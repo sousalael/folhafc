@@ -4,55 +4,67 @@
     <meta charset="UTF-8">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <title>Gestão Formula Code</title>
+    <style>.hidden { display: none !important; }</style>
 </head>
 <body class="bg-light p-3">
-<div class="container" style="max-width: 700px; background: white; padding: 20px; border-radius: 10px;">
+<div class="container" style="max-width: 700px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
     
     <div id="view-login">
-        <h4>Acesso Supervisor</h4>
+        <h4 class="mb-3">Acesso Supervisor</h4>
         <select id="sel-proj" class="form-select mb-2"></select>
-        <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="CPF">
+        <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="Seu CPF">
         <button class="btn btn-primary w-100" onclick="entrar()">Entrar no Painel</button>
     </div>
 
     <div id="view-dashboard" class="hidden">
-        <h5>Painel: <span id="span-projeto"></span></h5>
-        <div class="alert alert-info mt-2">
-            Link Equipe: <input type="text" id="link-ponto" class="form-control form-control-sm" readonly>
-            <button class="btn btn-sm btn-secondary mt-1" onclick="copiarLink()">Copiar Link</button>
+        <div class="alert alert-success">
+            <h5>Gestão de Projeto</h5>
+            <small id="span-projeto"></small>
         </div>
-        <table class="table table-sm">
+        <div class="mb-3">
+            <label class="form-label small text-muted">Link para os Colaboradores:</label>
+            <div class="input-group">
+                <input type="text" id="link-ponto" class="form-control" readonly>
+                <button class="btn btn-outline-secondary" onclick="copiarLink()">Copiar</button>
+            </div>
+        </div>
+        <h6>Colaboradores Presentes:</h6>
+        <table class="table table-sm table-striped">
             <thead><tr><th>CPF</th><th>Função</th><th>Obs</th><th>Ação</th></tr></thead>
             <tbody id="lista-presentes"></tbody>
         </table>
     </div>
 
     <div id="view-colaborador" class="hidden text-center">
-        <h4>Ponto: <span id="info-projeto"></span></h4>
+        <h4>Registro de Ponto</h4>
+        <p class="text-muted" id="info-projeto"></p>
         <input type="number" id="cpf-colab" class="form-control mb-2" placeholder="Seu CPF">
-        <button class="btn btn-success w-100" onclick="registrarPonto()">Registrar Presença</button>
+        <button class="btn btn-success w-100" onclick="registrarPonto()">Confirmar Presença</button>
     </div>
 </div>
 
 <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbzKDLWSMVyfv7ktsSeds6VJuanCalpJRSwOJdfP2YuUREFZEg54w5Cvba6B8zY1AyD3JA/exec'; // <--- COLOQUE A URL DO SEU DEPLOY
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz7_vaRPTpYq_xha9CbopZeLL8rqgIIkUlW0p7Hy3PKT22nZfBOVCVK03e9FkBQZQJ19g/exec'; 
     let projetoAtivo = null;
 
     window.onload = async () => {
         const params = new URLSearchParams(window.location.search);
         const projParam = params.get('projeto');
+        
         if(projParam) {
             projetoAtivo = JSON.parse(decodeURIComponent(projParam));
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-colaborador').classList.remove('hidden');
-            document.getElementById('info-projeto').innerText = projetoAtivo.cliente;
+            document.getElementById('info-projeto').innerText = `Projeto: ${projetoAtivo.data} | ${projetoAtivo.cliente} | ${projetoAtivo.unidade}`;
         } else {
             const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
+            const sel = document.getElementById('sel-proj');
             res.projetos.forEach(p => {
                 let opt = document.createElement('option');
                 opt.value = JSON.stringify(p);
-                opt.text = `${p.cliente} - ${p.unidade}`;
-                document.getElementById('sel-proj').appendChild(opt);
+                // AQUI ESTÁ A EXIBIÇÃO SOLICITADA:
+                opt.text = `${p.data} | ${p.cliente} | ${p.unidade}`;
+                sel.appendChild(opt);
             });
         }
     };
@@ -60,14 +72,17 @@
     async function entrar() {
         const cpf = document.getElementById('cpf-sup').value;
         projetoAtivo = JSON.parse(document.getElementById('sel-proj').value);
+        
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf})})).json();
+        
         if(res.encontrado) {
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
-            document.getElementById('span-projeto').innerText = projetoAtivo.cliente;
+            document.getElementById('span-projeto').innerText = `Data: ${projetoAtivo.data} | Cliente: ${projetoAtivo.cliente} | Loja: ${projetoAtivo.unidade}`;
             document.getElementById('link-ponto').value = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
-            setInterval(carregarLista, 5000);
-            carregarLista();
+            
+            carregarLista(); 
+            setInterval(carregarLista, 5000); 
         } else { alert('Acesso Negado ou CPF Inválido'); }
     }
 
@@ -88,17 +103,20 @@
         const f = document.getElementById('f-'+rowId).value;
         const o = document.getElementById('o-'+rowId).value;
         await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'atualizarPresenca', rowId, funcao:f, obs:o})});
-        alert('Atualizado!');
+        alert('Dados salvos!');
     }
 
     async function registrarPonto() {
         const cpf = document.getElementById('cpf-colab').value;
         await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})});
-        alert('Registrado!');
+        alert('Presença registrada!');
     }
 
-    function copiarLink() { document.getElementById('link-ponto').select(); document.execCommand('copy'); }
+    function copiarLink() { 
+        document.getElementById('link-ponto').select(); 
+        document.execCommand('copy'); 
+        alert('Link copiado!');
+    }
 </script>
-<style>.hidden { display: none !important; }</style>
 </body>
 </html>
