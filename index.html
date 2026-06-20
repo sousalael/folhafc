@@ -94,18 +94,31 @@
 
 <script>
     // === COLE A URL DO SEU WEB APP AQUI ===
-    const API_URL = 'https://github.com/sousalael/folhafc';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzJip5HSpD3gIyztdiisBMHzRrWWceBLft_39rDKj3WWM5ZzHOmftthNHyQBAOJ5kfc/exec';
 
     let projetoAtual = null;
     let colaboradoresPresentes = [];
 
     // Funções Base
-    async function apiCall(data) {
+    async function async function apiCall(data) {
         try {
-            const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) });
-            return await response.json();
+            const response = await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify(data) 
+            });
+            
+            const textoResposta = await response.text();
+            
+            try {
+                return JSON.parse(textoResposta);
+            } catch (jsonError) {
+                console.error("Erro na leitura do JSON. Resposta do Google:", textoResposta);
+                alert("O Google não retornou os dados corretamente. Verifique se a implantação do Apps Script está como 'Qualquer pessoa'.");
+                return null;
+            }
+            
         } catch(e) {
-            alert('Erro de comunicação. Verifique a URL do Web App.');
+            alert('Falha de conexão com o Google Apps Script. Verifique se a variável API_URL está correta e termina com /exec.');
             console.error(e);
             return null;
         }
