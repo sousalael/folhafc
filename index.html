@@ -93,18 +93,22 @@
 </div>
 
 <script>
-    // === COLE A URL DO SEU WEB APP AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyHZX9k03xJl9tg9pOYko6dLqTsaZhsrg2yqpxm7pfwYGT65b9iAVlUoZJV2-ubggDK/exec';
+    // URL FIXADA (Não precisa alterar)
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzcWDlNP40m2AuWP1E_5fNuAZSa1Paqnz2aTrjNfUsWxqZlWC3ZLoPWeI28ZZKgDIPg/exec';
 
     let projetoAtual = null;
     let colaboradoresPresentes = [];
 
-    // Funções Base
-    async function async function apiCall(data) {
+    // Função de Comunicação Refatorada (Evita erro de CORS e bloqueio de redirecionamento)
+    async function apiCall(data) {
         try {
             const response = await fetch(API_URL, { 
-                method: 'POST', 
-                body: JSON.stringify(data) 
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify(data),
+                redirect: 'follow'
             });
             
             const textoResposta = await response.text();
@@ -112,14 +116,13 @@
             try {
                 return JSON.parse(textoResposta);
             } catch (jsonError) {
-                console.error("Erro na leitura do JSON. Resposta do Google:", textoResposta);
-                alert("O Google não retornou os dados corretamente. Verifique se a implantação do Apps Script está como 'Qualquer pessoa'.");
+                console.error("Erro ao converter resposta:", textoResposta);
+                alert("O servidor respondeu, mas não com o formato esperado.");
                 return null;
             }
-            
         } catch(e) {
-            alert('Falha de conexão com o Google Apps Script. Verifique se a variável API_URL está correta e termina com /exec.');
-            console.error(e);
+            console.error("Erro de conexão detalhado:", e);
+            alert('Falha crítica de comunicação. Verifique a aba Console para mais detalhes.');
             return null;
         }
     }
@@ -131,32 +134,30 @@
         document.getElementById(idTela).classList.remove('hidden');
     }
 
-    // Inicialização
     window.onload = async () => {
         const select = document.getElementById('select-projeto');
-        select.innerHTML = '<option>Carregando projetos...</option>';
-        const res = await apiCall({action: 'getProjetos'});
+        select.innerHTML = '<option>Carregando projetos do Google Sheets...</option>';
         
+        const res = await apiCall({action: 'getProjetos'});
         select.innerHTML = '';
-        if(res && res.projetos) {
+        
+        if(res && res.projetos && res.projetos.length > 0) {
             res.projetos.forEach(p => {
                 let option = document.createElement('option');
                 option.value = JSON.stringify(p);
                 option.text = `${p.data} - ${p.cliente} (${p.unidade})`;
                 select.appendChild(option);
             });
+        } else {
+            select.innerHTML = '<option value="">Nenhum projeto cadastrado hoje.</option>';
         }
     };
 
-    // Validação de Data limite (23:59 da data do projeto)
     function verificarPrazoProjeto(dataProjetoString) {
-        // Formato esperado DD/MM/AAAA
         const partes = dataProjetoString.split('/');
-        if(partes.length !== 3) return true; // Falha segura se a data estiver fora do padrão
-        
+        if(partes.length !== 3) return true; 
         const dataLimite = new Date(partes[2], partes[1] - 1, partes[0], 23, 59, 59);
         const agora = new Date();
-        
         if (agora > dataLimite) {
             alert('Atenção: O prazo para registro neste projeto encerrou às 23:59 da data agendada (' + dataProjetoString + ').');
             return false;
@@ -171,24 +172,15 @@
         if (!cpf || !projVal) return alert('Selecione o projeto e informe seu CPF.');
         
         projetoAtual = JSON.parse(projVal);
-        
-        if(!verificarPrazoProjeto(projetoAtual.data)) return; // Trava de horário
+        if(!verificarPrazoProjeto(projetoAtual.data)) return; 
 
-        document.getElementById('cpf-supervisor').disabled = true; // Evita cliques duplos
+        document.getElementById('cpf-supervisor').disabled = true; 
         
         const res = await apiCall({action: 'verificarCPF', cpf: cpf});
         
         if (res && res.encontrado && res.perfil.toUpperCase() === 'SUPERVISOR') {
             document.getElementById('projeto-titulo').innerText = `${projetoAtual.cliente} - ${projetoAtual.unidade} (${projetoAtual.data})`;
-            
-            // Adiciona automaticamente o supervisor na lista de presença
-            colaboradoresPresentes.push({
-                cpf: cpf, 
-                nome: res.nome, 
-                funcaoPadrao: 'SUPERVISÃO',
-                isSupervisor: true
-            });
-            
+            colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'SUPERVISÃO', isSupervisor: true});
             atualizarTelaFuncoes();
             mostrarTela('tela-ponto');
         } else {
@@ -200,7 +192,6 @@
     async function registrarPresenca() {
         const cpf = document.getElementById('cpf-colaborador').value;
         if (!cpf) return alert('Digite o CPF.');
-        
         if (colaboradoresPresentes.find(c => c.cpf === cpf)) {
             document.getElementById('cpf-colaborador').value = '';
             return alert('Colaborador já está na lista deste projeto.');
@@ -208,20 +199,14 @@
 
         const res = await apiCall({action: 'verificarCPF', cpf: cpf});
         if (res && res.encontrado) {
-            colaboradoresPresentes.push({
-                cpf: cpf, 
-                nome: res.nome, 
-                funcaoPadrao: 'OPERAÇÃO',
-                isSupervisor: false
-            });
+            colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'OPERAÇÃO', isSupervisor: false});
             atualizarTelaFuncoes();
             document.getElementById('cpf-colaborador').value = '';
         } else {
-            alert('CPF não localizado. Utilize o botão "Novo Cadastro" logo abaixo.');
+            alert('CPF não localizado. Utilize o botão "Novo Cadastro".');
         }
     }
 
-    // Desenha os inputs de função e observação diretamente na tela de ponto
     function atualizarTelaFuncoes() {
         document.getElementById('contador-equipe').innerText = colaboradoresPresentes.length;
         const container = document.getElementById('lista-funcoes');
@@ -255,20 +240,14 @@
 
     async function finalizarProjeto() {
         if(colaboradoresPresentes.length === 0) return alert('A lista está vazia.');
-        
-        if(!confirm('Tem certeza que deseja encerrar o projeto e salvar no banco de dados? Após o envio, não será possível alterar pela tela.')) return;
+        if(!confirm('Encerrar o projeto e salvar no banco de dados? Após o envio, não será possível alterar pela tela.')) return;
 
-        // Captura o que o supervisor selecionou/digitou na tela
         colaboradoresPresentes.forEach((c, index) => {
             c.funcao = document.getElementById(`func-${index}`).value;
             c.observacao = document.getElementById(`obs-${index}`).value;
         });
 
-        const res = await apiCall({
-            action: 'salvarPresencas',
-            projeto: projetoAtual,
-            presencas: colaboradoresPresentes
-        });
+        const res = await apiCall({action: 'salvarPresencas', projeto: projetoAtual, presencas: colaboradoresPresentes});
 
         if(res && res.success) {
             alert('Projeto salvo com sucesso! Foram registrados ' + res.salvos + ' colaboradores.');
@@ -278,15 +257,12 @@
         }
     }
 
-    // Modal de Cadastro
     function abrirModal(isUpdate) {
         document.getElementById('modal-title').innerText = isUpdate ? 'Atualizar Chave Pix' : 'Novo Cadastro de Colaborador';
         document.getElementById('is-update').value = isUpdate;
-        
         document.getElementById('div-nome').style.display = isUpdate ? 'none' : 'block';
         document.getElementById('div-nomer').style.display = isUpdate ? 'none' : 'block';
         
-        // Limpa campos
         document.getElementById('cad-cpf').value = '';
         document.getElementById('cad-nome').value = '';
         document.getElementById('cad-nomer').value = '';
@@ -323,10 +299,9 @@
         }
     }
 
-    // Geração de Excel
     async function gerarExcel() {
         const btn = document.querySelector('#tela-relatorio button.btn-success');
-        btn.innerText = "Buscando dados no Google Sheets...";
+        btn.innerText = "Processando arquivo, aguarde...";
         btn.disabled = true;
 
         const res = await apiCall({action: 'getRelatorio'});
