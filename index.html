@@ -29,9 +29,7 @@
 </div>
 
 <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxRq-UbAfIJfFwYVSwg4oiGNyNZNJAtyzdppSrPNx0eu8FqSnKWY7i-TzrKDcIR9q4JsA/exec';
-
-    // Roteamento: Detectar se é link de projeto
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwZ5Sqyv5HyN3GGXJ-MBAQO3y__DOTBTyekvQj6d_TjIIqi016EHhQK01S6uon8Mp6L6g/exec';
     const urlParams = new URLSearchParams(window.location.search);
     const projetoParam = urlParams.get('proj');
 
@@ -43,6 +41,7 @@
         } else {
             const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
             const sel = document.getElementById('sel-proj');
+            if(res.projetos.length === 0) sel.innerHTML = "<option>Nenhum projeto para hoje</option>";
             res.projetos.forEach(p => {
                 let opt = document.createElement('option');
                 opt.value = `${p.cliente} - ${p.unidade}`;
@@ -57,35 +56,31 @@
         const proj = document.getElementById('sel-proj').value;
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarCPF', cpf:cpf})})).json();
         
-        if(res.encontrado && res.perfil === 'Supervisor') {
+        // Verifica se é 'supervisor' (case-insensitive)
+        if(res.encontrado && res.perfil === 'supervisor') {
             const link = window.location.origin + window.location.pathname + "?proj=" + encodeURIComponent(proj);
             document.getElementById('link-gerado').value = link;
             document.getElementById('resultado-link').classList.remove('hidden');
         } else {
-            alert('CPF de Supervisor não localizado!');
+            alert('Acesso Negado: CPF não localizado ou perfil não é de Supervisor. (Perfil detectado: ' + (res.perfil || 'não definido') + ')');
         }
     }
 
     async function salvarPonto() {
         const cpf = document.getElementById('cpf-colab').value;
-        const projInfo = decodeURIComponent(projetoParam).split(' - ');
-        
         const res = await (await fetch(API_URL, {
             method:'POST', 
             body: JSON.stringify({
                 action: 'registrarPonto', 
                 cpf: cpf, 
                 projeto: 'Hoje', 
-                cliente: projInfo[0], 
-                unidade: projInfo[1]
+                cliente: decodeURIComponent(projetoParam).split(' - ')[0], 
+                unidade: decodeURIComponent(projetoParam).split(' - ')[1]
             })
         })).json();
 
-        if(res.success) {
-            alert('Ponto registrado com sucesso!');
-        } else {
-            alert('Erro ao salvar: ' + (res.error || 'Falha na conexão'));
-        }
+        if(res.success) alert('Ponto registrado com sucesso!');
+        else alert('Erro ao salvar.');
     }
 
     function copiarLink() {
