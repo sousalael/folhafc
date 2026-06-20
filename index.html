@@ -54,8 +54,7 @@
 
         <h6 class="fw-bold mb-3">Equipe Presente: <span id="contador-equipe" class="badge bg-secondary">0</span></h6>
         
-        <div id="lista-funcoes" class="mb-4">
-            </div>
+        <div id="lista-funcoes" class="mb-4"></div>
 
         <button class="btn btn-danger w-100 py-2 fw-bold fs-5 shadow-sm" onclick="finalizarProjeto()">Encerrar e Salvar Relatório</button>
         <button class="btn btn-light w-100 mt-2 text-muted" onclick="location.reload()">Cancelar Operação</button>
@@ -93,37 +92,28 @@
 </div>
 
 <script>
-    // URL FIXADA (Não precisa alterar)
-    const API_URL = 'https://script.google.com/macros/s/AKfycbzcWDlNP40m2AuWP1E_5fNuAZSa1Paqnz2aTrjNfUsWxqZlWC3ZLoPWeI28ZZKgDIPg/exec';
+    // URL Fixada 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzXn-mOo245hrxikeWmiPsav-Yz8vbTRv_LOScVLiGyyRczZsMDYGVQy_jYhR9ak2HU/exec';
 
     let projetoAtual = null;
     let colaboradoresPresentes = [];
 
-    // Função de Comunicação Refatorada (Evita erro de CORS e bloqueio de redirecionamento)
+    // Função de Comunicação Direta (Sem preflight CORS)
     async function apiCall(data) {
         try {
-            const response = await fetch(API_URL, { 
+            const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'text/plain;charset=utf-8',
-                },
-                body: JSON.stringify(data),
-                redirect: 'follow'
+                body: JSON.stringify(data)
             });
+            const result = await response.json();
             
-            const textoResposta = await response.text();
-            
-            try {
-                return JSON.parse(textoResposta);
-            } catch (jsonError) {
-                console.error("Erro ao converter resposta:", textoResposta);
-                alert("O servidor respondeu, mas não com o formato esperado.");
-                return null;
+            if (result && result.error) {
+                console.error("Erro reportado pelo Google:", result.error);
             }
+            return result;
         } catch(e) {
-            console.error("Erro de conexão detalhado:", e);
-            alert('Falha crítica de comunicação. Verifique a aba Console para mais detalhes.');
-            return null;
+            console.error("Erro na requisição Fetch:", e);
+            return { error: "Falha de conexão com a nuvem do Google." };
         }
     }
 
@@ -134,14 +124,22 @@
         document.getElementById(idTela).classList.remove('hidden');
     }
 
+    // Inicialização - Onde a lista é populada
     window.onload = async () => {
         const select = document.getElementById('select-projeto');
-        select.innerHTML = '<option>Carregando projetos do Google Sheets...</option>';
+        select.innerHTML = '<option>Buscando projetos no sistema, aguarde...</option>';
         
         const res = await apiCall({action: 'getProjetos'});
-        select.innerHTML = '';
         
+        // Verifica se a planilha enviou um erro explícito
+        if (res && res.error) {
+            select.innerHTML = `<option value="">ERRO: ${res.error}</option>`;
+            alert("Erro detectado na Planilha: " + res.error);
+            return;
+        }
+
         if(res && res.projetos && res.projetos.length > 0) {
+            select.innerHTML = '';
             res.projetos.forEach(p => {
                 let option = document.createElement('option');
                 option.value = JSON.stringify(p);
@@ -149,7 +147,7 @@
                 select.appendChild(option);
             });
         } else {
-            select.innerHTML = '<option value="">Nenhum projeto cadastrado hoje.</option>';
+            select.innerHTML = '<option value="">Nenhum projeto cadastrado na planilha hoje.</option>';
         }
     };
 
@@ -169,23 +167,34 @@
         const cpf = document.getElementById('cpf-supervisor').value;
         const projVal = document.getElementById('select-projeto').value;
         
-        if (!cpf || !projVal) return alert('Selecione o projeto e informe seu CPF.');
+        if (!projVal) return alert('Não há projetos disponíveis ou carregados.');
+        if (!cpf) return alert('Informe seu CPF.');
         
         projetoAtual = JSON.parse(projVal);
         if(!verificarPrazoProjeto(projetoAtual.data)) return; 
 
         document.getElementById('cpf-supervisor').disabled = true; 
+        const btn = document.querySelector('#tela-login button.btn-primary');
+        btn.innerText = "Verificando Credenciais...";
         
         const res = await apiCall({action: 'verificarCPF', cpf: cpf});
         
+        if (res && res.error) {
+            alert("Erro da Planilha: " + res.error);
+            document.getElementById('cpf-supervisor').disabled = false;
+            btn.innerText = "Iniciar Registro de Ponto";
+            return;
+        }
+
         if (res && res.encontrado && res.perfil.toUpperCase() === 'SUPERVISOR') {
             document.getElementById('projeto-titulo').innerText = `${projetoAtual.cliente} - ${projetoAtual.unidade} (${projetoAtual.data})`;
             colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'SUPERVISÃO', isSupervisor: true});
             atualizarTelaFuncoes();
             mostrarTela('tela-ponto');
         } else {
-            alert('Acesso negado: CPF não encontrado ou não tem perfil de Supervisor.');
+            alert('Acesso negado: CPF não encontrado na aba Colaboradores ou o perfil não está como "Supervisor".');
             document.getElementById('cpf-supervisor').disabled = false;
+            btn.innerText = "Iniciar Registro de Ponto";
         }
     }
 
@@ -197,14 +206,21 @@
             return alert('Colaborador já está na lista deste projeto.');
         }
 
+        const btn = document.querySelector('#tela-ponto .btn-success');
+        btn.disabled = true;
+
         const res = await apiCall({action: 'verificarCPF', cpf: cpf});
-        if (res && res.encontrado) {
+        
+        if (res && res.error) {
+            alert("Erro: " + res.error);
+        } else if (res && res.encontrado) {
             colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'OPERAÇÃO', isSupervisor: false});
             atualizarTelaFuncoes();
             document.getElementById('cpf-colaborador').value = '';
         } else {
             alert('CPF não localizado. Utilize o botão "Novo Cadastro".');
         }
+        btn.disabled = false;
     }
 
     function atualizarTelaFuncoes() {
@@ -247,13 +263,23 @@
             c.observacao = document.getElementById(`obs-${index}`).value;
         });
 
+        const btn = document.querySelector('#tela-ponto .btn-danger');
+        btn.innerText = "Salvando na Nuvem...";
+        btn.disabled = true;
+
         const res = await apiCall({action: 'salvarPresencas', projeto: projetoAtual, presencas: colaboradoresPresentes});
 
-        if(res && res.success) {
+        if (res && res.error) {
+            alert("Erro ao salvar: " + res.error);
+            btn.innerText = "Encerrar e Salvar Relatório";
+            btn.disabled = false;
+        } else if(res && res.success) {
             alert('Projeto salvo com sucesso! Foram registrados ' + res.salvos + ' colaboradores.');
             location.reload(); 
         } else {
-            alert('Houve um erro ao salvar. Tente novamente.');
+            alert('Houve um erro desconhecido ao salvar.');
+            btn.innerText = "Encerrar e Salvar Relatório";
+            btn.disabled = false;
         }
     }
 
@@ -284,6 +310,9 @@
         
         if(!cpf || !pix) return alert('CPF e Pix são obrigatórios.');
 
+        const btn = document.querySelector('#modal-cadastro .btn-primary');
+        btn.disabled = true;
+
         const res = await apiCall({
             action: 'cadastrarAtualizar',
             cpf: cpf,
@@ -293,10 +322,13 @@
             isUpdate: isUpdate
         });
 
-        if(res) {
+        if (res && res.error) {
+            alert("Erro da Planilha: " + res.error);
+        } else if(res) {
             alert(res.message);
             if(res.success) fecharModal();
         }
+        btn.disabled = false;
     }
 
     async function gerarExcel() {
@@ -306,6 +338,13 @@
 
         const res = await apiCall({action: 'getRelatorio'});
         
+        if (res && res.error) {
+            alert("Erro ao puxar dados: " + res.error);
+            btn.innerText = "Baixar Relatório em Excel";
+            btn.disabled = false;
+            return;
+        }
+
         if(!res || !res.relatorio || res.relatorio.length === 0) {
             btn.innerText = "Baixar Relatório em Excel";
             btn.disabled = false;
