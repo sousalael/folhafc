@@ -2,336 +2,52 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formula Code - Gestão de Projetos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .container-app { max-width: 700px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
-        .hidden { display: none !important; }
-        .supervisor-badge { background-color: #0d6efd; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; }
-        .colab-card { border-left: 4px solid #198754; background-color: #fdfdfd; }
-    </style>
+    <title>Folha FC</title>
 </head>
-<body>
-
-<div class="container container-app" id="app">
-    <h3 class="text-center mb-4" style="color: #2c3e50; font-weight: 700;">Formula Code - Ponto Operacional</h3>
-
-    <div id="tela-login">
-        <div class="card p-4 shadow-sm">
-            <h5 class="mb-3 border-bottom pb-2">1. Abertura da Operação</h5>
-            <div class="mb-3">
-                <label class="form-label fw-bold">Projeto da Noite:</label>
-                <select id="select-projeto" class="form-select"></select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-bold">CPF do Supervisor:</label>
-                <input type="number" id="cpf-supervisor" class="form-control" placeholder="Digite apenas os números">
-            </div>
-            <button class="btn btn-primary w-100 py-2 fw-bold" onclick="iniciarProjeto()">Iniciar Registro de Ponto</button>
+<body class="bg-light">
+<div class="container mt-5" style="max-width: 500px; background: white; padding: 20px; border-radius: 10px;">
+    <div id="app">
+        <h4>Folha de Ponto</h4>
+        <div id="login-supervisor">
+            <select id="sel-proj" class="form-select mb-2"></select>
+            <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="Seu CPF (Supervisor)">
+            <button class="btn btn-primary w-100" onclick="iniciarSessao()">Gerar Link de Ponto</button>
         </div>
-        <button class="btn btn-outline-secondary w-100 mt-3" onclick="mostrarTela('tela-relatorio')">Consultar Relatórios Financeiros (Excel)</button>
-    </div>
-
-    <div id="tela-ponto" class="hidden">
-        <div class="alert alert-info border-0 shadow-sm">
-            <h5 id="projeto-titulo" class="mb-0 fw-bold"></h5>
-        </div>
-        
-        <div class="card p-3 mb-4 shadow-sm">
-            <h6 class="fw-bold">Adicionar Colaborador</h6>
-            <div class="input-group mb-2">
-                <input type="number" id="cpf-colaborador" class="form-control" placeholder="CPF do colaborador">
-                <button class="btn btn-success" onclick="registrarPresenca()">Registrar</button>
-            </div>
-            <div class="d-flex justify-content-between mt-2">
-                <button class="btn btn-sm btn-outline-primary" onclick="abrirModal(false)">Novo Cadastro</button>
-                <button class="btn btn-sm btn-outline-warning text-dark" onclick="abrirModal(true)">Atualizar Chave Pix</button>
-            </div>
-        </div>
-
-        <h6 class="fw-bold mb-3">Equipe Presente: <span id="contador-equipe" class="badge bg-secondary">0</span></h6>
-        
-        <div id="lista-funcoes" class="mb-4">
-            </div>
-
-        <button class="btn btn-danger w-100 py-2 fw-bold fs-5 shadow-sm" onclick="finalizarProjeto()">Encerrar e Salvar Relatório</button>
-        <button class="btn btn-light w-100 mt-2 text-muted" onclick="location.reload()">Cancelar Operação</button>
-    </div>
-
-    <div id="tela-relatorio" class="hidden">
-        <div class="card p-4 shadow-sm text-center">
-            <h5 class="mb-4 fw-bold">Extração de Relatório</h5>
-            <p class="text-muted mb-4">O arquivo Excel será gerado com os CPFs, chaves Pix e funções de todos os projetos executados.</p>
-            <button class="btn btn-success w-100 py-2 fw-bold mb-3" onclick="gerarExcel()">Baixar Relatório em Excel</button>
-            <button class="btn btn-secondary w-100" onclick="mostrarTela('tela-login')">Voltar ao Início</button>
+        <div id="area-link" class="hidden mt-3 alert alert-success">
+            Link para os colaboradores:<br><input type="text" id="link-ponto" class="form-control" readonly>
         </div>
     </div>
-</div>
-
-<div class="modal fade" id="modal-cadastro" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-light">
-        <h5 class="modal-title fw-bold" id="modal-title">Novo Cadastro</h5>
-        <button type="button" class="btn-close" onclick="fecharModal()"></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="is-update" value="false">
-        <div class="mb-3"><label class="form-label">CPF</label><input type="number" id="cad-cpf" class="form-control"></div>
-        <div class="mb-3" id="div-nome"><label class="form-label">Nome Completo</label><input type="text" id="cad-nome" class="form-control"></div>
-        <div class="mb-3" id="div-nomer"><label class="form-label">Nome Reduzido (Crachá)</label><input type="text" id="cad-nomer" class="form-control"></div>
-        <div class="mb-3"><label class="form-label">Chave Pix</label><input type="text" id="cad-pix" class="form-control" placeholder="Celular, CPF, E-mail ou Aleatória"></div>
-      </div>
-      <div class="modal-footer border-0">
-        <button type="button" class="btn btn-primary w-100" onclick="salvarCadastro()">Confirmar Dados</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <script>
-    // URL FIXADA (Não precisa alterar)
     const API_URL = 'https://script.google.com/macros/s/AKfycbz0f4eOvjZPmo9DFg7cAgKyw5YDwFUUZnuEoAX4Lq1wQN0Yx6AIItB9MY--be0BQ4QERw/exec';
 
-    let projetoAtual = null;
-    let colaboradoresPresentes = [];
-
-    // Função de Comunicação Refatorada (Evita erro de CORS e bloqueio de redirecionamento)
-    async function apiCall(data) {
-        try {
-            const response = await fetch(API_URL, { 
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'text/plain;charset=utf-8',
-                },
-                body: JSON.stringify(data),
-                redirect: 'follow'
-            });
-            
-            const textoResposta = await response.text();
-            
-            try {
-                return JSON.parse(textoResposta);
-            } catch (jsonError) {
-                console.error("Erro ao converter resposta:", textoResposta);
-                alert("O servidor respondeu, mas não com o formato esperado.");
-                return null;
-            }
-        } catch(e) {
-            console.error("Erro de conexão detalhado:", e);
-            alert('Falha crítica de comunicação. Verifique a aba Console para mais detalhes.');
-            return null;
+    async function iniciarSessao() {
+        const cpf = document.getElementById('cpf-sup').value;
+        const proj = document.getElementById('sel-proj').value;
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarCPF', cpf:cpf})})).json();
+        
+        if(res.encontrado && res.perfil === 'Supervisor') {
+            const linkRes = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'iniciarSessao', projeto:proj})})).json();
+            document.getElementById('area-link').classList.remove('hidden');
+            document.getElementById('link-ponto').value = linkRes.link;
+        } else {
+            alert('CPF de Supervisor não localizado!');
         }
     }
 
-    function mostrarTela(idTela) {
-        document.getElementById('tela-login').classList.add('hidden');
-        document.getElementById('tela-ponto').classList.add('hidden');
-        document.getElementById('tela-relatorio').classList.add('hidden');
-        document.getElementById(idTela).classList.remove('hidden');
-    }
-
+    // Carregar projetos ao iniciar
     window.onload = async () => {
-        const select = document.getElementById('select-projeto');
-        select.innerHTML = '<option>Carregando projetos do Google Sheets...</option>';
-        
-        const res = await apiCall({action: 'getProjetos'});
-        select.innerHTML = '';
-        
-        if(res && res.projetos && res.projetos.length > 0) {
-            res.projetos.forEach(p => {
-                let option = document.createElement('option');
-                option.value = JSON.stringify(p);
-                option.text = `${p.data} - ${p.cliente} (${p.unidade})`;
-                select.appendChild(option);
-            });
-        } else {
-            select.innerHTML = '<option value="">Nenhum projeto cadastrado hoje.</option>';
-        }
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
+        const sel = document.getElementById('sel-proj');
+        res.projetos.forEach(p => {
+            let opt = document.createElement('option');
+            opt.value = JSON.stringify(p);
+            opt.text = p.cliente + " - " + p.unidade;
+            sel.appendChild(opt);
+        });
     };
-
-    function verificarPrazoProjeto(dataProjetoString) {
-        const partes = dataProjetoString.split('/');
-        if(partes.length !== 3) return true; 
-        const dataLimite = new Date(partes[2], partes[1] - 1, partes[0], 23, 59, 59);
-        const agora = new Date();
-        if (agora > dataLimite) {
-            alert('Atenção: O prazo para registro neste projeto encerrou às 23:59 da data agendada (' + dataProjetoString + ').');
-            return false;
-        }
-        return true;
-    }
-
-    async function iniciarProjeto() {
-        const cpf = document.getElementById('cpf-supervisor').value;
-        const projVal = document.getElementById('select-projeto').value;
-        
-        if (!cpf || !projVal) return alert('Selecione o projeto e informe seu CPF.');
-        
-        projetoAtual = JSON.parse(projVal);
-        if(!verificarPrazoProjeto(projetoAtual.data)) return; 
-
-        document.getElementById('cpf-supervisor').disabled = true; 
-        
-        const res = await apiCall({action: 'verificarCPF', cpf: cpf});
-        
-        if (res && res.encontrado && res.perfil.toUpperCase() === 'SUPERVISOR') {
-            document.getElementById('projeto-titulo').innerText = `${projetoAtual.cliente} - ${projetoAtual.unidade} (${projetoAtual.data})`;
-            colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'SUPERVISÃO', isSupervisor: true});
-            atualizarTelaFuncoes();
-            mostrarTela('tela-ponto');
-        } else {
-            alert('Acesso negado: CPF não encontrado ou não tem perfil de Supervisor.');
-            document.getElementById('cpf-supervisor').disabled = false;
-        }
-    }
-
-    async function registrarPresenca() {
-        const cpf = document.getElementById('cpf-colaborador').value;
-        if (!cpf) return alert('Digite o CPF.');
-        if (colaboradoresPresentes.find(c => c.cpf === cpf)) {
-            document.getElementById('cpf-colaborador').value = '';
-            return alert('Colaborador já está na lista deste projeto.');
-        }
-
-        const res = await apiCall({action: 'verificarCPF', cpf: cpf});
-        if (res && res.encontrado) {
-            colaboradoresPresentes.push({cpf: cpf, nome: res.nome, funcaoPadrao: 'OPERAÇÃO', isSupervisor: false});
-            atualizarTelaFuncoes();
-            document.getElementById('cpf-colaborador').value = '';
-        } else {
-            alert('CPF não localizado. Utilize o botão "Novo Cadastro".');
-        }
-    }
-
-    function atualizarTelaFuncoes() {
-        document.getElementById('contador-equipe').innerText = colaboradoresPresentes.length;
-        const container = document.getElementById('lista-funcoes');
-        container.innerHTML = '';
-        
-        colaboradoresPresentes.forEach((c, index) => {
-            const badge = c.isSupervisor ? '<span class="supervisor-badge ms-2">Supervisor Responsável</span>' : '';
-            const blockSelect = c.isSupervisor ? 'disabled' : '';
-            
-            container.innerHTML += `
-                <div class="card p-3 mb-2 colab-card shadow-sm">
-                    <div class="fw-bold mb-2" style="color: #34495e;">${c.nome} ${badge}</div>
-                    <div class="row g-2">
-                        <div class="col-md-4">
-                            <select id="func-${index}" class="form-select form-select-sm" ${blockSelect}>
-                                <option value="OPERAÇÃO" ${c.funcaoPadrao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
-                                <option value="FRIOS" ${c.funcaoPadrao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AÉREOS" ${c.funcaoPadrao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
-                                <option value="PONTO-EXTRA" ${c.funcaoPadrao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
-                                <option value="SUPERVISÃO" ${c.funcaoPadrao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
-                            </select>
-                        </div>
-                        <div class="col-md-8">
-                            <input type="text" id="obs-${index}" class="form-control form-control-sm" placeholder="Observações (opcional)...">
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    async function finalizarProjeto() {
-        if(colaboradoresPresentes.length === 0) return alert('A lista está vazia.');
-        if(!confirm('Encerrar o projeto e salvar no banco de dados? Após o envio, não será possível alterar pela tela.')) return;
-
-        colaboradoresPresentes.forEach((c, index) => {
-            c.funcao = document.getElementById(`func-${index}`).value;
-            c.observacao = document.getElementById(`obs-${index}`).value;
-        });
-
-        const res = await apiCall({action: 'salvarPresencas', projeto: projetoAtual, presencas: colaboradoresPresentes});
-
-        if(res && res.success) {
-            alert('Projeto salvo com sucesso! Foram registrados ' + res.salvos + ' colaboradores.');
-            location.reload(); 
-        } else {
-            alert('Houve um erro ao salvar. Tente novamente.');
-        }
-    }
-
-    function abrirModal(isUpdate) {
-        document.getElementById('modal-title').innerText = isUpdate ? 'Atualizar Chave Pix' : 'Novo Cadastro de Colaborador';
-        document.getElementById('is-update').value = isUpdate;
-        document.getElementById('div-nome').style.display = isUpdate ? 'none' : 'block';
-        document.getElementById('div-nomer').style.display = isUpdate ? 'none' : 'block';
-        
-        document.getElementById('cad-cpf').value = '';
-        document.getElementById('cad-nome').value = '';
-        document.getElementById('cad-nomer').value = '';
-        document.getElementById('cad-pix').value = '';
-
-        document.getElementById('modal-cadastro').classList.add('show');
-        document.getElementById('modal-cadastro').style.display = 'block';
-    }
-
-    function fecharModal() {
-        document.getElementById('modal-cadastro').classList.remove('show');
-        document.getElementById('modal-cadastro').style.display = 'none';
-    }
-
-    async function salvarCadastro() {
-        const isUpdate = document.getElementById('is-update').value === 'true';
-        const cpf = document.getElementById('cad-cpf').value;
-        const pix = document.getElementById('cad-pix').value;
-        
-        if(!cpf || !pix) return alert('CPF e Pix são obrigatórios.');
-
-        const res = await apiCall({
-            action: 'cadastrarAtualizar',
-            cpf: cpf,
-            nomeCompleto: document.getElementById('cad-nome').value,
-            nomeReduzido: document.getElementById('cad-nomer').value,
-            chavePix: pix,
-            isUpdate: isUpdate
-        });
-
-        if(res) {
-            alert(res.message);
-            if(res.success) fecharModal();
-        }
-    }
-
-    async function gerarExcel() {
-        const btn = document.querySelector('#tela-relatorio button.btn-success');
-        btn.innerText = "Processando arquivo, aguarde...";
-        btn.disabled = true;
-
-        const res = await apiCall({action: 'getRelatorio'});
-        
-        if(!res || !res.relatorio || res.relatorio.length === 0) {
-            btn.innerText = "Baixar Relatório em Excel";
-            btn.disabled = false;
-            return alert('Ainda não há presenças registradas no banco de dados.');
-        }
-
-        const dadosExcel = res.relatorio.map(r => ({
-            "Data do Projeto": r.dataProjeto,
-            "Nome do Cliente": r.cliente,
-            "Nome da Unidade": r.unidade,
-            "Nome Completo": r.nomeCompleto,
-            "Nome Reduzido": r.nomeReduzido,
-            "CPF": r.cpf,
-            "Chave Pix": r.chavePix,
-            "Função": r.funcao,
-            "Observação": r.observacao
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(dadosExcel);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Ponto Operacional");
-        XLSX.writeFile(workbook, "Relatorio_Pagamentos.xlsx");
-
-        btn.innerText = "Baixar Relatório em Excel";
-        btn.disabled = false;
-    }
 </script>
 </body>
 </html>
