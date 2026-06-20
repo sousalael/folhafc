@@ -3,104 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <title>Folha FC</title>
-    <style>.hidden { display: none !important; }</style>
+    <title>Gestão Formula Code</title>
 </head>
-<body class="bg-light">
-<div class="container mt-5" style="max-width: 500px; background: white; padding: 20px; border-radius: 10px;">
+<body class="bg-light p-3">
+<div class="container" style="max-width: 700px; background: white; padding: 20px; border-radius: 10px;">
     
     <div id="view-login">
-        <h4>Tela do Supervisor</h4>
+        <h4>Acesso Supervisor</h4>
         <select id="sel-proj" class="form-select mb-2"></select>
-        <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="Seu CPF">
-        <button class="btn btn-primary w-100" onclick="iniciarSessao()">Gerar Link de Ponto</button>
+        <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="CPF">
+        <button class="btn btn-primary w-100" onclick="entrar()">Entrar no Painel</button>
     </div>
 
     <div id="view-dashboard" class="hidden">
-        <h5>Projeto: <span id="span-projeto" class="text-primary"></span></h5>
-        <div class="alert alert-info mt-3">
-            <label>Link para a Equipe:</label>
-            <input type="text" id="link-ponto" class="form-control" readonly>
-            <button class="btn btn-secondary btn-sm mt-2 w-100" onclick="copiarLink()">Copiar Link</button>
+        <h5>Painel: <span id="span-projeto"></span></h5>
+        <div class="alert alert-info mt-2">
+            Link Equipe: <input type="text" id="link-ponto" class="form-control form-control-sm" readonly>
+            <button class="btn btn-sm btn-secondary mt-1" onclick="copiarLink()">Copiar Link</button>
         </div>
-        <h6>Colaboradores Presentes (<span id="contagem">0</span>):</h6>
-        <ul id="lista-presentes" class="list-group"></ul>
+        <table class="table table-sm">
+            <thead><tr><th>CPF</th><th>Função</th><th>Obs</th><th>Ação</th></tr></thead>
+            <tbody id="lista-presentes"></tbody>
+        </table>
     </div>
 
     <div id="view-colaborador" class="hidden text-center">
-        <h4>Registro de Ponto</h4>
-        <p id="info-proj-colab"></p>
-        <input type="number" id="cpf-colab" class="form-control mb-2" placeholder="Digite seu CPF">
-        <button class="btn btn-success w-100" onclick="registrarPonto()">Registrar Minha Presença</button>
+        <h4>Ponto: <span id="info-projeto"></span></h4>
+        <input type="number" id="cpf-colab" class="form-control mb-2" placeholder="Seu CPF">
+        <button class="btn btn-success w-100" onclick="registrarPonto()">Registrar Presença</button>
     </div>
 </div>
 
 <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwNxD9dUU_Eit9o4bWRlwVlyDXNqwv5S3XaHOrQifqjqmv5TLtZxRBrkd2PC8JVv7sYZw/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzKDLWSMVyfv7ktsSeds6VJuanCalpJRSwOJdfP2YuUREFZEg54w5Cvba6B8zY1AyD3JA/exec'; // <--- COLOQUE A URL DO SEU DEPLOY
     let projetoAtivo = null;
 
     window.onload = async () => {
         const params = new URLSearchParams(window.location.search);
-        const projBase64 = params.get('projeto');
-
-        if (projBase64) {
-            // Modo Colaborador
-            projetoAtivo = JSON.parse(decodeURIComponent(projBase64));
+        const projParam = params.get('projeto');
+        if(projParam) {
+            projetoAtivo = JSON.parse(decodeURIComponent(projParam));
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-colaborador').classList.remove('hidden');
-            document.getElementById('info-proj-colab').innerText = `${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            document.getElementById('info-projeto').innerText = projetoAtivo.cliente;
         } else {
-            // Modo Supervisor (Carregar projetos)
             const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
-            const sel = document.getElementById('sel-proj');
             res.projetos.forEach(p => {
                 let opt = document.createElement('option');
                 opt.value = JSON.stringify(p);
                 opt.text = `${p.cliente} - ${p.unidade}`;
-                sel.appendChild(opt);
+                document.getElementById('sel-proj').appendChild(opt);
             });
         }
     };
 
-    async function iniciarSessao() {
+    async function entrar() {
         const cpf = document.getElementById('cpf-sup').value;
         projetoAtivo = JSON.parse(document.getElementById('sel-proj').value);
-        
-        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarCPF', cpf:cpf})})).json();
-        if(res.encontrado && res.perfil === 'Supervisor') {
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf})})).json();
+        if(res.encontrado) {
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('span-projeto').innerText = projetoAtivo.cliente;
-            
-            const link = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
-            document.getElementById('link-ponto').value = link;
-            
-            // Inicia atualização automática a cada 5 segundos
-            setInterval(atualizarLista, 5000);
-            atualizarLista();
-        } else {
-            alert('Acesso negado!');
-        }
+            document.getElementById('link-ponto').value = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
+            setInterval(carregarLista, 5000);
+            carregarLista();
+        } else { alert('Acesso Negado ou CPF Inválido'); }
     }
 
-    async function atualizarLista() {
-        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresentes', projeto:projetoAtivo})})).json();
-        const lista = document.getElementById('lista-presentes');
-        document.getElementById('contagem').innerText = res.lista.length;
-        lista.innerHTML = res.lista.map(p => `<li class="list-group-item">CPF: ${p.cpf} - ${p.hora}</li>`).join('');
+    async function carregarLista() {
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
+        const tbody = document.getElementById('lista-presentes');
+        tbody.innerHTML = res.lista.map(p => `
+            <tr>
+                <td>${p.cpf}</td>
+                <td><input type="text" id="f-${p.rowId}" value="${p.funcao}" class="form-control form-control-sm"></td>
+                <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm"></td>
+                <td><button class="btn btn-sm btn-primary" onclick="salvar(${p.rowId})">Salvar</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function salvar(rowId) {
+        const f = document.getElementById('f-'+rowId).value;
+        const o = document.getElementById('o-'+rowId).value;
+        await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'atualizarPresenca', rowId, funcao:f, obs:o})});
+        alert('Atualizado!');
     }
 
     async function registrarPonto() {
         const cpf = document.getElementById('cpf-colab').value;
-        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})})).json();
-        if(res.success) { alert('Presença registrada!'); }
+        await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})});
+        alert('Registrado!');
     }
 
-    function copiarLink() {
-        document.getElementById('link-ponto').select();
-        document.execCommand('copy');
-        alert('Link copiado!');
-    }
+    function copiarLink() { document.getElementById('link-ponto').select(); document.execCommand('copy'); }
 </script>
+<style>.hidden { display: none !important; }</style>
 </body>
 </html>
