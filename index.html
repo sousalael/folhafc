@@ -2,90 +2,162 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <title>Gestão de Ponto</title>
+    <title>Gestão Formula Code</title>
     <style>.hidden { display: none !important; }</style>
 </head>
 <body class="bg-light p-3">
-<div class="container" style="max-width: 600px; background: white; padding: 20px; border-radius: 10px;">
+<div class="container" style="max-width: 650px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
-        <h4>Acesso Supervisor</h4>
-        <select id="sel-proj" class="form-select mb-2"></select>
-        <input type="number" id="cpf-sup" class="form-control mb-2" placeholder="Seu CPF">
-        <button class="btn btn-primary w-100" onclick="entrar()">Entrar no Painel</button>
+        <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
+        <label class="form-label fw-bold">Selecione o Projeto de Hoje:</label>
+        <select id="sel-proj" class="form-select mb-3"></select>
+        
+        <label class="form-label fw-bold">CPF do Supervisor:</label>
+        <input type="number" id="cpf-sup" class="form-control mb-3" placeholder="Digite apenas números">
+        <button class="btn btn-primary w-100 py-2" onclick="entrar()">Entrar no Painel</button>
     </div>
 
     <div id="view-dashboard" class="hidden">
-        <div class="alert alert-success">Projeto: <b id="span-projeto"></b></div>
-        <input type="text" id="link-ponto" class="form-control mb-2" readonly>
-        <h6>Colaboradores Presentes:</h6>
-        <table class="table table-sm table-bordered">
-            <thead><tr><th>Nome</th><th>Função</th><th>Obs</th><th>Salvar</th></tr></thead>
-            <tbody id="lista-presentes-sup"></tbody>
-        </table>
+        <div class="alert alert-success">
+            <h5 class="alert-heading">Painel de Gestão</h5>
+            <hr>
+            <p class="mb-1"><strong>Supervisor(a):</strong> <span id="span-nome-sup"></span></p>
+            <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
+        </div>
+
+        <div class="card mb-4 bg-light">
+            <div class="card-body">
+                <label class="fw-bold mb-2">Link para os Colaboradores:</label>
+                <div class="input-group">
+                    <input type="text" id="link-ponto" class="form-control bg-white" readonly>
+                    <button class="btn btn-primary" onclick="copiarLink()">Copiar Link</button>
+                </div>
+            </div>
+        </div>
+
+        <h6 class="fw-bold">Colaboradores Presentes:</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Função</th>
+                        <th>Observação</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-presentes-sup"></tbody>
+            </table>
+        </div>
     </div>
 
     <div id="view-colaborador" class="hidden text-center">
-        <h4>Registrar Presença</h4>
-        <p id="info-projeto" class="text-primary"></p>
-        <input type="number" id="cpf-colab" class="form-control mb-2" placeholder="Seu CPF">
-        <button class="btn btn-success w-100" onclick="registrarPonto()">Confirmar Presença</button>
+        <h4 class="mb-3 text-primary">Registrar Presença</h4>
+        <p id="info-projeto-colab" class="fw-bold text-secondary mb-4"></p>
+        
+        <input type="number" id="cpf-colab" class="form-control form-control-lg mb-3" placeholder="Seu CPF (só números)">
+        <button class="btn btn-success btn-lg w-100 mb-4" onclick="registrarPonto()">Confirmar Presença</button>
+        
         <hr>
-        <h6>Quem já registrou:</h6>
-        <ul id="lista-colab-view" class="list-group list-group-flush"></ul>
+        
+        <h6 class="text-start fw-bold mb-3">Colaboradores Confirmados:</h6>
+        <ul id="lista-colab-view" class="list-group list-group-flush text-start border rounded">
+            </ul>
     </div>
 </div>
 
 <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwCHvR6IIqHI2wZmiTP3-YTw2J614J0AuNElLXVMjsgX2rxXXI5hxnQ3W8oG28k1Bb28w/exec'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzyEJihUsSTcnysDDT8HjbLucaWd423KQW_tc1IVmxiIRWmKPOVZkAI8QBN7N1xTbC0eQ/exec'; // <--- COLOQUE SEU LINK AQUI
     let projetoAtivo = null;
 
     window.onload = async () => {
         const params = new URLSearchParams(window.location.search);
         const projParam = params.get('projeto');
+        
+        // Se a URL tiver "?projeto=", mostra a tela do colaborador
         if(projParam) {
             projetoAtivo = JSON.parse(decodeURIComponent(projParam));
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-colaborador').classList.remove('hidden');
-            document.getElementById('info-projeto').innerText = `${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            document.getElementById('info-projeto-colab').innerText = `${projetoAtivo.data} | ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            
             carregarLista(true);
             setInterval(() => carregarLista(true), 5000);
         } else {
+            // Se for acesso direto, carrega os projetos para o supervisor
             const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
+            const sel = document.getElementById('sel-proj');
             res.projetos.forEach(p => {
                 let opt = document.createElement('option');
                 opt.value = JSON.stringify(p);
                 opt.text = `${p.data} | ${p.cliente} | ${p.unidade}`;
-                document.getElementById('sel-proj').appendChild(opt);
+                sel.appendChild(opt);
             });
         }
     };
 
     async function entrar() {
         const cpf = document.getElementById('cpf-sup').value;
-        if(!document.getElementById('sel-proj').value) return alert('Selecione um projeto');
+        if(!document.getElementById('sel-proj').value) return alert('Selecione um projeto primeiro.');
         projetoAtivo = JSON.parse(document.getElementById('sel-proj').value);
         
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf})})).json();
+        
         if(res.encontrado) {
+            // Esconde Login, Mostra Dashboard
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
-            document.getElementById('span-projeto').innerText = projetoAtivo.cliente;
-            document.getElementById('link-ponto').value = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
+            
+            // Preenche a confirmação de quem está logado e qual o projeto
+            document.getElementById('span-nome-sup').innerText = res.nome;
+            document.getElementById('span-projeto').innerText = `${projetoAtivo.data} | ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            
+            // Gera o link para a equipe
+            const linkGerado = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
+            document.getElementById('link-ponto').value = linkGerado;
+            
+            // Inicia a tabela
             carregarLista(false);
             setInterval(() => carregarLista(false), 5000); 
-        } else { alert('Acesso Negado'); }
+        } else { 
+            alert('Acesso Negado: CPF não encontrado ou sem permissão de Supervisor.'); 
+        }
     }
 
     async function carregarLista(isColaborador) {
+        // Trava de segurança: Se o supervisor estiver digitando, não atualiza a tabela para não apagar o texto
+        if (!isColaborador && document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'text') {
+            return; 
+        }
+
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
+        
         if(isColaborador) {
+            // Visão do Colaborador: Apenas a lista de nomes confirmados
             const ul = document.getElementById('lista-colab-view');
-            ul.innerHTML = res.lista.map(p => `<li class="list-group-item">${p.nome}</li>`).join('');
+            if(res.lista.length === 0) {
+                ul.innerHTML = '<li class="list-group-item text-muted">Nenhum registro ainda.</li>';
+            } else {
+                ul.innerHTML = res.lista.map(p => `<li class="list-group-item"><span class="text-success fw-bold">✓</span> ${p.nome}</li>`).join('');
+            }
         } else {
+            // Visão do Supervisor: Tabela com Função e Observação editáveis
             const tbody = document.getElementById('lista-presentes-sup');
-            tbody.innerHTML = res.lista.map(p => `<tr><td>${p.nome}</td><td><input type="text" id="f-${p.rowId}" value="${p.funcao}" class="form-control form-control-sm"></td><td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm"></td><td><button class="btn btn-sm btn-primary" onclick="salvar(${p.rowId})">OK</button></td></tr>`).join('');
+            if(res.lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Aguardando registros da equipe...</td></tr>';
+            } else {
+                tbody.innerHTML = res.lista.map(p => `
+                    <tr>
+                        <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
+                        <td><input type="text" id="f-${p.rowId}" value="${p.funcao}" class="form-control form-control-sm"></td>
+                        <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm"></td>
+                        <td><button class="btn btn-sm btn-success w-100" onclick="salvar(${p.rowId})">Salvar</button></td>
+                    </tr>
+                `).join('');
+            }
         }
     }
 
@@ -93,12 +165,52 @@
         const f = document.getElementById('f-'+rowId).value;
         const o = document.getElementById('o-'+rowId).value;
         await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'atualizarPresenca', rowId, funcao:f, obs:o})});
+        // Feedback sutil no botão para o supervisor saber que salvou
+        const btn = event.target;
+        btn.innerText = "Salvo!";
+        setTimeout(() => btn.innerText = "Salvar", 2000);
     }
 
     async function registrarPonto() {
-        const cpf = document.getElementById('cpf-colab').value;
+        const cpfInput = document.getElementById('cpf-colab');
+        const cpf = cpfInput.value;
+        if(!cpf) return;
+
+        // Limpa o input do CPF e muda o texto do botão momentaneamente (Sem alert)
+        cpfInput.value = '';
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.innerText = "Registrando...";
+        btn.disabled = true;
+
         await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})});
-        carregarLista(true); // Atualiza instantaneamente ao clicar
+        
+        // Atualiza a lista instantaneamente
+        carregarLista(true);
+        
+        // Restaura o botão
+        btn.innerText = "Presença Confirmada!";
+        btn.classList.replace('btn-success', 'btn-primary');
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.replace('btn-primary', 'btn-success');
+            btn.disabled = false;
+        }, 3000);
+    }
+
+    function copiarLink() { 
+        const inputLink = document.getElementById('link-ponto');
+        inputLink.select(); 
+        inputLink.setSelectionRange(0, 99999); // Para mobile
+        document.execCommand('copy'); 
+        
+        const btn = event.target;
+        btn.innerText = "Copiado!";
+        btn.classList.replace('btn-primary', 'btn-success');
+        setTimeout(() => {
+            btn.innerText = "Copiar Link";
+            btn.classList.replace('btn-success', 'btn-primary');
+        }, 2000);
     }
 </script>
 </body>
