@@ -8,7 +8,7 @@
     <style>.hidden { display: none !important; }</style>
 </head>
 <body class="bg-light p-3">
-<div class="container" style="max-width: 700px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+<div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
         <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
@@ -60,10 +60,29 @@
 
     <div id="view-colaborador" class="hidden text-center">
         <h4 class="mb-3 text-primary">Registrar Presença</h4>
-        <p id="info-projeto-colab" class="fw-bold text-secondary mb-4"></p>
+        <p id="info-projeto-colab" class="fw-bold text-secondary mb-3"></p>
         
         <input type="number" id="cpf-colab" class="form-control form-control-lg mb-3" placeholder="Seu CPF (só números)">
-        <button class="btn btn-success btn-lg w-100 mb-4" onclick="registrarPonto()">Confirmar Presença</button>
+        
+        <div id="area-botoes-padrao">
+            <button class="btn btn-success btn-lg w-100 mb-2" id="btn-ponto-padrao" onclick="processarPonto('padrao')">Confirmar Presença</button>
+            <button class="btn btn-outline-secondary w-100 mb-4" onclick="alternarTelaColab('pix')">Desejo alterar minha chave PIX</button>
+        </div>
+
+        <div id="area-cadastro" class="hidden text-start mb-4 p-3 border rounded bg-light">
+            <div class="alert alert-warning text-center">CPF não encontrado. Complete seu cadastro:</div>
+            <input type="text" id="nome-cadastro" class="form-control mb-2" placeholder="Nome Completo">
+            <input type="text" id="pix-cadastro" class="form-control mb-3" placeholder="Sua Chave PIX">
+            <button class="btn btn-primary w-100 mb-2" id="btn-ponto-cadastro" onclick="processarPonto('cadastro')">Salvar Cadastro e Confirmar Presença</button>
+            <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
+        </div>
+
+        <div id="area-alterar-pix" class="hidden text-start mb-4 p-3 border rounded bg-light">
+            <div class="alert alert-info text-center">Digite abaixo sua nova chave:</div>
+            <input type="text" id="pix-alterar" class="form-control mb-3" placeholder="Nova Chave PIX">
+            <button class="btn btn-primary w-100 mb-2" id="btn-ponto-pix" onclick="processarPonto('alterarPix')">Atualizar PIX e Confirmar Presença</button>
+            <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
+        </div>
         
         <hr>
         
@@ -75,7 +94,7 @@
 
 <script>
     // === ATENÇÃO: COLE SUA URL DE DEPLOY AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwmMezMzcQX24EcqAYtmr4v73l52fLDDPrnwOIwetqqFoHU61GB7nXFJgujnppkUFAkDQ/exec'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbx2o2kTxY9cvPQQg5_TEqX5FBqz3wvsQ0BImKmbX0ptskaJBWDjZaPxLKWmwoYqkod7pQ/exec'; 
     let projetoAtivo = null;
 
     window.onload = async () => {
@@ -126,38 +145,109 @@
         }
     }
 
-    async function carregarLista(isColaborador) {
-        // Bloqueia atualização automática se o supervisor estiver digitando uma observação ou escolhendo função
-        if (!isColaborador && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) {
-            return; 
+    // Gerencia as visões dentro da tela do colaborador
+    function alternarTelaColab(tela) {
+        document.getElementById('area-botoes-padrao').classList.add('hidden');
+        document.getElementById('area-cadastro').classList.add('hidden');
+        document.getElementById('area-alterar-pix').classList.add('hidden');
+
+        if(tela === 'padrao') document.getElementById('area-botoes-padrao').classList.remove('hidden');
+        if(tela === 'cadastro') document.getElementById('area-cadastro').classList.remove('hidden');
+        if(tela === 'pix') document.getElementById('area-alterar-pix').classList.remove('hidden');
+    }
+
+    async function processarPonto(tipo) {
+        const cpf = document.getElementById('cpf-colab').value;
+        if(!cpf) return alert("Digite o seu CPF primeiro.");
+
+        let extras = { nome: null, pix: null, updatePix: false };
+        let btn;
+
+        if(tipo === 'padrao') btn = document.getElementById('btn-ponto-padrao');
+        if(tipo === 'cadastro') {
+            btn = document.getElementById('btn-ponto-cadastro');
+            extras.nome = document.getElementById('nome-cadastro').value;
+            extras.pix = document.getElementById('pix-cadastro').value;
+            if(!extras.nome || !extras.pix) return alert("Preencha seu Nome Completo e Chave PIX.");
         }
+        if(tipo === 'alterarPix') {
+            btn = document.getElementById('btn-ponto-pix');
+            extras.pix = document.getElementById('pix-alterar').value;
+            extras.updatePix = true;
+            if(!extras.pix) return alert("Preencha a sua nova Chave PIX.");
+        }
+
+        const textoOriginal = btn.innerText;
+        btn.innerText = "Processando...";
+        btn.disabled = true;
+
+        const res = await (await fetch(API_URL, {
+            method:'POST', 
+            body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf, extras: extras})
+        })).json();
+
+        btn.innerText = textoOriginal;
+        btn.disabled = false;
+
+        if(res.error) {
+            alert(res.error);
+        } else if (res.requiresRegistration) {
+            // Gatilho automático: Usuário não existe, abre os campos.
+            alternarTelaColab('cadastro');
+        } else if (res.success) {
+            // Limpa os campos após o sucesso
+            document.getElementById('cpf-colab').value = '';
+            document.getElementById('nome-cadastro').value = '';
+            document.getElementById('pix-cadastro').value = '';
+            document.getElementById('pix-alterar').value = '';
+            alternarTelaColab('padrao');
+            carregarLista(true);
+            
+            // Feedback visual no botão principal
+            const btnPrincipal = document.getElementById('btn-ponto-padrao');
+            btnPrincipal.innerText = "✓ Presença Confirmada!";
+            btnPrincipal.classList.replace('btn-success', 'btn-primary');
+            setTimeout(() => {
+                btnPrincipal.innerText = "Confirmar Presença";
+                btnPrincipal.classList.replace('btn-primary', 'btn-success');
+            }, 3000);
+        }
+    }
+
+    async function carregarLista(isColaborador) {
+        if (!isColaborador && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
         
         if(isColaborador) {
-            // TELA DO COLABORADOR: Exibe o nome claramente
             const ul = document.getElementById('lista-colab-view');
             if(res.lista.length === 0) {
                 ul.innerHTML = '<li class="list-group-item text-muted">Nenhum colaborador registrado ainda.</li>';
             } else {
-                ul.innerHTML = res.lista.map(p => `<li class="list-group-item"><span class="text-success fw-bold">✓</span> ${p.nome}</li>`).join('');
+                // REGRA 3: Exibir CPF e NOME na tela do Colaborador
+                ul.innerHTML = res.lista.map(p => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div><span class="text-success fw-bold me-1">✓</span> ${p.nome}</div>
+                        <small class="text-muted">${p.cpf}</small>
+                    </li>
+                `).join('');
             }
         } else {
-            // TELA DO SUPERVISOR: Tabela com Nome e Lista Suspensa (Select) para Função
             const tbody = document.getElementById('lista-presentes-sup');
             if(res.lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros da equipe...</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
             } else {
-                // Monta a tabela com o "select" em vez de "input" de texto
+                // REGRA 2 e 3: Select com funções corretas (OPERAÇÃO como padrão) e Exibição de CPF/NOME
                 tbody.innerHTML = res.lista.map(p => `
                     <tr data-rowid="${p.rowId}">
                         <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
                         <td>
                             <select id="f-${p.rowId}" class="form-select form-select-sm">
-                                <option value="OPERACIONAL" ${p.funcao === 'OPERACIONAL' ? 'selected' : ''}>OPERACIONAL</option>
-                                <option value="LÍDER" ${p.funcao === 'LÍDER' ? 'selected' : ''}>LÍDER</option>
-                                <option value="APOIO" ${p.funcao === 'APOIO' ? 'selected' : ''}>APOIO</option>
-                                <option value="SUPERVISOR" ${p.funcao === 'SUPERVISOR' ? 'selected' : ''}>SUPERVISOR</option>
+                                <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
+                                <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
+                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
+                                <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
+                                <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
                             </select>
                         </td>
                         <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" placeholder="Opcional"></td>
@@ -167,7 +257,6 @@
         }
     }
 
-    // NOVA FUNÇÃO: Salva a lista inteira de uma vez só
     async function salvarTodaLista() {
         const btn = document.getElementById('btn-salvar-lista');
         btn.innerText = "Salvando...";
@@ -185,10 +274,7 @@
             }
         });
 
-        await fetch(API_URL, {
-            method:'POST', 
-            body: JSON.stringify({action:'salvarLista', lista: listaParaSalvar})
-        });
+        await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'salvarLista', lista: listaParaSalvar}) });
 
         btn.innerText = "✓ Salvo com Sucesso!";
         btn.classList.replace('btn-success', 'btn-primary');
@@ -199,7 +285,6 @@
         }, 3000);
     }
 
-    // NOVA FUNÇÃO: Gera um arquivo do Excel compatível com o sistema
     function exportarExcel() {
         let csv = [];
         let rows = document.querySelectorAll("#tabela-presencas tr");
@@ -210,15 +295,12 @@
             
             for (let j = 0; j < cols.length; j++) {
                 let data = cols[j].innerText;
-                // Se a coluna tiver input ou select, pega o valor digitado/selecionado em vez do texto
                 let input = cols[j].querySelector('input, select');
                 if(input) { data = input.value; }
                 
-                // Limpa quebras de linha que possam bagunçar o Excel
                 data = data.replace(/(\r\n|\n|\r)/gm, " - ");
                 row.push('"' + data.replace(/"/g, '""') + '"');
             }
-            // Usa ponto e vírgula para abrir corretamente no Excel em português
             csv.push(row.join(";")); 
         }
 
@@ -230,30 +312,6 @@
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
-    }
-
-    async function registrarPonto() {
-        const cpfInput = document.getElementById('cpf-colab');
-        const cpf = cpfInput.value;
-        if(!cpf) return;
-
-        cpfInput.value = '';
-        const btn = event.target;
-        const originalText = btn.innerText;
-        btn.innerText = "Registrando...";
-        btn.disabled = true;
-
-        await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})});
-        
-        carregarLista(true);
-        
-        btn.innerText = "Presença Confirmada!";
-        btn.classList.replace('btn-success', 'btn-primary');
-        setTimeout(() => {
-            btn.innerText = originalText;
-            btn.classList.replace('btn-primary', 'btn-success');
-            btn.disabled = false;
-        }, 3000);
     }
 
     function copiarLink() { 
