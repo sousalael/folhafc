@@ -1,48 +1,347 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Gestão Formula Code</title>
     <style>.hidden { display: none !important; }</style>
 </head>
-<body class="p-3 bg-light">
-    <div id="app" class="container" style="max-width: 600px; background: white; padding: 20px; border-radius: 10px;">
-        <div id="view-dashboard">
-            <h4>Gestão de Projeto</h4>
-            <div id="lista-presentes-sup"></div>
-            <div class="mt-3 d-grid gap-2">
-                <button class="btn btn-primary" onclick="salvarAlteracoes()">💾 Salvar Alterações</button>
-                <button class="btn btn-danger" onclick="encerrarProjeto()">🔒 Encerrar Projeto</button>
-                <button class="btn btn-secondary" onclick="exportarExcel()">📊 Gerar Excel</button>
+<body class="bg-light p-3">
+<div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+    
+    <div id="view-login">
+        <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
+        <label class="form-label fw-bold">Selecione o Projeto de Hoje:</label>
+        <select id="sel-proj" class="form-select mb-3"></select>
+        
+        <label class="form-label fw-bold">CPF do Supervisor:</label>
+        <input type="number" id="cpf-sup" class="form-control mb-3" placeholder="Digite apenas números">
+        <button class="btn btn-primary w-100 py-2" onclick="entrar()">Entrar no Painel</button>
+    </div>
+
+    <div id="view-dashboard" class="hidden">
+        <div class="alert alert-success">
+            <h5 class="alert-heading">Painel de Gestão</h5>
+            <hr>
+            <p class="mb-1"><strong>Supervisor(a):</strong> <span id="span-nome-sup"></span></p>
+            <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
+            <span id="badge-status" class="badge bg-success mt-2">Ativo</span>
+        </div>
+
+        <div class="card mb-4 bg-light" id="card-link">
+            <div class="card-body">
+                <label class="fw-bold mb-2">Link para Colaboradores:</label>
+                <div class="input-group">
+                    <input type="text" id="link-ponto" class="form-control bg-white" readonly>
+                    <button class="btn btn-primary" onclick="copiarLink()">Copiar Link</button>
+                </div>
             </div>
+        </div>
+
+        <h6 class="fw-bold">Colaboradores Presentes:</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle" id="tabela-presencas">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome / CPF</th>
+                        <th>Função</th>
+                        <th>Observação</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-presentes-sup"></tbody>
+            </table>
+        </div>
+        
+        <div class="d-flex flex-column gap-2 mt-3">
+            <button class="btn btn-danger fw-bold w-100 py-2" id="btn-salvar-lista" onclick="salvarTodaLista()">💾 Salvar Alterações e Encerrar Projeto</button>
+            <button class="btn btn-secondary w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel</button>
         </div>
     </div>
 
-    <script>
-        // --- COLE SUA URL ABAIXO (Sem aspas extras) ---
-        const API_URL = 'https://script.google.com/macros/s/AKfycbzsV0ChuBOi3J3Gfzy1e53XHWPxiBMrFCil0O7dZTyYyEXYFJ2Cn_XoL_h175wEhFIF1A/exec'; 
-        // ----------------------------------------------
+    <div id="view-colaborador" class="hidden text-center">
+        <h4 class="mb-3 text-primary">Registrar Presença</h4>
+        <p id="info-projeto-colab" class="fw-bold text-secondary mb-3"></p>
+        
+        <input type="number" id="cpf-colab" class="form-control form-control-lg mb-3" placeholder="Seu CPF (só números)">
+        
+        <div id="area-botoes-padrao">
+            <button class="btn btn-success btn-lg w-100 mb-2" id="btn-ponto-padrao" onclick="processarPonto('padrao')">Confirmar Presença</button>
+            <button class="btn btn-outline-secondary w-100 mb-4" onclick="alternarTelaColab('pix')">Alterar minha chave PIX</button>
+        </div>
 
-        // A função de exportação com colunas fixas:
-        function exportarExcel() {
-            const data = window.dadosAtuais; // Variável global preenchida pelo getListaPresencas
-            const csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
-            
-            data.forEach(p => {
-                let row = [
-                    "DataFixa", "ClienteFixo", "UnidadeFixa", // Ajuste conforme necessário
-                    p.cpf, p.nome, p.pix, p.nomeReduzido, p.funcao, p.obs
-                ];
-                csv.push(row.map(item => `"${String(item).replace(/"/g, '""')}"`).join(";"));
+        <div id="area-cadastro" class="hidden text-start mb-4 p-3 border rounded bg-light">
+            <div class="alert alert-warning text-center">CPF não cadastrado. Complete seus dados:</div>
+            <input type="text" id="nome-cadastro" class="form-control mb-2" placeholder="Nome Completo">
+            <input type="text" id="pix-cadastro" class="form-control mb-3" placeholder="Sua Chave PIX">
+            <button class="btn btn-primary w-100 mb-2" id="btn-ponto-cadastro" onclick="processarPonto('cadastro')">Salvar Cadastro e Confirmar Presença</button>
+            <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
+        </div>
+
+        <div id="area-alterar-pix" class="hidden text-start mb-4 p-3 border rounded bg-light">
+            <div class="alert alert-info text-center">Digite abaixo sua nova chave:</div>
+            <input type="text" id="pix-alterar" class="form-control mb-3" placeholder="Nova Chave PIX">
+            <button class="btn btn-primary w-100 mb-2" id="btn-ponto-pix" onclick="processarPonto('alterarPix')">Atualizar PIX e Confirmar Presença</button>
+            <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
+        </div>
+        
+        <hr>
+        <h6 class="text-start fw-bold mb-3">Colaboradores Presentes:</h6>
+        <ul id="lista-colab-view" class="list-group list-group-flush text-start border rounded"></ul>
+    </div>
+</div>
+
+<script>
+    // === COLOQUE O SEU LINK AQUI ===
+    const API_URL = 'https://script.google.com/macros/s/AKfycbysglmzCgFFsNauk2R78V_lk6V-W1YMG-occ1Hf_nkppwskrTg3NjuvjPn9kdv83i0H2A/exec'; 
+    let projetoAtivo = null;
+    let dadosGlobaisParaExcel = []; 
+
+    window.onload = async () => {
+        const params = new URLSearchParams(window.location.search);
+        const projParam = params.get('projeto');
+        
+        if(projParam) {
+            projetoAtivo = JSON.parse(decodeURIComponent(projParam));
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-colaborador').classList.remove('hidden');
+            document.getElementById('info-projeto-colab').innerText = `${projetoAtivo.data} | ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            carregarLista(true);
+            setInterval(() => carregarLista(true), 5000);
+        } else {
+            const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
+            const sel = document.getElementById('sel-proj');
+            res.projetos.forEach(p => {
+                let opt = document.createElement('option');
+                opt.value = JSON.stringify(p);
+                opt.text = `${p.data} | ${p.cliente} | ${p.unidade} ${p.status === 'Encerrado' ? '(ENCERRADO)' : ''}`;
+                sel.appendChild(opt);
             });
+        }
+    };
+
+    async function entrar() {
+        const cpf = document.getElementById('cpf-sup').value;
+        if(!document.getElementById('sel-proj').value) return alert('Selecione um projeto.');
+        projetoAtivo = JSON.parse(document.getElementById('sel-proj').value);
+        
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf, projeto:projetoAtivo})})).json();
+        
+        if(res.encontrado) {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            document.getElementById('span-nome-sup').innerText = res.nome;
+            document.getElementById('span-projeto').innerText = `${projetoAtivo.data} | ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
+            document.getElementById('link-ponto').value = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
             
-            const blob = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url; a.download = "Relatorio.csv"; a.click();
+            if(projetoAtivo.status === 'Encerrado') {
+                document.getElementById('badge-status').innerText = "Encerrado";
+                document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
+                document.getElementById('btn-salvar-lista').disabled = true;
+                document.getElementById('card-link').classList.add('hidden');
+            }
+
+            carregarLista(false);
+            setInterval(() => carregarLista(false), 5000); 
+        } else { alert('Acesso Negado ou CPF Inválido.'); }
+    }
+
+    function alternarTelaColab(tela) {
+        document.getElementById('area-botoes-padrao').classList.add('hidden');
+        document.getElementById('area-cadastro').classList.add('hidden');
+        document.getElementById('area-alterar-pix').classList.add('hidden');
+        if(tela === 'padrao') document.getElementById('area-botoes-padrao').classList.remove('hidden');
+        if(tela === 'cadastro') document.getElementById('area-cadastro').classList.remove('hidden');
+        if(tela === 'pix') document.getElementById('area-alterar-pix').classList.remove('hidden');
+    }
+
+    async function processarPonto(tipo) {
+        const cpf = document.getElementById('cpf-colab').value;
+        if(!cpf) return alert("Digite o seu CPF.");
+
+        let extras = { nome: null, pix: null, updatePix: false };
+        let btn;
+
+        if(tipo === 'padrao') btn = document.getElementById('btn-ponto-padrao');
+        if(tipo === 'cadastro') {
+            btn = document.getElementById('btn-ponto-cadastro');
+            extras.nome = document.getElementById('nome-cadastro').value;
+            extras.pix = document.getElementById('pix-cadastro').value;
+            if(!extras.nome || !extras.pix) return alert("Preencha seu Nome e PIX.");
+        }
+        if(tipo === 'alterarPix') {
+            btn = document.getElementById('btn-ponto-pix');
+            extras.pix = document.getElementById('pix-alterar').value;
+            extras.updatePix = true;
+            if(!extras.pix) return alert("Preencha a nova Chave PIX.");
         }
 
-        async function salvarAlteracoes() { /* Logica de fetch p/ salvarApenas */ }
-        async function encerrarProjeto() { /* Logica de fetch p/ encerrarProjeto */ }
-    </script>
+        const originalText = btn.innerText;
+        btn.innerText = "Processando...";
+        btn.disabled = true;
+
+        const res = await (await fetch(API_URL, {
+            method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf, extras: extras})
+        })).json();
+
+        btn.innerText = originalText;
+        btn.disabled = false;
+
+        if(res.error) {
+            alert(res.error);
+        } else if (res.requiresRegistration) {
+            alternarTelaColab('cadastro');
+        } else if (res.success) {
+            if(res.message) alert(res.message); 
+            document.getElementById('cpf-colab').value = '';
+            document.getElementById('nome-cadastro').value = '';
+            document.getElementById('pix-cadastro').value = '';
+            document.getElementById('pix-alterar').value = '';
+            alternarTelaColab('padrao');
+            carregarLista(true);
+            
+            const btnP = document.getElementById('btn-ponto-padrao');
+            btnP.innerText = "✓ Confirmado!";
+            btnP.classList.replace('btn-success', 'btn-primary');
+            setTimeout(() => { btnP.innerText = "Confirmar Presença"; btnP.classList.replace('btn-primary', 'btn-success'); }, 3000);
+        }
+    }
+
+    async function carregarLista(isColaborador) {
+        // REGRA: Salvamento de estado para o Supervisor não perder dados na atualização de tela (Polling de 5 seg)
+        let savedInputs = {};
+        if (!isColaborador) {
+            document.querySelectorAll('#lista-presentes-sup tr').forEach(tr => {
+                let id = tr.getAttribute('data-rowid');
+                if (id) {
+                    let sel = document.getElementById('f-'+id);
+                    let obs = document.getElementById('o-'+id);
+                    savedInputs[id] = { f: sel ? sel.value : null, o: obs ? obs.value : null };
+                }
+            });
+        }
+
+        const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
+        dadosGlobaisParaExcel = res.lista; 
+
+        if(isColaborador) {
+            const ul = document.getElementById('lista-colab-view');
+            if(res.lista.length === 0) {
+                ul.innerHTML = '<li class="list-group-item text-muted">Nenhum registro ainda.</li>';
+            } else {
+                ul.innerHTML = res.lista.map(p => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div><span class="text-success fw-bold me-1">✓</span> ${p.nome}</div>
+                        <small class="text-muted">${p.cpf}</small>
+                    </li>
+                `).join('');
+            }
+        } else {
+            const tbody = document.getElementById('lista-presentes-sup');
+            if(res.lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
+            } else {
+                tbody.innerHTML = res.lista.map(p => `
+                    <tr data-rowid="${p.rowId}">
+                        <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
+                        <td>
+                            <select id="f-${p.rowId}" class="form-select form-select-sm" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
+                                <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
+                                <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
+                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
+                                <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
+                                <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
+                            </select>
+                        </td>
+                        <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}></td>
+                    </tr>
+                `).join('');
+                
+                // Reaplica os dados que o supervisor já estava digitando (Prevenindo perda de dados)
+                Object.keys(savedInputs).forEach(id => {
+                    let sel = document.getElementById('f-'+id);
+                    let obs = document.getElementById('o-'+id);
+                    if (sel && savedInputs[id].f !== null) sel.value = savedInputs[id].f;
+                    if (obs && savedInputs[id].o !== null) obs.value = savedInputs[id].o;
+                });
+            }
+        }
+    }
+
+    async function salvarTodaLista() {
+        if(!confirm("⚠️ AVISO: Ao salvar, este projeto será ENCERRADO e não aceitará novas presenças.\nDeseja continuar?")) return;
+
+        const btn = document.getElementById('btn-salvar-lista');
+        btn.innerText = "Encerrando...";
+        btn.disabled = true;
+
+        let listaParaSalvar = [];
+        document.querySelectorAll('tbody#lista-presentes-sup tr').forEach(tr => {
+            const rowId = tr.getAttribute('data-rowid');
+            if(rowId) {
+                listaParaSalvar.push({
+                    rowId: parseInt(rowId), 
+                    funcao: document.getElementById('f-'+rowId).value, 
+                    obs: document.getElementById('o-'+rowId).value
+                });
+            }
+        });
+
+        await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'salvarLista', lista: listaParaSalvar, projeto: projetoAtivo}) });
+
+        projetoAtivo.status = "Encerrado"; 
+        document.getElementById('badge-status').innerText = "Encerrado";
+        document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
+        document.getElementById('card-link').classList.add('hidden'); 
+
+        btn.innerText = "✓ Projeto Encerrado";
+        btn.classList.replace('btn-danger', 'btn-secondary');
+    }
+
+    // REGRA: Exportação blindada em CSV, prevenindo inversão e quebra de colunas
+    function exportarExcel() {
+        if (!dadosGlobaisParaExcel || dadosGlobaisParaExcel.length === 0) return alert("Não há dados.");
+
+        // Função de escape rígida: Garante que um "ponto e vírgula" ou "enter" num campo não quebre a estrutura das colunas.
+        const escapeCsv = (str) => {
+            if (str === null || str === undefined) return '""';
+            return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"';
+        };
+
+        let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
+
+        dadosGlobaisParaExcel.forEach(p => {
+            // Garante o salvamento dos campos na mesma tela caso o supervisor exporte antes de salvar o projeto.
+            let f = document.getElementById('f-'+p.rowId) ? document.getElementById('f-'+p.rowId).value : p.funcao;
+            let o = document.getElementById('o-'+p.rowId) ? document.getElementById('o-'+p.rowId).value : p.obs;
+            
+            // Ordem rigorosa baseada na sua solicitação
+            let row = [
+                escapeCsv(projetoAtivo.data),
+                escapeCsv(projetoAtivo.cliente),
+                escapeCsv(projetoAtivo.unidade),
+                escapeCsv(p.cpf),
+                escapeCsv(p.nome),
+                escapeCsv(p.pix),
+                escapeCsv(p.nomeReduzido),
+                escapeCsv(f),
+                escapeCsv(o)
+            ];
+
+            csv.push(row.join(";"));
+        });
+
+        let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
+        let downloadLink = document.createElement("a");
+        downloadLink.download = `Folha_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.click();
+    }
+
+    function copiarLink() { 
+        document.getElementById('link-ponto').select(); document.execCommand('copy'); 
+        alert("Link copiado!");
+    }
+</script>
 </body>
 </html>
