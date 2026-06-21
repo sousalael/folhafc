@@ -11,12 +11,12 @@
 <div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
+        <h4 class="mb-3 text-primary">Gestão de equipes</h4>
         <label class="form-label fw-bold">Selecione o Projeto de Hoje:</label>
         <select id="sel-proj" class="form-select mb-3"></select>
         
         <label class="form-label fw-bold">CPF do Supervisor:</label>
-        <input type="number" id="cpf-sup" class="form-control mb-3" placeholder="Digite apenas números">
+        <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2" onclick="entrar()">Entrar no Painel</button>
     </div>
 
@@ -54,7 +54,8 @@
         </div>
         
         <div class="d-flex flex-column gap-2 mt-3">
-            <button class="btn btn-danger fw-bold w-100 py-2" id="btn-salvar-lista" onclick="salvarTodaLista()">💾 Salvar Alterações e Encerrar Projeto</button>
+            <button class="btn btn-primary fw-bold w-100 py-2" id="btn-salvar-apenas" onclick="salvarAlteracoes()">💾 Salvar Alterações</button>
+            <button class="btn btn-danger w-100 py-2" id="btn-encerrar" onclick="encerrarProjeto()">🔒 Encerrar Projeto</button>
             <button class="btn btn-secondary w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel</button>
         </div>
     </div>
@@ -63,7 +64,7 @@
         <h4 class="mb-3 text-primary">Registrar Presença</h4>
         <p id="info-projeto-colab" class="fw-bold text-secondary mb-3"></p>
         
-        <input type="number" id="cpf-colab" class="form-control form-control-lg mb-3" placeholder="Seu CPF (só números)">
+        <input type="text" id="cpf-colab" class="form-control form-control-lg mb-3 text-center cpf-mask" placeholder="Seu CPF (000.000.000-00)" maxlength="14">
         
         <div id="area-botoes-padrao">
             <button class="btn btn-success btn-lg w-100 mb-2" id="btn-ponto-padrao" onclick="processarPonto('padrao')">Confirmar Presença</button>
@@ -71,16 +72,40 @@
         </div>
 
         <div id="area-cadastro" class="hidden text-start mb-4 p-3 border rounded bg-light">
-            <div class="alert alert-warning text-center">CPF não cadastrado. Complete seus dados:</div>
+            <div class="alert alert-warning text-center fw-bold">CPF não cadastrado. Complete seus dados:</div>
+            
+            <label class="form-label fw-bold">Nome Completo:</label>
             <input type="text" id="nome-cadastro" class="form-control mb-2" placeholder="Nome Completo">
-            <input type="text" id="pix-cadastro" class="form-control mb-3" placeholder="Sua Chave PIX">
+            
+            <label class="form-label fw-bold">Tipo de Chave Pix:</label>
+            <select id="tipo-pix-cadastro" class="form-select mb-2" onchange="gerenciarMascaraPix('cadastro')">
+                <option value="CELULAR">Celular</option>
+                <option value="CPF">CPF</option>
+                <option value="EMAIL">E-mail</option>
+                <option value="ALEATORIA">Chave Aleatória</option>
+            </select>
+
+            <label class="form-label fw-bold">Chave PIX:</label>
+            <input type="text" id="pix-cadastro" class="form-control mb-3" placeholder="Digite sua chave Pix">
+            
             <button class="btn btn-primary w-100 mb-2" id="btn-ponto-cadastro" onclick="processarPonto('cadastro')">Salvar Cadastro e Confirmar Presença</button>
             <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
         </div>
 
         <div id="area-alterar-pix" class="hidden text-start mb-4 p-3 border rounded bg-light">
-            <div class="alert alert-info text-center">Digite abaixo sua nova chave:</div>
-            <input type="text" id="pix-alterar" class="form-control mb-3" placeholder="Nova Chave PIX">
+            <div class="alert alert-info text-center fw-bold">Selecione o tipo e digite a nova chave:</div>
+            
+            <label class="form-label fw-bold">Tipo de Chave Pix:</label>
+            <select id="tipo-pix-alterar" class="form-select mb-2" onchange="gerenciarMascaraPix('alterar')">
+                <option value="CELULAR">Celular</option>
+                <option value="CPF">CPF</option>
+                <option value="EMAIL">E-mail</option>
+                <option value="ALEATORIA">Chave Aleatória</option>
+            </select>
+
+            <label class="form-label fw-bold">Nova Chave PIX:</label>
+            <input type="text" id="pix-alterar" class="form-control mb-3" placeholder="Digite a nova chave Pix">
+            
             <button class="btn btn-primary w-100 mb-2" id="btn-ponto-pix" onclick="processarPonto('alterarPix')">Atualizar PIX e Confirmar Presença</button>
             <button class="btn btn-secondary w-100" onclick="alternarTelaColab('padrao')">Cancelar</button>
         </div>
@@ -92,12 +117,63 @@
 </div>
 
 <script>
-    // === COLOQUE O SEU LINK AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbysglmzCgFFsNauk2R78V_lk6V-W1YMG-occ1Hf_nkppwskrTg3NjuvjPn9kdv83i0H2A/exec'; 
+    // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwNpO5Kw4CJ71ZahKwxenFYt8iHs60tpTCiU0oYdZ9WAC9FnUsf73Fzrm3M4H_jYpOIhQ/exec'; 
+    
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
 
+    // Função de aplicação manual da máscara dinâmica de CPF
+    function aplicarMascaraCPF(input) {
+        let v = input.value.replace(/\D/g, "");
+        if (v.length > 11) v = v.slice(0, 11);
+        if (v.length > 9) {
+            v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{1,2})$/, "$1.$2.$3-$4");
+        } else if (v.length > 6) {
+            v = v.replace(/^(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3");
+        } else if (v.length > 3) {
+            v = v.replace(/^(\d{3})(\d{1,3})$/, "$1.$2");
+        }
+        input.value = v;
+    }
+
+    // Gerencia o comportamento dos campos de PIX baseado na seleção do tipo
+    function gerenciarMascaraPix(contexto) {
+        const sufixo = contexto === 'cadastro' ? '-cadastro' : '-alterar';
+        const select = document.getElementById('tipo-pix' + sufixo);
+        const input = document.getElementById('pix' + sufixo);
+        
+        input.value = ''; 
+        input.removeAttribute('maxlength');
+        
+        // Remove ouvintes antigos redefinindo o elemento por clonagem leve
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+
+        if (select.value === 'CPF') {
+            newInput.setAttribute('placeholder', '000.000.000-00');
+            newInput.setAttribute('maxlength', '14');
+            newInput.addEventListener('input', () => aplicarMascaraCPF(newInput));
+        } else if (select.value === 'CELULAR') {
+            newInput.setAttribute('placeholder', '(00) 00000-0000');
+            newInput.addEventListener('input', () => {
+                let v = newInput.value.replace(/\D/g, "");
+                if(v.length > 11) v = v.slice(0,11);
+                if(v.length > 6) v = v.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
+                else if(v.length > 2) v = v.replace(/^(\d{2})(\d{1,5})$/, "($1) $2");
+                newInput.value = v;
+            });
+        } else {
+            newInput.setAttribute('placeholder', 'Digite a chave Pix');
+        }
+    }
+
     window.onload = async () => {
+        // Inicializa máscaras em todos os campos declarados de CPF estáticos
+        document.querySelectorAll('.cpf-mask').forEach(input => {
+            input.addEventListener('input', () => aplicarMascaraCPF(input));
+        });
+
         const params = new URLSearchParams(window.location.search);
         const projParam = params.get('projeto');
         
@@ -137,13 +213,14 @@
             if(projetoAtivo.status === 'Encerrado') {
                 document.getElementById('badge-status').innerText = "Encerrado";
                 document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
-                document.getElementById('btn-salvar-lista').disabled = true;
+                document.getElementById('btn-salvar-apenas').disabled = true;
+                document.getElementById('btn-encerrar').disabled = true;
                 document.getElementById('card-link').classList.add('hidden');
             }
 
             carregarLista(false);
             setInterval(() => carregarLista(false), 5000); 
-        } else { alert('Acesso Negado ou CPF Inválido.'); }
+        } else { alert('Acesso Negado ou CPF de Supervisor Inválido.'); }
     }
 
     function alternarTelaColab(tela) {
@@ -151,26 +228,34 @@
         document.getElementById('area-cadastro').classList.add('hidden');
         document.getElementById('area-alterar-pix').classList.add('hidden');
         if(tela === 'padrao') document.getElementById('area-botoes-padrao').classList.remove('hidden');
-        if(tela === 'cadastro') document.getElementById('area-cadastro').classList.remove('hidden');
-        if(tela === 'pix') document.getElementById('area-alterar-pix').classList.remove('hidden');
+        if(tela === 'cadastro') {
+            document.getElementById('area-cadastro').classList.remove('hidden');
+            gerenciarMascaraPix('cadastro');
+        }
+        if(tela === 'pix') {
+            document.getElementById('area-alterar-pix').classList.remove('hidden');
+            gerenciarMascaraPix('alterar');
+        }
     }
 
     async function processarPonto(tipo) {
         const cpf = document.getElementById('cpf-colab').value;
-        if(!cpf) return alert("Digite o seu CPF.");
+        if(!cpf || cpf.replace(/\D/g, "").length !== 11) return alert("Digite um CPF válido com 11 dígitos.");
 
-        let extras = { nome: null, pix: null, updatePix: false };
+        let extras = { nome: null, pix: null, tipoPix: null, updatePix: false };
         let btn;
 
         if(tipo === 'padrao') btn = document.getElementById('btn-ponto-padrao');
         if(tipo === 'cadastro') {
             btn = document.getElementById('btn-ponto-cadastro');
             extras.nome = document.getElementById('nome-cadastro').value;
+            extras.tipoPix = document.getElementById('tipo-pix-cadastro').value;
             extras.pix = document.getElementById('pix-cadastro').value;
-            if(!extras.nome || !extras.pix) return alert("Preencha seu Nome e PIX.");
+            if(!extras.nome || !extras.pix) return alert("Preencha seu Nome e sua Chave PIX.");
         }
         if(tipo === 'alterarPix') {
             btn = document.getElementById('btn-ponto-pix');
+            extras.tipoPix = document.getElementById('tipo-pix-alterar').value;
             extras.pix = document.getElementById('pix-alterar').value;
             extras.updatePix = true;
             if(!extras.pix) return alert("Preencha a nova Chave PIX.");
@@ -208,7 +293,6 @@
     }
 
     async function carregarLista(isColaborador) {
-        // REGRA: Salvamento de estado para o Supervisor não perder dados na atualização de tela (Polling de 5 seg)
         let savedInputs = {};
         if (!isColaborador) {
             document.querySelectorAll('#lista-presentes-sup tr').forEach(tr => {
@@ -227,7 +311,7 @@
         if(isColaborador) {
             const ul = document.getElementById('lista-colab-view');
             if(res.lista.length === 0) {
-                ul.innerHTML = '<li class="list-group-item text-muted">Nenhum registro ainda.</li>';
+                ul.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum registro ainda.</li>';
             } else {
                 ul.innerHTML = res.lista.map(p => `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -257,7 +341,6 @@
                     </tr>
                 `).join('');
                 
-                // Reaplica os dados que o supervisor já estava digitando (Prevenindo perda de dados)
                 Object.keys(savedInputs).forEach(id => {
                     let sel = document.getElementById('f-'+id);
                     let obs = document.getElementById('o-'+id);
@@ -268,11 +351,9 @@
         }
     }
 
-    async function salvarTodaLista() {
-        if(!confirm("⚠️ AVISO: Ao salvar, este projeto será ENCERRADO e não aceitará novas presenças.\nDeseja continuar?")) return;
-
-        const btn = document.getElementById('btn-salvar-lista');
-        btn.innerText = "Encerrando...";
+    async function salvarAlteracoes() {
+        const btn = document.getElementById('btn-salvar-apenas');
+        btn.innerText = "Salvando...";
         btn.disabled = true;
 
         let listaParaSalvar = [];
@@ -287,22 +368,43 @@
             }
         });
 
-        await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'salvarLista', lista: listaParaSalvar, projeto: projetoAtivo}) });
+        await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'salvarApenas', lista: listaParaSalvar}) });
+        
+        btn.innerText = "✓ Salvo com sucesso!";
+        btn.classList.replace('btn-primary', 'btn-success');
+        
+        setTimeout(() => {
+            btn.innerText = "💾 Salvar Alterações";
+            btn.classList.replace('btn-success', 'btn-primary');
+            btn.disabled = false;
+        }, 3000);
+    }
+
+    async function encerrarProjeto() {
+        if(!confirm("⚠️ AVISO: Ao encerrar, este projeto NÃO aceitará novas presenças e NÃO poderá ser editado.\nDeseja continuar?")) return;
+
+        const btn = document.getElementById('btn-encerrar');
+        btn.innerText = "Encerrando...";
+        btn.disabled = true;
+
+        await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'encerrarProjeto', projeto: projetoAtivo}) });
 
         projetoAtivo.status = "Encerrado"; 
         document.getElementById('badge-status').innerText = "Encerrado";
         document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
         document.getElementById('card-link').classList.add('hidden'); 
+        document.getElementById('btn-salvar-apenas').disabled = true;
 
         btn.innerText = "✓ Projeto Encerrado";
         btn.classList.replace('btn-danger', 'btn-secondary');
+        
+        salvarAlteracoes(); 
+        carregarLista(false);
     }
 
-    // REGRA: Exportação blindada em CSV, prevenindo inversão e quebra de colunas
     function exportarExcel() {
         if (!dadosGlobaisParaExcel || dadosGlobaisParaExcel.length === 0) return alert("Não há dados.");
 
-        // Função de escape rígida: Garante que um "ponto e vírgula" ou "enter" num campo não quebre a estrutura das colunas.
         const escapeCsv = (str) => {
             if (str === null || str === undefined) return '""';
             return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"';
@@ -311,11 +413,9 @@
         let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
 
         dadosGlobaisParaExcel.forEach(p => {
-            // Garante o salvamento dos campos na mesma tela caso o supervisor exporte antes de salvar o projeto.
             let f = document.getElementById('f-'+p.rowId) ? document.getElementById('f-'+p.rowId).value : p.funcao;
             let o = document.getElementById('o-'+p.rowId) ? document.getElementById('o-'+p.rowId).value : p.obs;
             
-            // Ordem rigorosa baseada na sua solicitação
             let row = [
                 escapeCsv(projetoAtivo.data),
                 escapeCsv(projetoAtivo.cliente),
@@ -327,13 +427,12 @@
                 escapeCsv(f),
                 escapeCsv(o)
             ];
-
             csv.push(row.join(";"));
         });
 
         let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
         let downloadLink = document.createElement("a");
-        downloadLink.download = `Folha_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
+        downloadLink.download = `Relatorio_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
         downloadLink.href = window.URL.createObjectURL(csvFile);
         downloadLink.click();
     }
