@@ -11,7 +11,7 @@
 <div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary">Gestão de Equipes</h4>
+        <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
         <label class="form-label fw-bold">Selecione o Projeto de Hoje:</label>
         <select id="sel-proj" class="form-select mb-3"></select>
         
@@ -22,7 +22,7 @@
 
     <div id="view-dashboard" class="hidden">
         <div class="alert alert-success">
-            <h5 class="alert-heading">Gestão de Equipes</h5>
+            <h5 class="alert-heading">Painel de Gestão</h5>
             <hr>
             <p class="mb-1"><strong>Supervisor(a):</strong> <span id="span-nome-sup"></span></p>
             <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
@@ -118,11 +118,11 @@
 
 <script>
     // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbz4hh5vEvJihXINskRDDN04U83GYprH1M0z7glJU55bvLO4RkgwBY8bfIeYIahjP6E86A/exec'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz9fBb6Rxpn-yfdygSHkheVbg7nCP0UGWz3b79X7KUvCkjLHOzMgB1g8vGDg_zPtQdtdA/exec'; 
     
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
-    let isTyping = false; // NOVA VARIÁVEL: Detecta se o usuário está digitando
+    let isTyping = false; 
 
     function aplicarMascaraCPF(input) {
         let v = input.value.replace(/\D/g, "");
@@ -286,7 +286,6 @@
     }
 
     async function carregarLista(isColaborador) {
-        // BLOQUEIO DO REFRESH: Se for supervisor e estiver digitando, aborta a atualização para não apagar o texto.
         if (!isColaborador && isTyping) return;
 
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
@@ -297,7 +296,6 @@
             if(res.lista.length === 0) {
                 ul.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum registro ainda.</li>';
             } else {
-                // REGRA APLICADA: Exibir apenas "Data - Nome Completo", sem o CPF.
                 ul.innerHTML = res.lista.map(p => `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div><span class="text-success fw-bold me-1">✓</span> ${projetoAtivo.data} - ${p.nome}</div>
@@ -318,7 +316,7 @@
                                 ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
+                                <option value="AEREOS" ${p.funcao === 'AEREOS' ? 'selected' : ''}>AEREOS</option>
                                 <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
                                 <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
                             </select>
@@ -338,7 +336,7 @@
         const btn = document.getElementById('btn-salvar-apenas');
         btn.innerText = "Salvando...";
         btn.disabled = true;
-        isTyping = false; // Garante que a tela poderá atualizar após salvar
+        isTyping = false; 
 
         let listaParaSalvar = [];
         document.querySelectorAll('tbody#lista-presentes-sup tr').forEach(tr => {
@@ -394,20 +392,22 @@
             return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"';
         };
 
+        // CABEÇALHO RIGIDAMENTE ORDENADO
         let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
 
         dadosGlobaisParaExcel.forEach(p => {
             let f = document.getElementById('f-'+p.rowId) ? document.getElementById('f-'+p.rowId).value : p.funcao;
             let o = document.getElementById('o-'+p.rowId) ? document.getElementById('o-'+p.rowId).value : p.obs;
             
+            // CONSTRUÇÃO DA LINHA CORRESPONDENDO FIELMENTE AOS DADOS SEM INVERSÕES
             let row = [
                 escapeCsv(projetoAtivo.data),
                 escapeCsv(projetoAtivo.cliente),
                 escapeCsv(projetoAtivo.unidade),
                 escapeCsv(p.cpf),
                 escapeCsv(p.nome),
-                escapeCsv(p.pix),
-                escapeCsv(p.nomeReduzido),
+                escapeCsv(p.pix),          // Alinhado com "Chave Pix"
+                escapeCsv(p.nomeReduzido),  // Alinhado com "Nome Reduzido"
                 escapeCsv(f),
                 escapeCsv(o)
             ];
@@ -423,7 +423,7 @@
 
     function copiarLink() { 
         document.getElementById('link-ponto').select(); document.execCommand('copy'); 
-        alert("Link copiado!");
+        alert("Link copied!");
     }
 </script>
 </body>
