@@ -11,7 +11,7 @@
 <div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary">Gestão de equipes</h4>
+        <h4 class="mb-3 text-primary">Gestão de Equipes</h4>
         <label class="form-label fw-bold">Selecione o Projeto de Hoje:</label>
         <select id="sel-proj" class="form-select mb-3"></select>
         
@@ -22,7 +22,7 @@
 
     <div id="view-dashboard" class="hidden">
         <div class="alert alert-success">
-            <h5 class="alert-heading">Painel de Gestão</h5>
+            <h5 class="alert-heading">Gestão de Equipes</h5>
             <hr>
             <p class="mb-1"><strong>Supervisor(a):</strong> <span id="span-nome-sup"></span></p>
             <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
@@ -118,26 +118,21 @@
 
 <script>
     // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwNpO5Kw4CJ71ZahKwxenFYt8iHs60tpTCiU0oYdZ9WAC9FnUsf73Fzrm3M4H_jYpOIhQ/exec'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz4hh5vEvJihXINskRDDN04U83GYprH1M0z7glJU55bvLO4RkgwBY8bfIeYIahjP6E86A/exec'; 
     
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
+    let isTyping = false; // NOVA VARIÁVEL: Detecta se o usuário está digitando
 
-    // Função de aplicação manual da máscara dinâmica de CPF
     function aplicarMascaraCPF(input) {
         let v = input.value.replace(/\D/g, "");
         if (v.length > 11) v = v.slice(0, 11);
-        if (v.length > 9) {
-            v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{1,2})$/, "$1.$2.$3-$4");
-        } else if (v.length > 6) {
-            v = v.replace(/^(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3");
-        } else if (v.length > 3) {
-            v = v.replace(/^(\d{3})(\d{1,3})$/, "$1.$2");
-        }
+        if (v.length > 9) v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{1,2})$/, "$1.$2.$3-$4");
+        else if (v.length > 6) v = v.replace(/^(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3");
+        else if (v.length > 3) v = v.replace(/^(\d{3})(\d{1,3})$/, "$1.$2");
         input.value = v;
     }
 
-    // Gerencia o comportamento dos campos de PIX baseado na seleção do tipo
     function gerenciarMascaraPix(contexto) {
         const sufixo = contexto === 'cadastro' ? '-cadastro' : '-alterar';
         const select = document.getElementById('tipo-pix' + sufixo);
@@ -146,7 +141,6 @@
         input.value = ''; 
         input.removeAttribute('maxlength');
         
-        // Remove ouvintes antigos redefinindo o elemento por clonagem leve
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
 
@@ -169,7 +163,6 @@
     }
 
     window.onload = async () => {
-        // Inicializa máscaras em todos os campos declarados de CPF estáticos
         document.querySelectorAll('.cpf-mask').forEach(input => {
             input.addEventListener('input', () => aplicarMascaraCPF(input));
         });
@@ -293,17 +286,8 @@
     }
 
     async function carregarLista(isColaborador) {
-        let savedInputs = {};
-        if (!isColaborador) {
-            document.querySelectorAll('#lista-presentes-sup tr').forEach(tr => {
-                let id = tr.getAttribute('data-rowid');
-                if (id) {
-                    let sel = document.getElementById('f-'+id);
-                    let obs = document.getElementById('o-'+id);
-                    savedInputs[id] = { f: sel ? sel.value : null, o: obs ? obs.value : null };
-                }
-            });
-        }
+        // BLOQUEIO DO REFRESH: Se for supervisor e estiver digitando, aborta a atualização para não apagar o texto.
+        if (!isColaborador && isTyping) return;
 
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
         dadosGlobaisParaExcel = res.lista; 
@@ -313,10 +297,10 @@
             if(res.lista.length === 0) {
                 ul.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum registro ainda.</li>';
             } else {
+                // REGRA APLICADA: Exibir apenas "Data - Nome Completo", sem o CPF.
                 ul.innerHTML = res.lista.map(p => `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div><span class="text-success fw-bold me-1">✓</span> ${p.nome}</div>
-                        <small class="text-muted">${p.cpf}</small>
+                        <div><span class="text-success fw-bold me-1">✓</span> ${projetoAtivo.data} - ${p.nome}</div>
                     </li>
                 `).join('');
             }
@@ -329,7 +313,9 @@
                     <tr data-rowid="${p.rowId}">
                         <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
                         <td>
-                            <select id="f-${p.rowId}" class="form-select form-select-sm" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
+                            <select id="f-${p.rowId}" class="form-select form-select-sm" 
+                                onfocus="isTyping = true" onblur="isTyping = false" 
+                                ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
                                 <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
@@ -337,16 +323,13 @@
                                 <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
                             </select>
                         </td>
-                        <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}></td>
+                        <td>
+                            <input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" 
+                                onfocus="isTyping = true" onblur="isTyping = false" 
+                                ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}>
+                        </td>
                     </tr>
                 `).join('');
-                
-                Object.keys(savedInputs).forEach(id => {
-                    let sel = document.getElementById('f-'+id);
-                    let obs = document.getElementById('o-'+id);
-                    if (sel && savedInputs[id].f !== null) sel.value = savedInputs[id].f;
-                    if (obs && savedInputs[id].o !== null) obs.value = savedInputs[id].o;
-                });
             }
         }
     }
@@ -355,6 +338,7 @@
         const btn = document.getElementById('btn-salvar-apenas');
         btn.innerText = "Salvando...";
         btn.disabled = true;
+        isTyping = false; // Garante que a tela poderá atualizar após salvar
 
         let listaParaSalvar = [];
         document.querySelectorAll('tbody#lista-presentes-sup tr').forEach(tr => {
