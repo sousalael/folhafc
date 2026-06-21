@@ -8,7 +8,7 @@
     <style>.hidden { display: none !important; }</style>
 </head>
 <body class="bg-light p-3">
-<div class="container" style="max-width: 650px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+<div class="container" style="max-width: 700px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
     <div id="view-login">
         <h4 class="mb-3 text-primary">Acesso Supervisor</h4>
@@ -30,7 +30,7 @@
 
         <div class="card mb-4 bg-light">
             <div class="card-body">
-                <label class="fw-bold mb-2">Link para os Colaboradores:</label>
+                <label class="fw-bold mb-2">Link de preenchimento dos colaboradores:</label>
                 <div class="input-group">
                     <input type="text" id="link-ponto" class="form-control bg-white" readonly>
                     <button class="btn btn-primary" onclick="copiarLink()">Copiar Link</button>
@@ -40,17 +40,21 @@
 
         <h6 class="fw-bold">Colaboradores Presentes:</h6>
         <div class="table-responsive">
-            <table class="table table-sm table-bordered align-middle">
+            <table class="table table-sm table-bordered align-middle" id="tabela-presencas">
                 <thead class="table-light">
                     <tr>
-                        <th>Nome</th>
+                        <th>Nome / CPF</th>
                         <th>Função</th>
                         <th>Observação</th>
-                        <th>Ação</th>
                     </tr>
                 </thead>
                 <tbody id="lista-presentes-sup"></tbody>
             </table>
+        </div>
+        
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-success w-100" id="btn-salvar-lista" onclick="salvarTodaLista()">💾 Salvar Alterações</button>
+            <button class="btn btn-secondary w-100" onclick="exportarExcel()">📊 Gerar Excel</button>
         </div>
     </div>
 
@@ -63,21 +67,21 @@
         
         <hr>
         
-        <h6 class="text-start fw-bold mb-3">Colaboradores Confirmados:</h6>
+        <h6 class="text-start fw-bold mb-3">Colaboradores Presentes:</h6>
         <ul id="lista-colab-view" class="list-group list-group-flush text-start border rounded">
             </ul>
     </div>
 </div>
 
 <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbzyEJihUsSTcnysDDT8HjbLucaWd423KQW_tc1IVmxiIRWmKPOVZkAI8QBN7N1xTbC0eQ/exec'; // <--- COLOQUE SEU LINK AQUI
+    // === ATENÇÃO: COLE SUA URL DE DEPLOY AQUI ===
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwmMezMzcQX24EcqAYtmr4v73l52fLDDPrnwOIwetqqFoHU61GB7nXFJgujnppkUFAkDQ/exec'; 
     let projetoAtivo = null;
 
     window.onload = async () => {
         const params = new URLSearchParams(window.location.search);
         const projParam = params.get('projeto');
         
-        // Se a URL tiver "?projeto=", mostra a tela do colaborador
         if(projParam) {
             projetoAtivo = JSON.parse(decodeURIComponent(projParam));
             document.getElementById('view-login').classList.add('hidden');
@@ -87,7 +91,6 @@
             carregarLista(true);
             setInterval(() => carregarLista(true), 5000);
         } else {
-            // Se for acesso direto, carrega os projetos para o supervisor
             const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})})).json();
             const sel = document.getElementById('sel-proj');
             res.projetos.forEach(p => {
@@ -107,19 +110,15 @@
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf})})).json();
         
         if(res.encontrado) {
-            // Esconde Login, Mostra Dashboard
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
             
-            // Preenche a confirmação de quem está logado e qual o projeto
             document.getElementById('span-nome-sup').innerText = res.nome;
             document.getElementById('span-projeto').innerText = `${projetoAtivo.data} | ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
             
-            // Gera o link para a equipe
             const linkGerado = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
             document.getElementById('link-ponto').value = linkGerado;
             
-            // Inicia a tabela
             carregarLista(false);
             setInterval(() => carregarLista(false), 5000); 
         } else { 
@@ -128,47 +127,109 @@
     }
 
     async function carregarLista(isColaborador) {
-        // Trava de segurança: Se o supervisor estiver digitando, não atualiza a tabela para não apagar o texto
-        if (!isColaborador && document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'text') {
+        // Bloqueia atualização automática se o supervisor estiver digitando uma observação ou escolhendo função
+        if (!isColaborador && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) {
             return; 
         }
 
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
         
         if(isColaborador) {
-            // Visão do Colaborador: Apenas a lista de nomes confirmados
+            // TELA DO COLABORADOR: Exibe o nome claramente
             const ul = document.getElementById('lista-colab-view');
             if(res.lista.length === 0) {
-                ul.innerHTML = '<li class="list-group-item text-muted">Nenhum registro ainda.</li>';
+                ul.innerHTML = '<li class="list-group-item text-muted">Nenhum colaborador registrado ainda.</li>';
             } else {
                 ul.innerHTML = res.lista.map(p => `<li class="list-group-item"><span class="text-success fw-bold">✓</span> ${p.nome}</li>`).join('');
             }
         } else {
-            // Visão do Supervisor: Tabela com Função e Observação editáveis
+            // TELA DO SUPERVISOR: Tabela com Nome e Lista Suspensa (Select) para Função
             const tbody = document.getElementById('lista-presentes-sup');
             if(res.lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Aguardando registros da equipe...</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros da equipe...</td></tr>';
             } else {
+                // Monta a tabela com o "select" em vez de "input" de texto
                 tbody.innerHTML = res.lista.map(p => `
-                    <tr>
+                    <tr data-rowid="${p.rowId}">
                         <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
-                        <td><input type="text" id="f-${p.rowId}" value="${p.funcao}" class="form-control form-control-sm"></td>
-                        <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm"></td>
-                        <td><button class="btn btn-sm btn-success w-100" onclick="salvar(${p.rowId})">Salvar</button></td>
+                        <td>
+                            <select id="f-${p.rowId}" class="form-select form-select-sm">
+                                <option value="OPERACIONAL" ${p.funcao === 'OPERACIONAL' ? 'selected' : ''}>OPERACIONAL</option>
+                                <option value="LÍDER" ${p.funcao === 'LÍDER' ? 'selected' : ''}>LÍDER</option>
+                                <option value="APOIO" ${p.funcao === 'APOIO' ? 'selected' : ''}>APOIO</option>
+                                <option value="SUPERVISOR" ${p.funcao === 'SUPERVISOR' ? 'selected' : ''}>SUPERVISOR</option>
+                            </select>
+                        </td>
+                        <td><input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" placeholder="Opcional"></td>
                     </tr>
                 `).join('');
             }
         }
     }
 
-    async function salvar(rowId) {
-        const f = document.getElementById('f-'+rowId).value;
-        const o = document.getElementById('o-'+rowId).value;
-        await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'atualizarPresenca', rowId, funcao:f, obs:o})});
-        // Feedback sutil no botão para o supervisor saber que salvou
-        const btn = event.target;
-        btn.innerText = "Salvo!";
-        setTimeout(() => btn.innerText = "Salvar", 2000);
+    // NOVA FUNÇÃO: Salva a lista inteira de uma vez só
+    async function salvarTodaLista() {
+        const btn = document.getElementById('btn-salvar-lista');
+        btn.innerText = "Salvando...";
+        btn.disabled = true;
+
+        const linhas = document.querySelectorAll('tbody#lista-presentes-sup tr');
+        let listaParaSalvar = [];
+        
+        linhas.forEach(tr => {
+            const rowId = tr.getAttribute('data-rowid');
+            if(rowId) {
+                const f = document.getElementById('f-'+rowId).value;
+                const o = document.getElementById('o-'+rowId).value;
+                listaParaSalvar.push({rowId: parseInt(rowId), funcao: f, obs: o});
+            }
+        });
+
+        await fetch(API_URL, {
+            method:'POST', 
+            body: JSON.stringify({action:'salvarLista', lista: listaParaSalvar})
+        });
+
+        btn.innerText = "✓ Salvo com Sucesso!";
+        btn.classList.replace('btn-success', 'btn-primary');
+        setTimeout(() => { 
+            btn.innerText = "💾 Salvar Alterações"; 
+            btn.classList.replace('btn-primary', 'btn-success');
+            btn.disabled = false; 
+        }, 3000);
+    }
+
+    // NOVA FUNÇÃO: Gera um arquivo do Excel compatível com o sistema
+    function exportarExcel() {
+        let csv = [];
+        let rows = document.querySelectorAll("#tabela-presencas tr");
+        
+        for (let i = 0; i < rows.length; i++) {
+            let row = [];
+            let cols = rows[i].querySelectorAll("td, th");
+            
+            for (let j = 0; j < cols.length; j++) {
+                let data = cols[j].innerText;
+                // Se a coluna tiver input ou select, pega o valor digitado/selecionado em vez do texto
+                let input = cols[j].querySelector('input, select');
+                if(input) { data = input.value; }
+                
+                // Limpa quebras de linha que possam bagunçar o Excel
+                data = data.replace(/(\r\n|\n|\r)/gm, " - ");
+                row.push('"' + data.replace(/"/g, '""') + '"');
+            }
+            // Usa ponto e vírgula para abrir corretamente no Excel em português
+            csv.push(row.join(";")); 
+        }
+
+        let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
+        let downloadLink = document.createElement("a");
+        downloadLink.download = `Presencas_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
     }
 
     async function registrarPonto() {
@@ -176,7 +237,6 @@
         const cpf = cpfInput.value;
         if(!cpf) return;
 
-        // Limpa o input do CPF e muda o texto do botão momentaneamente (Sem alert)
         cpfInput.value = '';
         const btn = event.target;
         const originalText = btn.innerText;
@@ -185,10 +245,8 @@
 
         await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf})});
         
-        // Atualiza a lista instantaneamente
         carregarLista(true);
         
-        // Restaura o botão
         btn.innerText = "Presença Confirmada!";
         btn.classList.replace('btn-success', 'btn-primary');
         setTimeout(() => {
@@ -201,16 +259,12 @@
     function copiarLink() { 
         const inputLink = document.getElementById('link-ponto');
         inputLink.select(); 
-        inputLink.setSelectionRange(0, 99999); // Para mobile
+        inputLink.setSelectionRange(0, 99999);
         document.execCommand('copy'); 
         
         const btn = event.target;
         btn.innerText = "Copiado!";
-        btn.classList.replace('btn-primary', 'btn-success');
-        setTimeout(() => {
-            btn.innerText = "Copiar Link";
-            btn.classList.replace('btn-success', 'btn-primary');
-        }, 2000);
+        setTimeout(() => { btn.innerText = "Copiar Link"; }, 2000);
     }
 </script>
 </body>
