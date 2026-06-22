@@ -10,6 +10,7 @@
 <body class="bg-light p-3">
 <div class="container" style="max-width: 750px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
     
+    <!-- LOGIN SUPERVISOR / DIRETOR -->
     <div id="view-login">
         <h4 class="mb-3 text-primary">Acesso Gestão</h4>
         <label class="form-label fw-bold">Selecione o Projeto Ativo de Hoje:</label>
@@ -22,23 +23,31 @@
         <button class="btn btn-primary w-100 py-2" onclick="entrar()">Entrar no Painel</button>
     </div>
 
+    <!-- DASHBOARD SUPERVISOR / DIRETOR -->
     <div id="view-dashboard" class="hidden">
         
+        <!-- PAINEL DE FERRAMENTAS DO DIRETOR -->
         <div id="area-diretor" class="alert alert-dark hidden mb-4 border-dark">
-            <h6 class="fw-bold text-dark mb-3">👑 Painel de Controle do Diretor</h6>
-            <div class="row g-2">
+            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas da Diretoria</h6>
+            <div class="row g-2 mb-3">
                 <div class="col-md-6">
-                    <label class="form-label text-sm mb-1 fw-bold">Projetos Ativos do Dia:</label>
+                    <label class="form-label text-sm mb-1 fw-bold">Ver Projeto Ativo (Hoje):</label>
                     <select id="sel-proj-diretor-ativos" class="form-select border-dark" onchange="carregarProjetoDiretor('ativo')">
-                        <option value="">-- Selecionar Projeto Ativo --</option>
+                        <option value="">-- Selecionar --</option>
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label text-sm mb-1 fw-bold">Projetos Encerrados:</label>
+                    <label class="form-label text-sm mb-1 fw-bold">Ver Projeto Encerrado:</label>
                     <select id="sel-proj-diretor-encerrados" class="form-select border-dark" onchange="carregarProjetoDiretor('encerrado')">
-                        <option value="">-- Selecionar Projeto Encerrado --</option>
+                        <option value="">-- Selecionar --</option>
                     </select>
                 </div>
+            </div>
+            
+            <hr class="border-secondary">
+            <div class="d-flex flex-column flex-md-row gap-2 mt-2">
+                <button class="btn btn-outline-dark btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalMultiRelatorio" onclick="popularModalMulti()">📑 Relatório Múltiplo Unificado</button>
+                <button class="btn btn-outline-dark btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab">🔍 Pesquisar Colaborador</button>
             </div>
         </div>
 
@@ -77,14 +86,14 @@
         <div class="d-flex flex-column gap-2 mt-3">
             <button class="btn btn-primary fw-bold w-100 py-2" id="btn-salvar-apenas" onclick="salvarAlteracoes()">💾 Salvar Alterações</button>
             <button class="btn btn-danger w-100 py-2" id="btn-encerrar" onclick="encerrarProjeto()">🔒 Encerrar Projeto</button>
-            <button class="btn btn-secondary w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel</button>
+            <button class="btn btn-secondary w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel (Deste Projeto)</button>
         </div>
     </div>
 
+    <!-- REGISTRO COLABORADOR -->
     <div id="view-colaborador" class="hidden text-center">
         <h4 class="mb-3 text-primary">Registrar Presença</h4>
         <p id="info-projeto-colab" class="fw-bold text-secondary mb-3"></p>
-        
         <input type="text" id="cpf-colab" class="form-control form-control-lg mb-3 text-center cpf-mask" placeholder="Seu CPF (000.000.000-00)" maxlength="14">
         
         <div id="area-botoes-padrao">
@@ -130,12 +139,95 @@
     </div>
 </div>
 
+<!-- ================= MODAIS EXCLUSIVOS DO DIRETOR ================= -->
+
+<!-- Modal: Relatório Múltiplo -->
+<div class="modal fade" id="modalMultiRelatorio" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">Relatório de Múltiplos Projetos</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">Selecione abaixo os projetos encerrados que deseja unificar no Excel:</p>
+        <div id="lista-projetos-multi" class="border p-2 mb-3 rounded bg-light" style="max-height: 300px; overflow-y: auto;">
+           <!-- Preenchido via JS -->
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-secondary w-50" onclick="marcarTodosMulti(true)">Marcar Todos</button>
+            <button class="btn btn-sm btn-outline-secondary w-50" onclick="marcarTodosMulti(false)">Desmarcar</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success fw-bold" id="btn-gerar-multi" onclick="gerarRelatorioMultiplo()">Gerar Excel Unificado</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Buscar Colaborador -->
+<div class="modal fade" id="modalBuscaColab" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">Pesquisa em Histórico</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0">
+          <div class="col-6">
+            <label class="form-label text-sm fw-bold">Data Inicial:</label>
+            <input type="date" id="busca-data-ini" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label text-sm fw-bold">Data Final:</label>
+            <input type="date" id="busca-data-fim" class="form-control form-control-sm">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-sm fw-bold">CPF do Colaborador:</label>
+            <input type="text" id="busca-cpf" class="form-control form-control-sm cpf-mask" placeholder="000.000.000-00">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-sm fw-bold">Ou trecho do Nome:</label>
+            <input type="text" id="busca-nome" class="form-control form-control-sm" placeholder="Ex: Maria da Silva">
+          </div>
+          <div class="col-12 mt-3">
+            <button class="btn btn-primary btn-sm w-100 fw-bold" id="btn-executar-busca" onclick="executarBuscaColab()">🔍 Executar Busca</button>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered text-center align-middle text-sm" style="font-size: 0.85rem;">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Data</th>
+                        <th>Projeto / Unidade</th>
+                        <th>Colaborador</th>
+                        <th>Função</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-busca-resultados">
+                    <tr><td colspan="4" class="text-muted py-3">Preencha os filtros acima e clique em Executar Busca.</td></tr>
+                </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REQUIRED P/ FUNCIONAMENTO DAS MODAIS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyFmwYFPo66omkTXkBCpz9yRyYIpskGJ08O9njZBXTEPQ2-8fzVS-2x1zrGv6DjlWEAOA/exec'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxVoZfyFGTy4BzOD3LqWKqv4punmef-u_SxcKZIPNg14vIl802vmuUvpd0esV_6ounQ2Q/exec'; 
     
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
+    let projetosEncerradosGlobal = []; // Guarda a lista de projetos encerrados do diretor
     let isTyping = false; 
     let loopAtualizacao = null;
 
@@ -238,13 +330,12 @@
             
             if (projetoAtivo.data) atualizarCabecalhoProjeto();
 
-            // CARREGA E ALIMENTA O PAINEL DO DIRETOR COM DUPLAS LISTAS SUSPENSAS
             if (res.perfil === 'DIRETOR') {
                 document.getElementById('area-diretor').classList.remove('hidden');
+                projetosEncerradosGlobal = res.encerrados || []; 
                 
-                // 1. Popula Projetos Ativos do Dia para o Diretor
                 const selAtivos = document.getElementById('sel-proj-diretor-ativos');
-                selAtivos.innerHTML = '<option value="">-- Selecionar Projeto Ativo --</option>';
+                selAtivos.innerHTML = '<option value="">-- Selecionar --</option>';
                 if(res.ativosHoje) {
                     res.ativosHoje.forEach(p => {
                         let opt = document.createElement('option');
@@ -254,11 +345,10 @@
                     });
                 }
                 
-                // 2. Popula Projetos Encerrados para o Diretor
                 const selEncerrados = document.getElementById('sel-proj-diretor-encerrados');
-                selEncerrados.innerHTML = '<option value="">-- Selecionar Projeto Encerrado --</option>';
+                selEncerrados.innerHTML = '<option value="">-- Selecionar --</option>';
                 if(res.encerrados) {
-                    res.encerrados.reverse(); // Ordena dos mais recentes para os mais antigos
+                    res.encerrados.reverse();
                     res.encerrados.forEach(p => {
                         let opt = document.createElement('option');
                         opt.value = JSON.stringify(p);
@@ -273,7 +363,7 @@
                 if(loopAtualizacao) clearInterval(loopAtualizacao);
                 loopAtualizacao = setInterval(() => carregarLista(false), 5000); 
             } else {
-                document.getElementById('lista-presentes-sup').innerHTML = '<tr><td colspan="3" class="text-center text-muted">Utilize o painel acima para carregar um projeto ativo ou encerrado.</td></tr>';
+                document.getElementById('lista-presentes-sup').innerHTML = '<tr><td colspan="3" class="text-center text-muted">Selecione um projeto acima.</td></tr>';
             }
 
         } else { alert('Acesso Negado. CPF não reconhecido como Supervisor ou Diretor.'); }
@@ -283,10 +373,10 @@
         let val;
         if(tipo === 'ativo') {
             val = document.getElementById('sel-proj-diretor-ativos').value;
-            document.getElementById('sel-proj-diretor-encerrados').value = ""; // Limpa a outra seleção
+            document.getElementById('sel-proj-diretor-encerrados').value = ""; 
         } else {
             val = document.getElementById('sel-proj-diretor-encerrados').value;
-            document.getElementById('sel-proj-diretor-ativos').value = ""; // Limpa a outra seleção
+            document.getElementById('sel-proj-diretor-ativos').value = ""; 
         }
         
         if (!val) return;
@@ -295,10 +385,100 @@
         carregarLista(false);
         
         if(loopAtualizacao) clearInterval(loopAtualizacao);
-        if(projetoAtivo.status !== 'Encerrado') {
-            loopAtualizacao = setInterval(() => carregarLista(false), 5000); // Liga o tempo real se for um projeto ativo
+        if(projetoAtivo.status !== 'Encerrado') { loopAtualizacao = setInterval(() => carregarLista(false), 5000); }
+    }
+
+    // ================= FUNCIONALIDADES DO DIRETOR (MODAIS) ================= //
+    
+    function popularModalMulti() {
+        const container = document.getElementById('lista-projetos-multi');
+        if(projetosEncerradosGlobal.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center m-0">Nenhum projeto encerrado disponível.</p>';
+            return;
+        }
+        container.innerHTML = projetosEncerradosGlobal.map((p, i) => `
+            <div class="form-check border-bottom pb-1 mb-1">
+                <input class="form-check-input chk-multi" type="checkbox" value='${JSON.stringify(p)}' id="chk-multi-${i}">
+                <label class="form-check-label w-100" for="chk-multi-${i}" style="cursor:pointer;">${p.data} - ${p.cliente} - ${p.unidade}</label>
+            </div>
+        `).join('');
+    }
+
+    function marcarTodosMulti(marcar) {
+        document.querySelectorAll('.chk-multi').forEach(el => el.checked = marcar);
+    }
+
+    async function gerarRelatorioMultiplo() {
+        const chks = document.querySelectorAll('.chk-multi:checked');
+        if(chks.length === 0) return alert("Selecione pelo menos um projeto para gerar o relatório.");
+        
+        const btn = document.getElementById('btn-gerar-multi');
+        btn.innerText = "Gerando..."; btn.disabled = true;
+
+        const selecionados = Array.from(chks).map(el => JSON.parse(el.value));
+        
+        const res = await (await fetch(API_URL, {
+            method:'POST', body: JSON.stringify({action:'getRelatorioMultiplo', projetos: selecionados})
+        })).json();
+
+        btn.innerText = "Gerar Excel Unificado"; btn.disabled = false;
+
+        if(!res.lista || res.lista.length === 0) return alert("Nenhum registro encontrado para estes projetos.");
+        
+        const escapeCsv = (str) => {
+            if (str === null || str === undefined) return '""';
+            return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"';
+        };
+
+        let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
+        res.lista.forEach(p => {
+            csv.push([
+                escapeCsv(p.data), escapeCsv(p.cliente), escapeCsv(p.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), 
+                escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(p.funcao), escapeCsv(p.obs)
+            ].join(";"));
+        });
+
+        let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
+        let downloadLink = document.createElement("a");
+        downloadLink.download = `Relatorio_Multiplos_Projetos.csv`;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.click();
+    }
+
+    async function executarBuscaColab() {
+        const dataIni = document.getElementById('busca-data-ini').value;
+        const dataFim = document.getElementById('busca-data-fim').value;
+        const cpf = document.getElementById('busca-cpf').value;
+        const nome = document.getElementById('busca-nome').value;
+
+        if(!dataIni || !dataFim) return alert("Preencha a Data Inicial e Data Final para otimizar a busca.");
+        if(!cpf && !nome) return alert("Preencha o CPF ou trecho do Nome do colaborador.");
+
+        const btn = document.getElementById('btn-executar-busca');
+        btn.innerText = "Buscando..."; btn.disabled = true;
+
+        const res = await (await fetch(API_URL, {
+            method:'POST', body: JSON.stringify({action:'pesquisarColaboradores', filtros: { dataIni, dataFim, cpf, nome }})
+        })).json();
+
+        btn.innerText = "🔍 Executar Busca"; btn.disabled = false;
+
+        const tbody = document.getElementById('tbody-busca-resultados');
+        if(!res.resultados || res.resultados.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted py-3">Nenhum registro encontrado com estes filtros.</td></tr>';
+        } else {
+            tbody.innerHTML = res.resultados.map(r => `
+                <tr>
+                    <td class="text-nowrap">${r.data}</td>
+                    <td><span class="fw-bold d-block text-truncate" style="max-width:120px;">${r.cliente}</span><small class="text-muted">${r.unidade}</small></td>
+                    <td><span class="fw-bold d-block text-truncate" style="max-width:120px;">${r.nome}</span><small class="text-muted">${r.cpf}</small></td>
+                    <td>${r.funcao}</td>
+                </tr>
+            `).join('');
         }
     }
+
+    // ================= DEMAIS FUNÇÕES DO SISTEMA (MANTIDAS INTACTAS) ================= //
 
     function alternarTelaColab(tela) {
         document.getElementById('area-botoes-padrao').classList.add('hidden');
@@ -333,15 +513,11 @@
         }
 
         const originalText = btn.innerText;
-        btn.innerText = "Processando...";
-        btn.disabled = true;
+        btn.innerText = "Processando..."; btn.disabled = true;
 
-        const res = await (await fetch(API_URL, {
-            method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf, extras: extras})
-        })).json();
+        const res = await (await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'registrarPonto', projeto:projetoAtivo, cpf:cpf, extras: extras}) })).json();
 
-        btn.innerText = originalText;
-        btn.disabled = false;
+        btn.innerText = originalText; btn.disabled = false;
 
         if(res.error) {
             alert(res.error);
@@ -349,16 +525,12 @@
             alternarTelaColab('cadastro');
         } else if (res.success) {
             if(res.message) alert(res.message); 
-            document.getElementById('cpf-colab').value = '';
-            document.getElementById('nome-cadastro').value = '';
-            document.getElementById('pix-cadastro').value = '';
-            document.getElementById('pix-alterar').value = '';
-            alternarTelaColab('padrao');
-            carregarLista(true);
+            document.getElementById('cpf-colab').value = ''; document.getElementById('nome-cadastro').value = '';
+            document.getElementById('pix-cadastro').value = ''; document.getElementById('pix-alterar').value = '';
+            alternarTelaColab('padrao'); carregarLista(true);
             
             const btnP = document.getElementById('btn-ponto-padrao');
-            btnP.innerText = "✓ Confirmado!";
-            btnP.classList.replace('btn-success', 'btn-primary');
+            btnP.innerText = "✓ Confirmado!"; btnP.classList.replace('btn-success', 'btn-primary');
             setTimeout(() => { btnP.innerText = "Confirmar Presença"; btnP.classList.replace('btn-primary', 'btn-success'); }, 3000);
         }
     }
@@ -372,38 +544,27 @@
 
         if(isColaborador) {
             const ul = document.getElementById('lista-colab-view');
-            if(res.lista.length === 0) {
-                ul.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum registro ainda.</li>';
-            } else {
-                ul.innerHTML = res.lista.map(p => `
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div><span class="text-success fw-bold me-1">✓</span> ${projetoAtivo.data} - ${p.nome}</div>
-                    </li>
-                `).join('');
-            }
+            if(res.lista.length === 0) ul.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum registro ainda.</li>';
+            else ul.innerHTML = res.lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center"><div><span class="text-success fw-bold me-1">✓</span> ${projetoAtivo.data} - ${p.nome}</div></li>`).join('');
         } else {
             const tbody = document.getElementById('lista-presentes-sup');
-            if(res.lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
-            } else {
+            if(res.lista.length === 0) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
+            else {
                 tbody.innerHTML = res.lista.map(p => `
                     <tr data-rowid="${p.rowId}">
                         <td class="fw-bold">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
                         <td>
-                            <select id="f-${p.rowId}" class="form-select form-select-sm" 
-                                onfocus="isTyping = true" onblur="isTyping = false" 
-                                ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
+                            <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AEREOS" ${p.funcao === 'AEREOS' ? 'selected' : ''}>AEREOS</option>
+                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
                                 <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
-                                <option value="SUPERVISAO" ${p.funcao === 'SUPERVISAO' ? 'selected' : ''}>SUPERVISAO</option>
+                                <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
+                                <option value="DIRETORIA" ${p.funcao === 'DIRETORIA' ? 'selected' : ''}>DIRETORIA</option>
                             </select>
                         </td>
                         <td>
-                            <input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" 
-                                onfocus="isTyping = true" onblur="isTyping = false" 
-                                ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}>
+                            <input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}>
                         </td>
                     </tr>
                 `).join('');
@@ -413,92 +574,46 @@
 
     async function salvarAlteracoes() {
         const btn = document.getElementById('btn-salvar-apenas');
-        btn.innerText = "Salvando...";
-        btn.disabled = true;
-        isTyping = false; 
+        btn.innerText = "Salvando..."; btn.disabled = true; isTyping = false; 
 
         let listaParaSalvar = [];
         document.querySelectorAll('tbody#lista-presentes-sup tr').forEach(tr => {
             const rowId = tr.getAttribute('data-rowid');
-            if(rowId) {
-                listaParaSalvar.push({
-                    rowId: parseInt(rowId), 
-                    funcao: document.getElementById('f-'+rowId).value, 
-                    obs: document.getElementById('o-'+rowId).value
-                });
-            }
+            if(rowId) listaParaSalvar.push({ rowId: parseInt(rowId), funcao: document.getElementById('f-'+rowId).value, obs: document.getElementById('o-'+rowId).value });
         });
 
         await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'salvarApenas', lista: listaParaSalvar}) });
         
-        btn.innerText = "✓ Salvo com sucesso!";
-        btn.classList.replace('btn-primary', 'btn-success');
-        
-        setTimeout(() => {
-            btn.innerText = "💾 Salvar Alterações";
-            btn.classList.replace('btn-success', 'btn-primary');
-            btn.disabled = false;
-        }, 3000);
+        btn.innerText = "✓ Salvo com sucesso!"; btn.classList.replace('btn-primary', 'btn-success');
+        setTimeout(() => { btn.innerText = "💾 Salvar Alterações"; btn.classList.replace('btn-success', 'btn-primary'); btn.disabled = false; }, 3000);
     }
 
     async function encerrarProjeto() {
         if(!confirm("⚠️ AVISO: Ao encerrar, este projeto NÃO aceitará novas presenças e NÃO poderá ser editado.\nDeseja continuar?")) return;
-
-        const btn = document.getElementById('btn-encerrar');
-        btn.innerText = "Encerrando...";
-        btn.disabled = true;
-
+        const btn = document.getElementById('btn-encerrar'); btn.innerText = "Encerrando..."; btn.disabled = true;
         await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'encerrarProjeto', projeto: projetoAtivo}) });
-
         projetoAtivo.status = "Encerrado"; 
         atualizarCabecalhoProjeto();
-        
-        btn.innerText = "✓ Projeto Encerrado";
-        btn.classList.replace('btn-danger', 'btn-secondary');
-        
-        salvarAlteracoes(); 
-        carregarLista(false);
+        btn.innerText = "✓ Projeto Encerrado"; btn.classList.replace('btn-danger', 'btn-secondary');
+        salvarAlteracoes(); carregarLista(false);
     }
 
     function exportarExcel() {
         if (!dadosGlobaisParaExcel || dadosGlobaisParaExcel.length === 0) return alert("Não há dados para exportar.");
-
-        const escapeCsv = (str) => {
-            if (str === null || str === undefined) return '""';
-            return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"';
-        };
+        const escapeCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"'; };
 
         let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
-
         dadosGlobaisParaExcel.forEach(p => {
             let f = document.getElementById('f-'+p.rowId) ? document.getElementById('f-'+p.rowId).value : p.funcao;
             let o = document.getElementById('o-'+p.rowId) ? document.getElementById('o-'+p.rowId).value : p.obs;
-            
-            let row = [
-                escapeCsv(projetoAtivo.data),
-                escapeCsv(projetoAtivo.cliente),
-                escapeCsv(projetoAtivo.unidade),
-                escapeCsv(p.cpf),
-                escapeCsv(p.nome),
-                escapeCsv(p.pix),          
-                escapeCsv(p.nomeReduzido), 
-                escapeCsv(f),
-                escapeCsv(o)
-            ];
-            csv.push(row.join(";"));
+            csv.push([escapeCsv(projetoAtivo.data), escapeCsv(projetoAtivo.cliente), escapeCsv(projetoAtivo.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(f), escapeCsv(o)].join(";"));
         });
-
         let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
-        let downloadLink = document.createElement("a");
-        downloadLink.download = `Relatorio_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
-        downloadLink.href = window.URL.createObjectURL(csvFile);
-        downloadLink.click();
+        let downloadLink = document.createElement("a"); downloadLink.download = `Relatorio_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
+        downloadLink.href = window.URL.createObjectURL(csvFile); downloadLink.click();
     }
 
-    function copiarLink() { 
-        document.getElementById('link-ponto').select(); document.execCommand('copy'); 
-        alert("Link copiado com sucesso!");
-    }
+    function copiarLink() { document.getElementById('link-ponto').select(); document.execCommand('copy'); alert("Link copiado com sucesso!"); }
 </script>
 </body>
 </html>
