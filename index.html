@@ -61,7 +61,7 @@
 
         <div class="card mb-4 bg-light" id="card-link">
             <div class="card-body">
-                <label class="fw-bold mb-2">Link para Colaboradores (Bater Ponto):</label>
+                <label class="fw-bold mb-2">Link para Equipe:</label>
                 <div class="input-group">
                     <input type="text" id="link-ponto" class="form-control bg-white" readonly>
                     <button class="btn btn-primary" onclick="copiarLink()">Copiar Link</button>
@@ -69,7 +69,7 @@
             </div>
         </div>
 
-        <h6 class="fw-bold">Colaboradores Presentes:</h6>
+        <h6 class="fw-bold">Equipe Presente:</h6>
         <div class="table-responsive">
             <table class="table table-sm table-bordered align-middle" id="tabela-presencas">
                 <thead class="table-light">
@@ -557,10 +557,9 @@
                             <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
+                                <option value="AEREOS" ${p.funcao === 'AEREOS' ? 'selected' : ''}>AEREOS</option>
                                 <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
-                                <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
-                                <option value="DIRETORIA" ${p.funcao === 'DIRETORIA' ? 'selected' : ''}>DIRETORIA</option>
+                                <option value="SUPERVISAO" ${p.funcao === 'SUPERVISAO' ? 'selected' : ''}>SUPERVISAO</option>
                             </select>
                         </td>
                         <td>
