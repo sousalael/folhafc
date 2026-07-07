@@ -73,7 +73,7 @@
             <option value="">-- Selecione o Projeto --</option>
         </select>
         
-        <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
+        <label class="form-label fw-bold">Login:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
     </div>
@@ -81,7 +81,7 @@
     <div id="view-dashboard" class="hidden">
         
         <div id="area-diretor" class="alert alert-dark hidden mb-4 border-dark">
-            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas da Diretoria</h6>
+            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas de Gestão</h6>
             <div class="row g-2 mb-3">
                 <div class="col-md-6">
                     <label class="form-label text-sm mb-1 fw-bold">Ver Projeto Ativo (Hoje):</label>
@@ -114,7 +114,7 @@
 
         <div class="card mb-4 bg-light border-0 shadow-sm" id="card-link">
             <div class="card-body">
-                <label class="fw-bold mb-2">Link para Colaboradores (Bater Ponto):</label>
+                <label class="fw-bold mb-2">Link para Equipe:</label>
                 <div class="input-group">
                     <input type="text" id="link-ponto" class="form-control bg-white" readonly>
                     <button class="btn btn-primary fw-bold" onclick="copiarLink()">Copiar Link</button>
@@ -122,7 +122,7 @@
             </div>
         </div>
 
-        <h6 class="fw-bold text-primary">Colaboradores Presentes:</h6>
+        <h6 class="fw-bold text-primary">Equipe presente:</h6>
         <div class="table-responsive shadow-sm rounded">
             <table class="table table-sm table-bordered align-middle mb-0" id="tabela-presencas">
                 <thead class="table-light">
@@ -269,7 +269,7 @@
 
 <script>
     // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
-    const API_URL = 'SUA_URL_DE_DEPLOY_AQUI'; 
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxVoZfyFGTy4BzOD3LqWKqv4punmef-u_SxcKZIPNg14vIl802vmuUvpd0esV_6ounQ2Q/exec'; 
     
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
@@ -599,7 +599,7 @@
                             <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
+                                <option value="AEREOS" ${p.funcao === 'AEREOS' ? 'selected' : ''}>AEREOS</option>
                                 <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
                                 <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
                             </select>
