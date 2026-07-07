@@ -23,8 +23,8 @@
             color: var(--fc-primaria) !important; 
         }
 
-        /* Botões Primários */
-        .btn-primary, .btn-success {
+        /* Botões Primários e Badges Extras */
+        .btn-primary, .btn-success, .bg-primary {
             background-color: var(--fc-primaria) !important;
             border-color: var(--fc-primaria) !important;
             color: #ffffff !important;
@@ -42,8 +42,8 @@
         }
         
         .alert-success {
-            background-color: rgba(95, 101, 244, 0.1) !important; /* Fundo translúcido com a cor da marca */
-            color: #3b40a3 !important; /* Tom mais escuro para leitura */
+            background-color: rgba(95, 101, 244, 0.1) !important; 
+            color: #3b40a3 !important; 
             border: 1px solid rgba(95, 101, 244, 0.3) !important;
         }
         
@@ -73,7 +73,7 @@
             <option value="">-- Selecione o Projeto --</option>
         </select>
         
-        <label class="form-label fw-bold">Login:</label>
+        <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
     </div>
@@ -81,7 +81,7 @@
     <div id="view-dashboard" class="hidden">
         
         <div id="area-diretor" class="alert alert-dark hidden mb-4 border-dark">
-            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas de Gestão</h6>
+            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas da Diretoria</h6>
             <div class="row g-2 mb-3">
                 <div class="col-md-6">
                     <label class="form-label text-sm mb-1 fw-bold">Ver Projeto Ativo (Hoje):</label>
@@ -114,7 +114,7 @@
 
         <div class="card mb-4 bg-light border-0 shadow-sm" id="card-link">
             <div class="card-body">
-                <label class="fw-bold mb-2">Link para Equipe:</label>
+                <label class="fw-bold mb-2">Link para Colaboradores (Bater Ponto):</label>
                 <div class="input-group">
                     <input type="text" id="link-ponto" class="form-control bg-white" readonly>
                     <button class="btn btn-primary fw-bold" onclick="copiarLink()">Copiar Link</button>
@@ -122,12 +122,16 @@
             </div>
         </div>
 
-        <h6 class="fw-bold text-primary">Equipe presente:</h6>
+        <h6 class="fw-bold text-primary d-flex align-items-center mb-3">
+            Colaboradores Presentes: 
+            <span id="contador-participantes" class="badge bg-primary ms-2 rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
+        </h6>
+        
         <div class="table-responsive shadow-sm rounded">
             <table class="table table-sm table-bordered align-middle mb-0" id="tabela-presencas">
                 <thead class="table-light">
                     <tr>
-                        <th>Nome / CPF</th>
+                        <th>Nº / Nome Completo</th>
                         <th>Função</th>
                         <th>Observação</th>
                     </tr>
@@ -186,7 +190,10 @@
         </div>
         
         <hr class="border-opacity-50">
-        <h6 class="text-start fw-bold mb-3 text-primary">Colaboradores Presentes:</h6>
+        <h6 class="text-start fw-bold mb-3 text-primary d-flex align-items-center justify-content-between">
+            Colaboradores Presentes:
+            <span id="contador-participantes-colab" class="badge bg-primary rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
+        </h6>
         <ul id="lista-colab-view" class="list-group list-group-flush text-start border rounded shadow-sm"></ul>
     </div>
 </div>
@@ -269,7 +276,7 @@
 
 <script>
     // === COLOQUE O SEU LINK DE DEPLOY AQUI ===
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxVoZfyFGTy4BzOD3LqWKqv4punmef-u_SxcKZIPNg14vIl802vmuUvpd0esV_6ounQ2Q/exec'; 
+    const API_URL = 'SUA_URL_DE_DEPLOY_AQUI'; 
     
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
@@ -511,11 +518,12 @@
         if(!res.resultados || res.resultados.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" class="text-muted py-3">Nenhum registro encontrado com estes filtros.</td></tr>';
         } else {
+            // CPF também foi omitido da busca para manter a privacidade alinhada ao restante do sistema
             tbody.innerHTML = res.resultados.map(r => `
                 <tr>
                     <td class="text-nowrap">${r.data}</td>
                     <td><span class="fw-bold d-block text-truncate" style="max-width:120px;">${r.cliente}</span><small class="text-muted">${r.unidade}</small></td>
-                    <td><span class="fw-bold d-block text-truncate" style="max-width:120px; color: var(--fc-primaria);">${r.nome}</span><small class="text-muted">${r.cpf}</small></td>
+                    <td><span class="fw-bold d-block text-truncate" style="max-width:150px; color: var(--fc-primaria);">${r.nome}</span></td>
                     <td>${r.funcao}</td>
                 </tr>
             `).join('');
@@ -577,29 +585,51 @@
         }
     }
 
+    // Função central de carregamento de listas atualizada
     async function carregarLista(isColaborador) {
         if (!projetoAtivo || !projetoAtivo.data) return;
         if (!isColaborador && isTyping) return;
 
         const res = await (await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto:projetoAtivo})})).json();
+        
+        // Os dados ainda guardam o CPF no background (para gerar o Excel do Diretor sem quebrar)
         dadosGlobaisParaExcel = res.lista; 
 
         if(isColaborador) {
             const ul = document.getElementById('lista-colab-view');
-            if(res.lista.length === 0) ul.innerHTML = '<li class="list-group-item text-muted text-center border-0">Nenhum registro ainda.</li>';
-            else ul.innerHTML = res.lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center"><div><span class="fw-bold me-2" style="color: var(--fc-primaria);">✓</span> ${projetoAtivo.data} - ${p.nome}</div></li>`).join('');
+            
+            // Atualiza o contador de participantes na tela do colaborador
+            document.getElementById('contador-participantes-colab').innerText = res.lista.length;
+
+            if(res.lista.length === 0) {
+                ul.innerHTML = '<li class="list-group-item text-muted text-center border-0">Nenhum registro ainda.</li>';
+            } else {
+                ul.innerHTML = res.lista.map((p, index) => 
+                    `<li class="list-group-item d-flex align-items-center">
+                        <span class="text-muted small me-3 fw-bold">#${index + 1}</span>
+                        <div class="fw-bold" style="color: var(--fc-primaria);">${p.nome}</div>
+                    </li>`
+                ).join('');
+            }
         } else {
             const tbody = document.getElementById('lista-presentes-sup');
-            if(res.lista.length === 0) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
-            else {
-                tbody.innerHTML = res.lista.map(p => `
+            
+            // Atualiza o contador de participantes na tela do supervisor/diretor
+            document.getElementById('contador-participantes').innerText = res.lista.length;
+
+            if(res.lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aguardando registros...</td></tr>';
+            } else {
+                tbody.innerHTML = res.lista.map((p, index) => `
                     <tr data-rowid="${p.rowId}">
-                        <td class="fw-bold" style="color: var(--fc-primaria);">${p.nome}<br><small class="text-muted fw-normal">${p.cpf}</small></td>
+                        <td class="fw-bold d-flex align-items-center" style="color: var(--fc-primaria); border-bottom: none;">
+                            <span class="text-muted me-2 small">#${index + 1}</span> ${p.nome}
+                        </td>
                         <td>
                             <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
                                 <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                 <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
-                                <option value="AEREOS" ${p.funcao === 'AEREOS' ? 'selected' : ''}>AEREOS</option>
+                                <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
                                 <option value="PONTO-EXTRA" ${p.funcao === 'PONTO-EXTRA' ? 'selected' : ''}>PONTO-EXTRA</option>
                                 <option value="SUPERVISÃO" ${p.funcao === 'SUPERVISÃO' ? 'selected' : ''}>SUPERVISÃO</option>
                             </select>
@@ -643,6 +673,7 @@
         if (!dadosGlobaisParaExcel || dadosGlobaisParaExcel.length === 0) return alert("Não há dados para exportar.");
         const escapeCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"'; };
 
+        // O Excel continua exportando o CPF normalmente usando a variável dadosGlobaisParaExcel
         let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
         dadosGlobaisParaExcel.forEach(p => {
             let f = document.getElementById('f-'+p.rowId) ? document.getElementById('f-'+p.rowId).value : p.funcao;
