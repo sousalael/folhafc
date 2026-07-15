@@ -123,13 +123,16 @@
             <span id="badge-status" class="badge bg-success mt-2 px-3 py-2">Ativo</span>
         </div>
 
-        <!-- ############ NOVO: ABAS FOLHA DE PONTO / DESPESAS ############ -->
+        <!-- ############ NOVO: ABAS ############ -->
         <ul class="nav nav-tabs nav-fill flex-nowrap mb-4" id="abas-painel">
             <li class="nav-item">
-                <button class="nav-link active fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-ponto" type="button">🕒 Folha de Ponto</button>
+                <button class="nav-link active fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-ponto" type="button">🕒 <span class="d-none d-sm-inline">Folha de </span>Ponto</button>
             </li>
             <li class="nav-item">
                 <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-despesas" type="button">💰 Despesas</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-financeiro" type="button">🏦 Financeiro</button>
             </li>
         </ul>
 
@@ -209,53 +212,85 @@
             </div>
         </div>
         <!-- ############ (fim do conteúdo original da Folha de Ponto) ############ -->
+
         </div>
 
         <!-- ############ NOVO: ABA DE DESPESAS ############ -->
         <div class="tab-pane fade" id="tab-despesas">
 
         <h6 class="fw-bold text-primary d-flex align-items-center mb-3 flex-wrap">
-            Despesas do Projeto:
+            Despesas:
             <span id="contador-despesas" class="badge bg-primary ms-2 rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
             <span class="ms-auto fw-bold" style="color: var(--fc-primaria);">Total: <span id="total-despesas">R$ 0,00</span></span>
         </h6>
 
-        <div class="card mb-3 border-0 shadow-sm bg-light" id="card-form-despesa">
+        <div class="card mb-3 border-0 shadow-sm bg-light">
             <div class="card-body">
-                <div class="row g-2" id="desp-campos">
-                    <div class="col-md-7">
-                        <label class="form-label fw-bold text-primary mb-1">Tipo de Despesa:</label>
-                        <select id="desp-tipo" class="form-select">
-                            <option value="">-- Carregando tipos... --</option>
-                        </select>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
-                        <input type="text" id="desp-valor" class="form-control" placeholder="0,00" inputmode="numeric">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-bold text-primary mb-1">Observação (opcional):</label>
-                        <input type="text" id="desp-obs" class="form-control" placeholder="Ex: almoço da equipe, corrida de aplicativo...">
-                    </div>
+                <div id="desp-campos">
 
-                    <div class="col-12 mt-3">
-                        <label class="form-label fw-bold text-primary mb-1">Comprovante:</label>
-                        <div id="desp-area-colar" class="border border-2 rounded p-3 text-center bg-white" tabindex="0" style="cursor:pointer; border-style: dashed !important;">
-                            <input type="file" id="desp-arquivo" class="hidden" accept="image/*" onchange="prepararComprovante(this.files[0])">
-                            <div id="desp-preview-vazio">
-                                <button type="button" class="btn btn-outline-primary btn-sm fw-bold mb-2" id="btn-foto-desp" onclick="document.getElementById('desp-arquivo').click()">📷 Bater foto / Anexar imagem</button>
-                                <div class="text-muted small">ou clique aqui e cole o print com <strong>Ctrl+V</strong></div>
+                    <div class="hidden mb-3" id="desp-bloco-centro">
+                        <div class="form-check border rounded p-2 bg-white">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" id="desp-sem-projeto" onchange="alternarSemProjeto()">
+                            <label class="form-check-label fw-bold text-primary" for="desp-sem-projeto" style="cursor:pointer;">Despesa sem projeto (centro de custo)</label>
+                        </div>
+                        <div class="row g-2 mt-1 hidden" id="desp-campos-centro">
+                            <div class="col-7">
+                                <label class="form-label fw-bold text-primary mb-1">Centro de Custo:</label>
+                                <select id="desp-centro" class="form-select"></select>
                             </div>
-                            <div id="desp-preview-cheio" class="hidden">
-                                <img id="desp-preview-img" src="" class="img-fluid rounded shadow-sm mb-2" style="max-height: 160px;">
-                                <div class="small text-muted mb-2" id="desp-preview-info"></div>
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="limparComprovante()">🗑️ Remover imagem</button>
+                            <div class="col-5">
+                                <label class="form-label fw-bold text-primary mb-1">Competência:</label>
+                                <input type="date" id="desp-data-centro" class="form-control">
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12 mt-3">
-                        <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-despesa" onclick="gravarDespesa()">💾 Gravar Despesa</button>
+                    <div class="row g-2">
+                        <div class="col-md-7">
+                            <label class="form-label fw-bold text-primary mb-1">Tipo de Despesa:</label>
+                            <select id="desp-tipo" class="form-select">
+                                <option value="">-- Carregando tipos... --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
+                            <input type="text" id="desp-valor" class="form-control" placeholder="0,00" inputmode="numeric">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold text-primary mb-1">Forma de Pagamento:</label>
+                            <select id="desp-forma" class="form-select" onchange="avisarRecursoProprio()">
+                                <option value="">-- Carregando formas... --</option>
+                            </select>
+                            <div class="small text-muted mt-1 hidden" id="desp-aviso-proprio">💡 Pago com recurso próprio: este valor entra no seu acerto de contas.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold text-primary mb-1">Observação (opcional):</label>
+                            <input type="text" id="desp-obs" class="form-control" placeholder="Ex: almoço da equipe, corrida de aplicativo...">
+                        </div>
+
+                        <div class="col-12 mt-3">
+                            <label class="form-label fw-bold text-primary mb-1">Comprovante:</label>
+                            <div id="desp-area-colar" class="border border-2 rounded p-3 text-center bg-white" tabindex="0" style="cursor:pointer; border-style: dashed !important;">
+                                <input type="file" id="desp-camera" class="hidden" accept="image/*" capture="environment" onchange="prepararComprovante(this.files[0], 'desp')">
+                                <input type="file" id="desp-arquivo" class="hidden" accept="image/*" onchange="prepararComprovante(this.files[0], 'desp')">
+                                <div id="desp-preview-vazio">
+                                    <div class="d-flex gap-2 justify-content-center mb-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="document.getElementById('desp-camera').click()">📷 Tirar foto</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="document.getElementById('desp-arquivo').click()">📎 Anexar imagem</button>
+                                    </div>
+                                    <div class="text-muted small">ou clique aqui e cole o print com <strong>Ctrl+V</strong></div>
+                                </div>
+                                <div id="desp-preview-cheio" class="hidden">
+                                    <img id="desp-preview-img" src="" class="img-fluid rounded shadow-sm mb-2" style="max-height: 160px;">
+                                    <div class="small text-muted mb-2" id="desp-preview-info"></div>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="limparComprovante('desp')">🗑️ Remover imagem</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-3">
+                            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-despesa" onclick="gravarDespesa()">💾 Gravar Despesa</button>
+                        </div>
                     </div>
                 </div>
 
@@ -293,6 +328,49 @@
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBiDespesas" onclick="prepararBiDespesas()">📊 BI de Despesas</button>
         </div>
         <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
+
+        </div>
+
+        <!-- ############ NOVO: ABA FINANCEIRO ############ -->
+        <div class="tab-pane fade" id="tab-financeiro">
+
+        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
+            <div class="col-6">
+                <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
+                <input type="date" id="fin-ini" class="form-control form-control-sm">
+            </div>
+            <div class="col-6">
+                <label class="form-label text-sm fw-bold text-primary">Data Final:</label>
+                <input type="date" id="fin-fim" class="form-control form-control-sm">
+            </div>
+            <div class="col-12 mt-3">
+                <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-carregar-fin" onclick="carregarAcertoContas()">🔍 Carregar Acerto de Contas</button>
+            </div>
+        </div>
+
+        <h6 class="fw-bold text-primary mb-1">⚖️ Acerto de Contas</h6>
+        <div class="small text-muted mb-3" id="fin-escopo">Compara o que foi gasto com recurso próprio contra o que já foi ressarcido.</div>
+
+        <div id="fin-lista" class="border rounded p-2 mb-3" style="max-height: 340px; overflow-y: auto;">
+            <div class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
+        </div>
+
+        <div class="alert alert-success d-flex align-items-center mb-3 hidden" id="fin-rodape">
+            <span class="fw-bold" id="fin-resumo">0 pessoas</span>
+            <span class="ms-auto fw-bold" id="fin-saldo">R$ 0,00</span>
+        </div>
+
+        <button class="btn btn-secondary w-100 py-2 fw-bold hidden" id="btn-exportar-fin" onclick="exportarAcertoContas()">📊 Exportar Acerto de Contas</button>
+
+        <div class="hidden" id="fin-area-diretoria">
+            <hr class="my-4">
+            <h6 class="fw-bold text-primary mb-3">Lançamentos da Diretoria</h6>
+            <div class="d-flex flex-column flex-md-row gap-2">
+                <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalProvisionamento" onclick="prepararProvisionamento()">💵 Lançar Provisionamento</button>
+                <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalAdiantamento" onclick="prepararAdiantamento()">🤝 Lançar Adiantamento</button>
+            </div>
+            <div class="small text-muted mt-2">Provisionamento ressarce o supervisor. Adiantamento é salário antecipado ao colaborador. Nenhum dos dois entra no BI de despesas.</div>
+        </div>
 
         </div>
         </div>
@@ -448,7 +526,7 @@
         </div>
 
         <div id="rel-desp-resultado" class="hidden">
-          <label class="form-label fw-bold text-primary mb-2">Projetos encontrados — desmarque os que não quer no relatório:</label>
+          <label class="form-label fw-bold text-primary mb-2">Projetos e centros encontrados — desmarque o que não quer no relatório:</label>
           <div id="rel-desp-projetos" class="border p-2 mb-3 rounded bg-light" style="max-height: 220px; overflow-y: auto;"></div>
           <div class="d-flex gap-2 mb-3">
             <button class="btn btn-sm btn-secondary w-50" onclick="marcarTodosRelDesp(true)">Marcar Todos</button>
@@ -498,7 +576,7 @@
           </div>
 
           <div id="bi-trilha" class="d-flex flex-wrap align-items-center gap-1 mb-2 p-2 rounded bg-light small"></div>
-          <div class="small text-muted mb-2" id="bi-dica">Clique na linha para descer um nível. Use a trilha acima para subir.</div>
+          <div class="small text-muted mb-2" id="bi-dica"></div>
 
           <div id="bi-linhas" class="border rounded p-2 mb-3" style="max-height: 320px; overflow-y: auto;"></div>
 
@@ -514,6 +592,124 @@
         </div>
 
         <div id="bi-desp-vazio" class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL PROVISIONAMENTO ############ -->
+<div class="modal fade" id="modalProvisionamento" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">Lançar Provisionamento</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-secondary small py-2 mb-3">Ressarcimento ao supervisor. Não é despesa e não entra no BI de despesas.</div>
+
+        <label class="form-label fw-bold text-primary mb-1">Supervisor:</label>
+        <input type="text" id="prov-busca" class="form-control mb-2" placeholder="CPF, nome completo ou nome reduzido" oninput="pesquisarPessoa('prov', true)">
+        <div id="prov-resultados" class="border rounded mb-2 hidden" style="max-height: 150px; overflow-y: auto;"></div>
+        <div id="prov-selecionado" class="alert alert-success py-2 hidden mb-3"></div>
+
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label fw-bold text-primary mb-1">Data:</label>
+            <input type="date" id="prov-data" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
+            <input type="text" id="prov-valor" class="form-control" placeholder="0,00" inputmode="numeric">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Forma de Pagamento:</label>
+            <select id="prov-forma" class="form-select"></select>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Observação:</label>
+            <input type="text" id="prov-obs" class="form-control" placeholder="Ex: ressarcimento das despesas de julho">
+          </div>
+          <div class="col-12 mt-3">
+            <label class="form-label fw-bold text-primary mb-1">Comprovante:</label>
+            <div id="prov-area-colar" class="border border-2 rounded p-3 text-center bg-white" tabindex="0" style="cursor:pointer; border-style: dashed !important;">
+              <input type="file" id="prov-camera" class="hidden" accept="image/*" capture="environment" onchange="prepararComprovante(this.files[0], 'prov')">
+              <input type="file" id="prov-arquivo" class="hidden" accept="image/*" onchange="prepararComprovante(this.files[0], 'prov')">
+              <div id="prov-preview-vazio">
+                <div class="d-flex gap-2 justify-content-center mb-2">
+                  <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="document.getElementById('prov-camera').click()">📷 Tirar foto</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="document.getElementById('prov-arquivo').click()">📎 Anexar imagem</button>
+                </div>
+                <div class="text-muted small">ou clique aqui e cole o print com <strong>Ctrl+V</strong></div>
+              </div>
+              <div id="prov-preview-cheio" class="hidden">
+                <img id="prov-preview-img" src="" class="img-fluid rounded shadow-sm mb-2" style="max-height: 140px;">
+                <div class="small text-muted mb-2" id="prov-preview-info"></div>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="limparComprovante('prov')">🗑️ Remover imagem</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 mt-3">
+            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-prov" onclick="gravarProvisionamento()">💾 Gravar Provisionamento</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL ADIANTAMENTO ############ -->
+<div class="modal fade" id="modalAdiantamento" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">Lançar Adiantamento</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-secondary small py-2 mb-3">Recebimento parcial de salário antes da data de pagamento. Visível somente pela Diretoria.</div>
+
+        <label class="form-label fw-bold text-primary mb-1">Colaborador:</label>
+        <input type="text" id="adto-busca" class="form-control mb-2" placeholder="CPF, nome completo ou nome reduzido" oninput="pesquisarPessoa('adto', false)">
+        <div id="adto-resultados" class="border rounded mb-2 hidden" style="max-height: 150px; overflow-y: auto;"></div>
+        <div id="adto-selecionado" class="alert alert-success py-2 hidden mb-3"></div>
+
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label fw-bold text-primary mb-1">Data:</label>
+            <input type="date" id="adto-data" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
+            <input type="text" id="adto-valor" class="form-control" placeholder="0,00" inputmode="numeric">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Observação:</label>
+            <input type="text" id="adto-obs" class="form-control" placeholder="Ex: adiantamento quinzenal">
+          </div>
+          <div class="col-12 mt-3">
+            <label class="form-label fw-bold text-primary mb-1">Comprovante:</label>
+            <div id="adto-area-colar" class="border border-2 rounded p-3 text-center bg-white" tabindex="0" style="cursor:pointer; border-style: dashed !important;">
+              <input type="file" id="adto-camera" class="hidden" accept="image/*" capture="environment" onchange="prepararComprovante(this.files[0], 'adto')">
+              <input type="file" id="adto-arquivo" class="hidden" accept="image/*" onchange="prepararComprovante(this.files[0], 'adto')">
+              <div id="adto-preview-vazio">
+                <div class="d-flex gap-2 justify-content-center mb-2">
+                  <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="document.getElementById('adto-camera').click()">📷 Tirar foto</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="document.getElementById('adto-arquivo').click()">📎 Anexar imagem</button>
+                </div>
+                <div class="text-muted small">ou clique aqui e cole o print com <strong>Ctrl+V</strong></div>
+              </div>
+              <div id="adto-preview-cheio" class="hidden">
+                <img id="adto-preview-img" src="" class="img-fluid rounded shadow-sm mb-2" style="max-height: 140px;">
+                <div class="small text-muted mb-2" id="adto-preview-info"></div>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="limparComprovante('adto')">🗑️ Remover imagem</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 mt-3">
+            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-adto" onclick="gravarAdiantamento()">💾 Gravar Adiantamento</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1001,57 +1197,90 @@
 </script>
 
 <!-- ##################################################################### -->
-<!-- ####### NOVO: SCRIPT DO MÓDULO DE DESPESAS E HISTÓRICO ############# -->
-<!-- ####### (nada aqui altera o Folha de Ponto acima)      ############# -->
+<!-- ####### NOVO: DESPESAS, FINANCEIRO E RELATORIOS                ###### -->
+<!-- ####### Nada aqui altera o Folha de Ponto acima.               ###### -->
 <!-- ##################################################################### -->
 <script>
     let despesasGlobais = [];
-    let comprovanteAtual = null;
     let tiposDespesaCarregados = false;
+    let configExtraCarregada = false;
+    let formasPagamento = [];
     let chaveProjetoAnterior = '';
     let sessaoEncerradaAtual = false;
     let presencaGestorOk = false;
+    let comprovantes = { desp: null, prov: null, adto: null };
+    let pessoaSelecionada = { prov: null, adto: null };
 
+    // ============================================================
+    // Utilitarios
+    // ============================================================
     function chaveProjeto(p) {
         if (!p || !p.data) return '';
         return p.data + '|' + p.cliente + '|' + p.unidade;
     }
-
     function getCpfLogado() {
         const el = document.getElementById('cpf-sup');
         return el ? (el.value || '') : '';
     }
-
     function getSupervisorLogado() {
         const txt = document.getElementById('span-nome-sup').innerText || '';
         return txt.replace(/\s*\([^)]*\)\s*$/, '').trim();
     }
-
     function getPerfilLogado() {
         const txt = document.getElementById('span-nome-sup').innerText || '';
         const m = txt.match(/\(([^)]*)\)\s*$/);
         return m ? m[1].trim().toUpperCase() : '';
     }
-
+    function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
     function formatarReal(v) {
         return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
     }
-
-    // ---------- Máscara de valor em Real ----------
+    function escaparHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
     function aplicarMascaraValor(input) {
         let v = input.value.replace(/\D/g, '');
         if (!v) { input.value = ''; return; }
         v = (parseInt(v, 10) / 100).toFixed(2);
         input.value = v.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
     }
-
     function valorParaNumero(str) {
         if (!str) return 0;
         return parseFloat(String(str).replace(/\./g, '').replace(',', '.')) || 0;
     }
+    function hojeISO() {
+        const h = new Date();
+        return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
+    }
+    function primeiroDiaMesISO() {
+        const h = new Date();
+        return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-01';
+    }
+    function isoParaBR(iso) {
+        if (!iso) return '';
+        const p = iso.split('-');
+        return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : iso;
+    }
+    const escCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, ' - ') + '"'; };
+    function baixarCsv(linhas, nomeArquivo) {
+        const arquivo = new Blob(["\ufeff" + linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.download = nomeArquivo;
+        link.href = window.URL.createObjectURL(arquivo);
+        link.click();
+    }
+    async function chamarApi(payload) {
+        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const res = await response.json();
+        if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
+        return res;
+    }
 
-    // ---------- Comprovante: comprime a imagem antes de enviar ----------
-    function prepararComprovante(file) {
+    // ============================================================
+    // Comprovante (usado por despesa, provisionamento e adiantamento)
+    // A imagem e comprimida no navegador antes de subir.
+    // ============================================================
+    function prepararComprovante(file, ctx) {
         if (!file) return;
         if (!file.type || file.type.indexOf('image') === -1) return alert('O comprovante precisa ser uma imagem (foto ou print).');
 
@@ -1069,43 +1298,52 @@
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
 
-                comprovanteAtual = { base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' };
+                comprovantes[ctx] = { base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' };
 
-                document.getElementById('desp-preview-img').src = dataUrl;
-                const kb = Math.round(comprovanteAtual.base64.length * 0.75 / 1024);
-                document.getElementById('desp-preview-info').innerText = 'Imagem pronta para envio (' + kb + ' KB)';
-                document.getElementById('desp-preview-vazio').classList.add('hidden');
-                document.getElementById('desp-preview-cheio').classList.remove('hidden');
+                document.getElementById(ctx + '-preview-img').src = dataUrl;
+                const kb = Math.round(comprovantes[ctx].base64.length * 0.75 / 1024);
+                document.getElementById(ctx + '-preview-info').innerText = 'Imagem pronta para envio (' + kb + ' KB)';
+                document.getElementById(ctx + '-preview-vazio').classList.add('hidden');
+                document.getElementById(ctx + '-preview-cheio').classList.remove('hidden');
             };
-            img.onerror = () => alert('Não foi possível ler esta imagem. Tente outra foto.');
+            img.onerror = () => alert('Nao foi possivel ler esta imagem. Tente outra foto.');
             img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     }
 
-    function limparComprovante() {
-        comprovanteAtual = null;
-        document.getElementById('desp-arquivo').value = '';
-        document.getElementById('desp-preview-img').src = '';
-        document.getElementById('desp-preview-cheio').classList.add('hidden');
-        document.getElementById('desp-preview-vazio').classList.remove('hidden');
+    function limparComprovante(ctx) {
+        comprovantes[ctx] = null;
+        const cam = document.getElementById(ctx + '-camera');
+        const arq = document.getElementById(ctx + '-arquivo');
+        if (cam) cam.value = '';
+        if (arq) arq.value = '';
+        document.getElementById(ctx + '-preview-img').src = '';
+        document.getElementById(ctx + '-preview-cheio').classList.add('hidden');
+        document.getElementById(ctx + '-preview-vazio').classList.remove('hidden');
     }
 
-    function limparFormularioDespesa() {
-        document.getElementById('desp-tipo').value = '';
-        document.getElementById('desp-valor').value = '';
-        document.getElementById('desp-obs').value = '';
-        limparComprovante();
+    function ligarColagem(ctx) {
+        const area = document.getElementById(ctx + '-area-colar');
+        if (!area) return;
+        area.addEventListener('click', () => area.focus());
+        area.addEventListener('paste', (e) => {
+            const itens = (e.clipboardData || window.clipboardData).items;
+            for (let i = 0; i < itens.length; i++) {
+                if (itens[i].type.indexOf('image') !== -1) { e.preventDefault(); prepararComprovante(itens[i].getAsFile(), ctx); return; }
+            }
+        });
     }
 
-    // ---------- Tipos de despesa (aba Config_Despesas) ----------
+    // ============================================================
+    // Configuracoes (tipos, formas de pagamento, centros de custo)
+    // ============================================================
     async function carregarTiposDespesa() {
         if (tiposDespesaCarregados) return;
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'getConfigDespesas'}) });
-            const res = await response.json();
+            const res = await chamarApi({ action: 'getConfigDespesas', cpf: getCpfLogado() });
             const sel = document.getElementById('desp-tipo');
-            if (!res || !res.tipos || !res.tipos.length) {
+            if (!res.tipos || !res.tipos.length) {
                 sel.innerHTML = '<option value="">-- Nenhum tipo cadastrado na aba Config_Despesas --</option>';
                 return;
             }
@@ -1117,8 +1355,8 @@
             });
             let html = '<option value="">-- Selecione o Tipo --</option>';
             Object.keys(grupos).forEach(g => {
-                html += '<optgroup label="' + g + '">';
-                grupos[g].forEach(t => { html += '<option value="' + t + '">' + t + '</option>'; });
+                html += '<optgroup label="' + escaparHtml(g) + '">';
+                grupos[g].forEach(t => { html += '<option value="' + escaparHtml(t) + '">' + escaparHtml(t) + '</option>'; });
                 html += '</optgroup>';
             });
             sel.innerHTML = html;
@@ -1128,86 +1366,152 @@
         }
     }
 
-    // ---------- Gravar despesa ----------
+    async function carregarConfigExtra() {
+        if (configExtraCarregada) return;
+        configExtraCarregada = true;
+        const ehDiretor = (getPerfilLogado() === 'DIRETOR');
+
+        // Formas de pagamento
+        try {
+            const res = await chamarApi({ action: 'getConfigPagamento' });
+            formasPagamento = res.formas || [];
+            let html = '<option value="">-- Selecione a Forma --</option>';
+            formasPagamento.forEach(f => { html += '<option value="' + escaparHtml(f.forma) + '">' + escaparHtml(f.forma) + '</option>'; });
+            if (!formasPagamento.length) html = '<option value="">-- Nenhuma forma na aba Config_Pagamento --</option>';
+            const selD = document.getElementById('desp-forma');
+            const selP = document.getElementById('prov-forma');
+            if (selD) selD.innerHTML = html;
+            if (selP) selP.innerHTML = html;
+        } catch (err) {
+            const selD = document.getElementById('desp-forma');
+            if (selD) selD.innerHTML = '<option value="">-- Falha ao carregar formas --</option>';
+        }
+
+        // Centros de custo: exclusivo da Diretoria
+        if (!ehDiretor) return;
+        try {
+            const res = await chamarApi({ action: 'getConfigCentros', cpf: getCpfLogado() });
+            if (!res.centros || !res.centros.length) return;
+            document.getElementById('desp-centro').innerHTML =
+                '<option value="">-- Selecione o Centro --</option>' +
+                res.centros.map(c => '<option value="' + escaparHtml(c) + '">' + escaparHtml(c) + '</option>').join('');
+            document.getElementById('desp-bloco-centro').classList.remove('hidden');
+        } catch (err) { /* sem centros, segue normal */ }
+    }
+
+    function ehRecursoProprio(forma) {
+        const f = formasPagamento.find(x => x.forma === forma);
+        return !!(f && f.recursoProprio);
+    }
+
+    function avisarRecursoProprio() {
+        const aviso = document.getElementById('desp-aviso-proprio');
+        if (!aviso) return;
+        aviso.classList.toggle('hidden', !ehRecursoProprio(document.getElementById('desp-forma').value));
+    }
+
+    function alternarSemProjeto() {
+        const marcado = document.getElementById('desp-sem-projeto').checked;
+        document.getElementById('desp-campos-centro').classList.toggle('hidden', !marcado);
+        if (marcado && !document.getElementById('desp-data-centro').value) {
+            document.getElementById('desp-data-centro').value = hojeISO();
+        }
+    }
+
+    // ============================================================
+    // Lancamento de despesa
+    // ============================================================
+    function limparFormularioDespesa() {
+        document.getElementById('desp-tipo').value = '';
+        document.getElementById('desp-valor').value = '';
+        document.getElementById('desp-forma').value = '';
+        document.getElementById('desp-obs').value = '';
+        avisarRecursoProprio();
+        limparComprovante('desp');
+    }
+
+    // Devolve o destino do lancamento: projeto selecionado ou centro de custo.
+    function destinoDespesa() {
+        const chk = document.getElementById('desp-sem-projeto');
+        if (chk && chk.checked) {
+            const centro = document.getElementById('desp-centro').value;
+            const dataIso = document.getElementById('desp-data-centro').value;
+            if (!centro) { alert('Selecione o Centro de Custo.'); return null; }
+            if (!dataIso) { alert('Informe a competencia da despesa.'); return null; }
+            return { data: isoParaBR(dataIso), cliente: centro, unidade: 'EMPRESA', semProjeto: true };
+        }
+        if (!projetoAtivo || !projetoAtivo.data) { alert('Selecione um projeto no painel antes de lancar a despesa.'); return null; }
+        return { data: projetoAtivo.data, cliente: projetoAtivo.cliente, unidade: projetoAtivo.unidade, semProjeto: false };
+    }
+
     async function gravarDespesa() {
-        if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto no painel antes de lançar a despesa.');
+        const destino = destinoDespesa();
+        if (!destino) return;
 
         const tipo = document.getElementById('desp-tipo').value;
         const valor = valorParaNumero(document.getElementById('desp-valor').value);
+        const forma = document.getElementById('desp-forma').value;
         const obs = document.getElementById('desp-obs').value;
 
         if (!tipo) return alert('Selecione o Tipo de Despesa.');
         if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
+        if (!forma) return alert('Selecione a Forma de Pagamento.');
 
         const btn = document.getElementById('btn-gravar-despesa');
-        const txtOriginal = '💾 Gravar Despesa';
-        btn.innerText = comprovanteAtual ? 'Enviando comprovante...' : 'Gravando...';
+        btn.innerText = comprovantes.desp ? 'Enviando comprovante...' : 'Gravando...';
         btn.disabled = true;
 
         try {
-            const payload = {
+            await chamarApi({
                 action: 'lancarDespesa',
                 despesa: {
                     cpf: getCpfLogado(),
-                    data: projetoAtivo.data,
-                    cliente: projetoAtivo.cliente,
-                    unidade: projetoAtivo.unidade,
+                    data: destino.data,
+                    cliente: destino.cliente,
+                    unidade: destino.unidade,
+                    semProjeto: destino.semProjeto,
                     tipo: tipo,
                     valor: valor,
+                    formaPagamento: forma,
                     obs: obs,
                     supervisor: getSupervisorLogado(),
-                    comprovante: comprovanteAtual
+                    comprovante: comprovantes.desp
                 }
-            };
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify(payload) });
-            const res = await response.json();
-
-            if (!res || res.error) {
-                alert('⚠️ A despesa NÃO foi gravada.\n\n' + ((res && res.error) ? res.error : 'Resposta inesperada do servidor.'));
-                return;
-            }
+            });
 
             limparFormularioDespesa();
             await carregarDespesas();
 
-            const outra = confirm('✅ Despesa gravada com sucesso!\n\nDeseja lançar outra despesa neste projeto?\n\nOK = lançar outra\nCancelar = encerrar meus lançamentos');
+            const outra = confirm('✅ Despesa gravada com sucesso!\n\nDeseja lancar outra despesa?\n\nOK = lancar outra\nCancelar = encerrar meus lancamentos');
             if (outra) {
                 document.getElementById('desp-tipo').focus();
-            } else {
+            } else if (!destino.semProjeto) {
                 await alterarSessaoDespesas('ENCERRADO', true);
             }
         } catch (err) {
-            alert('Erro de rede ao gravar a despesa: ' + err.message);
+            alert('⚠️ A despesa NAO foi gravada.\n\n' + err.message);
         } finally {
-            btn.innerText = txtOriginal;
+            btn.innerText = '💾 Gravar Despesa';
             btn.disabled = false;
         }
     }
 
-    // ---------- Sessão de lançamentos (aba Despesas_Sessoes) ----------
+    // ============================================================
+    // Sessao de lancamentos (aba Despesas_Sessoes)
+    // ============================================================
     async function alterarSessaoDespesas(status, silencioso) {
         if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto primeiro.');
-
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({
-                action: 'setSessaoDespesas', cpf: getCpfLogado(), projeto: projetoAtivo, status: status
-            })});
-            const res = await response.json();
-
-            if (!res || res.error) {
-                alert('⚠️ Não foi possível ' + (status === 'ENCERRADO' ? 'encerrar' : 'reabrir') + ' seus lançamentos.\n\n' + ((res && res.error) ? res.error : 'Resposta inesperada do servidor.'));
-                return;
-            }
-
+            await chamarApi({ action: 'setSessaoDespesas', cpf: getCpfLogado(), projeto: projetoAtivo, status: status });
             sessaoEncerradaAtual = (status === 'ENCERRADO');
             aplicarEstadoSessao();
             if (!silencioso) {
                 alert(status === 'ENCERRADO'
-                    ? '🔒 Seus lançamentos neste projeto foram encerrados.'
-                    : '🔓 Lançamentos reabertos. Pode continuar lançando.');
+                    ? '🔒 Seus lancamentos neste projeto foram encerrados.'
+                    : '🔓 Lancamentos reabertos. Pode continuar lancando.');
             }
         } catch (err) {
-            alert('Erro de rede ao atualizar seus lançamentos: ' + err.message);
+            alert('⚠️ Nao foi possivel atualizar seus lancamentos.\n\n' + err.message);
         }
     }
 
@@ -1215,17 +1519,13 @@
         const campos = document.getElementById('desp-campos');
         const aviso = document.getElementById('desp-aviso-encerrado');
         if (!campos || !aviso) return;
-
-        if (sessaoEncerradaAtual) {
-            campos.classList.add('hidden');
-            aviso.classList.remove('hidden');
-        } else {
-            campos.classList.remove('hidden');
-            aviso.classList.add('hidden');
-        }
+        campos.classList.toggle('hidden', sessaoEncerradaAtual);
+        aviso.classList.toggle('hidden', !sessaoEncerradaAtual);
     }
 
-    // ---------- Consultar despesas do projeto ----------
+    // ============================================================
+    // Lista de despesas do projeto
+    // ============================================================
     async function carregarDespesas() {
         const tbody = document.getElementById('lista-despesas');
         const ehDiretor = (getPerfilLogado() === 'DIRETOR');
@@ -1241,207 +1541,102 @@
         }
 
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'getDespesas', projeto: projetoAtivo, cpf: getCpfLogado()}) });
-            if (!response.ok) return;
-            const res = await response.json();
-            if (!res || !res.lista) return;
-
-            despesasGlobais = res.lista;
+            const res = await chamarApi({ action: 'getDespesas', projeto: projetoAtivo, cpf: getCpfLogado() });
+            despesasGlobais = res.lista || [];
             sessaoEncerradaAtual = !!res.sessaoEncerrada;
             aplicarEstadoSessao();
 
             let total = 0;
-            res.lista.forEach(d => total += Number(d.valor || 0));
-
-            document.getElementById('contador-despesas').innerText = res.lista.length;
+            despesasGlobais.forEach(d => total += Number(d.valor || 0));
+            document.getElementById('contador-despesas').innerText = despesasGlobais.length;
             document.getElementById('total-despesas').innerText = formatarReal(total);
 
-            if (res.lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma despesa lançada.</td></tr>';
-            } else {
-                tbody.innerHTML = res.lista.map(d => `
-                    <tr>
-                        <td><span class="fw-bold" style="color: var(--fc-primaria);">${d.tipo}</span>${d.obs ? '<br><small class="text-muted">' + d.obs + '</small>' : ''}</td>
-                        <td class="text-nowrap fw-bold">${formatarReal(d.valor)}</td>
-                        <td><small>${d.supervisor || '-'}</small></td>
-                        <td class="text-center">${d.url ? '<a href="' + d.url + '" target="_blank" title="Abrir comprovante">🧾</a>' : '<span class="text-muted">—</span>'}</td>
-                        ${ehDiretor ? '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 px-2" title="Excluir lançamento" onclick="excluirDespesaLinha(' + d.rowId + ', &quot;' + String(d.timestamp).replace(/"/g, '') + '&quot;, &quot;' + String(d.tipo).replace(/"/g, '') + '&quot;)">🗑️</button></td>' : ''}
-                    </tr>
-                `).join('');
-            }
-        } catch (e) {
-            console.error('Falha silenciosa ao sincronizar despesas.');
-        }
-    }
-
-    // ---------- Excluir despesa (somente DIRETORIA) ----------
-    async function excluirDespesaLinha(rowId, timestamp, tipo) {
-        if (getPerfilLogado() !== 'DIRETOR') return alert('Somente a Diretoria pode excluir lançamentos de despesa.');
-        if (!confirm('⚠️ Excluir definitivamente este lançamento?\n\nTipo: ' + tipo + '\nLançado em: ' + timestamp + '\n\nEsta ação não pode ser desfeita.')) return;
-
-        try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({
-                action: 'excluirDespesa', cpf: getCpfLogado(), despesa: { rowId: rowId, timestamp: timestamp, tipo: tipo }
-            })});
-            const res = await response.json();
-
-            if (!res || res.error) {
-                alert('⚠️ O lançamento NÃO foi excluído.\n\n' + ((res && res.error) ? res.error : 'Resposta inesperada do servidor.'));
-                carregarDespesas();
+            if (!despesasGlobais.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma despesa lancada.</td></tr>';
                 return;
             }
-            carregarDespesas();
-        } catch (err) {
-            alert('Erro de rede ao excluir o lançamento: ' + err.message);
+
+            tbody.innerHTML = despesasGlobais.map(d => `
+                <tr>
+                    <td>
+                        <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(d.tipo)}</span>
+                        ${d.formaPagamento ? '<small class="text-muted d-block">' + escaparHtml(d.formaPagamento) + '</small>' : ''}
+                        ${d.obs ? '<small class="text-muted d-block">' + escaparHtml(d.obs) + '</small>' : ''}
+                    </td>
+                    <td class="text-nowrap fw-bold">${formatarReal(d.valor)}</td>
+                    <td><small>${escaparHtml(d.supervisor || '-')}</small></td>
+                    <td class="text-center">${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank" title="Abrir comprovante">🧾</a>' : '<span class="text-muted">—</span>'}</td>
+                    ${ehDiretor ? '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 px-2" title="Excluir" onclick="excluirDespesaLinha(' + d.rowId + ', &quot;' + escaparHtml(String(d.timestamp)) + '&quot;, &quot;' + escaparHtml(String(d.tipo)) + '&quot;)">🗑️</button></td>' : ''}
+                </tr>`).join('');
+        } catch (e) {
+            console.error('Falha ao sincronizar despesas: ' + e.message);
         }
     }
 
-    // ---------- Exportar despesas ----------
-    function exportarDespesasExcel() {
-        if (!despesasGlobais || despesasGlobais.length === 0) return alert('Não há despesas para exportar neste projeto.');
-        const escapeCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, ' - ') + '"'; };
+    async function excluirDespesaLinha(rowId, timestamp, tipo) {
+        if (getPerfilLogado() !== 'DIRETOR') return alert('Somente a Diretoria pode excluir lancamentos de despesa.');
+        if (!confirm('⚠️ Excluir definitivamente este lancamento?\n\nTipo: ' + tipo + '\nLancado em: ' + timestamp + '\n\nEsta acao nao pode ser desfeita.')) return;
+        try {
+            await chamarApi({ action: 'excluirDespesa', cpf: getCpfLogado(), despesa: { rowId: rowId, timestamp: timestamp, tipo: tipo } });
+            carregarDespesas();
+        } catch (err) {
+            alert('⚠️ O lancamento NAO foi excluido.\n\n' + err.message);
+            carregarDespesas();
+        }
+    }
 
+    function exportarDespesasExcel() {
+        if (!despesasGlobais.length) return alert('Nao ha despesas para exportar.');
         let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Tipo Despesa", "Valor", "Observação", "Supervisor", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Tipo Despesa", "Valor", "Forma Pagamento", "Observacao", "Supervisor", "URL Comprovante"].join(";")];
         despesasGlobais.forEach(d => {
             total += Number(d.valor || 0);
-            csv.push([escapeCsv(d.timestamp), escapeCsv(d.data), escapeCsv(d.cliente), escapeCsv(d.unidade), escapeCsv(d.tipo), escapeCsv(Number(d.valor||0).toFixed(2).replace('.', ',')), escapeCsv(d.obs), escapeCsv(d.supervisor), escapeCsv(d.url)].join(";"));
+            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.tipo),
+                      escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.obs),
+                      escCsv(d.supervisor), escCsv(d.url)].join(";"));
         });
-        csv.push(["", "", "", "", escapeCsv("TOTAL"), escapeCsv(total.toFixed(2).replace('.', ',')), "", "", ""].join(";"));
-
-        let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
-        let downloadLink = document.createElement("a");
-        downloadLink.download = `Despesas_${projetoAtivo.cliente}_${projetoAtivo.data.replace(/\//g, '-')}.csv`;
-        downloadLink.href = window.URL.createObjectURL(csvFile);
-        downloadLink.click();
+        csv.push(["", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", ""].join(";"));
+        baixarCsv(csv, 'Despesas_' + projetoAtivo.cliente + '_' + projetoAtivo.data.replace(/\//g, '-') + '.csv');
     }
 
-    // ---------- Histórico de projetos encerrados ----------
-    async function carregarListaEncerradosSup() {
-        const btn = document.getElementById('btn-carregar-encerrados');
-        const txtOriginal = btn.innerText;
-        btn.innerText = 'Carregando...'; btn.disabled = true;
-        try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'getProjetosEncerrados', cpf: getCpfLogado()}) });
-            const res = await response.json();
-            const sel = document.getElementById('sel-proj-encerrados-sup');
-            sel.innerHTML = '<option value="">-- Selecione o Projeto Encerrado --</option>';
-            if (!res || !res.projetos || !res.projetos.length) {
-                sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no período --</option>';
-                return;
-            }
-            [...res.projetos].reverse().forEach(p => {
-                let opt = document.createElement('option');
-                opt.value = JSON.stringify(p);
-                opt.text = `${p.data} - ${p.cliente} - ${p.unidade}`;
-                sel.appendChild(opt);
-            });
-        } catch (err) {
-            alert('Erro ao carregar o histórico de projetos encerrados: ' + err.message);
-        } finally {
-            btn.innerText = txtOriginal; btn.disabled = false;
-        }
-    }
-
-    function carregarProjetoEncerradoSup() {
-        const val = document.getElementById('sel-proj-encerrados-sup').value;
-        if (!val) return;
-        document.getElementById('sel-proj-ativos-sup').value = '';
-        try {
-            projetoAtivo = JSON.parse(val);
-            if (loopAtualizacao) clearInterval(loopAtualizacao);
-            atualizarCabecalhoProjeto();
-            carregarLista(false);
-            verificarPresencaGestor();
-            carregarDespesas();
-        } catch (e) { alert('Erro ao carregar o projeto encerrado selecionado.'); }
-    }
-
-    // ---------- Projetos ativos de hoje (a seleção saiu da tela de login) ----------
-    // Reaproveita a lista que o Folha de Ponto já carrega no <select> original (oculto).
-    function popularProjetosAtivosSup() {
-        const origem = document.getElementById('sel-proj');
-        const destino = document.getElementById('sel-proj-ativos-sup');
-        if (!origem || !destino) return;
-        if (destino.options.length > 1) return;
-        if (origem.options.length <= 1) {
-            destino.innerHTML = '<option value="">-- Nenhum projeto ativo hoje --</option>';
-            return;
-        }
-        destino.innerHTML = '';
-        for (let i = 0; i < origem.options.length; i++) {
-            const o = document.createElement('option');
-            o.value = origem.options[i].value;
-            o.text = (i === 0) ? '-- Selecione o Projeto de Hoje --' : origem.options[i].text;
-            destino.appendChild(o);
-        }
-    }
-
-    async function selecionarProjetoAtivoSup() {
-        const val = document.getElementById('sel-proj-ativos-sup').value;
-        if (!val) return;
-        document.getElementById('sel-proj-encerrados-sup').value = '';
-        try {
-            projetoAtivo = JSON.parse(val);
-        } catch (e) { return alert('Erro ao interpretar os dados do projeto.'); }
-
-        atualizarCabecalhoProjeto();
-        carregarLista(false);
-        if (loopAtualizacao) clearInterval(loopAtualizacao);
-        if (projetoAtivo.status !== 'Encerrado') { loopAtualizacao = setInterval(() => carregarLista(false), 5000); }
-        verificarPresencaGestor();
-        carregarDespesas();
-    }
-
-    // ---------- Presença do gestor: agora é um ato do próprio supervisor ----------
-    function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
-
-    // Confere na lista de presenças do projeto se o gestor logado já está registrado.
+    // ============================================================
+    // Presenca do gestor: o link so nasce depois do registro
+    // ============================================================
     async function verificarPresencaGestor() {
         if (!projetoAtivo || !projetoAtivo.data) { presencaGestorOk = false; aplicarEstadoPresenca(); return; }
         const cpf = soDigitos(getCpfLogado());
         if (cpf.length !== 11) { presencaGestorOk = false; aplicarEstadoPresenca(); return; }
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'getListaPresencas', projeto: projetoAtivo}) });
-            const res = await response.json();
-            presencaGestorOk = !!(res && res.lista && res.lista.some(p => soDigitos(p.cpf) === cpf));
+            const res = await chamarApi({ action: 'getListaPresencas', projeto: projetoAtivo });
+            presencaGestorOk = !!(res.lista && res.lista.some(p => soDigitos(p.cpf) === cpf));
         } catch (e) {
             presencaGestorOk = false;
         }
         aplicarEstadoPresenca();
     }
 
-    // Registra a presença chamando a MESMA função original do Folha de Ponto.
     async function registrarPresencaGestor() {
-        if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto antes de registrar sua presença.');
-
+        if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto antes de registrar sua presenca.');
         const btn = document.getElementById('btn-registrar-presenca-gestor');
-        const txtOriginal = btn.innerText;
         btn.innerText = 'Registrando...'; btn.disabled = true;
-
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({
-                action: 'verificarSupervisor', cpf: getCpfLogado(), projeto: projetoAtivo
-            })});
-            const res = await response.json();
-
-            if (!res || !res.encontrado) {
-                alert('⚠️ Não foi possível registrar sua presença.\n\nSeu CPF não foi reconhecido como Supervisor ou Diretor.');
+            // Chama a MESMA funcao original do Folha de Ponto, que grava na aba Presencas.
+            const res = await chamarApi({ action: 'verificarSupervisor', cpf: getCpfLogado(), projeto: projetoAtivo });
+            if (!res.encontrado) {
+                alert('⚠️ Nao foi possivel registrar sua presenca.\n\nSeu CPF nao foi reconhecido como Supervisor ou Diretor.');
                 return;
             }
-
             presencaGestorOk = true;
             atualizarCabecalhoProjeto();
             aplicarEstadoPresenca();
             carregarLista(false);
         } catch (err) {
-            alert('Erro de rede ao registrar sua presença: ' + err.message);
+            alert('Erro ao registrar sua presenca: ' + err.message);
         } finally {
-            btn.innerText = txtOriginal; btn.disabled = false;
+            btn.innerText = '✅ Registrar minha presenca e liberar o link'; btn.disabled = false;
         }
     }
 
-    // O link dos colaboradores só aparece depois que o gestor registra a presença.
     function aplicarEstadoPresenca() {
         const bloco = document.getElementById('bloco-presenca-gestor');
         const pendente = document.getElementById('aviso-presenca-pendente');
@@ -1467,9 +1662,83 @@
     }
 
     // ============================================================
-    // RELATÓRIO DE DESPESAS E BI
-    // O alcance dos dados é definido no servidor pelo CPF:
-    // diretoria vê tudo, supervisor vê apenas o que ele lançou.
+    // Selecao de projeto no painel
+    // ============================================================
+    function popularProjetosAtivosSup() {
+        const origem = document.getElementById('sel-proj');
+        const destino = document.getElementById('sel-proj-ativos-sup');
+        if (!origem || !destino) return;
+        if (destino.options.length > 1) return;
+        if (origem.options.length <= 1) {
+            destino.innerHTML = '<option value="">-- Nenhum projeto ativo hoje --</option>';
+            return;
+        }
+        destino.innerHTML = '';
+        for (let i = 0; i < origem.options.length; i++) {
+            const o = document.createElement('option');
+            o.value = origem.options[i].value;
+            o.text = (i === 0) ? '-- Selecione o Projeto de Hoje --' : origem.options[i].text;
+            destino.appendChild(o);
+        }
+    }
+
+    function selecionarProjetoAtivoSup() {
+        const val = document.getElementById('sel-proj-ativos-sup').value;
+        if (!val) return;
+        document.getElementById('sel-proj-encerrados-sup').value = '';
+        try {
+            projetoAtivo = JSON.parse(val);
+        } catch (e) { return alert('Erro ao interpretar os dados do projeto.'); }
+
+        atualizarCabecalhoProjeto();
+        carregarLista(false);
+        if (loopAtualizacao) clearInterval(loopAtualizacao);
+        if (projetoAtivo.status !== 'Encerrado') { loopAtualizacao = setInterval(() => carregarLista(false), 5000); }
+        verificarPresencaGestor();
+        carregarDespesas();
+    }
+
+    async function carregarListaEncerradosSup() {
+        const btn = document.getElementById('btn-carregar-encerrados');
+        btn.innerText = 'Carregando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'getProjetosEncerrados', cpf: getCpfLogado() });
+            const sel = document.getElementById('sel-proj-encerrados-sup');
+            if (!res.projetos || !res.projetos.length) {
+                sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no periodo --</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">-- Selecione o Projeto Encerrado --</option>';
+            [...res.projetos].reverse().forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = JSON.stringify(p);
+                opt.text = p.data + ' - ' + p.cliente + ' - ' + p.unidade;
+                sel.appendChild(opt);
+            });
+        } catch (err) {
+            alert('Erro ao carregar o historico: ' + err.message);
+        } finally {
+            btn.innerText = 'Carregar Historico'; btn.disabled = false;
+        }
+    }
+
+    function carregarProjetoEncerradoSup() {
+        const val = document.getElementById('sel-proj-encerrados-sup').value;
+        if (!val) return;
+        document.getElementById('sel-proj-ativos-sup').value = '';
+        try {
+            projetoAtivo = JSON.parse(val);
+            if (loopAtualizacao) clearInterval(loopAtualizacao);
+            atualizarCabecalhoProjeto();
+            carregarLista(false);
+            verificarPresencaGestor();
+            carregarDespesas();
+        } catch (e) { alert('Erro ao carregar o projeto encerrado selecionado.'); }
+    }
+
+    // ============================================================
+    // Relatorio de despesas e BI
+    // O alcance dos dados e definido no servidor pelo CPF.
     // ============================================================
     let relDespDados = [];
     let biDados = [];
@@ -1481,33 +1750,8 @@
         supervisor: [ { campo: 'supervisor', rotulo: 'Supervisor' }, { campo: 'projetoLabel', rotulo: 'Projeto' }, { campo: 'grupo', rotulo: 'Grupo' } ]
     };
 
-    function primeiroDiaMesISO() {
-        const h = new Date();
-        return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-01';
-    }
-    function hojeISO() {
-        const h = new Date();
-        return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
-    }
-    function escaparHtml(s) {
-        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-    const escapeCsvDesp = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, ' - ') + '"'; };
-
-    function baixarCsv(linhas, nomeArquivo) {
-        const arquivo = new Blob(["\ufeff" + linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.download = nomeArquivo;
-        link.href = window.URL.createObjectURL(arquivo);
-        link.click();
-    }
-
     async function buscarDespesasPeriodo(dataIni, dataFim) {
-        const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({
-            action: 'getDespesasRelatorio', cpf: getCpfLogado(), filtros: { dataIni: dataIni, dataFim: dataFim }
-        })});
-        const res = await response.json();
-        if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
+        const res = await chamarApi({ action: 'getDespesasRelatorio', cpf: getCpfLogado(), filtros: { dataIni: dataIni, dataFim: dataFim } });
         (res.lista || []).forEach(d => { d.projetoLabel = d.data + ' - ' + d.cliente + ' - ' + d.unidade; });
         return res.lista || [];
     }
@@ -1516,11 +1760,23 @@
         const el = document.getElementById('aviso-escopo-despesas');
         if (!el) return;
         el.innerText = (getPerfilLogado() === 'DIRETOR')
-            ? 'Como Diretoria, você enxerga as despesas de todos os supervisores.'
-            : 'Você enxerga somente as despesas lançadas por você.';
+            ? 'Como Diretoria, voce enxerga as despesas de todos os supervisores.'
+            : 'Voce enxerga somente as despesas lancadas por voce.';
     }
 
-    // ---------- Relatório de Despesas ----------
+    function linhasCsvLancamentos(lista) {
+        let total = 0;
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Grupo", "Tipo Despesa", "Valor", "Forma Pagamento", "Recurso Proprio", "Observacao", "Supervisor", "URL Comprovante"].join(";")];
+        lista.forEach(d => {
+            total += Number(d.valor || 0);
+            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.grupo), escCsv(d.tipo),
+                      escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.recursoProprio ? 'SIM' : 'NAO'),
+                      escCsv(d.obs), escCsv(d.supervisor), escCsv(d.url)].join(";"));
+        });
+        csv.push(["", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", ""].join(";"));
+        return csv;
+    }
+
     function prepararRelDespesas() {
         if (!document.getElementById('rel-desp-ini').value) document.getElementById('rel-desp-ini').value = primeiroDiaMesISO();
         if (!document.getElementById('rel-desp-fim').value) document.getElementById('rel-desp-fim').value = hojeISO();
@@ -1535,14 +1791,12 @@
         btn.innerText = 'Buscando...'; btn.disabled = true;
         try {
             relDespDados = await buscarDespesasPeriodo(ini, fim);
-            const proj = {};
-            relDespDados.forEach(d => { proj[d.projetoLabel] = true; });
-            const nomes = Object.keys(proj).sort();
+            const nomes = [...new Set(relDespDados.map(d => d.projetoLabel))].sort();
 
-            if (nomes.length === 0) {
+            if (!nomes.length) {
                 document.getElementById('rel-desp-resultado').classList.add('hidden');
                 document.getElementById('rel-desp-vazio').classList.remove('hidden');
-                document.getElementById('rel-desp-vazio').innerText = 'Nenhuma despesa encontrada neste período.';
+                document.getElementById('rel-desp-vazio').innerText = 'Nenhuma despesa encontrada neste periodo.';
                 return;
             }
 
@@ -1558,7 +1812,7 @@
         } catch (err) {
             alert('Erro ao buscar as despesas: ' + err.message);
         } finally {
-            btn.innerText = '🔍 Buscar Despesas do Período'; btn.disabled = false;
+            btn.innerText = '🔍 Buscar Despesas do Periodo'; btn.disabled = false;
         }
     }
 
@@ -1577,7 +1831,7 @@
         const sel = relDespSelecionadas();
         let total = 0;
         sel.forEach(d => total += Number(d.valor || 0));
-        document.getElementById('rel-desp-resumo').innerText = sel.length + (sel.length === 1 ? ' lançamento' : ' lançamentos');
+        document.getElementById('rel-desp-resumo').innerText = sel.length + (sel.length === 1 ? ' lancamento' : ' lancamentos');
         document.getElementById('rel-desp-total').innerText = formatarReal(total);
     }
 
@@ -1587,20 +1841,6 @@
         baixarCsv(linhasCsvLancamentos(sel), 'Relatorio_Despesas_' + document.getElementById('rel-desp-ini').value + '_a_' + document.getElementById('rel-desp-fim').value + '.csv');
     }
 
-    function linhasCsvLancamentos(lista) {
-        let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Grupo", "Tipo Despesa", "Valor", "Observação", "Supervisor", "URL Comprovante"].join(";")];
-        lista.forEach(d => {
-            total += Number(d.valor || 0);
-            csv.push([escapeCsvDesp(d.timestamp), escapeCsvDesp(d.data), escapeCsvDesp(d.cliente), escapeCsvDesp(d.unidade),
-                      escapeCsvDesp(d.grupo), escapeCsvDesp(d.tipo), escapeCsvDesp(Number(d.valor||0).toFixed(2).replace('.', ',')),
-                      escapeCsvDesp(d.obs), escapeCsvDesp(d.supervisor), escapeCsvDesp(d.url)].join(";"));
-        });
-        csv.push(["", "", "", "", "", escapeCsvDesp("TOTAL"), escapeCsvDesp(total.toFixed(2).replace('.', ',')), "", "", ""].join(";"));
-        return csv;
-    }
-
-    // ---------- BI de Despesas ----------
     function prepararBiDespesas() {
         if (!document.getElementById('bi-desp-ini').value) document.getElementById('bi-desp-ini').value = primeiroDiaMesISO();
         if (!document.getElementById('bi-desp-fim').value) document.getElementById('bi-desp-fim').value = hojeISO();
@@ -1619,23 +1859,21 @@
             if (!biDados.length) {
                 document.getElementById('bi-desp-resultado').classList.add('hidden');
                 document.getElementById('bi-desp-vazio').classList.remove('hidden');
-                document.getElementById('bi-desp-vazio').innerText = 'Nenhuma despesa encontrada neste período.';
+                document.getElementById('bi-desp-vazio').innerText = 'Nenhuma despesa encontrada neste periodo.';
                 return;
             }
-            biEstado = { dimensao: 'projeto', caminho: [] };
             document.getElementById('bi-desp-vazio').classList.add('hidden');
             document.getElementById('bi-desp-resultado').classList.remove('hidden');
             mudarDimensaoBi('projeto');
         } catch (err) {
             alert('Erro ao carregar o BI: ' + err.message);
         } finally {
-            btn.innerText = '🔍 Carregar Dados do Período'; btn.disabled = false;
+            btn.innerText = '🔍 Carregar Dados do Periodo'; btn.disabled = false;
         }
     }
 
     function mudarDimensaoBi(dim) {
-        biEstado.dimensao = dim;
-        biEstado.caminho = [];
+        biEstado = { dimensao: dim, caminho: [] };
         ['projeto', 'grupo', 'supervisor'].forEach(d => {
             const b = document.getElementById('bi-dim-' + d);
             if (!b) return;
@@ -1651,9 +1889,8 @@
 
     function biDrill(valor) {
         const hier = BI_HIER[biEstado.dimensao];
-        const nivel = biEstado.caminho.length;
-        if (nivel >= hier.length) return;
-        biEstado.caminho.push({ campo: hier[nivel].campo, valor: String(valor) });
+        if (biEstado.caminho.length >= hier.length) return;
+        biEstado.caminho.push({ campo: hier[biEstado.caminho.length].campo, valor: String(valor) });
         renderBi();
     }
 
@@ -1667,12 +1904,12 @@
         let html = '<a href="javascript:void(0)" onclick="biSubir(0)" class="fw-bold text-decoration-none">Todos</a>';
         biEstado.caminho.forEach((p, i) => {
             const ultimo = (i === biEstado.caminho.length - 1);
-            html += ' <span class="text-muted">›</span> ';
+            html += ' <span class="text-muted">&rsaquo;</span> ';
             html += ultimo
                 ? '<span class="fw-bold">' + escaparHtml(p.valor) + '</span>'
                 : '<a href="javascript:void(0)" onclick="biSubir(' + (i + 1) + ')" class="text-decoration-none">' + escaparHtml(p.valor) + '</a>';
         });
-        html += '<span class="ms-auto text-muted">nível ' + (biEstado.caminho.length + 1) + ' de ' + (hier.length + 1) + '</span>';
+        html += '<span class="ms-auto text-muted">nivel ' + (biEstado.caminho.length + 1) + ' de ' + (hier.length + 1) + '</span>';
         document.getElementById('bi-trilha').innerHTML = html;
     }
 
@@ -1685,26 +1922,24 @@
 
         let total = 0;
         dados.forEach(d => total += Number(d.valor || 0));
-        document.getElementById('bi-resumo').innerText = dados.length + (dados.length === 1 ? ' lançamento' : ' lançamentos');
+        document.getElementById('bi-resumo').innerText = dados.length + (dados.length === 1 ? ' lancamento' : ' lancamentos');
         document.getElementById('bi-total').innerText = formatarReal(total);
 
         if (nivel >= hier.length) {
-            document.getElementById('bi-dica').innerText = 'Último nível: lançamentos individuais. Use a trilha acima para subir.';
+            document.getElementById('bi-dica').innerText = 'Ultimo nivel: lancamentos individuais. Use a trilha acima para subir.';
             cont.innerHTML = dados.map(d => `
-                <div class="border-bottom py-2">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(d.tipo)}</span>
-                            <small class="text-muted d-block">${escaparHtml(d.data)} · ${escaparHtml(d.supervisor)}${d.obs ? ' · ' + escaparHtml(d.obs) : ''}</small>
-                        </div>
-                        <span class="fw-bold me-2">${formatarReal(d.valor)}</span>
-                        ${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank" title="Abrir comprovante">🧾</a>' : ''}
+                <div class="border-bottom py-2 d-flex align-items-center">
+                    <div class="flex-grow-1" style="min-width:0;">
+                        <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(d.tipo)}</span>
+                        <small class="text-muted d-block">${escaparHtml(d.data)} · ${escaparHtml(d.supervisor)}${d.obs ? ' · ' + escaparHtml(d.obs) : ''}</small>
                     </div>
+                    <span class="fw-bold me-2">${formatarReal(d.valor)}</span>
+                    ${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank" title="Abrir comprovante">🧾</a>' : ''}
                 </div>`).join('') || '<div class="text-muted text-center py-2">Nada aqui.</div>';
             return;
         }
 
-        document.getElementById('bi-dica').innerText = 'Agrupado por ' + hier[nivel].rotulo + '. Clique na linha para descer um nível.';
+        document.getElementById('bi-dica').innerText = 'Agrupado por ' + hier[nivel].rotulo + '. Clique na linha para descer um nivel.';
 
         const grupos = {};
         dados.forEach(d => {
@@ -1722,7 +1957,7 @@
             const pct = total > 0 ? (g.valor / total * 100) : 0;
             const larg = maior > 0 ? (g.valor / maior * 100) : 0;
             return `
-                <div class="border-bottom py-2" style="cursor:pointer;" onclick="biDrill('${escaparHtml(k).replace(/'/g, "\\'")}')">
+                <div class="border-bottom py-2" style="cursor:pointer;" onclick="biDrill(this.dataset.valor)" data-valor="${escaparHtml(k)}">
                     <div class="d-flex align-items-center">
                         <div class="flex-grow-1 me-2" style="min-width:0;">
                             <div class="fw-bold text-truncate" style="color: var(--fc-primaria);">${escaparHtml(k)}</div>
@@ -1734,7 +1969,7 @@
                             <div class="fw-bold">${formatarReal(g.valor)}</div>
                             <small class="text-muted">${pct.toFixed(0)}% · ${g.qtd}</small>
                         </div>
-                        <span class="text-muted">›</span>
+                        <span class="text-muted">&rsaquo;</span>
                     </div>
                 </div>`;
         }).join('');
@@ -1744,7 +1979,7 @@
         const hier = BI_HIER[biEstado.dimensao];
         const nivel = biEstado.caminho.length;
         const dados = biFiltrados();
-        if (!dados.length) return alert('Não há dados nesta visão.');
+        if (!dados.length) return alert('Nao ha dados nesta visao.');
         if (nivel >= hier.length) return exportarBiLancamentos();
 
         const grupos = {};
@@ -1759,55 +1994,267 @@
         Object.keys(grupos).forEach(k => total += grupos[k].valor);
         const filtroTxt = biEstado.caminho.map(p => p.valor).join(' > ') || 'Todos';
 
-        let csv = [["Filtro aplicado", "Agrupado por", "Item", "Lançamentos", "Valor", "% do total"].join(";")];
+        let csv = [["Filtro aplicado", "Agrupado por", "Item", "Lancamentos", "Valor", "% do total"].join(";")];
         Object.keys(grupos).sort((a, b) => grupos[b].valor - grupos[a].valor).forEach(k => {
             const pct = total > 0 ? (grupos[k].valor / total * 100) : 0;
-            csv.push([escapeCsvDesp(filtroTxt), escapeCsvDesp(hier[nivel].rotulo), escapeCsvDesp(k), escapeCsvDesp(grupos[k].qtd),
-                      escapeCsvDesp(grupos[k].valor.toFixed(2).replace('.', ',')), escapeCsvDesp(pct.toFixed(1).replace('.', ',') + '%')].join(";"));
+            csv.push([escCsv(filtroTxt), escCsv(hier[nivel].rotulo), escCsv(k), escCsv(grupos[k].qtd),
+                      escCsv(grupos[k].valor.toFixed(2).replace('.', ',')), escCsv(pct.toFixed(1).replace('.', ',') + '%')].join(";"));
         });
-        csv.push(["", "", escapeCsvDesp("TOTAL"), "", escapeCsvDesp(total.toFixed(2).replace('.', ',')), ""].join(";"));
+        csv.push(["", "", escCsv("TOTAL"), "", escCsv(total.toFixed(2).replace('.', ',')), ""].join(";"));
         baixarCsv(csv, 'BI_Despesas_por_' + hier[nivel].rotulo + '.csv');
     }
 
     function exportarBiLancamentos() {
         const dados = biFiltrados();
-        if (!dados.length) return alert('Não há lançamentos nesta visão.');
+        if (!dados.length) return alert('Nao ha lancamentos nesta visao.');
         baixarCsv(linhasCsvLancamentos(dados), 'BI_Despesas_Lancamentos.csv');
     }
 
-    // ---------- Inicialização independente (não interfere no Folha de Ponto) ----------
-    document.addEventListener('DOMContentLoaded', () => {
-        const inputValor = document.getElementById('desp-valor');
-        if (inputValor) inputValor.addEventListener('input', () => aplicarMascaraValor(inputValor));
+    // ============================================================
+    // Financeiro: acerto de contas, provisionamento e adiantamento
+    // ============================================================
+    let acertoDados = [];
 
-        const area = document.getElementById('desp-area-colar');
-        if (area) {
-            area.addEventListener('click', () => area.focus());
-            area.addEventListener('paste', (e) => {
-                const itens = (e.clipboardData || window.clipboardData).items;
-                for (let i = 0; i < itens.length; i++) {
-                    if (itens[i].type.indexOf('image') !== -1) { e.preventDefault(); prepararComprovante(itens[i].getAsFile()); return; }
-                }
-            });
+    async function carregarAcertoContas() {
+        const ini = document.getElementById('fin-ini').value;
+        const fim = document.getElementById('fin-fim').value;
+        if (!ini || !fim) return alert('Preencha a Data Inicial e a Data Final.');
+
+        const btn = document.getElementById('btn-carregar-fin');
+        btn.innerText = 'Carregando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'getAcertoContas', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
+            acertoDados = res.lista || [];
+            renderAcertoContas();
+        } catch (err) {
+            alert('Erro ao carregar o acerto de contas: ' + err.message);
+        } finally {
+            btn.innerText = '🔍 Carregar Acerto de Contas'; btn.disabled = false;
+        }
+    }
+
+    function renderAcertoContas() {
+        const cont = document.getElementById('fin-lista');
+        const rodape = document.getElementById('fin-rodape');
+        const btnExp = document.getElementById('btn-exportar-fin');
+
+        if (!acertoDados.length) {
+            cont.innerHTML = '<div class="text-center text-muted py-3">Nenhum movimento com recurso proprio neste periodo.</div>';
+            rodape.classList.add('hidden');
+            btnExp.classList.add('hidden');
+            return;
         }
 
+        cont.innerHTML = acertoDados.map(p => {
+            // saldo negativo = a empresa deve ao supervisor
+            let rotulo, cor;
+            if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
+            else if (p.saldo < 0) { rotulo = 'Devo ' + formatarReal(-p.saldo); cor = 'danger'; }
+            else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
+
+            return `
+                <div class="border-bottom py-2">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(p.nome)}</span>
+                        <span class="ms-auto fw-bold text-${cor}">${rotulo}</span>
+                    </div>
+                    <div class="d-flex small text-muted">
+                        <span>Gastou do bolso ${formatarReal(p.gastou)}</span>
+                        <span class="ms-auto">Recebeu ${formatarReal(p.recebeu)}</span>
+                    </div>
+                </div>`;
+        }).join('');
+
+        let devo = 0;
+        acertoDados.forEach(p => { if (p.saldo < 0) devo += -p.saldo; });
+        document.getElementById('fin-resumo').innerText = acertoDados.length + (acertoDados.length === 1 ? ' pessoa' : ' pessoas');
+        document.getElementById('fin-saldo').innerText = 'A pagar: ' + formatarReal(devo);
+        rodape.classList.remove('hidden');
+        btnExp.classList.remove('hidden');
+    }
+
+    function exportarAcertoContas() {
+        if (!acertoDados.length) return alert('Nao ha dados para exportar.');
+        let csv = [["CPF", "Nome", "Gastou com recurso proprio", "Recebeu de provisionamento", "Saldo", "Situacao"].join(";")];
+        acertoDados.forEach(p => {
+            const sit = Math.abs(p.saldo) < 0.005 ? 'QUITADO' : (p.saldo < 0 ? 'EMPRESA DEVE' : 'ADIANTADO AO SUPERVISOR');
+            csv.push([escCsv(p.cpf), escCsv(p.nome), escCsv(p.gastou.toFixed(2).replace('.', ',')),
+                      escCsv(p.recebeu.toFixed(2).replace('.', ',')), escCsv(p.saldo.toFixed(2).replace('.', ',')), escCsv(sit)].join(";"));
+        });
+        baixarCsv(csv, 'Acerto_de_Contas_' + document.getElementById('fin-ini').value + '_a_' + document.getElementById('fin-fim').value + '.csv');
+    }
+
+    // ---------- Busca de pessoa (provisionamento e adiantamento) ----------
+    let timerBusca = { prov: null, adto: null };
+
+    function pesquisarPessoa(ctx, somenteGestores) {
+        clearTimeout(timerBusca[ctx]);
+        const termo = document.getElementById(ctx + '-busca').value;
+        const cont = document.getElementById(ctx + '-resultados');
+
+        if (termo.trim().length < 2) { cont.classList.add('hidden'); return; }
+
+        timerBusca[ctx] = setTimeout(async () => {
+            try {
+                const res = await chamarApi({ action: 'pesquisarPessoaFinanceiro', cpf: getCpfLogado(), termo: termo, somenteGestores: !!somenteGestores });
+                if (!res.pessoas || !res.pessoas.length) {
+                    cont.innerHTML = '<div class="p-2 text-muted small">Ninguem encontrado.</div>';
+                    cont.classList.remove('hidden');
+                    return;
+                }
+                cont.innerHTML = res.pessoas.map(p => `
+                    <div class="p-2 border-bottom" style="cursor:pointer;" onclick="selecionarPessoa('${ctx}', this.dataset.cpf, this.dataset.nome)" data-cpf="${escaparHtml(p.cpf)}" data-nome="${escaparHtml(p.nome)}">
+                        <div class="fw-bold small">${escaparHtml(p.nome)}</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">${escaparHtml(p.cpf)}${p.reduzido ? ' · ' + escaparHtml(p.reduzido) : ''} · ${escaparHtml(p.perfil)}</div>
+                    </div>`).join('');
+                cont.classList.remove('hidden');
+            } catch (err) {
+                cont.innerHTML = '<div class="p-2 text-danger small">' + escaparHtml(err.message) + '</div>';
+                cont.classList.remove('hidden');
+            }
+        }, 400);
+    }
+
+    function selecionarPessoa(ctx, cpf, nome) {
+        pessoaSelecionada[ctx] = { cpf: cpf, nome: nome };
+        document.getElementById(ctx + '-resultados').classList.add('hidden');
+        document.getElementById(ctx + '-busca').value = '';
+        const sel = document.getElementById(ctx + '-selecionado');
+        sel.innerHTML = '<span class="fw-bold">' + escaparHtml(nome) + '</span> <span class="small text-muted">' + escaparHtml(cpf) + '</span>';
+        sel.classList.remove('hidden');
+    }
+
+    function limparPessoa(ctx) {
+        pessoaSelecionada[ctx] = null;
+        const sel = document.getElementById(ctx + '-selecionado');
+        sel.innerHTML = ''; sel.classList.add('hidden');
+        document.getElementById(ctx + '-busca').value = '';
+        document.getElementById(ctx + '-resultados').classList.add('hidden');
+    }
+
+    // ---------- Provisionamento ----------
+    function prepararProvisionamento() {
+        limparPessoa('prov');
+        document.getElementById('prov-data').value = hojeISO();
+        document.getElementById('prov-valor').value = '';
+        document.getElementById('prov-obs').value = '';
+        document.getElementById('prov-forma').value = '';
+        limparComprovante('prov');
+    }
+
+    async function gravarProvisionamento() {
+        if (!pessoaSelecionada.prov) return alert('Pesquise e selecione o supervisor.');
+        const data = document.getElementById('prov-data').value;
+        const valor = valorParaNumero(document.getElementById('prov-valor').value);
+        if (!data) return alert('Informe a data.');
+        if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
+
+        const btn = document.getElementById('btn-gravar-prov');
+        btn.innerText = 'Gravando...'; btn.disabled = true;
+        try {
+            await chamarApi({
+                action: 'lancarProvisionamento', cpf: getCpfLogado(),
+                dados: {
+                    cpfSupervisor: pessoaSelecionada.prov.cpf,
+                    data: isoParaBR(data),
+                    valor: valor,
+                    formaPagamento: document.getElementById('prov-forma').value,
+                    obs: document.getElementById('prov-obs').value,
+                    comprovante: comprovantes.prov
+                }
+            });
+            alert('✅ Provisionamento gravado com sucesso!');
+            prepararProvisionamento();
+            carregarAcertoContas();
+        } catch (err) {
+            alert('⚠️ O provisionamento NAO foi gravado.\n\n' + err.message);
+        } finally {
+            btn.innerText = '💾 Gravar Provisionamento'; btn.disabled = false;
+        }
+    }
+
+    // ---------- Adiantamento ----------
+    function prepararAdiantamento() {
+        limparPessoa('adto');
+        document.getElementById('adto-data').value = hojeISO();
+        document.getElementById('adto-valor').value = '';
+        document.getElementById('adto-obs').value = '';
+        limparComprovante('adto');
+    }
+
+    async function gravarAdiantamento() {
+        if (!pessoaSelecionada.adto) return alert('Pesquise e selecione o colaborador.');
+        const data = document.getElementById('adto-data').value;
+        const valor = valorParaNumero(document.getElementById('adto-valor').value);
+        if (!data) return alert('Informe a data.');
+        if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
+
+        const btn = document.getElementById('btn-gravar-adto');
+        btn.innerText = 'Gravando...'; btn.disabled = true;
+        try {
+            await chamarApi({
+                action: 'lancarAdiantamento', cpf: getCpfLogado(),
+                dados: {
+                    cpfColaborador: pessoaSelecionada.adto.cpf,
+                    data: isoParaBR(data),
+                    valor: valor,
+                    obs: document.getElementById('adto-obs').value,
+                    comprovante: comprovantes.adto
+                }
+            });
+            alert('✅ Adiantamento gravado com sucesso!');
+            prepararAdiantamento();
+        } catch (err) {
+            alert('⚠️ O adiantamento NAO foi gravado.\n\n' + err.message);
+        } finally {
+            btn.innerText = '💾 Gravar Adiantamento'; btn.disabled = false;
+        }
+    }
+
+    // ============================================================
+    // Inicializacao independente (nao interfere no Folha de Ponto)
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        ['desp-valor', 'prov-valor', 'adto-valor'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', () => aplicarMascaraValor(el));
+        });
+
+        ['desp', 'prov', 'adto'].forEach(ligarColagem);
+
+        // Ctrl+V em qualquer lugar do painel cai no comprovante da despesa
         document.addEventListener('paste', (e) => {
             const dash = document.getElementById('view-dashboard');
             if (!dash || dash.classList.contains('hidden')) return;
-            if (comprovanteAtual || sessaoEncerradaAtual) return;
+            if (comprovantes.desp || sessaoEncerradaAtual) return;
+            const aba = document.getElementById('tab-despesas');
+            if (!aba || !aba.classList.contains('active')) return;
             const itens = (e.clipboardData || window.clipboardData).items;
             for (let i = 0; i < itens.length; i++) {
-                if (itens[i].type.indexOf('image') !== -1) { prepararComprovante(itens[i].getAsFile()); return; }
+                if (itens[i].type.indexOf('image') !== -1) { prepararComprovante(itens[i].getAsFile(), 'desp'); return; }
             }
         });
 
-        // Vigia a troca de projeto no painel sem alterar as funções existentes
+        // Vigia a troca de projeto sem alterar as funcoes existentes
         setInterval(() => {
             const dash = document.getElementById('view-dashboard');
             if (!dash || dash.classList.contains('hidden')) return;
+
             carregarTiposDespesa();
+            carregarConfigExtra();
             popularProjetosAtivosSup();
             atualizarAvisoEscopo();
+
+            const ehDiretor = (getPerfilLogado() === 'DIRETOR');
+            const areaDir = document.getElementById('fin-area-diretoria');
+            if (areaDir) areaDir.classList.toggle('hidden', !ehDiretor);
+            const escopo = document.getElementById('fin-escopo');
+            if (escopo) {
+                escopo.innerText = ehDiretor
+                    ? 'Gasto com recurso proprio x ressarcido, por supervisor.'
+                    : 'Seu gasto com recurso proprio x o que voce ja recebeu de volta.';
+            }
+
             const chave = chaveProjeto(projetoAtivo);
             if (chave !== chaveProjetoAnterior) {
                 chaveProjetoAnterior = chave;
@@ -1817,6 +2264,12 @@
             }
             aplicarEstadoPresenca();
         }, 2000);
+
+        // Periodo padrao do Financeiro
+        const fi = document.getElementById('fin-ini');
+        const ff = document.getElementById('fin-fim');
+        if (fi && !fi.value) fi.value = primeiroDiaMesISO();
+        if (ff && !ff.value) ff.value = hojeISO();
     });
 </script>
 </body>
