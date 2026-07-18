@@ -81,7 +81,7 @@
 <div class="container fc-container mx-auto">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão</h4>
+        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão Formula Code</h4>
         <!-- ALTERADO (autorizado): a selecao de projeto saiu da tela de login e foi para o painel.
              O <select> original permanece aqui, apenas OCULTO, para que a funcao entrar()
              e o window.onload do Folha de Ponto continuem funcionando exatamente como antes. -->
@@ -89,7 +89,7 @@
             <option value="">-- Selecione o Projeto --</option>
         </select>
         
-        <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
+        <label class="form-label fw-bold">Login</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
     </div>
@@ -217,6 +217,43 @@
 
         <!-- ############ NOVO: ABA DE DESPESAS ############ -->
         <div class="tab-pane fade" id="tab-despesas">
+
+        <!-- ############ LISTA GERAL DE DESPESAS COM SELETOR DE MÊS ############ -->
+        <div class="card mb-4 border-0 shadow-sm bg-light">
+            <div class="card-body">
+                <h6 class="fw-bold text-primary d-flex align-items-center mb-3 flex-wrap">
+                    Todas as Despesas:
+                    <span id="cnt-geral-despesas" class="badge bg-primary ms-2 rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
+                    <span class="ms-auto fw-bold" style="color: var(--fc-primaria);">Total: <span id="tot-geral-despesas">R$ 0,00</span></span>
+                </h6>
+                <label class="form-label fw-bold text-primary mb-1">Período:</label>
+                <select id="desp-geral-mes" class="form-select form-select-sm mb-2"></select>
+                <div class="row g-2 mb-3">
+                    <div class="col-5"><input type="date" id="desp-geral-ini" class="form-control form-control-sm"></div>
+                    <div class="col-5"><input type="date" id="desp-geral-fim" class="form-control form-control-sm"></div>
+                    <div class="col-2"><button class="btn btn-primary btn-sm w-100 fw-bold" id="btn-buscar-geral" onclick="buscarDespesasGeral()">🔍</button></div>
+                </div>
+                <div class="table-responsive shadow-sm rounded">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data / Cliente</th>
+                                <th>Tipo / Obs</th>
+                                <th class="text-nowrap">Valor</th>
+                                <th>Supervisor</th>
+                                <th class="text-center">Compr.</th>
+                                <th id="th-acoes-geral" class="hidden text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-geral-despesas">
+                            <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
+            </div>
+        </div>
+        <!-- ############ FIM DA LISTA GERAL ############ -->
 
         <h6 class="fw-bold text-primary d-flex align-items-center mb-3 flex-wrap">
             Despesas:
@@ -346,12 +383,12 @@
                 <input type="date" id="fin-fim" class="form-control form-control-sm">
             </div>
             <div class="col-12 mt-3">
-                <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-carregar-fin" onclick="carregarAcertoContas()">🔍 Atualizar Acerto de Contas</button>
+                <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-carregar-fin" onclick="carregarDespXProv()">🔍 Atualizar</button>
             </div>
         </div>
 
-        <h6 class="fw-bold text-primary mb-1">⚖️ Acerto de Contas</h6>
-        <div class="small text-muted mb-3" id="fin-escopo">Compara o que foi gasto com recurso próprio contra o que já foi ressarcido.</div>
+        <h6 class="fw-bold text-primary mb-1">⚖️ Despesas × Provisionamento</h6>
+        <div class="small text-muted mb-3" id="fin-escopo">Compara o que foi gasto com recurso próprio por supervisores contra o que já foi ressarcido.</div>
 
         <div id="fin-lista" class="border rounded p-2 mb-3" style="max-height: 340px; overflow-y: auto;">
             <div class="text-center text-muted py-3">Carregando...</div>
@@ -362,7 +399,7 @@
             <span class="ms-auto fw-bold" id="fin-saldo">R$ 0,00</span>
         </div>
 
-        <button class="btn btn-secondary w-100 py-2 fw-bold hidden" id="btn-exportar-fin" onclick="exportarAcertoContas()">📊 Exportar Acerto de Contas</button>
+        <button class="btn btn-secondary w-100 py-2 fw-bold hidden" id="btn-exportar-fin" onclick="exportarDespXProv()">📊 Exportar Despesas × Provisionamento</button>
 
         <hr class="my-4">
         <h6 class="fw-bold text-primary mb-3">Relatórios e Análise</h6>
@@ -1455,7 +1492,7 @@
     }
 
     // ============================================================
-    // Seletor de mes reutilizavel (Relatorios, BI e Acerto de Contas)
+    // Seletor de mes reutilizavel (Relatorios, BI e Despesas x Provisionamento)
     // Preenche um <select> com os ultimos 13 meses + "Personalizado".
     // Ao trocar, atualiza os inputs de data e dispara o recarregamento.
     // ============================================================
@@ -1826,6 +1863,7 @@
     let edicaoModoDestino = 'projeto';
     let ultimoResultadoProjetos = [];
     let timerBuscaProjeto = null;
+    let edicaoCallbackAposSalvar = null;
 
     function abrirEdicaoDespesa(rowId) {
         const d = despesasGlobais.find(x => x.rowId === rowId);
@@ -1847,6 +1885,7 @@
         document.getElementById('edit-desp-busca').value = '';
         mudarModoDestino('projeto');
 
+        edicaoCallbackAposSalvar = carregarDespesas;
         new bootstrap.Modal(document.getElementById('modalEditarDespesa')).show();
     }
 
@@ -1943,7 +1982,8 @@
             });
             bootstrap.Modal.getInstance(document.getElementById('modalEditarDespesa')).hide();
             alert('✅ Despesa atualizada com sucesso!');
-            carregarDespesas();
+            if (edicaoCallbackAposSalvar) edicaoCallbackAposSalvar();
+            else carregarDespesas();
         } catch (err) {
             alert('⚠️ A edição NÃO foi salva.\n\n' + err.message);
         } finally {
@@ -2081,6 +2121,102 @@
             verificarPresencaGestor();
             carregarDespesas();
         } catch (e) { alert('Erro ao carregar o projeto encerrado selecionado.'); }
+    }
+
+    // ============================================================
+    // Lista geral de despesas (MTD por padrao, com seletor de mes)
+    // Usa a mesma acao getDespesasRelatorio — fonte unica de permissao.
+    // ============================================================
+    let despesasGeralDados = [];
+    let despGeralInicializado = false;
+
+    async function buscarDespesasGeral() {
+        const ini = document.getElementById('desp-geral-ini').value;
+        const fim = document.getElementById('desp-geral-fim').value;
+        if (!ini || !fim) return;
+
+        const btn = document.getElementById('btn-buscar-geral');
+        btn.innerText = '...'; btn.disabled = true;
+        try {
+            despesasGeralDados = await buscarDespesasPeriodo(ini, fim);
+            renderDespesasGeral();
+        } catch (err) {
+            document.getElementById('lista-geral-despesas').innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escaparHtml(err.message) + '</td></tr>';
+        } finally {
+            btn.innerText = '🔍'; btn.disabled = false;
+        }
+    }
+
+    function renderDespesasGeral() {
+        const tbody = document.getElementById('lista-geral-despesas');
+        const ehDiretor = (getPerfilLogado() === 'DIRETOR');
+        const thAcoes = document.getElementById('th-acoes-geral');
+        if (thAcoes) thAcoes.classList.toggle('hidden', !ehDiretor);
+
+        let total = 0;
+        despesasGeralDados.forEach(d => total += Number(d.valor || 0));
+        document.getElementById('cnt-geral-despesas').innerText = despesasGeralDados.length;
+        document.getElementById('tot-geral-despesas').innerText = formatarReal(total);
+
+        if (!despesasGeralDados.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhuma despesa no período.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = despesasGeralDados.map(d => `
+            <tr>
+                <td>
+                    <small class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(d.cliente)}</small>
+                    <small class="text-muted d-block">${escaparHtml(d.data)} · ${escaparHtml(d.unidade)}</small>
+                </td>
+                <td>
+                    <span class="fw-bold small">${escaparHtml(d.tipo)}</span>
+                    ${d.formaPagamento ? '<small class="text-muted d-block">' + escaparHtml(d.formaPagamento) + '</small>' : ''}
+                    ${d.obs ? '<small class="text-muted d-block">' + escaparHtml(d.obs) + '</small>' : ''}
+                </td>
+                <td class="text-nowrap fw-bold">${formatarReal(d.valor)}</td>
+                <td><small>${escaparHtml(d.supervisor || '-')}</small></td>
+                <td class="text-center">${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank">🧾</a>' : '<span class="text-muted">—</span>'}</td>
+                ${ehDiretor ? '<td class="text-center text-nowrap"><button class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Editar" onclick="abrirEdicaoDespesaGeral(' + d.rowId + ')">✏️</button><button class="btn btn-sm btn-outline-danger py-0 px-2" title="Excluir" onclick="excluirDespesaGeralLinha(' + d.rowId + ', &quot;' + escaparHtml(String(d.timestamp)) + '&quot;, &quot;' + escaparHtml(String(d.tipo)) + '&quot;)">🗑️</button></td>' : ''}
+            </tr>`).join('');
+    }
+
+    function abrirEdicaoDespesaGeral(rowId) {
+        const d = despesasGeralDados.find(x => x.rowId === rowId);
+        if (!d) return alert('Lançamento não encontrado. Recarregue a lista.');
+        // Reutiliza o mesmo modal de edicao, preenchendo edicaoDespesaAtual
+        edicaoDespesaAtual = d;
+        edicaoDestinoNovo = null;
+
+        carregarConfigExtra();
+        document.getElementById('edit-desp-tipo').innerHTML = document.getElementById('desp-tipo').innerHTML;
+        document.getElementById('edit-desp-forma').innerHTML = document.getElementById('desp-forma').innerHTML;
+        document.getElementById('edit-desp-tipo').value = d.tipo;
+        document.getElementById('edit-desp-forma').value = d.formaPagamento || '';
+        document.getElementById('edit-desp-valor').value = Number(d.valor).toFixed(2).replace('.', ',');
+        document.getElementById('edit-desp-obs').value = d.obs || '';
+        document.getElementById('edit-desp-destino-atual').innerText = d.data + ' — ' + d.cliente + ' — ' + d.unidade;
+        document.getElementById('edit-desp-bloco-destino').classList.add('hidden');
+        document.getElementById('edit-desp-novo-destino').classList.add('hidden');
+        document.getElementById('edit-desp-resultados-projeto').classList.add('hidden');
+        document.getElementById('edit-desp-busca').value = '';
+        mudarModoDestino('projeto');
+
+        // Apos salvar, recarregar a lista geral em vez da lista por projeto
+        edicaoCallbackAposSalvar = buscarDespesasGeral;
+        new bootstrap.Modal(document.getElementById('modalEditarDespesa')).show();
+    }
+
+    async function excluirDespesaGeralLinha(rowId, timestamp, tipo) {
+        if (getPerfilLogado() !== 'DIRETOR') return alert('Somente a Diretoria pode excluir lançamentos.');
+        if (!confirm('⚠️ Excluir definitivamente este lançamento?\n\nTipo: ' + tipo + '\nLançado em: ' + timestamp + '\n\nEsta ação não pode ser desfeita.')) return;
+        try {
+            await chamarApi({ action: 'excluirDespesa', cpf: getCpfLogado(), despesa: { rowId: rowId, timestamp: timestamp, tipo: tipo } });
+            buscarDespesasGeral();
+        } catch (err) {
+            alert('⚠️ O lançamento NÃO foi excluído.\n\n' + err.message);
+            buscarDespesasGeral();
+        }
     }
 
     // ============================================================
@@ -2359,11 +2495,11 @@
     }
 
     // ============================================================
-    // Financeiro: Acerto de Contas, BI Financeiro, Provisionamento e Adiantamento
+    // Financeiro: Despesas x Provisionamento, BI Financeiro, Provisionamento e Adiantamento
     // ============================================================
     let acertoDados = [];
 
-    async function carregarAcertoContas() {
+    async function carregarDespXProv() {
         const ini = document.getElementById('fin-ini').value;
         const fim = document.getElementById('fin-fim').value;
         if (!ini || !fim) return;
@@ -2373,15 +2509,15 @@
         try {
             const res = await chamarApi({ action: 'getAcertoContas', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
             acertoDados = res.lista || [];
-            renderAcertoContas();
+            renderDespXProv();
         } catch (err) {
             document.getElementById('fin-lista').innerHTML = '<div class="text-center text-danger py-3">Erro ao carregar: ' + escaparHtml(err.message) + '</div>';
         } finally {
-            btn.innerText = '🔍 Atualizar Acerto de Contas'; btn.disabled = false;
+            btn.innerText = '🔍 Atualizar'; btn.disabled = false;
         }
     }
 
-    function renderAcertoContas() {
+    function renderDespXProv() {
         const cont = document.getElementById('fin-lista');
         const rodape = document.getElementById('fin-rodape');
         const btnExp = document.getElementById('btn-exportar-fin');
@@ -2420,7 +2556,7 @@
         btnExp.classList.remove('hidden');
     }
 
-    function exportarAcertoContas() {
+    function exportarDespXProv() {
         if (!acertoDados.length) return alert('Não há dados para exportar.');
         let csv = [["CPF", "Nome", "Gastou com recurso próprio", "Recebeu de provisionamento", "Saldo", "Situação"].join(";")];
         acertoDados.forEach(p => {
@@ -2724,7 +2860,7 @@
             });
             alert('✅ Provisionamento gravado com sucesso!');
             prepararProvisionamento();
-            carregarAcertoContas();
+            carregarDespXProv();
         } catch (err) {
             alert('⚠️ O provisionamento NÃO foi gravado.\n\n' + err.message);
         } finally {
@@ -2815,7 +2951,12 @@
 
             if (!financeiroInicializado && getCpfLogado()) {
                 financeiroInicializado = true;
-                popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', carregarAcertoContas);
+                popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', carregarDespXProv);
+            }
+
+            if (!despGeralInicializado && getCpfLogado()) {
+                despGeralInicializado = true;
+                popularSeletorMes('desp-geral-mes', 'desp-geral-ini', 'desp-geral-fim', buscarDespesasGeral);
             }
 
             const chave = chaveProjeto(projetoAtivo);
