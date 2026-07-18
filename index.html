@@ -310,7 +310,7 @@
                         <th class="text-nowrap">Valor</th>
                         <th>Supervisor</th>
                         <th class="text-center">Compr.</th>
-                        <th id="th-excluir-despesa" class="hidden text-center">Excluir</th>
+                        <th id="th-acoes-despesa" class="hidden text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody id="lista-despesas">
@@ -334,6 +334,8 @@
         <!-- ############ NOVO: ABA FINANCEIRO ############ -->
         <div class="tab-pane fade" id="tab-financeiro">
 
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="fin-mes" class="form-select form-select-sm mb-2"></select>
         <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
             <div class="col-6">
                 <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
@@ -344,7 +346,7 @@
                 <input type="date" id="fin-fim" class="form-control form-control-sm">
             </div>
             <div class="col-12 mt-3">
-                <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-carregar-fin" onclick="carregarAcertoContas()">🔍 Carregar Acerto de Contas</button>
+                <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-carregar-fin" onclick="carregarAcertoContas()">🔍 Atualizar Acerto de Contas</button>
             </div>
         </div>
 
@@ -352,7 +354,7 @@
         <div class="small text-muted mb-3" id="fin-escopo">Compara o que foi gasto com recurso próprio contra o que já foi ressarcido.</div>
 
         <div id="fin-lista" class="border rounded p-2 mb-3" style="max-height: 340px; overflow-y: auto;">
-            <div class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
+            <div class="text-center text-muted py-3">Carregando...</div>
         </div>
 
         <div class="alert alert-success d-flex align-items-center mb-3 hidden" id="fin-rodape">
@@ -362,6 +364,18 @@
 
         <button class="btn btn-secondary w-100 py-2 fw-bold hidden" id="btn-exportar-fin" onclick="exportarAcertoContas()">📊 Exportar Acerto de Contas</button>
 
+        <hr class="my-4">
+        <h6 class="fw-bold text-primary mb-3">Relatórios e Análise</h6>
+        <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+            <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-bi-financeiro" data-bs-toggle="modal" data-bs-target="#modalBiFinanceiro" onclick="prepararBiFinanceiro()">📊 BI Financeiro (Despesas × Provisionamento)</button>
+        </div>
+        <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+            <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelProvisionamento" onclick="prepararRelProvisionamento()">📑 Relatório de Provisionamento</button>
+        </div>
+        <div class="d-flex flex-column flex-md-row gap-2">
+            <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-rel-adiantamento" data-bs-toggle="modal" data-bs-target="#modalRelAdiantamento" onclick="prepararRelAdiantamento()">🤝 Visão e Relatório de Adiantamentos</button>
+        </div>
+
         <div class="hidden" id="fin-area-diretoria">
             <hr class="my-4">
             <h6 class="fw-bold text-primary mb-3">Lançamentos da Diretoria</h6>
@@ -369,7 +383,7 @@
                 <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalProvisionamento" onclick="prepararProvisionamento()">💵 Lançar Provisionamento</button>
                 <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalAdiantamento" onclick="prepararAdiantamento()">🤝 Lançar Adiantamento</button>
             </div>
-            <div class="small text-muted mt-2">Provisionamento ressarce o supervisor. Adiantamento é salário antecipado ao colaborador. Nenhum dos dois entra no BI de despesas.</div>
+            <div class="small text-muted mt-2">Provisionamento ressarce o supervisor por despesa paga do próprio bolso. Adiantamento é salário antecipado ao colaborador. Nenhum dos dois entra no BI de despesas.</div>
         </div>
 
         </div>
@@ -511,6 +525,8 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="rel-desp-mes" class="form-select form-select-sm mb-2"></select>
         <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
           <div class="col-6">
             <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
@@ -526,7 +542,7 @@
         </div>
 
         <div id="rel-desp-resultado" class="hidden">
-          <label class="form-label fw-bold text-primary mb-2">Projetos e centros encontrados — desmarque o que não quer no relatório:</label>
+          <label class="form-label fw-bold text-primary mb-2">Clientes e centros encontrados — desmarque o que não quer no relatório:</label>
           <div id="rel-desp-projetos" class="border p-2 mb-3 rounded bg-light" style="max-height: 220px; overflow-y: auto;"></div>
           <div class="d-flex gap-2 mb-3">
             <button class="btn btn-sm btn-secondary w-50" onclick="marcarTodosRelDesp(true)">Marcar Todos</button>
@@ -554,6 +570,8 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="bi-desp-mes" class="form-select form-select-sm mb-2"></select>
         <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
           <div class="col-6">
             <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
@@ -570,7 +588,7 @@
 
         <div id="bi-desp-resultado" class="hidden">
           <div class="d-flex flex-wrap gap-2 mb-3">
-            <button class="btn btn-sm btn-primary fw-bold" id="bi-dim-projeto" onclick="mudarDimensaoBi('projeto')">Por Projeto</button>
+            <button class="btn btn-sm btn-primary fw-bold" id="bi-dim-cliente" onclick="mudarDimensaoBi('cliente')">Por Cliente</button>
             <button class="btn btn-sm btn-outline-secondary fw-bold" id="bi-dim-grupo" onclick="mudarDimensaoBi('grupo')">Por Grupo</button>
             <button class="btn btn-sm btn-outline-secondary fw-bold hidden" id="bi-dim-supervisor" onclick="mudarDimensaoBi('supervisor')">Por Supervisor</button>
           </div>
@@ -592,6 +610,75 @@
         </div>
 
         <div id="bi-desp-vazio" class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL EDITAR DESPESA (DIRETORIA) ############ -->
+<div class="modal fade" id="modalEditarDespesa" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">Editar Despesa</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-secondary small py-2 mb-3">Somente Diretoria. A alteração é gravada direto na planilha.</div>
+
+        <div class="row g-2">
+          <div class="col-md-7">
+            <label class="form-label fw-bold text-primary mb-1">Tipo de Despesa:</label>
+            <select id="edit-desp-tipo" class="form-select"></select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
+            <input type="text" id="edit-desp-valor" class="form-control" inputmode="numeric">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Forma de Pagamento:</label>
+            <select id="edit-desp-forma" class="form-select"></select>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Observação:</label>
+            <input type="text" id="edit-desp-obs" class="form-control">
+          </div>
+
+          <div class="col-12 mt-2">
+            <label class="form-label fw-bold text-primary mb-1">Projeto / Centro de custo vinculado:</label>
+            <div class="alert alert-light border py-2 mb-2" id="edit-desp-destino-atual"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm fw-bold mb-2" onclick="alternarTrocaDestino()">🔀 Trocar vínculo</button>
+
+            <div class="hidden" id="edit-desp-bloco-destino">
+              <div class="d-flex gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-primary" id="edit-desp-modo-projeto" onclick="mudarModoDestino('projeto')">Projeto</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="edit-desp-modo-centro" onclick="mudarModoDestino('centro')">Sem Projeto (Centro de Custo)</button>
+              </div>
+
+              <div id="edit-desp-busca-projeto">
+                <input type="text" id="edit-desp-busca" class="form-control mb-2" placeholder="Digite cliente ou unidade" oninput="pesquisarProjetoEdicao()">
+                <div id="edit-desp-resultados-projeto" class="border rounded mb-2 hidden" style="max-height: 140px; overflow-y: auto;"></div>
+              </div>
+
+              <div class="hidden row g-2" id="edit-desp-campos-centro">
+                <div class="col-7">
+                  <label class="form-label fw-bold text-primary mb-1">Centro de Custo:</label>
+                  <select id="edit-desp-centro" class="form-select"></select>
+                </div>
+                <div class="col-5">
+                  <label class="form-label fw-bold text-primary mb-1">Competência:</label>
+                  <input type="date" id="edit-desp-data-centro" class="form-control">
+                </div>
+              </div>
+
+              <div class="alert alert-success py-2 hidden mt-2" id="edit-desp-novo-destino"></div>
+            </div>
+          </div>
+
+          <div class="col-12 mt-3">
+            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-salvar-edicao-despesa" onclick="salvarEdicaoDespesa()">💾 Salvar Alterações</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -710,6 +797,100 @@
             <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-adto" onclick="gravarAdiantamento()">💾 Gravar Adiantamento</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL BI FINANCEIRO (DIRETORIA) ############ -->
+<div class="modal fade" id="modalBiFinanceiro" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">BI Financeiro — Despesas × Provisionamento</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="bifin-mes" class="form-select form-select-sm mb-2"></select>
+        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
+          <div class="col-6">
+            <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
+            <input type="date" id="bifin-ini" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label text-sm fw-bold text-primary">Data Final:</label>
+            <input type="date" id="bifin-fim" class="form-control form-control-sm">
+          </div>
+          <div class="col-12 mt-3">
+            <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-buscar-bifin" onclick="buscarBiFinanceiro()">🔍 Carregar</button>
+          </div>
+        </div>
+
+        <div id="bifin-resultado" class="hidden">
+          <div id="bifin-trilha" class="d-flex flex-wrap align-items-center gap-1 mb-2 p-2 rounded bg-light small"></div>
+          <div id="bifin-corpo"></div>
+          <button class="btn btn-secondary w-100 py-2 fw-bold mt-3" onclick="exportarBiFinanceiro()">📊 Exportar</button>
+        </div>
+        <div id="bifin-vazio" class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL RELATÓRIO DE PROVISIONAMENTO ############ -->
+<div class="modal fade" id="modalRelProvisionamento" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">Relatório de Provisionamento</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="relprov-mes" class="form-select form-select-sm mb-2"></select>
+        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
+          <div class="col-6"><label class="form-label text-sm fw-bold text-primary">Data Inicial:</label><input type="date" id="relprov-ini" class="form-control form-control-sm"></div>
+          <div class="col-6"><label class="form-label text-sm fw-bold text-primary">Data Final:</label><input type="date" id="relprov-fim" class="form-control form-control-sm"></div>
+          <div class="col-12 mt-3"><button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-buscar-relprov" onclick="buscarRelProvisionamento()">🔍 Buscar</button></div>
+        </div>
+        <div id="relprov-resultado" class="hidden">
+          <div id="relprov-lista" class="border rounded p-2 mb-3" style="max-height: 300px; overflow-y: auto;"></div>
+          <div class="alert alert-success d-flex align-items-center mb-3"><span class="fw-bold" id="relprov-resumo">0 lançamentos</span><span class="ms-auto fw-bold" id="relprov-total">R$ 0,00</span></div>
+          <button class="btn btn-primary w-100 py-2 fw-bold" onclick="exportarRelProvisionamento()">📊 Exportar em Excel (.csv)</button>
+        </div>
+        <div id="relprov-vazio" class="text-center text-muted py-3">Escolha o período e clique em Buscar.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ NOVO: MODAL VISÃO/RELATÓRIO DE ADIANTAMENTOS (DIRETORIA) ############ -->
+<div class="modal fade" id="modalRelAdiantamento" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">Visão e Relatório de Adiantamentos</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-secondary small py-2 mb-3">Adiantamento é salário antecipado ao colaborador — diferente de Provisionamento, que é ressarcimento de despesa ao supervisor.</div>
+        <label class="form-label fw-bold text-primary mb-1">Período:</label>
+        <select id="reladto-mes" class="form-select form-select-sm mb-2"></select>
+        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
+          <div class="col-6"><label class="form-label text-sm fw-bold text-primary">Data Inicial:</label><input type="date" id="reladto-ini" class="form-control form-control-sm"></div>
+          <div class="col-6"><label class="form-label text-sm fw-bold text-primary">Data Final:</label><input type="date" id="reladto-fim" class="form-control form-control-sm"></div>
+          <div class="col-12 mt-3"><button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-buscar-reladto" onclick="buscarRelAdiantamento()">🔍 Buscar</button></div>
+        </div>
+        <div id="reladto-resultado" class="hidden">
+          <h6 class="fw-bold text-primary mb-2">Total por colaborador</h6>
+          <div id="reladto-por-colaborador" class="border rounded p-2 mb-3" style="max-height: 200px; overflow-y: auto;"></div>
+          <h6 class="fw-bold text-primary mb-2">Lançamentos</h6>
+          <div id="reladto-lista" class="border rounded p-2 mb-3" style="max-height: 220px; overflow-y: auto;"></div>
+          <div class="alert alert-success d-flex align-items-center mb-3"><span class="fw-bold" id="reladto-resumo">0 lançamentos</span><span class="ms-auto fw-bold" id="reladto-total">R$ 0,00</span></div>
+          <button class="btn btn-primary w-100 py-2 fw-bold" onclick="exportarRelAdiantamento()">📊 Exportar em Excel (.csv)</button>
+        </div>
+        <div id="reladto-vazio" class="text-center text-muted py-3">Escolha o período e clique em Buscar.</div>
       </div>
     </div>
   </div>
@@ -1210,9 +1391,10 @@
     let presencaGestorOk = false;
     let comprovantes = { desp: null, prov: null, adto: null };
     let pessoaSelecionada = { prov: null, adto: null };
+    let financeiroInicializado = false;
 
     // ============================================================
-    // Utilitarios
+    // Utilitarios gerais
     // ============================================================
     function chaveProjeto(p) {
         if (!p || !p.data) return '';
@@ -1252,10 +1434,6 @@
         const h = new Date();
         return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
     }
-    function primeiroDiaMesISO() {
-        const h = new Date();
-        return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-01';
-    }
     function isoParaBR(iso) {
         if (!iso) return '';
         const p = iso.split('-');
@@ -1274,6 +1452,55 @@
         const res = await response.json();
         if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
         return res;
+    }
+
+    // ============================================================
+    // Seletor de mes reutilizavel (Relatorios, BI e Acerto de Contas)
+    // Preenche um <select> com os ultimos 13 meses + "Personalizado".
+    // Ao trocar, atualiza os inputs de data e dispara o recarregamento.
+    // ============================================================
+    function gerarOpcoesMeses(qtd) {
+        const hoje = new Date();
+        const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        let opcoes = [];
+        for (let i = 0; i < qtd; i++) {
+            const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+            const ano = d.getFullYear(), mes = d.getMonth();
+            const iniISO = ano + '-' + String(mes + 1).padStart(2, '0') + '-01';
+            const ultimoDia = new Date(ano, mes + 1, 0).getDate();
+            const fimData = (i === 0) ? hoje : new Date(ano, mes, ultimoDia);
+            const fimISO = fimData.getFullYear() + '-' + String(fimData.getMonth() + 1).padStart(2, '0') + '-' + String(fimData.getDate()).padStart(2, '0');
+            opcoes.push({ label: nomesMes[mes] + '/' + ano + (i === 0 ? ' (mês atual)' : ''), iniISO: iniISO, fimISO: fimISO });
+        }
+        return opcoes;
+    }
+
+    function popularSeletorMes(selectId, iniId, fimId, onChange) {
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+        if (sel.dataset.pronto !== '1') {
+            const meses = gerarOpcoesMeses(13);
+            sel.innerHTML = meses.map((m, i) => '<option value="' + i + '">' + m.label + '</option>').join('') + '<option value="custom">Personalizado</option>';
+            sel.dataset.meses = JSON.stringify(meses);
+            sel.dataset.pronto = '1';
+            sel.value = '0';
+            sel.onchange = () => aplicarSeletorMes(selectId, iniId, fimId, onChange);
+        }
+        aplicarSeletorMes(selectId, iniId, fimId, onChange);
+    }
+
+    function aplicarSeletorMes(selectId, iniId, fimId, onChange) {
+        const sel = document.getElementById(selectId);
+        const meses = JSON.parse(sel.dataset.meses || '[]');
+        const iniEl = document.getElementById(iniId), fimEl = document.getElementById(fimId);
+        if (sel.value === 'custom') {
+            iniEl.disabled = false; fimEl.disabled = false;
+        } else {
+            const m = meses[parseInt(sel.value, 10)];
+            if (m) { iniEl.value = m.iniISO; fimEl.value = m.fimISO; }
+            iniEl.disabled = true; fimEl.disabled = true;
+        }
+        if (onChange) onChange();
     }
 
     // ============================================================
@@ -1306,7 +1533,7 @@
                 document.getElementById(ctx + '-preview-vazio').classList.add('hidden');
                 document.getElementById(ctx + '-preview-cheio').classList.remove('hidden');
             };
-            img.onerror = () => alert('Nao foi possivel ler esta imagem. Tente outra foto.');
+            img.onerror = () => alert('Não foi possível ler esta imagem. Tente outra foto.');
             img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
@@ -1371,7 +1598,6 @@
         configExtraCarregada = true;
         const ehDiretor = (getPerfilLogado() === 'DIRETOR');
 
-        // Formas de pagamento
         try {
             const res = await chamarApi({ action: 'getConfigPagamento' });
             formasPagamento = res.formas || [];
@@ -1380,34 +1606,34 @@
             if (!formasPagamento.length) html = '<option value="">-- Nenhuma forma na aba Config_Pagamento --</option>';
             const selD = document.getElementById('desp-forma');
             const selP = document.getElementById('prov-forma');
+            const selE = document.getElementById('edit-desp-forma');
             if (selD) selD.innerHTML = html;
             if (selP) selP.innerHTML = html;
+            if (selE) selE.innerHTML = html;
         } catch (err) {
             const selD = document.getElementById('desp-forma');
             if (selD) selD.innerHTML = '<option value="">-- Falha ao carregar formas --</option>';
         }
 
-        // Centros de custo: exclusivo da Diretoria
         if (!ehDiretor) return;
         try {
             const res = await chamarApi({ action: 'getConfigCentros', cpf: getCpfLogado() });
             if (!res.centros || !res.centros.length) return;
-            document.getElementById('desp-centro').innerHTML =
-                '<option value="">-- Selecione o Centro --</option>' +
+            const opcoesHtml = '<option value="">-- Selecione o Centro --</option>' +
                 res.centros.map(c => '<option value="' + escaparHtml(c) + '">' + escaparHtml(c) + '</option>').join('');
+            document.getElementById('desp-centro').innerHTML = opcoesHtml;
             document.getElementById('desp-bloco-centro').classList.remove('hidden');
+            const selEditCentro = document.getElementById('edit-desp-centro');
+            if (selEditCentro) selEditCentro.innerHTML = opcoesHtml;
         } catch (err) { /* sem centros, segue normal */ }
-    }
-
-    function ehRecursoProprio(forma) {
-        const f = formasPagamento.find(x => x.forma === forma);
-        return !!(f && f.recursoProprio);
     }
 
     function avisarRecursoProprio() {
         const aviso = document.getElementById('desp-aviso-proprio');
         if (!aviso) return;
-        aviso.classList.toggle('hidden', !ehRecursoProprio(document.getElementById('desp-forma').value));
+        const forma = document.getElementById('desp-forma').value;
+        const f = formasPagamento.find(x => x.forma === forma);
+        aviso.classList.toggle('hidden', !(f && f.recursoProprio));
     }
 
     function alternarSemProjeto() {
@@ -1430,17 +1656,16 @@
         limparComprovante('desp');
     }
 
-    // Devolve o destino do lancamento: projeto selecionado ou centro de custo.
     function destinoDespesa() {
         const chk = document.getElementById('desp-sem-projeto');
         if (chk && chk.checked) {
             const centro = document.getElementById('desp-centro').value;
             const dataIso = document.getElementById('desp-data-centro').value;
             if (!centro) { alert('Selecione o Centro de Custo.'); return null; }
-            if (!dataIso) { alert('Informe a competencia da despesa.'); return null; }
+            if (!dataIso) { alert('Informe a competência da despesa.'); return null; }
             return { data: isoParaBR(dataIso), cliente: centro, unidade: 'EMPRESA', semProjeto: true };
         }
-        if (!projetoAtivo || !projetoAtivo.data) { alert('Selecione um projeto no painel antes de lancar a despesa.'); return null; }
+        if (!projetoAtivo || !projetoAtivo.data) { alert('Selecione um projeto no painel antes de lançar a despesa.'); return null; }
         return { data: projetoAtivo.data, cliente: projetoAtivo.cliente, unidade: projetoAtivo.unidade, semProjeto: false };
     }
 
@@ -1466,30 +1691,23 @@
                 action: 'lancarDespesa',
                 despesa: {
                     cpf: getCpfLogado(),
-                    data: destino.data,
-                    cliente: destino.cliente,
-                    unidade: destino.unidade,
-                    semProjeto: destino.semProjeto,
-                    tipo: tipo,
-                    valor: valor,
-                    formaPagamento: forma,
-                    obs: obs,
-                    supervisor: getSupervisorLogado(),
-                    comprovante: comprovantes.desp
+                    data: destino.data, cliente: destino.cliente, unidade: destino.unidade, semProjeto: destino.semProjeto,
+                    tipo: tipo, valor: valor, formaPagamento: forma, obs: obs,
+                    supervisor: getSupervisorLogado(), comprovante: comprovantes.desp
                 }
             });
 
             limparFormularioDespesa();
             await carregarDespesas();
 
-            const outra = confirm('✅ Despesa gravada com sucesso!\n\nDeseja lancar outra despesa?\n\nOK = lancar outra\nCancelar = encerrar meus lancamentos');
+            const outra = confirm('✅ Despesa gravada com sucesso!\n\nDeseja lançar outra despesa?\n\nOK = lançar outra\nCancelar = encerrar meus lançamentos');
             if (outra) {
                 document.getElementById('desp-tipo').focus();
             } else if (!destino.semProjeto) {
                 await alterarSessaoDespesas('ENCERRADO', true);
             }
         } catch (err) {
-            alert('⚠️ A despesa NAO foi gravada.\n\n' + err.message);
+            alert('⚠️ A despesa NÃO foi gravada.\n\n' + err.message);
         } finally {
             btn.innerText = '💾 Gravar Despesa';
             btn.disabled = false;
@@ -1507,11 +1725,11 @@
             aplicarEstadoSessao();
             if (!silencioso) {
                 alert(status === 'ENCERRADO'
-                    ? '🔒 Seus lancamentos neste projeto foram encerrados.'
-                    : '🔓 Lancamentos reabertos. Pode continuar lancando.');
+                    ? '🔒 Seus lançamentos neste projeto foram encerrados.'
+                    : '🔓 Lançamentos reabertos. Pode continuar lançando.');
             }
         } catch (err) {
-            alert('⚠️ Nao foi possivel atualizar seus lancamentos.\n\n' + err.message);
+            alert('⚠️ Não foi possível atualizar seus lançamentos.\n\n' + err.message);
         }
     }
 
@@ -1529,8 +1747,8 @@
     async function carregarDespesas() {
         const tbody = document.getElementById('lista-despesas');
         const ehDiretor = (getPerfilLogado() === 'DIRETOR');
-        const thExcluir = document.getElementById('th-excluir-despesa');
-        if (thExcluir) thExcluir.classList.toggle('hidden', !ehDiretor);
+        const thAcoes = document.getElementById('th-acoes-despesa');
+        if (thAcoes) thAcoes.classList.toggle('hidden', !ehDiretor);
 
         if (!projetoAtivo || !projetoAtivo.data) {
             despesasGlobais = [];
@@ -1552,7 +1770,7 @@
             document.getElementById('total-despesas').innerText = formatarReal(total);
 
             if (!despesasGlobais.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma despesa lancada.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma despesa lançada.</td></tr>';
                 return;
             }
 
@@ -1566,7 +1784,7 @@
                     <td class="text-nowrap fw-bold">${formatarReal(d.valor)}</td>
                     <td><small>${escaparHtml(d.supervisor || '-')}</small></td>
                     <td class="text-center">${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank" title="Abrir comprovante">🧾</a>' : '<span class="text-muted">—</span>'}</td>
-                    ${ehDiretor ? '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 px-2" title="Excluir" onclick="excluirDespesaLinha(' + d.rowId + ', &quot;' + escaparHtml(String(d.timestamp)) + '&quot;, &quot;' + escaparHtml(String(d.tipo)) + '&quot;)">🗑️</button></td>' : ''}
+                    ${ehDiretor ? '<td class="text-center text-nowrap"><button class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Editar" onclick="abrirEdicaoDespesa(' + d.rowId + ')">✏️</button><button class="btn btn-sm btn-outline-danger py-0 px-2" title="Excluir" onclick="excluirDespesaLinha(' + d.rowId + ', &quot;' + escaparHtml(String(d.timestamp)) + '&quot;, &quot;' + escaparHtml(String(d.tipo)) + '&quot;)">🗑️</button></td>' : ''}
                 </tr>`).join('');
         } catch (e) {
             console.error('Falha ao sincronizar despesas: ' + e.message);
@@ -1574,21 +1792,21 @@
     }
 
     async function excluirDespesaLinha(rowId, timestamp, tipo) {
-        if (getPerfilLogado() !== 'DIRETOR') return alert('Somente a Diretoria pode excluir lancamentos de despesa.');
-        if (!confirm('⚠️ Excluir definitivamente este lancamento?\n\nTipo: ' + tipo + '\nLancado em: ' + timestamp + '\n\nEsta acao nao pode ser desfeita.')) return;
+        if (getPerfilLogado() !== 'DIRETOR') return alert('Somente a Diretoria pode excluir lançamentos de despesa.');
+        if (!confirm('⚠️ Excluir definitivamente este lançamento?\n\nTipo: ' + tipo + '\nLançado em: ' + timestamp + '\n\nEsta ação não pode ser desfeita.')) return;
         try {
             await chamarApi({ action: 'excluirDespesa', cpf: getCpfLogado(), despesa: { rowId: rowId, timestamp: timestamp, tipo: tipo } });
             carregarDespesas();
         } catch (err) {
-            alert('⚠️ O lancamento NAO foi excluido.\n\n' + err.message);
+            alert('⚠️ O lançamento NÃO foi excluído.\n\n' + err.message);
             carregarDespesas();
         }
     }
 
     function exportarDespesasExcel() {
-        if (!despesasGlobais.length) return alert('Nao ha despesas para exportar.');
+        if (!despesasGlobais.length) return alert('Não há despesas para exportar.');
         let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Tipo Despesa", "Valor", "Forma Pagamento", "Observacao", "Supervisor", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Tipo Despesa", "Valor", "Forma Pagamento", "Observação", "Supervisor", "URL Comprovante"].join(";")];
         despesasGlobais.forEach(d => {
             total += Number(d.valor || 0);
             csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.tipo),
@@ -1597,6 +1815,140 @@
         });
         csv.push(["", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", ""].join(";"));
         baixarCsv(csv, 'Despesas_' + projetoAtivo.cliente + '_' + projetoAtivo.data.replace(/\//g, '-') + '.csv');
+    }
+
+    // ============================================================
+    // Edicao de despesa pela Diretoria (tipo, valor, forma, obs e
+    // tambem o projeto/centro de custo vinculado)
+    // ============================================================
+    let edicaoDespesaAtual = null;
+    let edicaoDestinoNovo = null;
+    let edicaoModoDestino = 'projeto';
+    let ultimoResultadoProjetos = [];
+    let timerBuscaProjeto = null;
+
+    function abrirEdicaoDespesa(rowId) {
+        const d = despesasGlobais.find(x => x.rowId === rowId);
+        if (!d) return alert('Lançamento não encontrado. Recarregue a lista.');
+        edicaoDespesaAtual = d;
+        edicaoDestinoNovo = null;
+
+        carregarConfigExtra();
+        document.getElementById('edit-desp-tipo').innerHTML = document.getElementById('desp-tipo').innerHTML;
+        document.getElementById('edit-desp-forma').innerHTML = document.getElementById('desp-forma').innerHTML;
+        document.getElementById('edit-desp-tipo').value = d.tipo;
+        document.getElementById('edit-desp-forma').value = d.formaPagamento;
+        document.getElementById('edit-desp-valor').value = Number(d.valor).toFixed(2).replace('.', ',');
+        document.getElementById('edit-desp-obs').value = d.obs || '';
+        document.getElementById('edit-desp-destino-atual').innerText = d.data + ' — ' + d.cliente + ' — ' + d.unidade;
+        document.getElementById('edit-desp-bloco-destino').classList.add('hidden');
+        document.getElementById('edit-desp-novo-destino').classList.add('hidden');
+        document.getElementById('edit-desp-resultados-projeto').classList.add('hidden');
+        document.getElementById('edit-desp-busca').value = '';
+        mudarModoDestino('projeto');
+
+        new bootstrap.Modal(document.getElementById('modalEditarDespesa')).show();
+    }
+
+    function alternarTrocaDestino() {
+        document.getElementById('edit-desp-bloco-destino').classList.toggle('hidden');
+    }
+
+    function mudarModoDestino(modo) {
+        edicaoModoDestino = modo;
+        document.getElementById('edit-desp-modo-projeto').classList.toggle('btn-primary', modo === 'projeto');
+        document.getElementById('edit-desp-modo-projeto').classList.toggle('btn-outline-secondary', modo !== 'projeto');
+        document.getElementById('edit-desp-modo-centro').classList.toggle('btn-primary', modo === 'centro');
+        document.getElementById('edit-desp-modo-centro').classList.toggle('btn-outline-secondary', modo !== 'centro');
+        document.getElementById('edit-desp-busca-projeto').classList.toggle('hidden', modo !== 'projeto');
+        document.getElementById('edit-desp-campos-centro').classList.toggle('hidden', modo !== 'centro');
+        if (modo === 'centro' && !document.getElementById('edit-desp-data-centro').value) {
+            document.getElementById('edit-desp-data-centro').value = hojeISO();
+        }
+    }
+
+    function pesquisarProjetoEdicao() {
+        clearTimeout(timerBuscaProjeto);
+        const termo = document.getElementById('edit-desp-busca').value;
+        const cont = document.getElementById('edit-desp-resultados-projeto');
+        if (termo.trim().length < 2) { cont.classList.add('hidden'); return; }
+        timerBuscaProjeto = setTimeout(async () => {
+            try {
+                const res = await chamarApi({ action: 'pesquisarProjetos', cpf: getCpfLogado(), termo: termo });
+                ultimoResultadoProjetos = res.projetos || [];
+                if (!ultimoResultadoProjetos.length) {
+                    cont.innerHTML = '<div class="p-2 text-muted small">Nenhum projeto encontrado.</div>';
+                    cont.classList.remove('hidden');
+                    return;
+                }
+                cont.innerHTML = ultimoResultadoProjetos.map((p, i) => `
+                    <div class="p-2 border-bottom" style="cursor:pointer;" onclick="selecionarProjetoEdicaoIdx(${i})">
+                        <div class="fw-bold small">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                        <div class="text-muted" style="font-size:0.75rem;">${escaparHtml(p.data)} · ${escaparHtml(p.status)}</div>
+                    </div>`).join('');
+                cont.classList.remove('hidden');
+            } catch (err) {
+                cont.innerHTML = '<div class="p-2 text-danger small">' + escaparHtml(err.message) + '</div>';
+                cont.classList.remove('hidden');
+            }
+        }, 400);
+    }
+
+    function selecionarProjetoEdicaoIdx(i) {
+        const p = ultimoResultadoProjetos[i];
+        if (!p) return;
+        edicaoDestinoNovo = { data: p.data, cliente: p.cliente, unidade: p.unidade };
+        document.getElementById('edit-desp-resultados-projeto').classList.add('hidden');
+        document.getElementById('edit-desp-busca').value = '';
+        const el = document.getElementById('edit-desp-novo-destino');
+        el.innerText = 'Novo vínculo: ' + p.data + ' — ' + p.cliente + ' — ' + p.unidade;
+        el.classList.remove('hidden');
+    }
+
+    async function salvarEdicaoDespesa() {
+        if (!edicaoDespesaAtual) return;
+
+        const tipo = document.getElementById('edit-desp-tipo').value;
+        const valor = valorParaNumero(document.getElementById('edit-desp-valor').value);
+        const forma = document.getElementById('edit-desp-forma').value;
+        const obs = document.getElementById('edit-desp-obs').value;
+        if (!tipo) return alert('Selecione o Tipo de Despesa.');
+        if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
+        if (!forma) return alert('Selecione a Forma de Pagamento.');
+
+        let destino = { data: edicaoDespesaAtual.data, cliente: edicaoDespesaAtual.cliente, unidade: edicaoDespesaAtual.unidade };
+        const trocando = !document.getElementById('edit-desp-bloco-destino').classList.contains('hidden');
+        if (trocando) {
+            if (edicaoModoDestino === 'centro') {
+                const centro = document.getElementById('edit-desp-centro').value;
+                const dataIso = document.getElementById('edit-desp-data-centro').value;
+                if (!centro) return alert('Selecione o Centro de Custo.');
+                if (!dataIso) return alert('Informe a competência.');
+                destino = { data: isoParaBR(dataIso), cliente: centro, unidade: 'EMPRESA' };
+            } else if (edicaoDestinoNovo) {
+                destino = edicaoDestinoNovo;
+            }
+        }
+
+        const btn = document.getElementById('btn-salvar-edicao-despesa');
+        btn.innerText = 'Salvando...'; btn.disabled = true;
+        try {
+            await chamarApi({
+                action: 'editarDespesa', cpf: getCpfLogado(),
+                despesa: {
+                    rowId: edicaoDespesaAtual.rowId, timestampOriginal: edicaoDespesaAtual.timestamp,
+                    data: destino.data, cliente: destino.cliente, unidade: destino.unidade,
+                    tipo: tipo, valor: valor, formaPagamento: forma, obs: obs
+                }
+            });
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarDespesa')).hide();
+            alert('✅ Despesa atualizada com sucesso!');
+            carregarDespesas();
+        } catch (err) {
+            alert('⚠️ A edição NÃO foi salva.\n\n' + err.message);
+        } finally {
+            btn.innerText = '💾 Salvar Alterações'; btn.disabled = false;
+        }
     }
 
     // ============================================================
@@ -1616,14 +1968,13 @@
     }
 
     async function registrarPresencaGestor() {
-        if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto antes de registrar sua presenca.');
+        if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto antes de registrar sua presença.');
         const btn = document.getElementById('btn-registrar-presenca-gestor');
         btn.innerText = 'Registrando...'; btn.disabled = true;
         try {
-            // Chama a MESMA funcao original do Folha de Ponto, que grava na aba Presencas.
             const res = await chamarApi({ action: 'verificarSupervisor', cpf: getCpfLogado(), projeto: projetoAtivo });
             if (!res.encontrado) {
-                alert('⚠️ Nao foi possivel registrar sua presenca.\n\nSeu CPF nao foi reconhecido como Supervisor ou Diretor.');
+                alert('⚠️ Não foi possível registrar sua presença.\n\nSeu CPF não foi reconhecido como Supervisor ou Diretor.');
                 return;
             }
             presencaGestorOk = true;
@@ -1631,9 +1982,9 @@
             aplicarEstadoPresenca();
             carregarLista(false);
         } catch (err) {
-            alert('Erro ao registrar sua presenca: ' + err.message);
+            alert('Erro ao registrar sua presença: ' + err.message);
         } finally {
-            btn.innerText = '✅ Registrar minha presenca e liberar o link'; btn.disabled = false;
+            btn.innerText = '✅ Registrar minha presença e liberar o link'; btn.disabled = false;
         }
     }
 
@@ -1651,13 +2002,9 @@
 
         bloco.classList.remove('hidden');
         if (presencaGestorOk) {
-            pendente.classList.add('hidden');
-            ok.classList.remove('hidden');
-            link.classList.remove('hidden');
+            pendente.classList.add('hidden'); ok.classList.remove('hidden'); link.classList.remove('hidden');
         } else {
-            pendente.classList.remove('hidden');
-            ok.classList.add('hidden');
-            link.classList.add('hidden');
+            pendente.classList.remove('hidden'); ok.classList.add('hidden'); link.classList.add('hidden');
         }
     }
 
@@ -1705,20 +2052,20 @@
             const res = await chamarApi({ action: 'getProjetosEncerrados', cpf: getCpfLogado() });
             const sel = document.getElementById('sel-proj-encerrados-sup');
             if (!res.projetos || !res.projetos.length) {
-                sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no periodo --</option>';
+                sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no período --</option>';
                 return;
             }
             sel.innerHTML = '<option value="">-- Selecione o Projeto Encerrado --</option>';
-            [...res.projetos].reverse().forEach(p => {
+            res.projetos.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = JSON.stringify(p);
                 opt.text = p.data + ' - ' + p.cliente + ' - ' + p.unidade;
                 sel.appendChild(opt);
             });
         } catch (err) {
-            alert('Erro ao carregar o historico: ' + err.message);
+            alert('Erro ao carregar o histórico: ' + err.message);
         } finally {
-            btn.innerText = 'Carregar Historico'; btn.disabled = false;
+            btn.innerText = 'Carregar Histórico'; btn.disabled = false;
         }
     }
 
@@ -1742,12 +2089,15 @@
     // ============================================================
     let relDespDados = [];
     let biDados = [];
-    let biEstado = { dimensao: 'projeto', caminho: [] };
+    let biEstado = { dimensao: 'cliente', caminho: [] };
 
+    // "Por Cliente" agrupa de verdade por cliente, somando todas as datas e
+    // projetos daquele cliente juntos. As outras dimensoes continuam
+    // detalhando por projeto/data no nivel mais fundo.
     const BI_HIER = {
-        projeto:    [ { campo: 'projetoLabel', rotulo: 'Projeto' }, { campo: 'grupo', rotulo: 'Grupo' }, { campo: 'tipo', rotulo: 'Tipo' } ],
-        grupo:      [ { campo: 'grupo', rotulo: 'Grupo' }, { campo: 'tipo', rotulo: 'Tipo' }, { campo: 'projetoLabel', rotulo: 'Projeto' } ],
-        supervisor: [ { campo: 'supervisor', rotulo: 'Supervisor' }, { campo: 'projetoLabel', rotulo: 'Projeto' }, { campo: 'grupo', rotulo: 'Grupo' } ]
+        cliente:    [ { campo: 'cliente', rotulo: 'Cliente' }, { campo: 'grupo', rotulo: 'Grupo' }, { campo: 'tipo', rotulo: 'Tipo' } ],
+        grupo:      [ { campo: 'grupo', rotulo: 'Grupo' }, { campo: 'tipo', rotulo: 'Tipo' }, { campo: 'projetoLabel', rotulo: 'Projeto/Data' } ],
+        supervisor: [ { campo: 'supervisor', rotulo: 'Supervisor' }, { campo: 'projetoLabel', rotulo: 'Projeto/Data' }, { campo: 'grupo', rotulo: 'Grupo' } ]
     };
 
     async function buscarDespesasPeriodo(dataIni, dataFim) {
@@ -1760,17 +2110,17 @@
         const el = document.getElementById('aviso-escopo-despesas');
         if (!el) return;
         el.innerText = (getPerfilLogado() === 'DIRETOR')
-            ? 'Como Diretoria, voce enxerga as despesas de todos os supervisores.'
-            : 'Voce enxerga somente as despesas lancadas por voce.';
+            ? 'Como Diretoria, você enxerga as despesas de todos os supervisores.'
+            : 'Você enxerga somente as despesas lançadas por você.';
     }
 
     function linhasCsvLancamentos(lista) {
         let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Grupo", "Tipo Despesa", "Valor", "Forma Pagamento", "Recurso Proprio", "Observacao", "Supervisor", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Grupo", "Tipo Despesa", "Valor", "Forma Pagamento", "Recurso Próprio", "Observação", "Supervisor", "URL Comprovante"].join(";")];
         lista.forEach(d => {
             total += Number(d.valor || 0);
             csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.grupo), escCsv(d.tipo),
-                      escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.recursoProprio ? 'SIM' : 'NAO'),
+                      escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.recursoProprio ? 'SIM' : 'NÃO'),
                       escCsv(d.obs), escCsv(d.supervisor), escCsv(d.url)].join(";"));
         });
         csv.push(["", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", ""].join(";"));
@@ -1778,25 +2128,24 @@
     }
 
     function prepararRelDespesas() {
-        if (!document.getElementById('rel-desp-ini').value) document.getElementById('rel-desp-ini').value = primeiroDiaMesISO();
-        if (!document.getElementById('rel-desp-fim').value) document.getElementById('rel-desp-fim').value = hojeISO();
+        popularSeletorMes('rel-desp-mes', 'rel-desp-ini', 'rel-desp-fim', buscarRelDespesas);
     }
 
     async function buscarRelDespesas() {
         const ini = document.getElementById('rel-desp-ini').value;
         const fim = document.getElementById('rel-desp-fim').value;
-        if (!ini || !fim) return alert('Preencha a Data Inicial e a Data Final.');
+        if (!ini || !fim) return alert('Preencha o período.');
 
         const btn = document.getElementById('btn-buscar-rel-desp');
         btn.innerText = 'Buscando...'; btn.disabled = true;
         try {
             relDespDados = await buscarDespesasPeriodo(ini, fim);
-            const nomes = [...new Set(relDespDados.map(d => d.projetoLabel))].sort();
+            const nomes = [...new Set(relDespDados.map(d => d.cliente))].sort();
 
             if (!nomes.length) {
                 document.getElementById('rel-desp-resultado').classList.add('hidden');
                 document.getElementById('rel-desp-vazio').classList.remove('hidden');
-                document.getElementById('rel-desp-vazio').innerText = 'Nenhuma despesa encontrada neste periodo.';
+                document.getElementById('rel-desp-vazio').innerText = 'Nenhuma despesa encontrada neste período.';
                 return;
             }
 
@@ -1812,7 +2161,7 @@
         } catch (err) {
             alert('Erro ao buscar as despesas: ' + err.message);
         } finally {
-            btn.innerText = '🔍 Buscar Despesas do Periodo'; btn.disabled = false;
+            btn.innerText = '🔍 Buscar Despesas do Período'; btn.disabled = false;
         }
     }
 
@@ -1824,33 +2173,32 @@
     function relDespSelecionadas() {
         const marcados = {};
         document.querySelectorAll('.chk-rel-desp:checked').forEach(el => marcados[el.value] = true);
-        return relDespDados.filter(d => marcados[d.projetoLabel]);
+        return relDespDados.filter(d => marcados[d.cliente]);
     }
 
     function resumirRelDespesas() {
         const sel = relDespSelecionadas();
         let total = 0;
         sel.forEach(d => total += Number(d.valor || 0));
-        document.getElementById('rel-desp-resumo').innerText = sel.length + (sel.length === 1 ? ' lancamento' : ' lancamentos');
+        document.getElementById('rel-desp-resumo').innerText = sel.length + (sel.length === 1 ? ' lançamento' : ' lançamentos');
         document.getElementById('rel-desp-total').innerText = formatarReal(total);
     }
 
     function exportarRelDespesas() {
         const sel = relDespSelecionadas();
-        if (!sel.length) return alert('Selecione ao menos um projeto para exportar.');
+        if (!sel.length) return alert('Selecione ao menos um cliente para exportar.');
         baixarCsv(linhasCsvLancamentos(sel), 'Relatorio_Despesas_' + document.getElementById('rel-desp-ini').value + '_a_' + document.getElementById('rel-desp-fim').value + '.csv');
     }
 
     function prepararBiDespesas() {
-        if (!document.getElementById('bi-desp-ini').value) document.getElementById('bi-desp-ini').value = primeiroDiaMesISO();
-        if (!document.getElementById('bi-desp-fim').value) document.getElementById('bi-desp-fim').value = hojeISO();
+        popularSeletorMes('bi-desp-mes', 'bi-desp-ini', 'bi-desp-fim', buscarBiDespesas);
         document.getElementById('bi-dim-supervisor').classList.toggle('hidden', getPerfilLogado() !== 'DIRETOR');
     }
 
     async function buscarBiDespesas() {
         const ini = document.getElementById('bi-desp-ini').value;
         const fim = document.getElementById('bi-desp-fim').value;
-        if (!ini || !fim) return alert('Preencha a Data Inicial e a Data Final.');
+        if (!ini || !fim) return alert('Preencha o período.');
 
         const btn = document.getElementById('btn-buscar-bi-desp');
         btn.innerText = 'Carregando...'; btn.disabled = true;
@@ -1859,22 +2207,22 @@
             if (!biDados.length) {
                 document.getElementById('bi-desp-resultado').classList.add('hidden');
                 document.getElementById('bi-desp-vazio').classList.remove('hidden');
-                document.getElementById('bi-desp-vazio').innerText = 'Nenhuma despesa encontrada neste periodo.';
+                document.getElementById('bi-desp-vazio').innerText = 'Nenhuma despesa encontrada neste período.';
                 return;
             }
             document.getElementById('bi-desp-vazio').classList.add('hidden');
             document.getElementById('bi-desp-resultado').classList.remove('hidden');
-            mudarDimensaoBi('projeto');
+            mudarDimensaoBi('cliente');
         } catch (err) {
             alert('Erro ao carregar o BI: ' + err.message);
         } finally {
-            btn.innerText = '🔍 Carregar Dados do Periodo'; btn.disabled = false;
+            btn.innerText = '🔍 Carregar Dados do Período'; btn.disabled = false;
         }
     }
 
     function mudarDimensaoBi(dim) {
         biEstado = { dimensao: dim, caminho: [] };
-        ['projeto', 'grupo', 'supervisor'].forEach(d => {
+        ['cliente', 'grupo', 'supervisor'].forEach(d => {
             const b = document.getElementById('bi-dim-' + d);
             if (!b) return;
             b.classList.toggle('btn-primary', d === dim);
@@ -1909,7 +2257,7 @@
                 ? '<span class="fw-bold">' + escaparHtml(p.valor) + '</span>'
                 : '<a href="javascript:void(0)" onclick="biSubir(' + (i + 1) + ')" class="text-decoration-none">' + escaparHtml(p.valor) + '</a>';
         });
-        html += '<span class="ms-auto text-muted">nivel ' + (biEstado.caminho.length + 1) + ' de ' + (hier.length + 1) + '</span>';
+        html += '<span class="ms-auto text-muted">nível ' + (biEstado.caminho.length + 1) + ' de ' + (hier.length + 1) + '</span>';
         document.getElementById('bi-trilha').innerHTML = html;
     }
 
@@ -1922,11 +2270,11 @@
 
         let total = 0;
         dados.forEach(d => total += Number(d.valor || 0));
-        document.getElementById('bi-resumo').innerText = dados.length + (dados.length === 1 ? ' lancamento' : ' lancamentos');
+        document.getElementById('bi-resumo').innerText = dados.length + (dados.length === 1 ? ' lançamento' : ' lançamentos');
         document.getElementById('bi-total').innerText = formatarReal(total);
 
         if (nivel >= hier.length) {
-            document.getElementById('bi-dica').innerText = 'Ultimo nivel: lancamentos individuais. Use a trilha acima para subir.';
+            document.getElementById('bi-dica').innerText = 'Último nível: lançamentos individuais. Use a trilha acima para subir.';
             cont.innerHTML = dados.map(d => `
                 <div class="border-bottom py-2 d-flex align-items-center">
                     <div class="flex-grow-1" style="min-width:0;">
@@ -1934,12 +2282,12 @@
                         <small class="text-muted d-block">${escaparHtml(d.data)} · ${escaparHtml(d.supervisor)}${d.obs ? ' · ' + escaparHtml(d.obs) : ''}</small>
                     </div>
                     <span class="fw-bold me-2">${formatarReal(d.valor)}</span>
-                    ${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank" title="Abrir comprovante">🧾</a>' : ''}
+                    ${d.url ? '<a href="' + escaparHtml(d.url) + '" target="_blank">🧾</a>' : ''}
                 </div>`).join('') || '<div class="text-muted text-center py-2">Nada aqui.</div>';
             return;
         }
 
-        document.getElementById('bi-dica').innerText = 'Agrupado por ' + hier[nivel].rotulo + '. Clique na linha para descer um nivel.';
+        document.getElementById('bi-dica').innerText = 'Agrupado por ' + hier[nivel].rotulo + '. Clique na linha para descer um nível.';
 
         const grupos = {};
         dados.forEach(d => {
@@ -1979,7 +2327,7 @@
         const hier = BI_HIER[biEstado.dimensao];
         const nivel = biEstado.caminho.length;
         const dados = biFiltrados();
-        if (!dados.length) return alert('Nao ha dados nesta visao.');
+        if (!dados.length) return alert('Não há dados nesta visão.');
         if (nivel >= hier.length) return exportarBiLancamentos();
 
         const grupos = {};
@@ -1994,7 +2342,7 @@
         Object.keys(grupos).forEach(k => total += grupos[k].valor);
         const filtroTxt = biEstado.caminho.map(p => p.valor).join(' > ') || 'Todos';
 
-        let csv = [["Filtro aplicado", "Agrupado por", "Item", "Lancamentos", "Valor", "% do total"].join(";")];
+        let csv = [["Filtro aplicado", "Agrupado por", "Item", "Lançamentos", "Valor", "% do total"].join(";")];
         Object.keys(grupos).sort((a, b) => grupos[b].valor - grupos[a].valor).forEach(k => {
             const pct = total > 0 ? (grupos[k].valor / total * 100) : 0;
             csv.push([escCsv(filtroTxt), escCsv(hier[nivel].rotulo), escCsv(k), escCsv(grupos[k].qtd),
@@ -2006,19 +2354,19 @@
 
     function exportarBiLancamentos() {
         const dados = biFiltrados();
-        if (!dados.length) return alert('Nao ha lancamentos nesta visao.');
+        if (!dados.length) return alert('Não há lançamentos nesta visão.');
         baixarCsv(linhasCsvLancamentos(dados), 'BI_Despesas_Lancamentos.csv');
     }
 
     // ============================================================
-    // Financeiro: acerto de contas, provisionamento e adiantamento
+    // Financeiro: Acerto de Contas, BI Financeiro, Provisionamento e Adiantamento
     // ============================================================
     let acertoDados = [];
 
     async function carregarAcertoContas() {
         const ini = document.getElementById('fin-ini').value;
         const fim = document.getElementById('fin-fim').value;
-        if (!ini || !fim) return alert('Preencha a Data Inicial e a Data Final.');
+        if (!ini || !fim) return;
 
         const btn = document.getElementById('btn-carregar-fin');
         btn.innerText = 'Carregando...'; btn.disabled = true;
@@ -2027,9 +2375,9 @@
             acertoDados = res.lista || [];
             renderAcertoContas();
         } catch (err) {
-            alert('Erro ao carregar o acerto de contas: ' + err.message);
+            document.getElementById('fin-lista').innerHTML = '<div class="text-center text-danger py-3">Erro ao carregar: ' + escaparHtml(err.message) + '</div>';
         } finally {
-            btn.innerText = '🔍 Carregar Acerto de Contas'; btn.disabled = false;
+            btn.innerText = '🔍 Atualizar Acerto de Contas'; btn.disabled = false;
         }
     }
 
@@ -2039,14 +2387,13 @@
         const btnExp = document.getElementById('btn-exportar-fin');
 
         if (!acertoDados.length) {
-            cont.innerHTML = '<div class="text-center text-muted py-3">Nenhum movimento com recurso proprio neste periodo.</div>';
+            cont.innerHTML = '<div class="text-center text-muted py-3">Nenhum movimento com recurso próprio neste período.</div>';
             rodape.classList.add('hidden');
             btnExp.classList.add('hidden');
             return;
         }
 
         cont.innerHTML = acertoDados.map(p => {
-            // saldo negativo = a empresa deve ao supervisor
             let rotulo, cor;
             if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
             else if (p.saldo < 0) { rotulo = 'Devo ' + formatarReal(-p.saldo); cor = 'danger'; }
@@ -2074,8 +2421,8 @@
     }
 
     function exportarAcertoContas() {
-        if (!acertoDados.length) return alert('Nao ha dados para exportar.');
-        let csv = [["CPF", "Nome", "Gastou com recurso proprio", "Recebeu de provisionamento", "Saldo", "Situacao"].join(";")];
+        if (!acertoDados.length) return alert('Não há dados para exportar.');
+        let csv = [["CPF", "Nome", "Gastou com recurso próprio", "Recebeu de provisionamento", "Saldo", "Situação"].join(";")];
         acertoDados.forEach(p => {
             const sit = Math.abs(p.saldo) < 0.005 ? 'QUITADO' : (p.saldo < 0 ? 'EMPRESA DEVE' : 'ADIANTADO AO SUPERVISOR');
             csv.push([escCsv(p.cpf), escCsv(p.nome), escCsv(p.gastou.toFixed(2).replace('.', ',')),
@@ -2084,21 +2431,236 @@
         baixarCsv(csv, 'Acerto_de_Contas_' + document.getElementById('fin-ini').value + '_a_' + document.getElementById('fin-fim').value + '.csv');
     }
 
-    // ---------- Busca de pessoa (provisionamento e adiantamento) ----------
-    let timerBusca = { prov: null, adto: null };
+    // ---------- BI Financeiro (despesas recurso próprio x provisionamento por supervisor) ----------
+    let biFinDados = [];
+    let biFinSupervisorAtual = null;
+
+    function prepararBiFinanceiro() {
+        popularSeletorMes('bifin-mes', 'bifin-ini', 'bifin-fim', buscarBiFinanceiro);
+    }
+
+    async function buscarBiFinanceiro() {
+        const ini = document.getElementById('bifin-ini').value;
+        const fim = document.getElementById('bifin-fim').value;
+        if (!ini || !fim) return alert('Preencha o período.');
+        const btn = document.getElementById('btn-buscar-bifin');
+        btn.innerText = 'Carregando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'getBiFinanceiro', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
+            biFinDados = res.lista || [];
+            biFinSupervisorAtual = null;
+            if (!biFinDados.length) {
+                document.getElementById('bifin-resultado').classList.add('hidden');
+                document.getElementById('bifin-vazio').classList.remove('hidden');
+                document.getElementById('bifin-vazio').innerText = 'Nenhum movimento com recurso próprio neste período.';
+                return;
+            }
+            document.getElementById('bifin-vazio').classList.add('hidden');
+            document.getElementById('bifin-resultado').classList.remove('hidden');
+            renderBiFinanceiro();
+        } catch (err) {
+            alert('Erro ao carregar o BI Financeiro: ' + err.message);
+        } finally {
+            btn.innerText = '🔍 Carregar'; btn.disabled = false;
+        }
+    }
+
+    function renderBiFinanceiro() {
+        const trilha = document.getElementById('bifin-trilha');
+        const corpo = document.getElementById('bifin-corpo');
+
+        if (!biFinSupervisorAtual) {
+            trilha.innerHTML = '<span class="fw-bold">Todos os supervisores</span>';
+            const maior = Math.max(...biFinDados.map(p => p.gastou), 0.01);
+            corpo.innerHTML = biFinDados.map(p => {
+                const larg = p.gastou / maior * 100;
+                let rotulo, cor;
+                if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
+                else if (p.saldo < 0) { rotulo = 'Devo ' + formatarReal(-p.saldo); cor = 'danger'; }
+                else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
+                return `
+                    <div class="border-bottom py-2" style="cursor:pointer;" onclick="abrirDetalheBiFinanceiro(this.dataset.cpf)" data-cpf="${escaparHtml(p.cpf)}">
+                        <div class="d-flex align-items-center mb-1">
+                            <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(p.nome)}</span>
+                            <span class="ms-auto small text-${cor} fw-bold">${rotulo}</span>
+                        </div>
+                        <div class="progress mb-1" style="height:5px;"><div class="progress-bar" style="width:${larg.toFixed(0)}%; background-color: var(--fc-primaria);"></div></div>
+                        <div class="d-flex small text-muted"><span>Gastou ${formatarReal(p.gastou)}</span><span class="ms-auto">Recebeu ${formatarReal(p.recebeu)} ›</span></div>
+                    </div>`;
+            }).join('');
+            return;
+        }
+
+        const p = biFinDados.find(x => x.cpf === biFinSupervisorAtual);
+        if (!p) { biFinSupervisorAtual = null; return renderBiFinanceiro(); }
+
+        trilha.innerHTML = '<a href="javascript:void(0)" onclick="voltarBiFinanceiro()" class="fw-bold text-decoration-none">Todos os supervisores</a> <span class="text-muted">&rsaquo;</span> <span class="fw-bold">' + escaparHtml(p.nome) + '</span>';
+
+        const maiorG = Math.max(...p.porGrupo.map(g => g.valor), 0.01);
+        let html = '<h6 class="fw-bold text-primary mb-2">Gasto por Grupo</h6>';
+        html += p.porGrupo.length ? [...p.porGrupo].sort((a, b) => b.valor - a.valor).map(g => `
+            <div class="border-bottom py-2">
+                <div class="d-flex"><span class="fw-bold">${escaparHtml(g.grupo)}</span><span class="ms-auto fw-bold">${formatarReal(g.valor)}</span></div>
+                <div class="progress mt-1" style="height:5px;"><div class="progress-bar" style="width:${(g.valor / maiorG * 100).toFixed(0)}%; background-color: var(--fc-primaria);"></div></div>
+            </div>`).join('') : '<div class="text-muted small">Nenhum gasto com recurso próprio.</div>';
+
+        html += '<h6 class="fw-bold text-primary mb-2 mt-3">Provisionamentos Recebidos</h6>';
+        html += p.provisionamentos.length ? p.provisionamentos.map(pr => `
+            <div class="border-bottom py-2 d-flex align-items-center">
+                <div><div class="small">${escaparHtml(pr.data)} · ${escaparHtml(pr.formaPagamento)}</div>${pr.obs ? '<div class="text-muted small">' + escaparHtml(pr.obs) + '</div>' : ''}</div>
+                <span class="ms-auto fw-bold">${formatarReal(pr.valor)}</span>
+            </div>`).join('') : '<div class="text-muted small">Nenhum provisionamento no período.</div>';
+
+        corpo.innerHTML = html;
+    }
+
+    function abrirDetalheBiFinanceiro(cpf) { biFinSupervisorAtual = cpf; renderBiFinanceiro(); }
+    function voltarBiFinanceiro() { biFinSupervisorAtual = null; renderBiFinanceiro(); }
+
+    function exportarBiFinanceiro() {
+        if (!biFinDados.length) return alert('Não há dados para exportar.');
+        let csv = [["CPF", "Nome", "Gastou (recurso próprio)", "Recebeu (provisionamento)", "Saldo"].join(";")];
+        biFinDados.forEach(p => {
+            csv.push([escCsv(p.cpf), escCsv(p.nome), escCsv(p.gastou.toFixed(2).replace('.', ',')), escCsv(p.recebeu.toFixed(2).replace('.', ',')), escCsv(p.saldo.toFixed(2).replace('.', ','))].join(";"));
+        });
+        baixarCsv(csv, 'BI_Financeiro_' + document.getElementById('bifin-ini').value + '_a_' + document.getElementById('bifin-fim').value + '.csv');
+    }
+
+    // ---------- Relatório de Provisionamento ----------
+    let relProvDados = [];
+
+    function prepararRelProvisionamento() {
+        popularSeletorMes('relprov-mes', 'relprov-ini', 'relprov-fim', buscarRelProvisionamento);
+    }
+
+    async function buscarRelProvisionamento() {
+        const ini = document.getElementById('relprov-ini').value;
+        const fim = document.getElementById('relprov-fim').value;
+        if (!ini || !fim) return alert('Preencha o período.');
+        const btn = document.getElementById('btn-buscar-relprov');
+        btn.innerText = 'Buscando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'getProvisionamentos', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
+            relProvDados = res.lista || [];
+            if (!relProvDados.length) {
+                document.getElementById('relprov-resultado').classList.add('hidden');
+                document.getElementById('relprov-vazio').classList.remove('hidden');
+                document.getElementById('relprov-vazio').innerText = 'Nenhum provisionamento neste período.';
+                return;
+            }
+            let total = 0;
+            document.getElementById('relprov-lista').innerHTML = relProvDados.map(p => {
+                total += Number(p.valor || 0);
+                return `<div class="border-bottom py-2 d-flex align-items-center">
+                    <div><div class="fw-bold small">${escaparHtml(p.nome)}</div><div class="text-muted small">${escaparHtml(p.data)} · ${escaparHtml(p.formaPagamento)}${p.obs ? ' · ' + escaparHtml(p.obs) : ''}</div></div>
+                    <span class="ms-auto fw-bold">${formatarReal(p.valor)}</span>
+                    ${p.url ? '<a class="ms-2" href="' + escaparHtml(p.url) + '" target="_blank">🧾</a>' : ''}
+                </div>`;
+            }).join('');
+            document.getElementById('relprov-resumo').innerText = relProvDados.length + (relProvDados.length === 1 ? ' lançamento' : ' lançamentos');
+            document.getElementById('relprov-total').innerText = formatarReal(total);
+            document.getElementById('relprov-vazio').classList.add('hidden');
+            document.getElementById('relprov-resultado').classList.remove('hidden');
+        } catch (err) {
+            alert('Erro ao buscar: ' + err.message);
+        } finally {
+            btn.innerText = '🔍 Buscar'; btn.disabled = false;
+        }
+    }
+
+    function exportarRelProvisionamento() {
+        if (!relProvDados.length) return alert('Não há dados para exportar.');
+        let total = 0;
+        let csv = [["Timestamp", "Data", "Supervisor", "CPF", "Valor", "Forma Pagamento", "Observação", "Lançado Por", "URL Comprovante"].join(";")];
+        relProvDados.forEach(p => {
+            total += Number(p.valor || 0);
+            csv.push([escCsv(p.timestamp), escCsv(p.data), escCsv(p.nome), escCsv(p.cpf), escCsv(Number(p.valor||0).toFixed(2).replace('.', ',')), escCsv(p.formaPagamento), escCsv(p.obs), escCsv(p.lancadoPor), escCsv(p.url)].join(";"));
+        });
+        csv.push(["", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", ""].join(";"));
+        baixarCsv(csv, 'Relatorio_Provisionamento_' + document.getElementById('relprov-ini').value + '_a_' + document.getElementById('relprov-fim').value + '.csv');
+    }
+
+    // ---------- Visão e Relatório de Adiantamentos ----------
+    let relAdtoDados = [];
+
+    function prepararRelAdiantamento() {
+        popularSeletorMes('reladto-mes', 'reladto-ini', 'reladto-fim', buscarRelAdiantamento);
+    }
+
+    async function buscarRelAdiantamento() {
+        const ini = document.getElementById('reladto-ini').value;
+        const fim = document.getElementById('reladto-fim').value;
+        if (!ini || !fim) return alert('Preencha o período.');
+        const btn = document.getElementById('btn-buscar-reladto');
+        btn.innerText = 'Buscando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'getAdiantamentos', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
+            relAdtoDados = res.lista || [];
+            if (!relAdtoDados.length) {
+                document.getElementById('reladto-resultado').classList.add('hidden');
+                document.getElementById('reladto-vazio').classList.remove('hidden');
+                document.getElementById('reladto-vazio').innerText = 'Nenhum adiantamento neste período.';
+                return;
+            }
+
+            let porColab = {};
+            relAdtoDados.forEach(a => {
+                if (!porColab[a.cpf]) porColab[a.cpf] = { nome: a.nome, total: 0, qtd: 0 };
+                porColab[a.cpf].total += Number(a.valor || 0);
+                porColab[a.cpf].qtd++;
+            });
+            document.getElementById('reladto-por-colaborador').innerHTML = Object.keys(porColab).sort((x, y) => porColab[y].total - porColab[x].total).map(k => `
+                <div class="border-bottom py-1 d-flex">
+                    <span class="fw-bold small">${escaparHtml(porColab[k].nome)}</span>
+                    <span class="ms-auto small">${formatarReal(porColab[k].total)} · ${porColab[k].qtd}x</span>
+                </div>`).join('');
+
+            let total = 0;
+            document.getElementById('reladto-lista').innerHTML = relAdtoDados.map(a => {
+                total += Number(a.valor || 0);
+                return `<div class="border-bottom py-2 d-flex align-items-center">
+                    <div><div class="fw-bold small">${escaparHtml(a.nome)}</div><div class="text-muted small">${escaparHtml(a.data)}${a.obs ? ' · ' + escaparHtml(a.obs) : ''}</div></div>
+                    <span class="ms-auto fw-bold">${formatarReal(a.valor)}</span>
+                    ${a.url ? '<a class="ms-2" href="' + escaparHtml(a.url) + '" target="_blank">🧾</a>' : ''}
+                </div>`;
+            }).join('');
+            document.getElementById('reladto-resumo').innerText = relAdtoDados.length + (relAdtoDados.length === 1 ? ' lançamento' : ' lançamentos');
+            document.getElementById('reladto-total').innerText = formatarReal(total);
+            document.getElementById('reladto-vazio').classList.add('hidden');
+            document.getElementById('reladto-resultado').classList.remove('hidden');
+        } catch (err) {
+            alert('Erro ao buscar: ' + err.message);
+        } finally {
+            btn.innerText = '🔍 Buscar'; btn.disabled = false;
+        }
+    }
+
+    function exportarRelAdiantamento() {
+        if (!relAdtoDados.length) return alert('Não há dados para exportar.');
+        let total = 0;
+        let csv = [["Timestamp", "Data", "Colaborador", "CPF", "Valor", "Observação", "Lançado Por", "URL Comprovante"].join(";")];
+        relAdtoDados.forEach(a => {
+            total += Number(a.valor || 0);
+            csv.push([escCsv(a.timestamp), escCsv(a.data), escCsv(a.nome), escCsv(a.cpf), escCsv(Number(a.valor||0).toFixed(2).replace('.', ',')), escCsv(a.obs), escCsv(a.lancadoPor), escCsv(a.url)].join(";"));
+        });
+        csv.push(["", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", ""].join(";"));
+        baixarCsv(csv, 'Relatorio_Adiantamentos_' + document.getElementById('reladto-ini').value + '_a_' + document.getElementById('reladto-fim').value + '.csv');
+    }
+
+    // ---------- Busca de pessoa (Provisionamento e Adiantamento) ----------
+    let timerBuscaPessoa = { prov: null, adto: null };
 
     function pesquisarPessoa(ctx, somenteGestores) {
-        clearTimeout(timerBusca[ctx]);
+        clearTimeout(timerBuscaPessoa[ctx]);
         const termo = document.getElementById(ctx + '-busca').value;
         const cont = document.getElementById(ctx + '-resultados');
-
         if (termo.trim().length < 2) { cont.classList.add('hidden'); return; }
 
-        timerBusca[ctx] = setTimeout(async () => {
+        timerBuscaPessoa[ctx] = setTimeout(async () => {
             try {
                 const res = await chamarApi({ action: 'pesquisarPessoaFinanceiro', cpf: getCpfLogado(), termo: termo, somenteGestores: !!somenteGestores });
                 if (!res.pessoas || !res.pessoas.length) {
-                    cont.innerHTML = '<div class="p-2 text-muted small">Ninguem encontrado.</div>';
+                    cont.innerHTML = '<div class="p-2 text-muted small">Ninguém encontrado.</div>';
                     cont.classList.remove('hidden');
                     return;
                 }
@@ -2132,7 +2694,7 @@
         document.getElementById(ctx + '-resultados').classList.add('hidden');
     }
 
-    // ---------- Provisionamento ----------
+    // ---------- Lançar Provisionamento ----------
     function prepararProvisionamento() {
         limparPessoa('prov');
         document.getElementById('prov-data').value = hojeISO();
@@ -2155,25 +2717,22 @@
             await chamarApi({
                 action: 'lancarProvisionamento', cpf: getCpfLogado(),
                 dados: {
-                    cpfSupervisor: pessoaSelecionada.prov.cpf,
-                    data: isoParaBR(data),
-                    valor: valor,
+                    cpfSupervisor: pessoaSelecionada.prov.cpf, data: isoParaBR(data), valor: valor,
                     formaPagamento: document.getElementById('prov-forma').value,
-                    obs: document.getElementById('prov-obs').value,
-                    comprovante: comprovantes.prov
+                    obs: document.getElementById('prov-obs').value, comprovante: comprovantes.prov
                 }
             });
             alert('✅ Provisionamento gravado com sucesso!');
             prepararProvisionamento();
             carregarAcertoContas();
         } catch (err) {
-            alert('⚠️ O provisionamento NAO foi gravado.\n\n' + err.message);
+            alert('⚠️ O provisionamento NÃO foi gravado.\n\n' + err.message);
         } finally {
             btn.innerText = '💾 Gravar Provisionamento'; btn.disabled = false;
         }
     }
 
-    // ---------- Adiantamento ----------
+    // ---------- Lançar Adiantamento ----------
     function prepararAdiantamento() {
         limparPessoa('adto');
         document.getElementById('adto-data').value = hojeISO();
@@ -2195,17 +2754,14 @@
             await chamarApi({
                 action: 'lancarAdiantamento', cpf: getCpfLogado(),
                 dados: {
-                    cpfColaborador: pessoaSelecionada.adto.cpf,
-                    data: isoParaBR(data),
-                    valor: valor,
-                    obs: document.getElementById('adto-obs').value,
-                    comprovante: comprovantes.adto
+                    cpfColaborador: pessoaSelecionada.adto.cpf, data: isoParaBR(data), valor: valor,
+                    obs: document.getElementById('adto-obs').value, comprovante: comprovantes.adto
                 }
             });
             alert('✅ Adiantamento gravado com sucesso!');
             prepararAdiantamento();
         } catch (err) {
-            alert('⚠️ O adiantamento NAO foi gravado.\n\n' + err.message);
+            alert('⚠️ O adiantamento NÃO foi gravado.\n\n' + err.message);
         } finally {
             btn.innerText = '💾 Gravar Adiantamento'; btn.disabled = false;
         }
@@ -2222,7 +2778,6 @@
 
         ['desp', 'prov', 'adto'].forEach(ligarColagem);
 
-        // Ctrl+V em qualquer lugar do painel cai no comprovante da despesa
         document.addEventListener('paste', (e) => {
             const dash = document.getElementById('view-dashboard');
             if (!dash || dash.classList.contains('hidden')) return;
@@ -2235,7 +2790,6 @@
             }
         });
 
-        // Vigia a troca de projeto sem alterar as funcoes existentes
         setInterval(() => {
             const dash = document.getElementById('view-dashboard');
             if (!dash || dash.classList.contains('hidden')) return;
@@ -2248,11 +2802,20 @@
             const ehDiretor = (getPerfilLogado() === 'DIRETOR');
             const areaDir = document.getElementById('fin-area-diretoria');
             if (areaDir) areaDir.classList.toggle('hidden', !ehDiretor);
+            const btnBiFin = document.getElementById('btn-bi-financeiro');
+            if (btnBiFin) btnBiFin.classList.toggle('hidden', !ehDiretor);
+            const btnRelAdto = document.getElementById('btn-rel-adiantamento');
+            if (btnRelAdto) btnRelAdto.classList.toggle('hidden', !ehDiretor);
             const escopo = document.getElementById('fin-escopo');
             if (escopo) {
                 escopo.innerText = ehDiretor
-                    ? 'Gasto com recurso proprio x ressarcido, por supervisor.'
-                    : 'Seu gasto com recurso proprio x o que voce ja recebeu de volta.';
+                    ? 'Gasto com recurso próprio × ressarcido, por supervisor.'
+                    : 'Seu gasto com recurso próprio × o que você já recebeu de volta.';
+            }
+
+            if (!financeiroInicializado && getCpfLogado()) {
+                financeiroInicializado = true;
+                popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', carregarAcertoContas);
             }
 
             const chave = chaveProjeto(projetoAtivo);
@@ -2264,12 +2827,6 @@
             }
             aplicarEstadoPresenca();
         }, 2000);
-
-        // Periodo padrao do Financeiro
-        const fi = document.getElementById('fin-ini');
-        const ff = document.getElementById('fin-fim');
-        if (fi && !fi.value) fi.value = primeiroDiaMesISO();
-        if (ff && !ff.value) ff.value = hojeISO();
     });
 </script>
 </body>
