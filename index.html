@@ -81,7 +81,7 @@
 <div class="container fc-container mx-auto">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão</h4>
+        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão Formula Code</h4>
         <!-- ALTERADO (autorizado): a selecao de projeto saiu da tela de login e foi para o painel.
              O <select> original permanece aqui, apenas OCULTO, para que a funcao entrar()
              e o window.onload do Folha de Ponto continuem funcionando exatamente como antes. -->
@@ -89,7 +89,7 @@
             <option value="">-- Selecione o Projeto --</option>
         </select>
         
-        <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
+        <label class="form-label fw-bold">Login:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
     </div>
@@ -2155,7 +2155,55 @@
     let despesasGeralDados = [];
     let despesasGeralCompleto = [];
     let despGeralInicializado = false;
-    let filtrosGeralEstado = {}; // { prefixo: Set de valores marcados }
+    let filtrosGeralEstado = {};
+
+    // Popula os filtros a partir dos CADASTROS (Config_Despesas, Config_Pagamento,
+    // Colaboradores), nao dos dados. O usuario marca/desmarca ANTES de pesquisar.
+    async function popularFiltrosIniciais() {
+        try {
+            // Supervisores e diretores
+            const resTipos = await chamarApi({ action: 'getConfigDespesas', cpf: getCpfLogado() });
+            const resFormas = await chamarApi({ action: 'getConfigPagamento' });
+
+            const supervisores = [getSupervisorLogado()]; // ao menos ele mesmo
+            const grupos = [...new Set((resTipos.tipos || []).map(t => t.grupo || 'OUTROS'))].sort();
+            const formas = (resFormas.formas || []).map(f => f.forma).sort();
+
+            popularDropdownFiltro('supervisor', supervisores);
+            popularDropdownFiltro('grupo', grupos);
+            popularDropdownFiltro('forma', formas);
+            // Cliente vem vazio inicialmente, sera populado com os dados
+            popularDropdownFiltro('cliente', []);
+        } catch (e) {
+            console.error('Filtros iniciais: ' + e.message);
+        }
+    }
+
+    function popularDropdownFiltro(prefixo, valores) {
+        const cont = document.getElementById('drop-filtro-' + prefixo);
+        if (!cont) return;
+        const estadoAnterior = filtrosGeralEstado[prefixo];
+
+        let marcados;
+        if (estadoAnterior) {
+            marcados = new Set();
+            valores.forEach(v => {
+                marcados.add(v); // preserva ou marca por padrao
+            });
+        } else {
+            marcados = new Set(valores);
+        }
+        marcados.add('__inicializado__');
+        filtrosGeralEstado[prefixo] = marcados;
+
+        const todosMarc = valores.length === 0 || valores.every(v => marcados.has(v));
+
+        cont.innerHTML =
+            '<div class="form-check mb-1 border-bottom pb-1"><input class="form-check-input" type="checkbox" ' + (todosMarc ? 'checked' : '') + ' id="chk-todos-' + prefixo + '" onchange="toggleTodosFiltro(\'' + prefixo + '\', this.checked)"><label class="form-check-label fw-bold" for="chk-todos-' + prefixo + '" style="cursor:pointer;">Selecionar todas</label></div>' +
+            (valores.length ? valores.map((v, i) =>
+                '<div class="form-check mb-0"><input class="form-check-input filtro-chk-' + prefixo + '" type="checkbox" ' + (marcados.has(v) ? 'checked' : '') + ' value="' + escaparHtml(v) + '" id="chk-' + prefixo + '-' + i + '" onchange="onFiltroChange(\'' + prefixo + '\')"><label class="form-check-label" for="chk-' + prefixo + '-' + i + '" style="cursor:pointer;">' + escaparHtml(v) + '</label></div>'
+            ).join('') : '<div class="text-muted small p-1">Será populado ao carregar as despesas.</div>');
+    } // { prefixo: Set de valores marcados }
 
     async function buscarDespesasGeral() {
         const ini = document.getElementById('desp-geral-ini').value;
@@ -2175,42 +2223,47 @@
         }
     }
 
-    // Monta ou atualiza o conteúdo de cada dropdown, preservando seleções anteriores
+    // Apos buscar os dados, enriquece os filtros com valores reais (especialmente
+    // Cliente, que nao vem dos cadastros). Preserva as selecoes ja feitas.
     function atualizarFiltrosGeral() {
         const configs = [
-            { prefixo: 'supervisor', campo: 'supervisor', containerId: 'drop-filtro-supervisor' },
-            { prefixo: 'cliente',    campo: 'cliente',    containerId: 'drop-filtro-cliente' },
-            { prefixo: 'grupo',      campo: 'grupo',      containerId: 'drop-filtro-grupo' },
-            { prefixo: 'forma',      campo: 'formaPagamento', containerId: 'drop-filtro-forma' }
+            { prefixo: 'supervisor', campo: 'supervisor' },
+            { prefixo: 'cliente',    campo: 'cliente' },
+            { prefixo: 'grupo',      campo: 'grupo' },
+            { prefixo: 'forma',      campo: 'formaPagamento' }
         ];
 
         configs.forEach(cfg => {
-            const valores = [...new Set(despesasGeralCompleto.map(d => String(d[cfg.campo] || '(vazio)')))].sort();
-            const cont = document.getElementById(cfg.containerId);
+            const valoresDados = [...new Set(despesasGeralCompleto.map(d => String(d[cfg.campo] || '(vazio)')))].sort();
             const estadoAnterior = filtrosGeralEstado[cfg.prefixo];
 
-            // Se já existia estado, preserva; valores novos entram marcados
-            let marcados;
-            if (estadoAnterior) {
-                marcados = new Set();
-                valores.forEach(v => {
-                    if (estadoAnterior.has(v)) marcados.add(v);
-                    else if (!estadoAnterior.has('__inicializado__')) marcados.add(v);
-                    else marcados.add(v); // valor novo = marcado
-                });
-            } else {
-                marcados = new Set(valores);
-            }
+            // Mescla valores ja existentes no dropdown com os novos dos dados
+            const existentes = [];
+            document.querySelectorAll('.filtro-chk-' + cfg.prefixo).forEach(el => existentes.push(el.value));
+            const todos = [...new Set([...existentes, ...valoresDados])].sort();
+
+            let marcados = new Set();
             marcados.add('__inicializado__');
+            todos.forEach(v => {
+                if (estadoAnterior && estadoAnterior.has('__inicializado__')) {
+                    // Se ja existia, preserva a selecao anterior
+                    if (estadoAnterior.has(v)) marcados.add(v);
+                    else if (!existentes.includes(v)) marcados.add(v); // novo = marcado
+                } else {
+                    marcados.add(v); // primeira vez = tudo marcado
+                }
+            });
             filtrosGeralEstado[cfg.prefixo] = marcados;
 
-            const todosMarc = valores.every(v => marcados.has(v));
-
-            cont.innerHTML =
-                '<div class="form-check mb-1 border-bottom pb-1"><input class="form-check-input" type="checkbox" ' + (todosMarc ? 'checked' : '') + ' id="chk-todos-' + cfg.prefixo + '" onchange="toggleTodosFiltro(\'' + cfg.prefixo + '\', this.checked)"><label class="form-check-label fw-bold" for="chk-todos-' + cfg.prefixo + '" style="cursor:pointer;">Selecionar todas</label></div>' +
-                valores.map((v, i) =>
-                    '<div class="form-check mb-0"><input class="form-check-input filtro-chk-' + cfg.prefixo + '" type="checkbox" ' + (marcados.has(v) ? 'checked' : '') + ' value="' + escaparHtml(v) + '" id="chk-' + cfg.prefixo + '-' + i + '" onchange="onFiltroChange(\'' + cfg.prefixo + '\')"><label class="form-check-label" for="chk-' + cfg.prefixo + '-' + i + '" style="cursor:pointer;">' + escaparHtml(v) + '</label></div>'
-                ).join('');
+            popularDropdownFiltro(cfg.prefixo, todos);
+            // Reaplica o estado correto (popularDropdownFiltro marca tudo por padrao)
+            document.querySelectorAll('.filtro-chk-' + cfg.prefixo).forEach(el => {
+                el.checked = marcados.has(el.value);
+            });
+            const chkTodos = document.getElementById('chk-todos-' + cfg.prefixo);
+            const totalChk = document.querySelectorAll('.filtro-chk-' + cfg.prefixo).length;
+            const marcChk = document.querySelectorAll('.filtro-chk-' + cfg.prefixo + ':checked').length;
+            if (chkTodos) { chkTodos.checked = (marcChk === totalChk); chkTodos.indeterminate = (marcChk > 0 && marcChk < totalChk); }
         });
     }
 
@@ -2709,7 +2762,16 @@
             if (!biFinDados.length) {
                 document.getElementById('bifin-resultado').classList.add('hidden');
                 document.getElementById('bifin-vazio').classList.remove('hidden');
-                document.getElementById('bifin-vazio').innerText = 'Nenhum movimento com recurso próprio neste período.';
+                let msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
+                const dd = res.diagnostico;
+                if (dd) {
+                    if (dd.totalLidas === 0) msg = 'A aba Despesas está vazia.';
+                    else if (dd.noPerido === 0) msg = dd.totalLidas + ' despesas na base, mas nenhuma no período selecionado.';
+                    else if (dd.comRecursoProprio === 0) msg = dd.noPerido + ' despesas no período, mas nenhuma com forma de pagamento marcada como recurso próprio na Config_Pagamento. Verifique se o texto na coluna K da aba Despesas é idêntico ao da Config_Pagamento (acentos, espaços, maiúsculas).';
+                    else if (dd.comCpf === 0) msg = dd.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF identificável (coluna J vazia e nome não encontrado na base).';
+                    else if (dd.saoSupervisor === 0) msg = dd.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR (todas são de DIRETOR). Despesas da Diretoria não entram nesta análise.';
+                }
+                document.getElementById('bifin-vazio').innerText = msg;
                 return;
             }
             document.getElementById('bifin-vazio').classList.add('hidden');
@@ -2733,7 +2795,7 @@
                 const larg = p.gastou / maior * 100;
                 let rotulo, cor;
                 if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
-                else if (p.saldo < 0) { rotulo = 'Devo ' + formatarReal(-p.saldo); cor = 'danger'; }
+                else if (p.saldo < 0) { rotulo = 'Saldo ' + formatarReal(-p.saldo); cor = 'danger'; }
                 else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
                 return `
                     <div class="border-bottom py-2" style="cursor:pointer;" onclick="abrirDetalheBiFinanceiro(this.dataset.cpf)" data-cpf="${escaparHtml(p.cpf)}">
@@ -3077,9 +3139,8 @@
 
             if (!despGeralInicializado && getCpfLogado()) {
                 despGeralInicializado = true;
-                // Apenas popula o seletor de mes, sem carregar automaticamente.
-                // O usuario clica em 🔍 quando quiser.
                 popularSeletorMes('desp-geral-mes', 'desp-geral-ini', 'desp-geral-fim', null);
+                popularFiltrosIniciais();
             }
 
             const chave = chaveProjeto(projetoAtivo);
