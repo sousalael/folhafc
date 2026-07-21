@@ -92,6 +92,9 @@
         <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
+        <!-- ############ NOVO: INDICADOR DE VERSAO DO SCRIPT ############ -->
+        <div id="badge-versao-script" class="small text-center text-muted mt-3">Verificando versão do script...</div>
+        <!-- ############ FIM DO INDICADOR ############ -->
     </div>
 
     <div id="view-dashboard" class="hidden">
@@ -2701,16 +2704,29 @@
         const btnExp = document.getElementById('btn-exportar-fin');
 
         if (!acertoDados.length) {
-            let msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
-            if (acertoDiagnostico) {
+            let msg, detalhe = '';
+            if (!acertoDiagnostico) {
+                msg = '⚠️ O servidor não enviou informações de diagnóstico. Isso indica que o Apps Script publicado é uma versão anterior — confira o indicador de versão na tela de login.';
+            } else {
                 const d = acertoDiagnostico;
+                msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
                 if (d.totalLidas === 0) msg = 'A aba Despesas está vazia.';
                 else if (d.noPerido === 0) msg = d.totalLidas + ' despesas na base, mas nenhuma no período selecionado.';
-                else if (d.comRecursoProprio === 0) msg = d.noPerido + ' despesas no período, mas nenhuma com forma de pagamento marcada como recurso próprio na Config_Pagamento. Verifique se o texto na coluna K bate exatamente com o que está cadastrado.';
-                else if (d.comCpf === 0) msg = d.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF do supervisor identificável (coluna J vazia e nome não encontrado na base).';
-                else if (d.saoSupervisor === 0) msg = d.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR. Despesas da Diretoria não entram nesta análise.';
+                else if (d.comRecursoProprio === 0) msg = d.noPerido + ' despesas no período, mas nenhuma com forma de pagamento reconhecida como recurso próprio.';
+                else if (d.comCpf === 0) msg = d.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF do supervisor identificável.';
+                else if (d.saoSupervisor === 0) msg = d.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR.';
+
+                if (d.formasEncontradas) {
+                    detalhe += '<div class="small text-start mt-2 p-2 bg-white border rounded">';
+                    detalhe += '<strong>Formas de pagamento encontradas na Despesas:</strong> ' + (d.formasEncontradas.length ? escaparHtml(d.formasEncontradas.join(', ')) : '(nenhuma)') + '<br>';
+                    detalhe += '<strong>Formas marcadas como recurso próprio na Config_Pagamento:</strong> ' + (d.formasConfiguradas.length ? escaparHtml(d.formasConfiguradas.join(', ')) : '(nenhuma cadastrada — todas tratadas como recurso próprio)') + '<br>';
+                    if (d.perfisEncontrados && d.perfisEncontrados.length) {
+                        detalhe += '<strong>Supervisores/perfis encontrados nas despesas com recurso próprio:</strong> ' + escaparHtml(d.perfisEncontrados.join(' · '));
+                    }
+                    detalhe += '</div>';
+                }
             }
-            cont.innerHTML = '<div class="text-center text-muted py-3">' + escaparHtml(msg) + '</div>';
+            cont.innerHTML = '<div class="text-center text-muted py-3">' + escaparHtml(msg) + detalhe + '</div>';
             rodape.classList.add('hidden');
             btnExp.classList.add('hidden');
             return;
@@ -2775,16 +2791,29 @@
             if (!biFinDados.length) {
                 document.getElementById('bifin-resultado').classList.add('hidden');
                 document.getElementById('bifin-vazio').classList.remove('hidden');
-                let msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
                 const dd = res.diagnostico;
-                if (dd) {
+                let msg, detalhe = '';
+                if (!dd) {
+                    msg = '⚠️ O servidor não enviou informações de diagnóstico. Isso indica que o Apps Script publicado é uma versão anterior — confira o indicador de versão na tela de login.';
+                } else {
+                    msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
                     if (dd.totalLidas === 0) msg = 'A aba Despesas está vazia.';
                     else if (dd.noPerido === 0) msg = dd.totalLidas + ' despesas na base, mas nenhuma no período selecionado.';
-                    else if (dd.comRecursoProprio === 0) msg = dd.noPerido + ' despesas no período, mas nenhuma com forma de pagamento marcada como recurso próprio na Config_Pagamento. Verifique se o texto na coluna K da aba Despesas é idêntico ao da Config_Pagamento (acentos, espaços, maiúsculas).';
-                    else if (dd.comCpf === 0) msg = dd.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF identificável (coluna J vazia e nome não encontrado na base).';
-                    else if (dd.saoSupervisor === 0) msg = dd.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR (todas são de DIRETOR). Despesas da Diretoria não entram nesta análise.';
+                    else if (dd.comRecursoProprio === 0) msg = dd.noPerido + ' despesas no período, mas nenhuma com forma de pagamento reconhecida como recurso próprio.';
+                    else if (dd.comCpf === 0) msg = dd.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF identificável.';
+                    else if (dd.saoSupervisor === 0) msg = dd.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR (todas são de DIRETOR).';
+
+                    if (dd.formasEncontradas) {
+                        detalhe += '<div class="small text-start mt-2 p-2 bg-white border rounded">';
+                        detalhe += '<strong>Formas de pagamento encontradas na Despesas:</strong> ' + (dd.formasEncontradas.length ? escaparHtml(dd.formasEncontradas.join(', ')) : '(nenhuma)') + '<br>';
+                        detalhe += '<strong>Formas marcadas como recurso próprio na Config_Pagamento:</strong> ' + (dd.formasConfiguradas.length ? escaparHtml(dd.formasConfiguradas.join(', ')) : '(nenhuma cadastrada — todas tratadas como recurso próprio)') + '<br>';
+                        if (dd.perfisEncontrados && dd.perfisEncontrados.length) {
+                            detalhe += '<strong>Supervisores/perfis encontrados nas despesas com recurso próprio:</strong> ' + escaparHtml(dd.perfisEncontrados.join(' · '));
+                        }
+                        detalhe += '</div>';
+                    }
                 }
-                document.getElementById('bifin-vazio').innerText = msg;
+                document.getElementById('bifin-vazio').innerHTML = escaparHtml(msg) + detalhe;
                 return;
             }
             document.getElementById('bifin-vazio').classList.add('hidden');
@@ -3098,6 +3127,33 @@
             btn.innerText = '💾 Gravar Adiantamento'; btn.disabled = false;
         }
     }
+
+    // ============================================================
+    // Indicador de versao do script: elimina a duvida sobre se o
+    // Apps Script publicado e realmente a versao mais recente.
+    // ============================================================
+    const VERSAO_ESPERADA = '2026-07-21-r7';
+
+    async function verificarVersaoScript() {
+        const badge = document.getElementById('badge-versao-script');
+        if (!badge) return;
+        try {
+            const res = await chamarApi({ action: 'getVersaoScript' });
+            if (res.versao === VERSAO_ESPERADA) {
+                badge.innerHTML = '✅ Script atualizado (versão ' + escaparHtml(res.versao) + ')';
+                badge.className = 'small text-center text-success mt-3';
+            } else {
+                badge.innerHTML = '⚠️ Script desatualizado! Servidor está na versão "' + escaparHtml(res.versao) +
+                    '", mas este app espera "' + VERSAO_ESPERADA + '". Publique uma <strong>Nova Versão</strong> no Apps Script (Implantar → Gerenciar implantações → lápis → Nova versão → Implantar).';
+                badge.className = 'small text-center text-danger mt-3 fw-bold';
+            }
+        } catch (err) {
+            badge.innerHTML = '⚠️ Não foi possível verificar a versão do script (' + escaparHtml(err.message) + '). Isso também pode indicar uma versão muito antiga, sem esta ação.';
+            badge.className = 'small text-center text-danger mt-3';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', verificarVersaoScript);
 
     // ============================================================
     // Inicializacao independente (nao interfere no Folha de Ponto)
