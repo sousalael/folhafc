@@ -81,7 +81,7 @@
 <div class="container fc-container mx-auto">
     
     <div id="view-login">
-        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão Formula Code</h4>
+        <h4 class="mb-3 text-primary fw-bold">Acesso Gestão</h4>
         <!-- ALTERADO (autorizado): a selecao de projeto saiu da tela de login e foi para o painel.
              O <select> original permanece aqui, apenas OCULTO, para que a funcao entrar()
              e o window.onload do Folha de Ponto continuem funcionando exatamente como antes. -->
@@ -89,7 +89,7 @@
             <option value="">-- Selecione o Projeto --</option>
         </select>
         
-        <label class="form-label fw-bold">Login:</label>
+        <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
     </div>
@@ -1118,7 +1118,8 @@
                     const selAtivos = document.getElementById('sel-proj-diretor-ativos');
                     selAtivos.innerHTML = '<option value="">-- Selecionar --</option>';
                     if(res.ativosHoje) {
-                        res.ativosHoje.forEach(p => {
+                        const copiaAtivosHoje = [...res.ativosHoje].reverse(); // ORDENADO (autorizado): mais recente primeiro
+                        copiaAtivosHoje.forEach(p => {
                             let opt = document.createElement('option');
                             opt.value = JSON.stringify(p);
                             opt.text = `${p.data} - ${p.cliente} - ${p.unidade}`;
@@ -2085,13 +2086,25 @@
             destino.innerHTML = '<option value="">-- Nenhum projeto ativo hoje --</option>';
             return;
         }
-        destino.innerHTML = '';
-        for (let i = 0; i < origem.options.length; i++) {
-            const o = document.createElement('option');
-            o.value = origem.options[i].value;
-            o.text = (i === 0) ? '-- Selecione o Projeto de Hoje --' : origem.options[i].text;
-            destino.appendChild(o);
+        // Copia as opcoes (exceto o placeholder no indice 0) e inverte,
+        // para exibir do projeto mais recente para o mais antigo.
+        const opcoes = [];
+        for (let i = 1; i < origem.options.length; i++) {
+            opcoes.push({ value: origem.options[i].value, text: origem.options[i].text });
         }
+        opcoes.reverse();
+
+        destino.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.text = '-- Selecione o Projeto de Hoje --';
+        destino.appendChild(placeholder);
+        opcoes.forEach(o => {
+            const el = document.createElement('option');
+            el.value = o.value;
+            el.text = o.text;
+            destino.appendChild(el);
+        });
     }
 
     function selecionarProjetoAtivoSup() {
@@ -2706,7 +2719,7 @@
         cont.innerHTML = acertoDados.map(p => {
             let rotulo, cor;
             if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
-            else if (p.saldo < 0) { rotulo = 'Devo ' + formatarReal(-p.saldo); cor = 'danger'; }
+            else if (p.saldo < 0) { rotulo = 'Saldo ' + formatarReal(-p.saldo); cor = 'danger'; }
             else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
 
             return `
