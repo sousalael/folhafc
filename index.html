@@ -3,6 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ############ ANTI-CACHE DA PAGINA ############ -->
+    <!-- Instrui o navegador a nunca guardar este index.html em cache, forcando-o -->
+    <!-- a sempre buscar a versao mais recente do GitHub. Corrige o erro          -->
+    <!-- intermitente no celular causado por uma copia antiga da pagina em cache. -->
+    <!-- Afeta SO o carregamento da pagina; nao toca em nenhuma chamada de rede.  -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- ############ FIM ANTI-CACHE ############ -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <title>Gestão Formula Code</title>
     <style>
@@ -966,31 +975,7 @@
     // ⚠️ ATENÇÃO: SUBSTITUA O TEXTO ABAIXO PELO LINK DO SEU DEPLOY DO APPS SCRIPT
     // =========================================================================
     const API_URL = 'https://script.google.com/macros/s/AKfycbwx1ltpKQkR3GUDebICMvLAUfEj0fWTahqm6SczO0t2AVFakZ-aMAGWwv8J59rD6mIO/exec'; 
-
-    // =========================================================================
-    // CACHE-BUSTING GLOBAL (via cabeçalhos, sem alterar a URL)
-    // Corrige o erro intermitente no celular ("<!DOCTYPE ... is not valid JSON"),
-    // causado pelo navegador reaproveitando uma resposta antiga em cache.
-    //
-    // IMPORTANTE: NAO alteramos a URL. O Apps Script redireciona o POST
-    // internamente e um parametro extra na URL (?_t=) quebra esse redirecionamento
-    // com erro 404. Por isso o anti-cache e feito SO por 'cache: no-store' e
-    // cabeçalhos, que o navegador respeita sem mexer no endereço.
-    // Nao altera nenhuma chamada existente do Folha de Ponto: elas passam por
-    // esta camada de protecao sem serem editadas.
-    // =========================================================================
-    (function instalarCacheBusting() {
-        const fetchOriginal = window.fetch;
-        window.fetch = function (url, opts) {
-            try {
-                if (typeof url === 'string' && url.indexOf('script.google.com') > -1) {
-                    opts = Object.assign({}, opts, { cache: 'no-store' });
-                }
-            } catch (e) { /* em caso de duvida, segue sem alterar */ }
-            return fetchOriginal.call(this, url, opts);
-        };
-    })();
-
+    
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
     let projetosEncerradosGlobal = []; 
@@ -1535,21 +1520,9 @@
         link.href = window.URL.createObjectURL(arquivo);
         link.click();
     }
-    async function chamarApi(payload, _tentativa) {
+    async function chamarApi(payload) {
         const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        const texto = await response.text();
-        let res;
-        try {
-            res = JSON.parse(texto);
-        } catch (e) {
-            // Resposta veio como HTML (pagina do Google/GitHub em vez de JSON),
-            // tipicamente por cache. Tenta de novo UMA vez antes de desistir.
-            if (!_tentativa) {
-                await new Promise(r => setTimeout(r, 800));
-                return chamarApi(payload, true);
-            }
-            throw new Error('O servidor devolveu uma resposta inválida. Puxe a tela para baixo para recarregar e tente de novo.');
-        }
+        const res = await response.json();
         if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
         return res;
     }
