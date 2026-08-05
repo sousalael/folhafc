@@ -968,23 +968,22 @@
     const API_URL = 'https://script.google.com/macros/s/AKfycbwx1ltpKQkR3GUDebICMvLAUfEj0fWTahqm6SczO0t2AVFakZ-aMAGWwv8J59rD6mIO/exec'; 
 
     // =========================================================================
-    // CACHE-BUSTING GLOBAL
-    // Corrige o erro intermitente no celular ("Unexpected token '<' ...
-    // <!DOCTYPE ... is not valid JSON"), causado pelo navegador reaproveitando
-    // uma resposta antiga/corrompida guardada em cache.
+    // CACHE-BUSTING GLOBAL (via cabeçalhos, sem alterar a URL)
+    // Corrige o erro intermitente no celular ("<!DOCTYPE ... is not valid JSON"),
+    // causado pelo navegador reaproveitando uma resposta antiga em cache.
     //
-    // Este interceptador envolve o window.fetch e, para TODA chamada ao Google
-    // Apps Script, acrescenta um carimbo de tempo unico na URL e desliga o
-    // cache. Nao altera nenhuma das chamadas existentes do Folha de Ponto:
-    // elas continuam identicas, so passam por esta camada de protecao.
+    // IMPORTANTE: NAO alteramos a URL. O Apps Script redireciona o POST
+    // internamente e um parametro extra na URL (?_t=) quebra esse redirecionamento
+    // com erro 404. Por isso o anti-cache e feito SO por 'cache: no-store' e
+    // cabeçalhos, que o navegador respeita sem mexer no endereço.
+    // Nao altera nenhuma chamada existente do Folha de Ponto: elas passam por
+    // esta camada de protecao sem serem editadas.
     // =========================================================================
     (function instalarCacheBusting() {
         const fetchOriginal = window.fetch;
         window.fetch = function (url, opts) {
             try {
                 if (typeof url === 'string' && url.indexOf('script.google.com') > -1) {
-                    // carimbo de tempo unico: forca o navegador a buscar do servidor
-                    url = url + (url.indexOf('?') > -1 ? '&' : '?') + '_t=' + Date.now();
                     opts = Object.assign({}, opts, { cache: 'no-store' });
                 }
             } catch (e) { /* em caso de duvida, segue sem alterar */ }
