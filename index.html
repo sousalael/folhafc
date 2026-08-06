@@ -117,12 +117,28 @@
                 </select>
 
                 <label class="form-label fw-bold text-primary mb-1">🗂️ Ou consulte um Projeto Encerrado:</label>
-                <div class="input-group">
-                    <select id="sel-proj-encerrados-sup" class="form-select" onchange="carregarProjetoEncerradoSup()">
-                        <option value="">-- Clique em Carregar Histórico --</option>
-                    </select>
-                    <button class="btn btn-primary fw-bold" id="btn-carregar-encerrados" onclick="carregarListaEncerradosSup()">Carregar Histórico</button>
+
+                <!-- Filtros no estilo da aba Despesas: Cliente em botao-dropdown -->
+                <div class="d-flex flex-wrap gap-2 mb-2" id="barra-filtros-encerrados">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="btn-filtro-cli-enc">🏢 Cliente</button>
+                        <div class="dropdown-menu p-2" style="min-width: 220px; max-height: 260px; overflow-y: auto;" id="drop-filtro-cli-enc">
+                            <div class="text-muted small p-1">Clique em 🔍 para carregar.</div>
+                        </div>
+                    </div>
                 </div>
+
+                <label class="form-label fw-bold text-primary mb-1 small">Período:</label>
+                <select id="enc-mes" class="form-select form-select-sm mb-2"></select>
+                <div class="row g-2 mb-2">
+                    <div class="col-5"><input type="date" id="enc-ini" class="form-control form-control-sm"></div>
+                    <div class="col-5"><input type="date" id="enc-fim" class="form-control form-control-sm"></div>
+                    <div class="col-2"><button class="btn btn-primary btn-sm w-100 fw-bold" id="btn-carregar-encerrados" onclick="carregarListaEncerradosSup()">🔍</button></div>
+                </div>
+
+                <select id="sel-proj-encerrados-sup" class="form-select" onchange="carregarProjetoEncerradoSup()">
+                    <option value="">-- Selecione o período e clique em 🔍 --</option>
+                </select>
             </div>
         </div>
         <!-- ############ FIM DO BLOCO NOVO ############ -->
@@ -841,6 +857,10 @@
           <div class="col-6">
             <label class="form-label fw-bold text-primary mb-1">Valor (R$):</label>
             <input type="text" id="adto-valor" class="form-control" placeholder="0,00" inputmode="numeric">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold text-primary mb-1">Forma de Pagamento:</label>
+            <select id="adto-forma" class="form-select"></select>
           </div>
           <div class="col-12">
             <label class="form-label fw-bold text-primary mb-1">Observação:</label>
@@ -1739,9 +1759,11 @@
             const selD = document.getElementById('desp-forma');
             const selP = document.getElementById('prov-forma');
             const selE = document.getElementById('edit-desp-forma');
+            const selA = document.getElementById('adto-forma');
             if (selD) selD.innerHTML = html;
             if (selP) selP.innerHTML = html;
             if (selE) selE.innerHTML = html;
+            if (selA) selA.innerHTML = html;
         } catch (err) {
             const selD = document.getElementById('desp-forma');
             if (selD) selD.innerHTML = '<option value="">-- Falha ao carregar formas --</option>';
@@ -2194,28 +2216,102 @@
         carregarDespesas();
     }
 
+    let encerradosCompleto = [];        // todos os projetos retornados no periodo
+    let encFiltroClienteEstado = null;  // Set de clientes marcados
+
+    // Inicializa o seletor de mes (mes atual por padrao) na 1a vez que a tela abre.
+    function inicializarFiltrosEncerrados() {
+        const sel = document.getElementById('enc-mes');
+        if (sel && sel.dataset.pronto !== '1') {
+            popularSeletorMes('enc-mes', 'enc-ini', 'enc-fim', null);
+        }
+    }
+
     async function carregarListaEncerradosSup() {
+        const ini = document.getElementById('enc-ini').value;
+        const fim = document.getElementById('enc-fim').value;
         const btn = document.getElementById('btn-carregar-encerrados');
-        btn.innerText = 'Carregando...'; btn.disabled = true;
+        btn.innerText = '...'; btn.disabled = true;
         try {
-            const res = await chamarApi({ action: 'getProjetosEncerrados', cpf: getCpfLogado() });
-            const sel = document.getElementById('sel-proj-encerrados-sup');
-            if (!res.projetos || !res.projetos.length) {
-                sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no período --</option>';
-                return;
-            }
-            sel.innerHTML = '<option value="">-- Selecione o Projeto Encerrado --</option>';
-            res.projetos.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = JSON.stringify(p);
-                opt.text = p.data + ' - ' + p.cliente + ' - ' + p.unidade;
-                sel.appendChild(opt);
+            const res = await chamarApi({
+                action: 'getProjetosEncerrados', cpf: getCpfLogado(),
+                filtros: { dataIni: ini, dataFim: fim }
             });
+            encerradosCompleto = res.projetos || [];
+            montarFiltroClienteEncerrados();
+            aplicarFiltroEncerrados();
         } catch (err) {
             alert('Erro ao carregar o histórico: ' + err.message);
         } finally {
-            btn.innerText = 'Carregar Histórico'; btn.disabled = false;
+            btn.innerText = '🔍'; btn.disabled = false;
         }
+    }
+
+    // Monta o dropdown de Cliente a partir dos projetos retornados,
+    // preservando as selecoes anteriores (padrao da aba Despesas).
+    function montarFiltroClienteEncerrados() {
+        const clientes = [...new Set(encerradosCompleto.map(p => String(p.cliente || '(sem cliente)')))].sort();
+        const cont = document.getElementById('drop-filtro-cli-enc');
+        const anterior = encFiltroClienteEstado;
+
+        let marcados = new Set();
+        clientes.forEach(c => {
+            if (anterior && anterior.has('__init__')) { if (anterior.has(c)) marcados.add(c); }
+            else marcados.add(c);
+        });
+        marcados.add('__init__');
+        encFiltroClienteEstado = marcados;
+
+        const todosMarc = clientes.every(c => marcados.has(c));
+        if (!clientes.length) {
+            cont.innerHTML = '<div class="text-muted small p-1">Nenhum projeto encerrado no período.</div>';
+            return;
+        }
+        cont.innerHTML =
+            '<div class="form-check mb-1 border-bottom pb-1"><input class="form-check-input" type="checkbox" ' + (todosMarc ? 'checked' : '') + ' id="chk-todos-cli-enc" onchange="toggleTodosCliEnc(this.checked)"><label class="form-check-label fw-bold" for="chk-todos-cli-enc" style="cursor:pointer;">Selecionar todas</label></div>' +
+            clientes.map((c, i) =>
+                '<div class="form-check mb-0"><input class="form-check-input filtro-chk-cli-enc" type="checkbox" ' + (marcados.has(c) ? 'checked' : '') + ' value="' + escaparHtml(c) + '" id="chk-cli-enc-' + i + '" onchange="onFiltroCliEncChange()"><label class="form-check-label" for="chk-cli-enc-' + i + '" style="cursor:pointer;">' + escaparHtml(c) + '</label></div>'
+            ).join('');
+    }
+
+    function toggleTodosCliEnc(marcar) {
+        document.querySelectorAll('.filtro-chk-cli-enc').forEach(el => el.checked = marcar);
+        onFiltroCliEncChange();
+    }
+
+    function onFiltroCliEncChange() {
+        const marcados = new Set(); marcados.add('__init__');
+        document.querySelectorAll('.filtro-chk-cli-enc:checked').forEach(el => marcados.add(el.value));
+        encFiltroClienteEstado = marcados;
+        const total = document.querySelectorAll('.filtro-chk-cli-enc').length;
+        const marc = document.querySelectorAll('.filtro-chk-cli-enc:checked').length;
+        const chkTodos = document.getElementById('chk-todos-cli-enc');
+        if (chkTodos) { chkTodos.checked = (marc === total); chkTodos.indeterminate = (marc > 0 && marc < total); }
+        aplicarFiltroEncerrados();
+    }
+
+    // Aplica o filtro de cliente e popula o select de projetos encerrados.
+    function aplicarFiltroEncerrados() {
+        const marc = {};
+        document.querySelectorAll('.filtro-chk-cli-enc:checked').forEach(el => marc[el.value] = true);
+        const semFiltro = document.querySelectorAll('.filtro-chk-cli-enc').length === 0;
+
+        const lista = encerradosCompleto.filter(p =>
+            semFiltro || marc[String(p.cliente || '(sem cliente)')]
+        );
+
+        const sel = document.getElementById('sel-proj-encerrados-sup');
+        if (!lista.length) {
+            sel.innerHTML = '<option value="">-- Nenhum projeto encerrado no período --</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">-- Selecione o Projeto Encerrado --</option>';
+        lista.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify(p);
+            opt.text = p.data + ' - ' + p.cliente + ' - ' + p.unidade;
+            sel.appendChild(opt);
+        });
     }
 
     function carregarProjetoEncerradoSup() {
@@ -3048,7 +3144,7 @@
             document.getElementById('reladto-lista').innerHTML = relAdtoDados.map(a => {
                 total += Number(a.valor || 0);
                 return `<div class="border-bottom py-2 d-flex align-items-center">
-                    <div><div class="fw-bold small">${escaparHtml(a.nome)}</div><div class="text-muted small">${escaparHtml(a.data)}${a.obs ? ' · ' + escaparHtml(a.obs) : ''}</div></div>
+                    <div><div class="fw-bold small">${escaparHtml(a.nome)}</div><div class="text-muted small">${escaparHtml(a.data)}${a.formaPagamento ? ' · ' + escaparHtml(a.formaPagamento) : ''}${a.obs ? ' · ' + escaparHtml(a.obs) : ''}</div></div>
                     <span class="ms-auto fw-bold">${formatarReal(a.valor)}</span>
                     ${a.url ? '<a class="ms-2" href="' + escaparHtml(a.url) + '" target="_blank">🧾</a>' : ''}
                 </div>`;
@@ -3067,12 +3163,12 @@
     function exportarRelAdiantamento() {
         if (!relAdtoDados.length) return alert('Não há dados para exportar.');
         let total = 0;
-        let csv = [["Timestamp", "Data", "Colaborador", "CPF", "Valor", "Observação", "Lançado Por", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data", "Colaborador", "CPF", "Valor", "Forma de Pagamento", "Observação", "Lançado Por", "URL Comprovante"].join(";")];
         relAdtoDados.forEach(a => {
             total += Number(a.valor || 0);
-            csv.push([escCsv(a.timestamp), escCsv(a.data), escCsv(a.nome), escCsv(a.cpf), escCsv(Number(a.valor||0).toFixed(2).replace('.', ',')), escCsv(a.obs), escCsv(a.lancadoPor), escCsv(a.url)].join(";"));
+            csv.push([escCsv(a.timestamp), escCsv(a.data), escCsv(a.nome), escCsv(a.cpf), escCsv(Number(a.valor||0).toFixed(2).replace('.', ',')), escCsv(a.formaPagamento), escCsv(a.obs), escCsv(a.lancadoPor), escCsv(a.url)].join(";"));
         });
-        csv.push(["", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", ""].join(";"));
+        csv.push(["", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", ""].join(";"));
         baixarCsv(csv, 'Relatorio_Adiantamentos_' + document.getElementById('reladto-ini').value + '_a_' + document.getElementById('reladto-fim').value + '.csv');
     }
 
@@ -3167,6 +3263,7 @@
         document.getElementById('adto-data').value = hojeISO();
         document.getElementById('adto-valor').value = '';
         document.getElementById('adto-obs').value = '';
+        document.getElementById('adto-forma').value = '';
         limparComprovante('adto');
     }
 
@@ -3174,8 +3271,10 @@
         if (!pessoaSelecionada.adto) return alert('Pesquise e selecione o colaborador.');
         const data = document.getElementById('adto-data').value;
         const valor = valorParaNumero(document.getElementById('adto-valor').value);
+        const forma = document.getElementById('adto-forma').value;
         if (!data) return alert('Informe a data.');
         if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
+        if (!forma) return alert('Selecione a Forma de Pagamento.');
 
         const btn = document.getElementById('btn-gravar-adto');
         btn.innerText = 'Gravando...'; btn.disabled = true;
@@ -3184,6 +3283,7 @@
                 action: 'lancarAdiantamento', cpf: getCpfLogado(),
                 dados: {
                     cpfColaborador: pessoaSelecionada.adto.cpf, data: isoParaBR(data), valor: valor,
+                    formaPagamento: forma,
                     obs: document.getElementById('adto-obs').value, comprovante: comprovantes.adto
                 }
             });
@@ -3253,6 +3353,7 @@
             carregarTiposDespesa();
             carregarConfigExtra();
             popularProjetosAtivosSup();
+            inicializarFiltrosEncerrados();
             atualizarAvisoEscopo();
 
             const ehDiretor = (getPerfilLogado() === 'DIRETOR');
