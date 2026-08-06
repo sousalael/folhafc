@@ -975,7 +975,66 @@
     // ⚠️ ATENÇÃO: SUBSTITUA O TEXTO ABAIXO PELO LINK DO SEU DEPLOY DO APPS SCRIPT
     // =========================================================================
     const API_URL = 'https://script.google.com/macros/s/AKfycbwx1ltpKQkR3GUDebICMvLAUfEj0fWTahqm6SczO0t2AVFakZ-aMAGWwv8J59rD6mIO/exec'; 
-    
+
+    // =========================================================================
+    // RESILIENCIA A RESPOSTAS LENTAS DO APPS SCRIPT
+    // O Apps Script "dorme" quando fica ocioso; a primeira chamada apos um
+    // tempo parado pode voltar lenta e, em rede movel, as vezes retorna uma
+    // pagina HTML de timeout do Google em vez de JSON (erro "<!DOCTYPE...").
+    //
+    // Este wrapper envolve o window.fetch: quando uma chamada ao Apps Script
+    // retorna algo que NAO e JSON valido, ele REFAZ a mesma chamada ate 2 vezes
+    // (a 2a ja pega o script "quente"). E transparente para TODO o codigo
+    // existente: nenhuma das chamadas do Folha de Ponto precisa mudar, todas
+    // passam a ter nova tentativa automatica. Nao altera a URL nem o metodo,
+    // entao nao ha risco para os POSTs.
+    // =========================================================================
+    (function instalarRetryAutomatico() {
+        const fetchOriginal = window.fetch;
+        const MAX_TENTATIVAS = 3;
+        const ESPERA_MS = 900;
+
+        function ehAppsScript(url) {
+            try { return typeof url === 'string' && url.indexOf('script.google.com') > -1; }
+            catch (e) { return false; }
+        }
+        function dormir(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        window.fetch = async function (url, opts) {
+            // Chamadas que nao sao para o Apps Script passam direto, intocadas.
+            if (!ehAppsScript(url)) {
+                return fetchOriginal.call(this, url, opts);
+            }
+
+            for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+                let resp;
+                try {
+                    resp = await fetchOriginal.call(this, url, opts);
+                } catch (erroRede) {
+                    if (tentativa < MAX_TENTATIVAS) { await dormir(ESPERA_MS); continue; }
+                    throw erroRede;
+                }
+
+                // Inspeciona o corpo sem consumir a resposta original.
+                const texto = await resp.clone().text();
+                const t = texto.trim();
+                const pareceJson = t.charAt(0) === '{' || t.charAt(0) === '[';
+
+                if (pareceJson || tentativa === MAX_TENTATIVAS) {
+                    // Resposta boa, OU ultima tentativa: devolve para o chamador.
+                    return new Response(texto, {
+                        status: resp.status,
+                        statusText: resp.statusText,
+                        headers: resp.headers
+                    });
+                }
+
+                // Resposta nao-JSON (timeout do Google): espera e tenta de novo.
+                await dormir(ESPERA_MS);
+            }
+        };
+    })();
+
     let projetoAtivo = null;
     let dadosGlobaisParaExcel = []; 
     let projetosEncerradosGlobal = []; 
