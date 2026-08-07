@@ -100,7 +100,21 @@
         
         <label class="form-label fw-bold">CPF do Supervisor ou Diretor:</label>
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
-        <button class="btn btn-primary w-100 py-2 fw-bold" onclick="entrar()">Entrar no Painel</button>
+        <button class="btn btn-primary w-100 py-2 fw-bold hidden" onclick="entrar()">Entrar no Painel</button>
+
+        <!-- ############ NOVO: SENHA DINAMICA POR E-MAIL ############ -->
+        <div id="bloco-acesso-seguro">
+            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-pedir-codigo" onclick="pedirCodigoAcesso()">📧 Receber código por e-mail</button>
+
+            <div id="bloco-codigo" class="hidden mt-3">
+                <div class="alert alert-info py-2 small mb-2" id="aviso-codigo-enviado"></div>
+                <label class="form-label fw-bold text-primary mb-1">Código de 6 dígitos:</label>
+                <input type="text" id="input-codigo" class="form-control mb-2 text-center" maxlength="6" inputmode="numeric" placeholder="000000" style="font-size:1.4rem; letter-spacing:0.35em; font-weight:bold;">
+                <button class="btn btn-success w-100 py-2 fw-bold" id="btn-validar-codigo" onclick="confirmarCodigoAcesso()">🔓 Entrar no Painel</button>
+                <button class="btn btn-link w-100 btn-sm mt-1 text-muted" onclick="reiniciarAcesso()">Voltar / reenviar código</button>
+            </div>
+        </div>
+        <!-- ############ FIM DA SENHA DINAMICA ############ -->
         <!-- ############ NOVO: INDICADOR DE VERSAO DO SCRIPT ############ -->
         <div id="badge-versao-script" class="small text-center text-muted mt-3">Verificando versão do script...</div>
         <!-- ############ FIM DO INDICADOR ############ -->
@@ -1181,12 +1195,12 @@
             projetoAtivo = { data: null, cliente: null, unidade: null, status: null }; 
         }
 
-        const btnLogin = document.querySelector('#view-login button');
+        const btnLogin = document.getElementById('btn-validar-codigo') || document.querySelector('#view-login button');
         const txtOriginal = btnLogin.innerText;
         btnLogin.innerText = "Autenticando..."; btnLogin.disabled = true;
 
         try {
-            const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf, projeto: projetoAtivo})});
+            const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf, projeto: projetoAtivo, token: tokenSessao})});
             if (!response.ok) throw new Error("Código HTTP de erro: " + response.status);
             
             const rawText = await response.text();
@@ -1599,11 +1613,76 @@
         link.href = window.URL.createObjectURL(arquivo);
         link.click();
     }
+    // ============================================================
+    // SENHA DINAMICA: token de sessao + funcoes de login por e-mail.
+    // O token vive so em memoria; ao recarregar o app, some. Como o servidor
+    // guarda a sessao por 2h, dentro desse periodo um novo codigo e pedido
+    // apenas se a pagina for recarregada. Detecta sessao expirada e reinicia.
+    // ============================================================
+    let tokenSessao = '';
+    let avisoSessaoExibido = false;
+
     async function chamarApi(payload) {
+        // Injeta o token em toda chamada autenticada (transparente ao resto do app).
+        if (tokenSessao && !payload.token) payload = Object.assign({}, payload, { token: tokenSessao });
         const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const res = await response.json();
+        if (res && res.error === 'SESSAO_INVALIDA') {
+            if (!avisoSessaoExibido) {
+                avisoSessaoExibido = true;
+                tokenSessao = '';
+                alert('🔒 ' + (res.mensagem || 'Sua sessão expirou.') + '\n\nA página será recarregada.');
+                location.reload();
+            }
+            throw new Error(res.mensagem || 'Sessão expirada.');
+        }
         if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
         return res;
+    }
+
+    async function pedirCodigoAcesso() {
+        const cpf = document.getElementById('cpf-sup').value;
+        if (soDigitos(cpf).length !== 11) return alert('Digite o CPF completo (11 dígitos).');
+
+        const btn = document.getElementById('btn-pedir-codigo');
+        btn.innerText = 'Enviando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'solicitarCodigoAcesso', cpf: cpf });
+            document.getElementById('aviso-codigo-enviado').innerHTML =
+                'Código enviado para <strong>' + escaparHtml(res.emailMascarado) + '</strong>. Válido por 10 minutos.';
+            document.getElementById('bloco-codigo').classList.remove('hidden');
+            document.getElementById('btn-pedir-codigo').classList.add('hidden');
+            document.getElementById('input-codigo').focus();
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.innerText = '📧 Receber código por e-mail'; btn.disabled = false;
+        }
+    }
+
+    async function confirmarCodigoAcesso() {
+        const cpf = document.getElementById('cpf-sup').value;
+        const codigo = document.getElementById('input-codigo').value.trim();
+        if (codigo.length !== 6) return alert('Digite os 6 dígitos do código.');
+
+        const btn = document.getElementById('btn-validar-codigo');
+        btn.innerText = 'Verificando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo });
+            tokenSessao = res.token;
+            avisoSessaoExibido = false;
+            entrar(); // funcao ORIGINAL do Folha de Ponto, intocada
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.innerText = '🔓 Entrar no Painel'; btn.disabled = false;
+        }
+    }
+
+    function reiniciarAcesso() {
+        document.getElementById('bloco-codigo').classList.add('hidden');
+        document.getElementById('btn-pedir-codigo').classList.remove('hidden');
+        document.getElementById('input-codigo').value = '';
     }
 
     // ============================================================
@@ -2214,6 +2293,13 @@
         if (projetoAtivo.status !== 'Encerrado') { loopAtualizacao = setInterval(() => carregarLista(false), 5000); }
         verificarPresencaGestor();
         carregarDespesas();
+
+        // ALT 1: abre o link do colaborador automaticamente em nova aba.
+        // So para projeto ativo (o link so existe/faz sentido nesse caso).
+        if (projetoAtivo.status !== 'Encerrado') {
+            const link = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
+            window.open(link, '_blank');
+        }
     }
 
     let encerradosCompleto = [];        // todos os projetos retornados no periodo
@@ -3300,7 +3386,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r12';
+    const VERSAO_ESPERADA = '2026-08-06-r13';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -3322,6 +3408,15 @@
     }
 
     document.addEventListener('DOMContentLoaded', verificarVersaoScript);
+
+    // Enter no campo de codigo confirma o acesso; restringe a digitos.
+    document.addEventListener('DOMContentLoaded', () => {
+        const inp = document.getElementById('input-codigo');
+        if (inp) {
+            inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, ''); });
+            inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmarCodigoAcesso(); });
+        }
+    });
 
     // ============================================================
     // Inicializacao independente (nao interfere no Folha de Ponto)
