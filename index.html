@@ -160,7 +160,7 @@
         <div class="alert alert-success" id="alerta-header">
             <div class="d-flex align-items-start">
                 <h5 class="alert-heading mb-0">Painel de Gestão</h5>
-                <button class="btn btn-sm btn-outline-secondary ms-auto fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar sessão</button>
+                <button class="btn btn-sm btn-outline-secondary ms-auto fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar Sessão</button>
             </div>
             <hr class="border-opacity-25">
             <p class="mb-1"><strong>Gestor(a):</strong> <span id="span-nome-sup"></span></p>
@@ -1154,11 +1154,22 @@
             } catch (err) {
                 alert("Erro ao ler os parâmetros do projeto via link: " + err.message);
             }
+        } else if (tokenSessao && window.__fcCpfRestaurar) {
+            // Retorno de "Reiniciar Sessao": reautentica com o token preservado,
+            // sem pedir CPF nem codigo. A pagina ja recarregou do zero, entao
+            // todo o estado (pesquisas, filtros, abas) esta limpo.
+            try {
+                document.getElementById('cpf-sup').value = window.__fcCpfRestaurar;
+                await entrar();
+            } catch (e) {
+                // Se falhar (token expirou), segue para o login normal.
+                document.getElementById('view-login').classList.remove('hidden');
+            }
         } else {
             try {
                 const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})});
                 if (!response.ok) throw new Error("Código HTTP de erro: " + response.status);
-                
+
                 const rawText = await response.text();
                 let res;
                 try { res = JSON.parse(rawText); } catch(e) {
@@ -1641,6 +1652,18 @@
     // apenas se a pagina for recarregada. Detecta sessao expirada e reinicia.
     // ============================================================
     let tokenSessao = '';
+    // Restaura o token apos um "Reiniciar Sessao" (reload proposital). O token
+    // fica no sessionStorage apenas durante a aba aberta; some ao fechar. Usado
+    // so para reautenticar automaticamente e recriar o estado inicial limpo.
+    try {
+        const tokSalvo = sessionStorage.getItem('fc_token');
+        const cpfSalvo = sessionStorage.getItem('fc_cpf');
+        if (tokSalvo) tokenSessao = tokSalvo;
+        // limpa imediatamente: uso unico por reload
+        sessionStorage.removeItem('fc_token');
+        window.__fcCpfRestaurar = cpfSalvo || '';
+        sessionStorage.removeItem('fc_cpf');
+    } catch (e) { window.__fcCpfRestaurar = ''; }
     let avisoSessaoExibido = false;
 
     async function chamarApi(payload) {
@@ -1706,45 +1729,17 @@
         document.getElementById('input-codigo').value = '';
     }
 
-    // 🔄 Recomeçar: volta ao estado de recem-logado SEM pedir CPF/codigo de novo.
-    // Reaproveita o proprio fluxo entrar() (que ja recria o setup inicial),
-    // apenas garantindo o encerramento do loop de atualizacao e a limpeza de
-    // filtros/campos que ficam fora do entrar(). O token de sessao e preservado.
+    // 🔄 Reiniciar Sessão: recarrega a pagina (garante estado 100% limpo, sem
+    // pesquisas/filtros/abas residuais) preservando o token para reautenticar
+    // automaticamente, sem pedir CPF nem codigo.
     function recomecarSessao() {
-        if (!confirm('Recomeçar? Isso desfaz as pesquisas, filtros, seleções e campos preenchidos, voltando ao estado inicial. Você continuará logado.')) return;
-
-        // 1) Encerra o loop de atualizacao para nao duplicar ao rechamar entrar()
-        if (typeof loopAtualizacao !== 'undefined' && loopAtualizacao) {
-            clearInterval(loopAtualizacao);
-            loopAtualizacao = null;
-        }
-
-        // 2) Volta para a primeira aba (Folha de Ponto)
-        const primeiraAba = document.querySelector('#abas-painel .aba-btn');
-        if (primeiraAba && window.bootstrap && bootstrap.Tab) {
-            try { new bootstrap.Tab(primeiraAba).show(); } catch (e) {}
-        }
-
-        // 3) Limpa campos de texto, selects e filtros soltos dentro do painel
-        //    (buscas, datas de filtro, dropdowns) sem tocar no login nem no token.
-        const dash = document.getElementById('view-dashboard');
-        if (dash) {
-            dash.querySelectorAll('input[type=text], input[type=date], input[type=search], input[type=number]').forEach(el => { el.value = ''; });
-            // Desmarca checkboxes de filtro (clientes, supervisores, etc.)
-            dash.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
-        }
-        // Zera estados de filtro em memoria, se existirem
-        try { if (typeof filtrosGeralEstado !== 'undefined') filtrosGeralEstado = {}; } catch (e) {}
-        try { if (typeof encFiltroClienteEstado !== 'undefined') encFiltroClienteEstado = null; } catch (e) {}
-        try { if (typeof encerradosCompleto !== 'undefined') encerradosCompleto = []; } catch (e) {}
-
-        // 4) Reseta o projeto selecionado e reexecuta o fluxo pos-login.
-        //    O entrar() reusa o CPF que continua no campo e o tokenSessao vivo,
-        //    refazendo todo o setup exatamente como logo apos o login.
-        projetoAtivo = null;
-        const selAtivo = document.getElementById('sel-proj-ativos-sup');
-        if (selAtivo) selAtivo.value = '';
-        entrar();
+        if (!confirm('Reiniciar Sessão? Isso desfaz todas as pesquisas, filtros, seleções e campos preenchidos, voltando ao estado inicial. Você continuará logado.')) return;
+        try {
+            if (tokenSessao) sessionStorage.setItem('fc_token', tokenSessao);
+            const cpf = document.getElementById('cpf-sup').value;
+            if (cpf) sessionStorage.setItem('fc_cpf', cpf);
+        } catch (e) { /* se o storage falhar, apenas recarrega e pede login */ }
+        location.reload();
     }
 
     // ============================================================
@@ -2281,6 +2276,13 @@
             atualizarCabecalhoProjeto();
             aplicarEstadoPresenca();
             carregarLista(false);
+
+            // Ao registrar a presenca com sucesso, libera e ABRE o link do
+            // colaborador em nova aba (comportamento do "liberar o link").
+            if (projetoAtivo && projetoAtivo.status !== 'Encerrado') {
+                const link = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
+                window.open(link, '_blank');
+            }
         } catch (err) {
             alert('Erro ao registrar sua presença: ' + err.message);
         } finally {
@@ -2355,13 +2357,6 @@
         if (projetoAtivo.status !== 'Encerrado') { loopAtualizacao = setInterval(() => carregarLista(false), 5000); }
         verificarPresencaGestor();
         carregarDespesas();
-
-        // ALT 1: abre o link do colaborador automaticamente em nova aba.
-        // So para projeto ativo (o link so existe/faz sentido nesse caso).
-        if (projetoAtivo.status !== 'Encerrado') {
-            const link = window.location.origin + window.location.pathname + "?projeto=" + encodeURIComponent(JSON.stringify(projetoAtivo));
-            window.open(link, '_blank');
-        }
     }
 
     let encerradosCompleto = [];        // todos os projetos retornados no periodo
@@ -3448,7 +3443,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r15';
+    const VERSAO_ESPERADA = '2026-08-06-r16';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
