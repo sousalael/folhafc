@@ -1031,9 +1031,24 @@
         const MAX_TENTATIVAS = 3;
         const ESPERA_MS = 900;
 
+        // Acoes que NAO podem ser repetidas automaticamente por terem efeito
+        // colateral de uso unico: validar o codigo o consome (apaga do cache),
+        // e solicitar dispara envio de e-mail. Repetir "queimaria" o codigo
+        // valido ou enviaria e-mail duplicado. Para elas, uma unica tentativa.
+        const ACOES_SEM_RETRY = ['validarCodigoAcesso', 'solicitarCodigoAcesso'];
+
         function ehAppsScript(url) {
             try { return typeof url === 'string' && url.indexOf('script.google.com') > -1; }
             catch (e) { return false; }
+        }
+        function acaoSemRetry(opts) {
+            try {
+                if (opts && opts.body) {
+                    const corpo = JSON.parse(opts.body);
+                    return ACOES_SEM_RETRY.indexOf(corpo.action) > -1;
+                }
+            } catch (e) {}
+            return false;
         }
         function dormir(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -1043,12 +1058,15 @@
                 return fetchOriginal.call(this, url, opts);
             }
 
-            for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+            // Operacoes de uso unico (login): uma unica tentativa, sem repeticao.
+            const maxTentativas = acaoSemRetry(opts) ? 1 : MAX_TENTATIVAS;
+
+            for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
                 let resp;
                 try {
                     resp = await fetchOriginal.call(this, url, opts);
                 } catch (erroRede) {
-                    if (tentativa < MAX_TENTATIVAS) { await dormir(ESPERA_MS); continue; }
+                    if (tentativa < maxTentativas) { await dormir(ESPERA_MS); continue; }
                     throw erroRede;
                 }
 
@@ -1057,7 +1075,7 @@
                 const t = texto.trim();
                 const pareceJson = t.charAt(0) === '{' || t.charAt(0) === '[';
 
-                if (pareceJson || tentativa === MAX_TENTATIVAS) {
+                if (pareceJson || tentativa === maxTentativas) {
                     // Resposta boa, OU ultima tentativa: devolve para o chamador.
                     return new Response(texto, {
                         status: resp.status,
@@ -3430,7 +3448,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r14';
+    const VERSAO_ESPERADA = '2026-08-06-r15';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
