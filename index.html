@@ -158,7 +158,10 @@
         <!-- ############ FIM DO BLOCO NOVO ############ -->
 
         <div class="alert alert-success" id="alerta-header">
-            <h5 class="alert-heading">Painel de Gestão</h5>
+            <div class="d-flex align-items-start">
+                <h5 class="alert-heading mb-0">Painel de Gestão</h5>
+                <button class="btn btn-sm btn-outline-secondary ms-auto fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Recomeçar</button>
+            </div>
             <hr class="border-opacity-25">
             <p class="mb-1"><strong>Gestor(a):</strong> <span id="span-nome-sup"></span></p>
             <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
@@ -1683,6 +1686,47 @@
         document.getElementById('bloco-codigo').classList.add('hidden');
         document.getElementById('btn-pedir-codigo').classList.remove('hidden');
         document.getElementById('input-codigo').value = '';
+    }
+
+    // 🔄 Recomeçar: volta ao estado de recem-logado SEM pedir CPF/codigo de novo.
+    // Reaproveita o proprio fluxo entrar() (que ja recria o setup inicial),
+    // apenas garantindo o encerramento do loop de atualizacao e a limpeza de
+    // filtros/campos que ficam fora do entrar(). O token de sessao e preservado.
+    function recomecarSessao() {
+        if (!confirm('Recomeçar? Isso desfaz as pesquisas, filtros, seleções e campos preenchidos, voltando ao estado inicial. Você continuará logado.')) return;
+
+        // 1) Encerra o loop de atualizacao para nao duplicar ao rechamar entrar()
+        if (typeof loopAtualizacao !== 'undefined' && loopAtualizacao) {
+            clearInterval(loopAtualizacao);
+            loopAtualizacao = null;
+        }
+
+        // 2) Volta para a primeira aba (Folha de Ponto)
+        const primeiraAba = document.querySelector('#abas-painel .aba-btn');
+        if (primeiraAba && window.bootstrap && bootstrap.Tab) {
+            try { new bootstrap.Tab(primeiraAba).show(); } catch (e) {}
+        }
+
+        // 3) Limpa campos de texto, selects e filtros soltos dentro do painel
+        //    (buscas, datas de filtro, dropdowns) sem tocar no login nem no token.
+        const dash = document.getElementById('view-dashboard');
+        if (dash) {
+            dash.querySelectorAll('input[type=text], input[type=date], input[type=search], input[type=number]').forEach(el => { el.value = ''; });
+            // Desmarca checkboxes de filtro (clientes, supervisores, etc.)
+            dash.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
+        }
+        // Zera estados de filtro em memoria, se existirem
+        try { if (typeof filtrosGeralEstado !== 'undefined') filtrosGeralEstado = {}; } catch (e) {}
+        try { if (typeof encFiltroClienteEstado !== 'undefined') encFiltroClienteEstado = null; } catch (e) {}
+        try { if (typeof encerradosCompleto !== 'undefined') encerradosCompleto = []; } catch (e) {}
+
+        // 4) Reseta o projeto selecionado e reexecuta o fluxo pos-login.
+        //    O entrar() reusa o CPF que continua no campo e o tokenSessao vivo,
+        //    refazendo todo o setup exatamente como logo apos o login.
+        projetoAtivo = null;
+        const selAtivo = document.getElementById('sel-proj-ativos-sup');
+        if (selAtivo) selAtivo.value = '';
+        entrar();
     }
 
     // ============================================================
@@ -3386,7 +3430,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r13';
+    const VERSAO_ESPERADA = '2026-08-06-r14';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
