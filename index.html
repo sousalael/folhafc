@@ -1058,6 +1058,22 @@
                 return fetchOriginal.call(this, url, opts);
             }
 
+            // Injeta o token de sessao em TODA chamada ao Apps Script que ainda
+            // nao o tenha. Cobre tambem os fetch diretos do Folha de Ponto
+            // (encerrarProjeto, salvarApenas, getRelatorioMultiplo, etc.), que
+            // nao passam pelo chamarApi. Acoes publicas ignoram o token no
+            // servidor, entao envia-lo nunca atrapalha.
+            try {
+                const tk = window.tokenSessao || '';
+                if (tk && opts && opts.body) {
+                    const corpo = JSON.parse(opts.body);
+                    if (!corpo.token) {
+                        corpo.token = tk;
+                        opts = Object.assign({}, opts, { body: JSON.stringify(corpo) });
+                    }
+                }
+            } catch (e) { /* corpo nao-JSON: segue sem alterar */ }
+
             // Operacoes de uso unico (login): uma unica tentativa, sem repeticao.
             const maxTentativas = acaoSemRetry(opts) ? 1 : MAX_TENTATIVAS;
 
@@ -1159,6 +1175,9 @@
             // sem pedir CPF nem codigo. A pagina ja recarregou do zero, entao
             // todo o estado (pesquisas, filtros, abas) esta limpo.
             try {
+                // Popula o sel-proj (projetos de hoje) ANTES de entrar, igual ao
+                // fluxo normal — senao a lista "Projeto Ativo de Hoje" fica vazia.
+                await carregarProjetosDeHoje();
                 document.getElementById('cpf-sup').value = window.__fcCpfRestaurar;
                 await entrar();
             } catch (e) {
@@ -1166,6 +1185,13 @@
                 document.getElementById('view-login').classList.remove('hidden');
             }
         } else {
+            await carregarProjetosDeHoje();
+        }
+    };
+
+    // Popula o <select> oculto sel-proj com os projetos de hoje. Fonte unica,
+    // usada tanto no carregamento normal quanto no retorno via token.
+    async function carregarProjetosDeHoje() {
             try {
                 const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'getProjetos'})});
                 if (!response.ok) throw new Error("Código HTTP de erro: " + response.status);
@@ -1190,8 +1216,7 @@
             } catch (err) {
                 alert("🔴 ERRO DE CONEXÃO (Não foi possível listar os projetos):\n\n" + err.message + "\n\nO que verificar:\n1. Certifique-se de realizar um NOVO DEPLOY caso tenha alterado o Código.gs.\n2. Garanta que configurou o acesso para 'Qualquer Pessoa' (Anyone).");
             }
-        }
-    };
+    }
 
     function atualizarCabecalhoProjeto() {
         if (!projetoAtivo || !projetoAtivo.data) return;
@@ -1658,7 +1683,7 @@
     try {
         const tokSalvo = sessionStorage.getItem('fc_token');
         const cpfSalvo = sessionStorage.getItem('fc_cpf');
-        if (tokSalvo) tokenSessao = tokSalvo;
+        if (tokSalvo) { tokenSessao = tokSalvo; window.tokenSessao = tokSalvo; }
         // limpa imediatamente: uso unico por reload
         sessionStorage.removeItem('fc_token');
         window.__fcCpfRestaurar = cpfSalvo || '';
@@ -1675,6 +1700,7 @@
             if (!avisoSessaoExibido) {
                 avisoSessaoExibido = true;
                 tokenSessao = '';
+                window.tokenSessao = '';
                 alert('🔒 ' + (res.mensagem || 'Sua sessão expirou.') + '\n\nA página será recarregada.');
                 location.reload();
             }
@@ -1714,6 +1740,7 @@
         try {
             const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo });
             tokenSessao = res.token;
+            window.tokenSessao = res.token;
             avisoSessaoExibido = false;
             entrar(); // funcao ORIGINAL do Folha de Ponto, intocada
         } catch (err) {
@@ -2317,11 +2344,31 @@
         const origem = document.getElementById('sel-proj');
         const destino = document.getElementById('sel-proj-ativos-sup');
         if (!origem || !destino) return;
-        if (destino.options.length > 1) return;
-        if (origem.options.length <= 1) {
-            destino.innerHTML = '<option value="">-- Nenhum projeto ativo hoje --</option>';
+
+        // Quantos projetos reais existem na origem (sel-proj), fora o placeholder.
+        const qtdOrigem = Math.max(0, origem.options.length - 1);
+
+        // Preserva a selecao atual do usuario (se houver) para nao perde-la.
+        const selecaoAtual = destino.value;
+
+        // Evita repopular a toa (e nao perder selecao) SOMENTE quando o destino
+        // ja reflete a mesma quantidade de projetos da origem. Se a origem mudou
+        // — por exemplo, os projetos chegaram depois de um Reiniciar Sessao —,
+        // a lista e reconstruida para refletir o estado atual.
+        const qtdDestino = Math.max(0, destino.options.length - 1);
+        const destinoTemProjetosReais = qtdDestino > 0 && destino.options[1] && destino.options[1].value !== '';
+        if (qtdOrigem > 0 && destinoTemProjetosReais && qtdDestino === qtdOrigem) return;
+
+        if (qtdOrigem === 0) {
+            // Ainda nao chegaram os projetos (ou realmente nao ha nenhum hoje).
+            // So mostra a mensagem se o destino nao tiver projetos reais ja listados,
+            // para nao apagar uma lista boa por causa de uma execucao adiantada.
+            if (!destinoTemProjetosReais) {
+                destino.innerHTML = '<option value="">-- Nenhum projeto ativo hoje --</option>';
+            }
             return;
         }
+
         // Copia as opcoes (exceto o placeholder no indice 0) e inverte,
         // para exibir do projeto mais recente para o mais antigo.
         const opcoes = [];
@@ -2341,6 +2388,12 @@
             el.text = o.text;
             destino.appendChild(el);
         });
+
+        // Restaura a selecao anterior, se ela ainda existir na nova lista.
+        if (selecaoAtual) {
+            const aindaExiste = Array.from(destino.options).some(o => o.value === selecaoAtual);
+            if (aindaExiste) destino.value = selecaoAtual;
+        }
     }
 
     function selecionarProjetoAtivoSup() {
@@ -3443,7 +3496,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r16';
+    const VERSAO_ESPERADA = '2026-08-06-r19';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
