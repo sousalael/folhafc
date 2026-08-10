@@ -134,6 +134,32 @@
         /* Badge de contagem (colaboradores presentes) em azul-marinho */
         .badge.bg-primary { background-color: var(--fc-primaria) !important; }
 
+        /* Botoes antes cinza (btn-secondary): azul-marinho da marca */
+        .btn-secondary {
+            background-color: var(--fc-primaria) !important;
+            border-color: var(--fc-primaria) !important;
+            color: #ffffff !important;
+            transition: all 0.25s ease;
+        }
+        .btn-secondary:hover {
+            background-color: var(--fc-primaria-clara) !important;
+            border-color: var(--fc-primaria-clara) !important;
+            color: #ffffff !important;
+        }
+
+        /* Botoes especificos marcados para VERDE (relatorios/pesquisa da Diretoria) */
+        .fc-btn-verde {
+            background-color: var(--fc-acao) !important;
+            border-color: var(--fc-acao) !important;
+            color: #ffffff !important;
+            transition: all 0.25s ease;
+        }
+        .fc-btn-verde:hover {
+            background-color: var(--fc-acao-escura) !important;
+            border-color: var(--fc-acao-escura) !important;
+            color: #ffffff !important;
+        }
+
         @media (max-width: 575.98px) {
             .fc-container { padding: 15px; }
             #abas-painel .aba-btn { font-size: 0.78rem; padding-top: 8px; padding-bottom: 8px; }
@@ -287,11 +313,11 @@
         <div class="d-flex flex-column gap-2 mt-4">
             <button class="btn btn-primary fw-bold w-100 py-2" id="btn-salvar-apenas" onclick="salvarAlteracoes()">💾 Salvar Alterações</button>
             <button class="btn btn-danger w-100 py-2" id="btn-encerrar" onclick="encerrarProjeto()">🔒 Encerrar Projeto</button>
-            <button class="btn btn-secondary w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel (Deste Projeto)</button>
+            <button class="btn btn-secondary fc-btn-verde w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel (Deste Projeto)</button>
         </div>
 
         <div id="area-diretor" class="alert alert-dark hidden mb-4 border-dark">
-            <h6 class="fw-bold text-dark mb-3">👑 Ferramentas da Diretoria</h6>
+            <h6 class="fw-bold text-primary mb-3">👑 Ferramentas da Diretoria</h6>
             <div class="row g-2 mb-3">
                 <div class="col-md-6">
                     <label class="form-label text-sm mb-1 fw-bold">Ver Projeto Ativo (Hoje):</label>
@@ -309,8 +335,8 @@
             
             <hr class="border-secondary">
             <div class="d-flex flex-column flex-md-row gap-2 mt-2">
-                <button class="btn btn-outline-dark btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalMultiRelatorio" onclick="popularModalMulti()">📑 Relatório Múltiplo Unificado</button>
-                <button class="btn btn-outline-dark btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab">🔍 Pesquisar Colaborador</button>
+                <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalMultiRelatorio" onclick="popularModalMulti()">📑 Relatório Múltiplo Unificado</button>
+                <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab">🔍 Pesquisar Colaborador</button>
             </div>
         </div>
         <!-- ############ (fim do conteúdo original da Folha de Ponto) ############ -->
@@ -1696,6 +1722,20 @@
     function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
     function formatarReal(v) {
         return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
+    }
+
+    // Selo de status do Financeiro na paleta da marca: fundo azul-marinho com
+    // texto colorido que ainda distingue os 3 estados de relance.
+    //   Quitado          -> verde da marca
+    //   Saldo negativo    -> vermelho (empresa DEVE ao supervisor: pede acao)
+    //   Adiantado/positivo-> amarelo (recebeu a mais)
+    function montarSeloStatus(saldo) {
+        let rotulo, cor;
+        if (Math.abs(saldo) < 0.005) { rotulo = 'Quitado'; cor = '#61CF00'; }
+        else if (saldo < 0) { rotulo = 'Saldo ' + formatarReal(-saldo); cor = '#ff5a5a'; }
+        else { rotulo = 'Adiantado ' + formatarReal(saldo); cor = '#ffc107'; }
+        return '<span class="fw-bold" style="background: var(--fc-primaria); color: ' + cor +
+               '; padding: 2px 10px; border-radius: 6px; white-space: nowrap;">' + rotulo + '</span>';
     }
     function escaparHtml(s) {
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3150,16 +3190,13 @@
         }
 
         cont.innerHTML = acertoDados.map(p => {
-            let rotulo, cor;
-            if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
-            else if (p.saldo < 0) { rotulo = 'Saldo ' + formatarReal(-p.saldo); cor = 'danger'; }
-            else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
+            const selo = montarSeloStatus(p.saldo);
 
             return `
                 <div class="border-bottom py-2">
                     <div class="d-flex align-items-center mb-1">
                         <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(p.nome)}</span>
-                        <span class="ms-auto fw-bold text-${cor}">${rotulo}</span>
+                        <span class="ms-auto">${selo}</span>
                     </div>
                     <div class="d-flex small text-muted">
                         <span>Gastou do bolso ${formatarReal(p.gastou)}</span>
@@ -3252,15 +3289,12 @@
             const maior = Math.max(...biFinDados.map(p => p.gastou), 0.01);
             corpo.innerHTML = biFinDados.map(p => {
                 const larg = p.gastou / maior * 100;
-                let rotulo, cor;
-                if (Math.abs(p.saldo) < 0.005) { rotulo = 'Quitado'; cor = 'success'; }
-                else if (p.saldo < 0) { rotulo = 'Saldo ' + formatarReal(-p.saldo); cor = 'danger'; }
-                else { rotulo = 'Adiantado ' + formatarReal(p.saldo); cor = 'warning'; }
+                const selo = montarSeloStatus(p.saldo);
                 return `
                     <div class="border-bottom py-2" style="cursor:pointer;" onclick="abrirDetalheBiFinanceiro(this.dataset.cpf)" data-cpf="${escaparHtml(p.cpf)}">
                         <div class="d-flex align-items-center mb-1">
                             <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(p.nome)}</span>
-                            <span class="ms-auto small text-${cor} fw-bold">${rotulo}</span>
+                            <span class="ms-auto">${selo}</span>
                         </div>
                         <div class="progress mb-1" style="height:5px;"><div class="progress-bar" style="width:${larg.toFixed(0)}%; background-color: var(--fc-primaria);"></div></div>
                         <div class="d-flex small text-muted"><span>Gastou ${formatarReal(p.gastou)}</span><span class="ms-auto">Recebeu ${formatarReal(p.recebeu)} ›</span></div>
@@ -3553,7 +3587,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r20';
+    const VERSAO_ESPERADA = '2026-08-06-r21';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
