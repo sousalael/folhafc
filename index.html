@@ -1118,7 +1118,12 @@
         // colateral de uso unico: validar o codigo o consome (apaga do cache),
         // e solicitar dispara envio de e-mail. Repetir "queimaria" o codigo
         // valido ou enviaria e-mail duplicado. Para elas, uma unica tentativa.
-        const ACOES_SEM_RETRY = ['validarCodigoAcesso', 'solicitarCodigoAcesso'];
+        // Apenas 'solicitarCodigoAcesso' fica sem retry: repeti-la enviaria
+        // e-mail duplicado e invalidaria o codigo anterior. Ja 'validarCodigoAcesso'
+        // agora e IDEMPOTENTE no servidor (devolve o mesmo token se repetida em
+        // poucos segundos), entao pode ter retry com seguranca — o que corrige o
+        // erro de "resposta lenta" ao validar o codigo em redes/dispositivos lentos.
+        const ACOES_SEM_RETRY = ['solicitarCodigoAcesso'];
 
         function ehAppsScript(url) {
             try { return typeof url === 'string' && url.indexOf('script.google.com') > -1; }
@@ -3587,7 +3592,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r21';
+    const VERSAO_ESPERADA = '2026-08-06-r22';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
