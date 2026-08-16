@@ -530,6 +530,7 @@
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
+            <button class="btn btn-warning w-100 py-2 fw-bold" onclick="abrirRevisaoLancamentos()">🔎 Revisar Lançamentos</button>
         </div>
         <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
 
@@ -2958,6 +2959,14 @@
         window.open(url, '_blank');
     }
 
+    function abrirRevisaoLancamentos() {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'revisao.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir a revisão.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
+        window.open(url, '_blank');
+    }
+
     function prepararRelDespesas() {
         popularSeletorMes('rel-desp-mes', 'rel-desp-ini', 'rel-desp-fim', buscarRelDespesas);
     }
@@ -3646,7 +3655,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r29';
+    const VERSAO_ESPERADA = '2026-08-06-r30';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
