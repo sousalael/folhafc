@@ -2091,7 +2091,7 @@
         return { data: projetoAtivo.data, cliente: projetoAtivo.cliente, unidade: projetoAtivo.unidade, semProjeto: false };
     }
 
-    async function gravarDespesa() {
+    async function gravarDespesa(confirmarDuplicata) {
         const destino = destinoDespesa();
         if (!destino) return;
 
@@ -2109,15 +2109,33 @@
         btn.disabled = true;
 
         try {
-            await chamarApi({
+            const res = await chamarApi({
                 action: 'lancarDespesa',
                 despesa: {
                     cpf: getCpfLogado(),
                     data: destino.data, cliente: destino.cliente, unidade: destino.unidade, semProjeto: destino.semProjeto,
                     tipo: tipo, valor: valor, formaPagamento: forma, obs: obs,
-                    supervisor: getSupervisorLogado(), comprovante: comprovantes.desp
+                    supervisor: getSupervisorLogado(), comprovante: comprovantes.desp,
+                    confirmarDuplicata: !!confirmarDuplicata
                 }
             });
+
+            // BLOCO 1 — o servidor detectou uma despesa identica e nao gravou.
+            // Pergunta ao supervisor se e a mesma (cancela) ou diferente (grava).
+            if (res && res.duplicata) {
+                btn.innerText = '💾 Gravar Despesa';
+                btn.disabled = false;
+                const ehDiferente = confirm('⚠️ ' + res.mensagem +
+                    '\n\nOK = É a MESMA, não gravar (evitar duplicata)' +
+                    '\nCancelar = É DIFERENTE, gravar assim mesmo');
+                if (ehDiferente) {
+                    // Supervisor confirmou que e a mesma: nao grava.
+                    return;
+                } else {
+                    // Supervisor diz que e diferente: grava sinalizando para revisao.
+                    return gravarDespesa(true);
+                }
+            }
 
             limparFormularioDespesa();
             await carregarDespesas();
@@ -3615,7 +3633,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r24';
+    const VERSAO_ESPERADA = '2026-08-06-r25';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
