@@ -142,12 +142,21 @@
     // Rascunho: mudancas pendentes (nao gravadas)
     const rascunho = {}; // idDespesa -> { acao:'revisado'|'editado'|'excluido', dados:{...} }
 
-    function formatarReal(v) {
-        return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
-    }
     function valorParaNumero(str) {
         if (typeof str === 'number') return str;
-        return Number(String(str).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.')) || 0;
+        if (str == null) return 0;
+        let s = String(str).trim().replace(/[^\d,.-]/g, '');
+        // Se tem virgula, ela e o separador decimal (padrao BR): remove pontos de
+        // milhar e troca a virgula por ponto. Ex: "1.234,56" -> "1234.56".
+        if (s.indexOf(',') >= 0) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        }
+        const n = Number(s);
+        return isNaN(n) ? 0 : n;
+    }
+    function formatarReal(v) {
+        const n = valorParaNumero(v);
+        return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
     }
     function escaparHtml(s) {
         return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -324,7 +333,7 @@
             '<div class="form-edit">' +
                 '<div class="row g-2">' +
                     '<div class="col-6"><label>Data</label><input type="text" class="form-control form-control-sm" id="e-data-' + i + '" value="' + escaparHtml(d.data) + '"></div>' +
-                    '<div class="col-6"><label>Valor</label><input type="text" class="form-control form-control-sm" id="e-valor-' + i + '" value="' + formatarReal(d.valor).replace('R$ ','') + '"></div>' +
+                    '<div class="col-6"><label>Valor</label><input type="text" class="form-control form-control-sm" id="e-valor-' + i + '" value="' + valorParaNumero(d.valor).toFixed(2).replace('.', ',') + '"></div>' +
                     '<div class="col-6"><label>Cliente</label><input type="text" class="form-control form-control-sm" id="e-cli-' + i + '" value="' + escaparHtml(d.cliente) + '"></div>' +
                     '<div class="col-6"><label>Unidade</label><input type="text" class="form-control form-control-sm" id="e-uni-' + i + '" value="' + escaparHtml(d.unidade) + '"></div>' +
                     '<div class="col-6"><label>Tipo</label><select class="form-select form-select-sm" id="e-tipo-' + i + '">' + optTipos + '</select></div>' +
