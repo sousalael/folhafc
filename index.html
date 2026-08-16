@@ -3553,7 +3553,7 @@
         document.getElementById(ctx + '-resultados').classList.add('hidden');
         document.getElementById(ctx + '-busca').value = '';
         const sel = document.getElementById(ctx + '-selecionado');
-        sel.innerHTML = '<span class="fw-bold">' + escaparHtml(nome) + '</span> <span class="small text-muted">' + escaparHtml(cpf) + '</span>';
+        sel.innerHTML = '<span class="fw-bold">' + escaparHtml(nome) + '</span> <span class="small" style="color: rgba(255,255,255,0.75);">' + escaparHtml(cpf) + '</span>';
         sel.classList.remove('hidden');
     }
 
@@ -3646,7 +3646,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r26';
+    const VERSAO_ESPERADA = '2026-08-06-r28';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
