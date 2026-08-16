@@ -10,7 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root { --fc-primaria:#002B50; --fc-primaria-clara:#0a3a68; --fc-acao:#61CF00; --fc-fundo:#f4f6f9; }
-        body { background: var(--fc-fundo); color:#1f2b38; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: var(--fc-fundo); color:#1f2b38; font-family: system-ui, -apple-system, sans-serif; padding-bottom:90px; }
         .rel-topo { background:#051323; color:#fff; padding:16px 0; box-shadow:0 3px 12px rgba(0,20,40,0.3); }
         .rel-topo img { height:40px; }
         .rel-wrap { max-width:1000px; margin:0 auto; padding:0 16px; }
@@ -22,24 +22,46 @@
         .resumo-card .rot { font-size:.72rem; color:#6c757d; font-weight:600; text-transform:uppercase; letter-spacing:.02em; }
         .resumo-card.vermelho .val { color:#c0392b; }
         .resumo-card.amarelo .val { color:#d39e00; }
-        .desp-card { background:#fff; border:1px solid #e6eaf0; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 3px 12px rgba(0,43,80,0.05); display:flex; flex-wrap:wrap; }
+        .desp-card { background:#fff; border:1px solid #e6eaf0; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 3px 12px rgba(0,43,80,0.05); display:flex; flex-wrap:wrap; position:relative; }
         .desp-card.alerta-vermelho { border-left:5px solid #c0392b; }
         .desp-card.alerta-amarelo { border-left:5px solid #f1c40f; }
+        .desp-card.st-revisado { opacity:0.5; }
+        .desp-card.st-editado { border-left:5px solid #2980b9; background:#f2f8fd; }
+        .desp-card.st-excluido { opacity:0.55; background:#fdecea; }
+        .desp-card.st-excluido .desp-info { text-decoration:line-through; text-decoration-color:#c0392b; }
         .desp-info { flex:1; min-width:280px; padding:16px 18px; }
-        .desp-foto { width:280px; background:#eef1f5; display:flex; align-items:center; justify-content:center; border-left:1px solid #e6eaf0; }
-        .desp-foto img { width:100%; height:100%; max-height:320px; object-fit:contain; cursor:zoom-in; }
+        .desp-foto { width:280px; background:#eef1f5; display:flex; align-items:center; justify-content:center; border-left:1px solid #e6eaf0; flex-direction:column; }
+        .desp-foto img { width:100%; height:100%; max-height:300px; object-fit:contain; cursor:zoom-in; }
         .desp-foto .placeholder { color:#9aa5b1; font-size:.85rem; padding:30px; text-align:center; }
-        .desp-topo { display:flex; align-items:baseline; margin-bottom:8px; }
+        .valor-comparar { background:#002B50; color:#fff; text-align:center; padding:8px; font-weight:700; font-size:1.05rem; width:100%; }
+        .desp-topo { display:flex; align-items:baseline; margin-bottom:6px; }
         .desp-tipo { font-weight:700; color:var(--fc-primaria); font-size:1.05rem; }
         .desp-valor { margin-left:auto; font-weight:700; color:var(--fc-primaria); font-size:1.15rem; }
         .desp-linha { font-size:.9rem; color:#47535f; margin-bottom:2px; }
         .desp-linha b { color:#2b3742; }
-        .selo-motivo { display:inline-block; border-radius:6px; padding:3px 11px; font-size:.8rem; font-weight:700; margin:8px 0; }
+        .selo-motivo { display:inline-block; border-radius:6px; padding:3px 11px; font-size:.8rem; font-weight:700; margin:6px 0; }
         .selo-vermelho { background:#fdecea; color:#c0392b; border:1px solid #f5c6cb; }
         .selo-amarelo { background:#fff8e1; color:#b8860b; border:1px solid #ffe082; }
         .alerta-ocr { background:#f8f9fa; border-radius:8px; padding:8px 10px; font-size:.85rem; color:#555; margin-top:6px; }
-        .btn-revisar { background:var(--fc-acao); border:none; color:#fff; font-weight:700; border-radius:8px; padding:9px 16px; margin-top:10px; }
-        .btn-revisar:hover { filter:brightness(.92); }
+        .acoes-card { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+        .btn-mini { border:none; color:#fff; font-weight:600; border-radius:7px; padding:7px 12px; font-size:.85rem; cursor:pointer; }
+        .btn-rev { background:var(--fc-acao); }
+        .btn-edit { background:#2980b9; }
+        .btn-excl { background:#c0392b; }
+        .btn-desfazer { background:#7f8c8d; }
+        .tag-status { position:absolute; top:8px; right:10px; font-size:.72rem; font-weight:700; padding:2px 10px; border-radius:20px; }
+        .tag-revisado { background:#61CF00; color:#fff; }
+        .tag-editado { background:#2980b9; color:#fff; }
+        .tag-excluido { background:#c0392b; color:#fff; }
+        .form-edit { background:#f8fafc; border:1px dashed #b0c4d4; border-radius:8px; padding:12px; margin-top:10px; }
+        .form-edit label { font-size:.78rem; font-weight:600; color:var(--fc-primaria); margin-bottom:2px; }
+        .form-edit .form-control, .form-edit .form-select { font-size:.85rem; }
+        .barra-gravar { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:2px solid var(--fc-primaria); box-shadow:0 -3px 12px rgba(0,43,80,0.12); padding:12px 16px; z-index:500; }
+        .barra-gravar .rel-wrap { display:flex; align-items:center; gap:14px; }
+        .pendencias-txt { font-size:.9rem; color:#47535f; }
+        .pendencias-txt b { color:var(--fc-primaria); }
+        .btn-gravar { background:var(--fc-acao); border:none; color:#fff; font-weight:700; border-radius:8px; padding:11px 22px; font-size:1rem; margin-left:auto; }
+        .btn-gravar:disabled { background:#b8c2cc; }
         .btn-fc { background:var(--fc-primaria); border-color:var(--fc-primaria); color:#fff; font-weight:600; }
         .estado-msg { text-align:center; padding:50px 20px; color:#6c757d; }
         .lightbox { position:fixed; inset:0; background:rgba(0,20,40,0.9); display:none; align-items:center; justify-content:center; z-index:9999; padding:20px; }
@@ -79,13 +101,20 @@
                     </select>
                 </div>
                 <div class="col-12 col-md-2">
-                    <button class="btn btn-fc btn-sm w-100" onclick="carregar()">🔍 Filtrar</button>
+                    <button class="btn btn-fc btn-sm w-100" onclick="recarregar()">🔍 Filtrar</button>
                 </div>
             </div>
         </div>
 
         <div id="area-resumo"></div>
         <div id="area-lista"><div class="estado-msg" id="estado">Carregando lançamentos…</div></div>
+    </div>
+
+    <div class="barra-gravar" id="barra-gravar" style="display:none;">
+        <div class="rel-wrap">
+            <span class="pendencias-txt" id="pendencias-txt">Nenhuma alteração pendente.</span>
+            <button class="btn-gravar" id="btn-gravar" onclick="gravarTudo()" disabled>💾 Gravar</button>
+        </div>
     </div>
 
     <div class="lightbox" id="lightbox" onclick="fecharLightbox()">
@@ -107,8 +136,18 @@
         ILEGIVEL:              { txt:'🟡 Comprovante ilegível',  cls:'selo-amarelo',  card:'alerta-amarelo' }
     };
 
+    let listaAtual = [];       // dados do servidor
+    let tiposDespesa = [];      // para o select de edicao
+    let formasPagamento = [];   // para o select de edicao
+    // Rascunho: mudancas pendentes (nao gravadas)
+    const rascunho = {}; // idDespesa -> { acao:'revisado'|'editado'|'excluido', dados:{...} }
+
     function formatarReal(v) {
         return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
+    }
+    function valorParaNumero(str) {
+        if (typeof str === 'number') return str;
+        return Number(String(str).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.')) || 0;
     }
     function escaparHtml(s) {
         return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -124,6 +163,15 @@
         return res;
     }
 
+    // Recarrega do servidor (avisa se houver rascunho nao gravado).
+    async function recarregar() {
+        if (Object.keys(rascunho).length > 0) {
+            if (!confirm('Há alterações não gravadas que serão perdidas ao recarregar. Continuar?')) return;
+        }
+        Object.keys(rascunho).forEach(k => delete rascunho[k]);
+        await carregar();
+    }
+
     async function carregar() {
         const ini = document.getElementById('f-ini').value;
         const fim = document.getElementById('f-fim').value;
@@ -131,9 +179,22 @@
         document.getElementById('area-resumo').innerHTML = '';
         document.getElementById('area-lista').innerHTML = '<div class="estado-msg">Carregando lançamentos…</div>';
         try {
+            // Carrega configs de edicao (uma vez).
+            if (!tiposDespesa.length) {
+                try {
+                    const cfg = await chamar({ action:'getConfigDespesas', cpf: cpfLogado });
+                    tiposDespesa = (cfg.tipos || cfg.lista || []).map(t => typeof t === 'string' ? t : (t.nome || t.tipo || '')).filter(Boolean);
+                } catch(e) {}
+                try {
+                    const cfgp = await chamar({ action:'getConfigPagamento' });
+                    formasPagamento = (cfgp.formas || cfgp.lista || []).map(t => typeof t === 'string' ? t : (t.nome || t.forma || '')).filter(Boolean);
+                } catch(e) {}
+            }
             const res = await chamar({ action:'getLancamentosRevisao', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim, tipoAlerta: tipo } });
+            listaAtual = res.lista || [];
             renderResumo(res.resumo || {});
-            renderLista(res.lista || []);
+            renderLista();
+            atualizarBarra();
         } catch (err) {
             document.getElementById('area-lista').innerHTML = '<div class="estado-msg">⚠️ ' + escaparHtml(err.message) + '</div>';
         }
@@ -153,65 +214,207 @@
             '</div>';
     }
 
-    function renderLista(lista) {
+    function renderLista() {
         const cont = document.getElementById('area-lista');
-        if (!lista.length) {
+        if (!listaAtual.length) {
             cont.innerHTML = '<div class="estado-msg">✅ Nenhum lançamento pendente de revisão. Tudo em ordem!</div>';
             return;
         }
-        cont.innerHTML = lista.map((d, i) => {
-            const selo = SELOS[d.resultado] || { txt:d.resultado, cls:'selo-amarelo', card:'alerta-amarelo' };
-            let extra = '';
-            if (d.resultado === 'VALOR_NAO_CONFERE') {
-                extra = '<div class="alerta-ocr">Valor lançado: <b>' + formatarReal(d.valor) + '</b> · Lido no comprovante: <b>' + (d.valorOcr ? escaparHtml(d.valorOcr) : '—') + '</b></div>';
-            } else if (d.motivo) {
-                extra = '<div class="alerta-ocr">' + escaparHtml(d.motivo) + '</div>';
-            }
-            return '<div class="desp-card ' + selo.card + '">' +
-                '<div class="desp-info">' +
-                    '<div class="desp-topo"><span class="desp-tipo">' + escaparHtml(d.tipo) + '</span>' +
-                        '<span class="desp-valor">' + formatarReal(d.valor) + '</span></div>' +
-                    '<span class="selo-motivo ' + selo.cls + '">' + selo.txt + '</span>' +
-                    '<div class="desp-linha"><b>Data:</b> ' + escaparHtml(d.data) + '</div>' +
-                    '<div class="desp-linha"><b>Cliente:</b> ' + escaparHtml(d.cliente) + ' — ' + escaparHtml(d.unidade) + '</div>' +
-                    '<div class="desp-linha"><b>Supervisor:</b> ' + escaparHtml(d.supervisor) + '</div>' +
-                    extra +
-                    '<div><button class="btn-revisar" onclick="marcarOk(\'' + escaparHtml(String(d.idDespesa)) + '\', this)">✓ Marcar como revisado</button></div>' +
-                '</div>' +
-                '<div class="desp-foto" id="foto-' + i + '">' +
-                    (d.url ? '<span class="placeholder">Carregando…</span>' : '<span class="placeholder">Sem comprovante</span>') +
-                '</div>' +
-            '</div>';
-        }).join('');
-
-        lista.forEach((d, i) => { if (d.url) carregarFoto(d.url, i); });
+        cont.innerHTML = listaAtual.map((d, i) => renderCard(d, i)).join('');
+        listaAtual.forEach((d, i) => { if (d.url) carregarFoto(d.url, i); });
     }
+
+    function renderCard(d, i) {
+        const selo = SELOS[d.resultado] || { txt:d.resultado, cls:'selo-amarelo', card:'alerta-amarelo' };
+        const rasc = rascunho[d.idDespesa];
+        let classeStatus = '', tag = '';
+        if (rasc) {
+            if (rasc.acao === 'revisado') { classeStatus = 'st-revisado'; tag = '<span class="tag-status tag-revisado">✓ Revisado</span>'; }
+            else if (rasc.acao === 'editado') { classeStatus = 'st-editado'; tag = '<span class="tag-status tag-editado">✏️ Editado</span>'; }
+            else if (rasc.acao === 'excluido') { classeStatus = 'st-excluido'; tag = '<span class="tag-status tag-excluido">🗑️ Excluído</span>'; }
+        }
+
+        // Valores exibidos (se editado, mostra os novos)
+        const dado = (rasc && rasc.acao === 'editado') ? rasc.dados : d;
+        const valorMostrar = (rasc && rasc.acao === 'editado') ? rasc.dados.valor : d.valor;
+
+        let extra = '';
+        if (d.resultado === 'VALOR_NAO_CONFERE') {
+            extra = '<div class="alerta-ocr">Valor lançado: <b>' + formatarReal(d.valor) + '</b> · Lido no comprovante: <b>' + (d.valorOcr ? escaparHtml(d.valorOcr) : '—') + '</b></div>';
+        } else if (d.motivo) {
+            extra = '<div class="alerta-ocr">' + escaparHtml(d.motivo) + '</div>';
+        }
+
+        // Botoes de acao (ou "desfazer" se ja tem rascunho)
+        let acoes;
+        if (rasc) {
+            acoes = '<button class="btn-mini btn-desfazer" onclick="desfazer(\'' + escaparId(d.idDespesa) + '\')">↩ Desfazer</button>';
+        } else {
+            acoes =
+                '<button class="btn-mini btn-rev" onclick="marcarRevisadoRascunho(\'' + escaparId(d.idDespesa) + '\')">✓ Revisado</button>' +
+                '<button class="btn-mini btn-edit" onclick="abrirEdicao(' + i + ')">✏️ Editar</button>' +
+                '<button class="btn-mini btn-excl" onclick="excluirRascunho(\'' + escaparId(d.idDespesa) + '\')">🗑️ Excluir</button>';
+        }
+
+        return '<div class="desp-card ' + selo.card + ' ' + classeStatus + '" id="card-' + i + '">' +
+            tag +
+            '<div class="desp-info">' +
+                '<div class="desp-topo"><span class="desp-tipo">' + escaparHtml(dado.tipo) + '</span>' +
+                    '<span class="desp-valor">' + formatarReal(valorMostrar) + '</span></div>' +
+                '<span class="selo-motivo ' + selo.cls + '">' + selo.txt + '</span>' +
+                '<div class="desp-linha"><b>Data:</b> ' + escaparHtml(dado.data) + '</div>' +
+                '<div class="desp-linha"><b>Cliente:</b> ' + escaparHtml(dado.cliente) + ' — ' + escaparHtml(dado.unidade) + '</div>' +
+                '<div class="desp-linha"><b>Supervisor:</b> ' + escaparHtml(d.supervisor) + '</div>' +
+                '<div class="desp-linha"><b>Forma:</b> ' + escaparHtml(dado.formaPagamento || '—') + '</div>' +
+                (dado.obs ? '<div class="desp-linha"><b>Obs:</b> ' + escaparHtml(dado.obs) + '</div>' : '') +
+                extra +
+                '<div class="acoes-card" id="acoes-' + i + '">' + acoes + '</div>' +
+                '<div id="form-' + i + '"></div>' +
+            '</div>' +
+            '<div class="desp-foto" id="foto-' + i + '">' +
+                '<div class="valor-comparar">Lançado: ' + formatarReal(d.valor) + '</div>' +
+                (d.url ? '<span class="placeholder">Carregando…</span>' : '<span class="placeholder">Sem comprovante</span>') +
+            '</div>' +
+        '</div>';
+    }
+
+    function escaparId(s) { return String(s).replace(/'/g, "\\'"); }
 
     async function carregarFoto(url, i) {
         try {
             const res = await chamar({ action:'getComprovanteImagem', url: url, cpf: cpfLogado });
             const cont = document.getElementById('foto-' + i);
+            const valorTop = cont.querySelector('.valor-comparar').outerHTML;
             if (res.base64) {
                 const src = 'data:' + (res.mimeType || 'image/jpeg') + ';base64,' + res.base64;
-                cont.innerHTML = '<img src="' + src + '" onclick="abrirLightbox(this.src)">';
+                cont.innerHTML = valorTop + '<img src="' + src + '" onclick="abrirLightbox(this.src)">';
             } else {
-                cont.innerHTML = '<span class="placeholder">Indisponível</span>';
+                cont.innerHTML = valorTop + '<span class="placeholder">Indisponível</span>';
             }
         } catch (err) {
             const cont = document.getElementById('foto-' + i);
-            if (cont) cont.innerHTML = '<span class="placeholder">Erro ao carregar</span>';
+            if (cont) { const v = cont.querySelector('.valor-comparar'); cont.innerHTML = (v?v.outerHTML:'') + '<span class="placeholder">Erro ao carregar</span>'; }
         }
     }
 
-    async function marcarOk(idDespesa, btn) {
-        if (!confirm('Marcar este lançamento como revisado? Ele sairá da lista de pendências.')) return;
-        btn.disabled = true; btn.innerText = 'Marcando…';
+    // ---- Acoes de rascunho (nao gravam no servidor) ----
+    function marcarRevisadoRascunho(id) {
+        rascunho[id] = { acao:'revisado' };
+        renderLista(); atualizarBarra();
+    }
+    function excluirRascunho(id) {
+        rascunho[id] = { acao:'excluido' };
+        renderLista(); atualizarBarra();
+    }
+    function desfazer(id) {
+        delete rascunho[id];
+        renderLista(); atualizarBarra();
+    }
+
+    function abrirEdicao(i) {
+        const d = listaAtual[i];
+        const optTipos = ['<option value="">— tipo —</option>'].concat(
+            tiposDespesa.map(t => '<option value="' + escaparHtml(t) + '"' + (t===d.tipo?' selected':'') + '>' + escaparHtml(t) + '</option>')
+        ).join('');
+        const optFormas = ['<option value="">— forma —</option>'].concat(
+            formasPagamento.map(f => '<option value="' + escaparHtml(f) + '"' + (f===d.formaPagamento?' selected':'') + '>' + escaparHtml(f) + '</option>')
+        ).join('');
+        document.getElementById('acoes-' + i).style.display = 'none';
+        document.getElementById('form-' + i).innerHTML =
+            '<div class="form-edit">' +
+                '<div class="row g-2">' +
+                    '<div class="col-6"><label>Data</label><input type="text" class="form-control form-control-sm" id="e-data-' + i + '" value="' + escaparHtml(d.data) + '"></div>' +
+                    '<div class="col-6"><label>Valor</label><input type="text" class="form-control form-control-sm" id="e-valor-' + i + '" value="' + formatarReal(d.valor).replace('R$ ','') + '"></div>' +
+                    '<div class="col-6"><label>Cliente</label><input type="text" class="form-control form-control-sm" id="e-cli-' + i + '" value="' + escaparHtml(d.cliente) + '"></div>' +
+                    '<div class="col-6"><label>Unidade</label><input type="text" class="form-control form-control-sm" id="e-uni-' + i + '" value="' + escaparHtml(d.unidade) + '"></div>' +
+                    '<div class="col-6"><label>Tipo</label><select class="form-select form-select-sm" id="e-tipo-' + i + '">' + optTipos + '</select></div>' +
+                    '<div class="col-6"><label>Forma</label><select class="form-select form-select-sm" id="e-forma-' + i + '">' + optFormas + '</select></div>' +
+                    '<div class="col-12"><label>Observação</label><input type="text" class="form-control form-control-sm" id="e-obs-' + i + '" value="' + escaparHtml(d.obs||'') + '"></div>' +
+                '</div>' +
+                '<div class="d-flex gap-2 mt-2">' +
+                    '<button class="btn-mini btn-rev" onclick="salvarEdicao(' + i + ')">✓ Aplicar edição</button>' +
+                    '<button class="btn-mini btn-desfazer" onclick="cancelarEdicao(' + i + ')">Cancelar</button>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function cancelarEdicao(i) {
+        document.getElementById('form-' + i).innerHTML = '';
+        document.getElementById('acoes-' + i).style.display = 'flex';
+    }
+
+    function salvarEdicao(i) {
+        const d = listaAtual[i];
+        const tipo = document.getElementById('e-tipo-' + i).value;
+        const forma = document.getElementById('e-forma-' + i).value;
+        const valor = valorParaNumero(document.getElementById('e-valor-' + i).value);
+        if (!tipo) return alert('Selecione o tipo.');
+        if (!forma) return alert('Selecione a forma de pagamento.');
+        if (!valor || valor <= 0) return alert('Informe um valor válido.');
+        rascunho[d.idDespesa] = {
+            acao:'editado',
+            dados: {
+                idDespesa: d.idDespesa, rowId: d.rowId, timestamp: d.idDespesa,
+                data: document.getElementById('e-data-' + i).value,
+                cliente: document.getElementById('e-cli-' + i).value,
+                unidade: document.getElementById('e-uni-' + i).value,
+                tipo: tipo, valor: valor, formaPagamento: forma,
+                obs: document.getElementById('e-obs-' + i).value,
+                tipoOriginal: d.tipo, cpfSupervisorOriginal: d.cpfSupervisor
+            }
+        };
+        renderLista(); atualizarBarra();
+    }
+
+    function atualizarBarra() {
+        const chaves = Object.keys(rascunho);
+        const barra = document.getElementById('barra-gravar');
+        if (!chaves.length) { barra.style.display = 'none'; return; }
+        barra.style.display = 'block';
+        let nRev=0, nEdit=0, nExcl=0;
+        chaves.forEach(k => {
+            if (rascunho[k].acao === 'revisado') nRev++;
+            else if (rascunho[k].acao === 'editado') nEdit++;
+            else if (rascunho[k].acao === 'excluido') nExcl++;
+        });
+        document.getElementById('pendencias-txt').innerHTML =
+            'Pendente: <b>' + nExcl + '</b> exclusão(ões), <b>' + nEdit + '</b> edição(ões), <b>' + nRev + '</b> revisado(s).';
+        document.getElementById('btn-gravar').disabled = false;
+    }
+
+    async function gravarTudo() {
+        const edicoes = [], exclusoes = [], revisados = [];
+        Object.keys(rascunho).forEach(id => {
+            const r = rascunho[id];
+            if (r.acao === 'editado') edicoes.push(r.dados);
+            else if (r.acao === 'excluido') {
+                const d = listaAtual.find(x => x.idDespesa === id);
+                exclusoes.push({ rowId: d.rowId, timestamp: d.idDespesa, tipo: d.tipo, idDespesa: id });
+            }
+            else if (r.acao === 'revisado') revisados.push(id);
+        });
+
+        const resumo = 'Confirma a gravação?\n\n' +
+            '🗑️ Exclusões: ' + exclusoes.length + '\n' +
+            '✏️ Edições: ' + edicoes.length + '\n' +
+            '✓ Revisados: ' + revisados.length + '\n\n' +
+            'As exclusões removem a despesa em definitivo.';
+        if (!confirm(resumo)) return;
+
+        const btn = document.getElementById('btn-gravar');
+        btn.disabled = true; btn.innerText = 'Gravando…';
         try {
-            await chamar({ action:'marcarRevisado', cpf: cpfLogado, idDespesa: idDespesa });
-            carregar(); // recarrega a lista
+            const res = await chamar({ action:'gravarRevisoes', cpf: cpfLogado, lote: { edicoes, exclusoes, revisados } });
+            const ap = res.aplicados || {};
+            let msg = '✅ Gravado!\n\nExclusões: ' + (ap.exclusoes||0) + '\nEdições: ' + (ap.edicoes||0) + '\nRevisados: ' + (ap.revisados||0);
+            if (res.erros && res.erros.length) msg += '\n\n⚠️ Alguns itens falharam:\n' + res.erros.join('\n');
+            alert(msg);
+            Object.keys(rascunho).forEach(k => delete rascunho[k]);
+            await carregar();
         } catch (err) {
-            alert('⚠️ ' + err.message);
-            btn.disabled = false; btn.innerText = '✓ Marcar como revisado';
+            alert('⚠️ Erro ao gravar: ' + err.message);
+        } finally {
+            btn.disabled = false; btn.innerText = '💾 Gravar';
         }
     }
 
@@ -222,6 +425,14 @@
     function fecharLightbox() {
         document.getElementById('lightbox').classList.remove('aberto');
     }
+
+    // Aviso ao sair com alteracoes nao gravadas.
+    window.addEventListener('beforeunload', function(e) {
+        if (Object.keys(rascunho).length > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
 
     // Inicializacao
     if (!tokenSessao) {
