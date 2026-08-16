@@ -152,13 +152,18 @@
     }
 
     // Busca as despesas do periodo (usa a funcao que ja existe no servidor).
-    async function carregarPeriodo() {
-        const ini = params.get('ini') || '';
-        const fim = params.get('fim') || '';
-        document.getElementById('f-ini').value = ini;
-        document.getElementById('f-fim').value = fim;
+    // Ao abrir: NAO lista despesas. Busca um periodo amplo (ultimos 12 meses)
+    // apenas para descobrir as opcoes dos filtros (supervisores, clientes,
+    // grupos). As despesas so aparecem quando o usuario clica em "Aplicar".
+    async function carregarOpcoesFiltros() {
+        const hoje = new Date();
+        const dozeMeses = new Date(hoje.getFullYear() - 1, hoje.getMonth(), hoje.getDate());
+        const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        // Preenche as datas visiveis com o periodo vindo da URL (mes atual).
+        document.getElementById('f-ini').value = params.get('ini') || '';
+        document.getElementById('f-fim').value = params.get('fim') || '';
         try {
-            const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim } });
+            const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: fmt(dozeMeses), dataFim: fmt(hoje) } });
             // Restricao: relatorio visual e exclusivo da Diretoria.
             if (res.perfil && res.perfil !== 'DIRETOR') {
                 document.querySelector('.rel-wrap').innerHTML =
@@ -166,18 +171,19 @@
                 document.querySelector('.filtros-barra')?.remove();
                 return;
             }
-            despesasTodas = res.lista || [];
-            popularSeletores();
-            aplicarFiltros();
+            // Guarda so para extrair opcoes; NAO exibe despesas.
+            popularSeletores(res.lista || []);
+            document.getElementById('area-lista').innerHTML =
+                '<div class="estado-msg">Selecione os filtros desejados e clique em <b>🔍 Aplicar filtros</b> para gerar o relatório.</div>';
         } catch (err) {
             document.getElementById('estado').innerHTML = '⚠️ ' + escaparHtml(err.message);
         }
     }
 
-    function popularSeletores() {
-        const sups = [...new Set(despesasTodas.map(d => d.supervisor).filter(Boolean))].sort();
-        const clis = [...new Set(despesasTodas.map(d => d.cliente).filter(Boolean))].sort();
-        const grps = [...new Set(despesasTodas.map(d => d.grupo).filter(Boolean))].sort();
+    function popularSeletores(lista) {
+        const sups = [...new Set(lista.map(d => d.supervisor).filter(Boolean))].sort();
+        const clis = [...new Set(lista.map(d => d.cliente).filter(Boolean))].sort();
+        const grps = [...new Set(lista.map(d => d.grupo).filter(Boolean))].sort();
         const fill = (id, arr) => {
             const s = document.getElementById(id);
             arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.text = v; s.appendChild(o); });
@@ -185,23 +191,23 @@
         fill('f-sup', sups); fill('f-cli', clis); fill('f-grp', grps);
     }
 
-    // Reconsulta o periodo se as datas mudaram; senao so refiltra localmente.
-    let ultIni = null, ultFim = null;
+    // Ao clicar em "Aplicar filtros": SEMPRE busca o periodo selecionado no
+    // servidor e entao aplica os filtros locais (supervisor/cliente/grupo).
     async function aplicarFiltros() {
         const ini = document.getElementById('f-ini').value;
         const fim = document.getElementById('f-fim').value;
-        if (ini !== ultIni || fim !== ultFim) {
-            ultIni = ini; ultFim = fim;
-            document.getElementById('estado').innerHTML = 'Carregando despesas…';
-            document.getElementById('area-lista').innerHTML = '<div class="estado-msg" id="estado">Carregando…</div>';
-            try {
-                const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim } });
-                despesasTodas = res.lista || [];
-            } catch (err) {
-                document.getElementById('area-lista').innerHTML = '<div class="estado-msg">⚠️ ' + escaparHtml(err.message) + '</div>';
-                return;
-            }
+        if (!ini || !fim) { alert('Selecione a data inicial e a data final.'); return; }
+
+        document.getElementById('area-resumo').innerHTML = '';
+        document.getElementById('area-lista').innerHTML = '<div class="estado-msg">Carregando despesas…</div>';
+        try {
+            const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim } });
+            despesasTodas = res.lista || [];
+        } catch (err) {
+            document.getElementById('area-lista').innerHTML = '<div class="estado-msg">⚠️ ' + escaparHtml(err.message) + '</div>';
+            return;
         }
+
         const fSup = document.getElementById('f-sup').value;
         const fCli = document.getElementById('f-cli').value;
         const fGrp = document.getElementById('f-grp').value;
@@ -284,8 +290,7 @@
     if (!tokenSessao) {
         document.getElementById('estado').innerHTML = '⚠️ Sessão não informada. Abra o relatório pelo botão no app.';
     } else {
-        ultIni = params.get('ini'); ultFim = params.get('fim');
-        carregarPeriodo();
+        carregarOpcoesFiltros();
     }
 </script>
 </body>
