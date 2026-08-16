@@ -515,6 +515,9 @@
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelDespesas" onclick="prepararRelDespesas()">📑 Relatório de Despesas</button>
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBiDespesas" onclick="prepararBiDespesas()">📊 BI de Despesas</button>
         </div>
+        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
+            <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
+        </div>
         <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
 
         </div>
@@ -2904,6 +2907,26 @@
         return csv;
     }
 
+    // 🖼️ Abre o Relatorio Visual com Fotos em nova aba. Passa o token de sessao
+    // (para o relatorio servir os comprovantes privados), o CPF e um periodo
+    // inicial (mes atual). Os filtros de supervisor/cliente/grupo e o periodo
+    // sao ajustados na propria tela do relatorio.
+    function abrirRelatorioVisual() {
+        const hoje = new Date();
+        const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        // relatorio.html fica no mesmo diretorio do index.html (GitHub Pages).
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'relatorio.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir o relatório visual.'); return; }
+        const url = base
+            + '?token=' + encodeURIComponent(tok)
+            + '&cpf=' + encodeURIComponent(getCpfLogado())
+            + '&ini=' + encodeURIComponent(fmt(ini))
+            + '&fim=' + encodeURIComponent(fmt(hoje));
+        window.open(url, '_blank');
+    }
+
     function prepararRelDespesas() {
         popularSeletorMes('rel-desp-mes', 'rel-desp-ini', 'rel-desp-fim', buscarRelDespesas);
     }
@@ -3592,7 +3615,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r22';
+    const VERSAO_ESPERADA = '2026-08-06-r24';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -3664,6 +3687,8 @@
             if (btnBiFin) btnBiFin.classList.toggle('hidden', !ehDiretor);
             const btnRelAdto = document.getElementById('btn-rel-adiantamento');
             if (btnRelAdto) btnRelAdto.classList.toggle('hidden', !ehDiretor);
+            const areaRelVis = document.getElementById('area-relatorio-visual');
+            if (areaRelVis) areaRelVis.style.display = ehDiretor ? 'flex' : 'none';
             const escopo = document.getElementById('fin-escopo');
             if (escopo) {
                 escopo.innerText = ehDiretor
