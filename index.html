@@ -292,9 +292,10 @@
         <!-- ############ FIM DO BLOCO NOVO ############ -->
 
         <div class="alert alert-success" id="alerta-header">
-            <div class="d-flex align-items-start">
+            <div class="d-flex align-items-center flex-wrap gap-2">
                 <h5 class="alert-heading mb-0">Painel de Gestão</h5>
-                <button class="btn btn-sm btn-outline-secondary ms-auto fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar Sessão</button>
+                <button class="btn btn-sm fw-bold ms-auto" id="btn-inventarios-topo" onclick="abrirAnaliseInventarios()" style="display:none; background:#00B74A; color:#fff; border:none;">📦 Análise de Inventários</button>
+                <button class="btn btn-sm btn-outline-secondary fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar Sessão</button>
             </div>
             <hr class="border-opacity-25">
             <p class="mb-1"><strong>Gestor(a):</strong> <span id="span-nome-sup"></span></p>
@@ -568,7 +569,6 @@
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-supervisor" style="display:none;">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
-            <button class="btn btn-primary w-100 py-2 fw-bold" onclick="abrirAnaliseInventarios()">📦 Análise de Inventários</button>
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none;">
             <button class="btn btn-warning w-100 py-2 fw-bold" onclick="abrirRevisaoLancamentos()">🔎 Revisar Lançamentos</button>
@@ -3816,7 +3816,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r40';
+    const VERSAO_ESPERADA = '2026-08-06-r41';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -3903,6 +3903,9 @@
             const ehSupOuDir = (getPerfilLogado() === 'DIRETOR' || getPerfilLogado() === 'SUPERVISOR');
             const areaRelSup = document.getElementById('area-relatorio-supervisor');
             if (areaRelSup) areaRelSup.style.display = ehSupOuDir ? 'flex' : 'none';
+            // Botao Analise de Inventarios no cabecalho (sup/dir).
+            const btnInv = document.getElementById('btn-inventarios-topo');
+            if (btnInv) btnInv.style.display = ehSupOuDir ? 'inline-block' : 'none';
             const escopo = document.getElementById('fin-escopo');
             if (escopo) {
                 escopo.innerText = ehDiretor
