@@ -198,19 +198,57 @@
         <input type="text" id="cpf-sup" class="form-control mb-3 cpf-mask" placeholder="000.000.000-00" maxlength="14">
         <button class="btn btn-primary w-100 py-2 fw-bold hidden" onclick="entrar()">Entrar no Painel</button>
 
-        <!-- ############ NOVO: SENHA DINAMICA POR E-MAIL ############ -->
+        <!-- ############ ACESSO POR SENHA (com codigo por e-mail como alternativa) ############ -->
         <div id="bloco-acesso-seguro">
-            <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-pedir-codigo" onclick="pedirCodigoAcesso()">📧 Receber código por e-mail</button>
+            <!-- Passo 1: continuar com o CPF -->
+            <div id="bloco-cpf-continuar">
+                <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-continuar-cpf" onclick="continuarComCpf()">Continuar</button>
+            </div>
 
-            <div id="bloco-codigo" class="hidden mt-3">
-                <div class="alert alert-info py-2 small mb-2" id="aviso-codigo-enviado"></div>
-                <label class="form-label fw-bold text-primary mb-1">Código de 6 dígitos:</label>
-                <input type="text" id="input-codigo" class="form-control mb-2 text-center" maxlength="6" inputmode="numeric" placeholder="000000" style="font-size:1.4rem; letter-spacing:0.35em; font-weight:bold;">
-                <button class="btn btn-success w-100 py-2 fw-bold" id="btn-validar-codigo" onclick="confirmarCodigoAcesso()">🔓 Entrar no Painel</button>
-                <button class="btn btn-link w-100 btn-sm mt-1 text-muted" onclick="reiniciarAcesso()">Voltar / reenviar código</button>
+            <!-- Passo 2a: LOGIN (ja tem senha) -->
+            <div id="bloco-login-senha" class="hidden mt-3">
+                <div class="small text-muted mb-1" id="ola-usuario"></div>
+                <label class="form-label fw-bold text-primary mb-1">Sua senha:</label>
+                <input type="password" id="input-senha" class="form-control mb-2" placeholder="Digite sua senha">
+                <button class="btn btn-success w-100 py-2 fw-bold" id="btn-entrar-senha" onclick="entrarComSenha()">🔓 Entrar no Painel</button>
+                <button class="btn btn-link w-100 btn-sm mt-1 text-muted" onclick="esqueciSenha()">Esqueci minha senha</button>
+                <button class="btn btn-link w-100 btn-sm text-muted" onclick="voltarInicioLogin()">Trocar CPF</button>
+            </div>
+
+            <!-- Passo 2b: PRIMEIRO ACESSO (cria senha) -->
+            <div id="bloco-criar-senha" class="hidden mt-3">
+                <div class="alert alert-info py-2 small mb-2">
+                    <b>Primeiro acesso.</b> Crie uma senha para <span id="nome-primeiro-acesso">você</span>.<br>
+                    Recuperação será pelo e-mail <b id="email-primeiro-acesso"></b>.
+                </div>
+                <label class="form-label fw-bold text-primary mb-1">Crie sua senha:</label>
+                <input type="password" id="input-nova-senha" class="form-control mb-1" placeholder="Mínimo 8 caracteres, com letra e número">
+                <input type="password" id="input-nova-senha2" class="form-control mb-2" placeholder="Repita a senha">
+                <button class="btn btn-success w-100 py-2 fw-bold" id="btn-criar-senha" onclick="criarSenhaPrimeiroAcesso()">✅ Criar senha e entrar</button>
+                <button class="btn btn-link w-100 btn-sm mt-1 text-muted" onclick="voltarInicioLogin()">Trocar CPF</button>
+            </div>
+
+            <!-- Recuperacao / alternativa: CODIGO POR E-MAIL (fluxo que ja existia) -->
+            <div id="bloco-recuperacao" class="hidden mt-3">
+                <hr class="my-2">
+                <div class="small text-muted mb-2" id="titulo-recuperacao">Recuperar senha por e-mail</div>
+                <button class="btn btn-outline-primary w-100 py-2 fw-bold" id="btn-pedir-codigo" onclick="pedirCodigoAcesso()">📧 Receber código por e-mail</button>
+
+                <div id="bloco-codigo" class="hidden mt-3">
+                    <div class="alert alert-info py-2 small mb-2" id="aviso-codigo-enviado"></div>
+                    <label class="form-label fw-bold text-primary mb-1">Código de 6 dígitos:</label>
+                    <input type="text" id="input-codigo" class="form-control mb-2 text-center" maxlength="6" inputmode="numeric" placeholder="000000" style="font-size:1.4rem; letter-spacing:0.35em; font-weight:bold;">
+                    <div id="bloco-nova-senha-recup" class="hidden">
+                        <label class="form-label fw-bold text-primary mb-1">Nova senha:</label>
+                        <input type="password" id="input-senha-recup" class="form-control mb-1" placeholder="Mínimo 8 caracteres, com letra e número">
+                        <input type="password" id="input-senha-recup2" class="form-control mb-2" placeholder="Repita a nova senha">
+                    </div>
+                    <button class="btn btn-success w-100 py-2 fw-bold" id="btn-validar-codigo" onclick="confirmarCodigoAcesso()">🔓 Confirmar</button>
+                    <button class="btn btn-link w-100 btn-sm mt-1 text-muted" onclick="reiniciarAcesso()">Voltar / reenviar código</button>
+                </div>
             </div>
         </div>
-        <!-- ############ FIM DA SENHA DINAMICA ############ -->
+        <!-- ############ FIM DO ACESSO POR SENHA ############ -->
         <!-- ############ NOVO: INDICADOR DE VERSAO DO SCRIPT ############ -->
         <div id="badge-versao-script" class="small text-center text-muted mt-3">Verificando versão do script...</div>
         <!-- ############ FIM DO INDICADOR ############ -->
@@ -528,8 +566,10 @@
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelDespesas" onclick="prepararRelDespesas()">📑 Relatório de Despesas</button>
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBiDespesas" onclick="prepararBiDespesas()">📊 BI de Despesas</button>
         </div>
-        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
+        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-supervisor" style="display:none !important;">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
+        </div>
+        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
             <button class="btn btn-warning w-100 py-2 fw-bold" onclick="abrirRevisaoLancamentos()">🔎 Revisar Lançamentos</button>
         </div>
         <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
@@ -1829,6 +1869,104 @@
         return res;
     }
 
+    // ===== FLUXO DE ACESSO POR SENHA (codigo por e-mail = recuperacao) =====
+    let modoRecuperacao = false; // true quando o codigo e para REDEFINIR senha
+
+    function voltarInicioLogin() {
+        document.getElementById('bloco-cpf-continuar').classList.remove('hidden');
+        document.getElementById('bloco-login-senha').classList.add('hidden');
+        document.getElementById('bloco-criar-senha').classList.add('hidden');
+        document.getElementById('bloco-recuperacao').classList.add('hidden');
+        document.getElementById('bloco-codigo').classList.add('hidden');
+        document.getElementById('btn-pedir-codigo').classList.remove('hidden');
+        document.getElementById('bloco-nova-senha-recup').classList.add('hidden');
+        modoRecuperacao = false;
+        const s1 = document.getElementById('input-senha'); if (s1) s1.value = '';
+    }
+
+    // Passo 1: descobre se o CPF ja tem senha (login) ou e primeiro acesso.
+    async function continuarComCpf() {
+        const cpf = document.getElementById('cpf-sup').value;
+        if (soDigitos(cpf).length !== 11) return alert('Digite o CPF completo (11 dígitos).');
+        const btn = document.getElementById('btn-continuar-cpf');
+        btn.innerText = 'Verificando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'verificarAcesso', cpf: cpf });
+            document.getElementById('bloco-cpf-continuar').classList.add('hidden');
+            if (res.primeiroAcesso) {
+                document.getElementById('nome-primeiro-acesso').innerText = res.nome || 'você';
+                document.getElementById('email-primeiro-acesso').innerText = res.emailMascarado || '(e-mail não cadastrado)';
+                document.getElementById('bloco-criar-senha').classList.remove('hidden');
+                document.getElementById('input-nova-senha').focus();
+            } else {
+                document.getElementById('ola-usuario').innerText = 'Olá, ' + (res.nome || '') + '.';
+                document.getElementById('bloco-login-senha').classList.remove('hidden');
+                document.getElementById('bloco-recuperacao').classList.remove('hidden');
+                document.getElementById('input-senha').focus();
+            }
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.innerText = 'Continuar'; btn.disabled = false;
+        }
+    }
+
+    // Login com senha.
+    async function entrarComSenha() {
+        const cpf = document.getElementById('cpf-sup').value;
+        const senha = document.getElementById('input-senha').value;
+        if (!senha) return alert('Digite sua senha.');
+        const btn = document.getElementById('btn-entrar-senha');
+        btn.innerText = 'Entrando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'entrarComSenha', cpf: cpf, senha: senha });
+            tokenSessao = res.token; window.tokenSessao = res.token;
+            avisoSessaoExibido = false;
+            entrar();
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.innerText = '🔓 Entrar no Painel'; btn.disabled = false;
+        }
+    }
+
+    // Primeiro acesso: cria a senha.
+    async function criarSenhaPrimeiroAcesso() {
+        const cpf = document.getElementById('cpf-sup').value;
+        const s1 = document.getElementById('input-nova-senha').value;
+        const s2 = document.getElementById('input-nova-senha2').value;
+        if (s1 !== s2) return alert('As senhas não conferem.');
+        if (!senhaForteOk(s1)) return alert('A senha deve ter no mínimo 8 caracteres, com pelo menos uma letra e um número.');
+        const btn = document.getElementById('btn-criar-senha');
+        btn.innerText = 'Criando...'; btn.disabled = true;
+        try {
+            const res = await chamarApi({ action: 'definirSenhaPrimeiroAcesso', cpf: cpf, senha: s1 });
+            tokenSessao = res.token; window.tokenSessao = res.token;
+            avisoSessaoExibido = false;
+            entrar();
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.innerText = '✅ Criar senha e entrar'; btn.disabled = false;
+        }
+    }
+
+    // "Esqueci minha senha" -> abre o fluxo de codigo por e-mail em modo recuperacao.
+    function esqueciSenha() {
+        modoRecuperacao = true;
+        document.getElementById('bloco-recuperacao').classList.remove('hidden');
+        document.getElementById('titulo-recuperacao').innerHTML = '<b>Redefinir senha</b> — receba um código por e-mail.';
+        document.getElementById('btn-pedir-codigo').classList.remove('hidden');
+        document.getElementById('bloco-codigo').classList.add('hidden');
+        document.getElementById('btn-pedir-codigo').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // valida forca da senha no cliente (espelha a regra do servidor)
+    function senhaForteOk(s) {
+        s = String(s || '');
+        return s.length >= 8 && /[A-Za-z]/.test(s) && /[0-9]/.test(s);
+    }
+
     async function pedirCodigoAcesso() {
         const cpf = document.getElementById('cpf-sup').value;
         if (soDigitos(cpf).length !== 11) return alert('Digite o CPF completo (11 dígitos).');
@@ -1841,6 +1979,8 @@
                 'Código enviado para <strong>' + escaparHtml(res.emailMascarado) + '</strong>. Válido por 10 minutos.';
             document.getElementById('bloco-codigo').classList.remove('hidden');
             document.getElementById('btn-pedir-codigo').classList.add('hidden');
+            // Em modo recuperacao, mostra os campos de nova senha.
+            document.getElementById('bloco-nova-senha-recup').classList.toggle('hidden', !modoRecuperacao);
             document.getElementById('input-codigo').focus();
         } catch (err) {
             alert('⚠️ ' + err.message);
@@ -1857,15 +1997,27 @@
         const btn = document.getElementById('btn-validar-codigo');
         btn.innerText = 'Verificando...'; btn.disabled = true;
         try {
-            const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo });
-            tokenSessao = res.token;
-            window.tokenSessao = res.token;
-            avisoSessaoExibido = false;
-            entrar(); // funcao ORIGINAL do Folha de Ponto, intocada
+            if (modoRecuperacao) {
+                // Redefine a senha usando o codigo. Exige a nova senha.
+                const s1 = document.getElementById('input-senha-recup').value;
+                const s2 = document.getElementById('input-senha-recup2').value;
+                if (s1 !== s2) { alert('As senhas não conferem.'); btn.innerText = '🔓 Confirmar'; btn.disabled = false; return; }
+                if (!senhaForteOk(s1)) { alert('A senha deve ter no mínimo 8 caracteres, com letra e número.'); btn.innerText = '🔓 Confirmar'; btn.disabled = false; return; }
+                const res = await chamarApi({ action: 'redefinirSenhaComCodigo', cpf: cpf, codigo: codigo, senha: s1 });
+                tokenSessao = res.token; window.tokenSessao = res.token;
+                avisoSessaoExibido = false;
+                entrar();
+            } else {
+                // Login direto pelo codigo (alternativa/compatibilidade).
+                const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo });
+                tokenSessao = res.token; window.tokenSessao = res.token;
+                avisoSessaoExibido = false;
+                entrar();
+            }
         } catch (err) {
             alert('⚠️ ' + err.message);
         } finally {
-            btn.innerText = '🔓 Entrar no Painel'; btn.disabled = false;
+            btn.innerText = modoRecuperacao ? '🔓 Confirmar' : '🔓 Entrar no Painel'; btn.disabled = false;
         }
     }
 
@@ -3655,7 +3807,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r36';
+    const VERSAO_ESPERADA = '2026-08-06-r38';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -3685,6 +3837,15 @@
             inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, ''); });
             inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmarCodigoAcesso(); });
         }
+        // Enter nos novos campos de senha, para agilizar.
+        const inpCpf = document.getElementById('cpf-sup');
+        if (inpCpf) inpCpf.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !document.getElementById('bloco-cpf-continuar').classList.contains('hidden')) continuarComCpf();
+        });
+        const inpSenha = document.getElementById('input-senha');
+        if (inpSenha) inpSenha.addEventListener('keydown', (e) => { if (e.key === 'Enter') entrarComSenha(); });
+        const inpNova2 = document.getElementById('input-nova-senha2');
+        if (inpNova2) inpNova2.addEventListener('keydown', (e) => { if (e.key === 'Enter') criarSenhaPrimeiroAcesso(); });
     });
 
     // ============================================================
@@ -3729,6 +3890,10 @@
             if (btnRelAdto) btnRelAdto.classList.toggle('hidden', !ehDiretor);
             const areaRelVis = document.getElementById('area-relatorio-visual');
             if (areaRelVis) areaRelVis.style.display = ehDiretor ? 'flex' : 'none';
+            // Relatorio Visual: liberado para SUPERVISOR e DIRETOR.
+            const ehSupOuDir = (getPerfilLogado() === 'DIRETOR' || getPerfilLogado() === 'SUPERVISOR');
+            const areaRelSup = document.getElementById('area-relatorio-supervisor');
+            if (areaRelSup) areaRelSup.style.display = ehSupOuDir ? 'flex' : 'none';
             const escopo = document.getElementById('fin-escopo');
             if (escopo) {
                 escopo.innerText = ehDiretor
