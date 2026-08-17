@@ -25,7 +25,12 @@
         .desp-card { background:#fff; border:1px solid #e6eaf0; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 3px 12px rgba(0,43,80,0.05); display:flex; flex-wrap:wrap; position:relative; }
         .desp-card.alerta-vermelho { border-left:5px solid #c0392b; }
         .desp-card.alerta-amarelo { border-left:5px solid #f1c40f; }
-        .desp-card.st-revisado { opacity:0.5; }
+        /* Destaque forte para alertas GRAVES (duplicado / valor nao confere):
+           borda espessa + fundo levemente avermelhado + aviso, para o diretor
+           nao dar como revisado sem olhar (mesmo vindo marcado por padrao). */
+        .desp-card.grave { border:2px solid #c0392b; border-left:6px solid #c0392b; background:#fff7f6; box-shadow:0 3px 14px rgba(192,57,43,0.15); }
+        .aviso-grave { background:#fdecea; color:#a5281b; border:1px solid #f5c6cb; border-radius:8px; padding:7px 10px; font-size:.82rem; font-weight:600; margin:8px 0; }
+        .desp-card.st-revisado { }  /* sem efeito: marcar/desmarcar so altera o checkbox */
         .desp-card.st-editado { border-left:5px solid #2980b9; background:#f2f8fd; }
         .desp-card.st-excluido { opacity:0.55; background:#fdecea; }
         .desp-card.st-excluido .desp-info { text-decoration:line-through; text-decoration-color:#c0392b; }
@@ -135,6 +140,8 @@
         SEM_COMPROVANTE:       { txt:'🟡 Sem comprovante',       cls:'selo-amarelo',  card:'alerta-amarelo' },
         ILEGIVEL:              { txt:'🟡 Comprovante ilegível',  cls:'selo-amarelo',  card:'alerta-amarelo' }
     };
+    // Alertas GRAVES: ganham destaque visual forte para nao passar batido.
+    const ALERTAS_GRAVES = ['COMPROVANTE_DUPLICADO', 'DUPLICIDADE', 'VALOR_NAO_CONFERE'];
 
     let listaAtual = [];       // dados do servidor
     let tiposDespesa = [];      // para o select de edicao
@@ -201,6 +208,10 @@
             }
             const res = await chamar({ action:'getLancamentosRevisao', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim, tipoAlerta: tipo } });
             listaAtual = res.lista || [];
+            // Todos comecam MARCADOS como revisado (agiliza: o diretor so desmarca
+            // as excecoes). Itens editados/excluidos depois sobrescrevem esse estado.
+            Object.keys(rascunho).forEach(k => delete rascunho[k]);
+            listaAtual.forEach(d => { rascunho[d.idDespesa] = { acao:'revisado' }; });
             renderResumo(res.resumo || {});
             renderLista();
             atualizarBarra();
@@ -237,15 +248,17 @@
         const selo = SELOS[d.resultado] || { txt:d.resultado, cls:'selo-amarelo', card:'alerta-amarelo' };
         const rasc = rascunho[d.idDespesa];
         let classeStatus = '', tag = '';
-        if (rasc) {
-            if (rasc.acao === 'revisado') { classeStatus = 'st-revisado'; tag = '<span class="tag-status tag-revisado">✓ Revisado</span>'; }
-            else if (rasc.acao === 'editado') { classeStatus = 'st-editado'; tag = '<span class="tag-status tag-editado">✏️ Editado</span>'; }
-            else if (rasc.acao === 'excluido') { classeStatus = 'st-excluido'; tag = '<span class="tag-status tag-excluido">🗑️ Excluído</span>'; }
-        }
+        const estaRevisado = rasc && rasc.acao === 'revisado';
+        const estaEditado  = rasc && rasc.acao === 'editado';
+        const estaExcluido = rasc && rasc.acao === 'excluido';
+        // Revisado NAO recebe efeito visual (checkbox puro, sem re-render).
+        // Editado e Excluido mantem a marca, pois mudam os dados.
+        if (estaEditado) { classeStatus = 'st-editado'; tag = '<span class="tag-status tag-editado">✏️ Editado</span>'; }
+        else if (estaExcluido) { classeStatus = 'st-excluido'; tag = '<span class="tag-status tag-excluido">🗑️ Excluído</span>'; }
 
         // Valores exibidos (se editado, mostra os novos)
-        const dado = (rasc && rasc.acao === 'editado') ? rasc.dados : d;
-        const valorMostrar = (rasc && rasc.acao === 'editado') ? rasc.dados.valor : d.valor;
+        const dado = estaEditado ? rasc.dados : d;
+        const valorMostrar = estaEditado ? rasc.dados.valor : d.valor;
 
         let extra = '';
         if (d.resultado === 'VALOR_NAO_CONFERE') {
@@ -254,23 +267,46 @@
             extra = '<div class="alerta-ocr">' + escaparHtml(d.motivo) + '</div>';
         }
 
-        // Botoes de acao (ou "desfazer" se ja tem rascunho)
-        let acoes;
-        if (rasc) {
-            acoes = '<button class="btn-mini btn-desfazer" onclick="desfazer(\'' + escaparId(d.idDespesa) + '\')">↩ Desfazer</button>';
+        // Destaque para alertas GRAVES: classe 'grave' + aviso para conferir.
+        const ehGrave = ALERTAS_GRAVES.indexOf(d.resultado) >= 0;
+        const classeGrave = (ehGrave && !estaExcluido) ? ' grave' : '';
+        const avisoGrave = (ehGrave && !estaExcluido)
+            ? '<div class="aviso-grave">⚠️ Alerta importante — confira o comprovante antes de dar como revisado.</div>'
+            : '';
+
+        // Checkbox "Revisado" (marcado por padrao). Desmarcar = deixar pendente.
+        // Desabilita se o item estiver marcado para exclusao.
+        const chkMarcado = estaRevisado ? 'checked' : '';
+        const chkDisabled = estaExcluido ? 'disabled' : '';
+        const checkbox =
+            '<label class="chk-revisado ' + (estaExcluido ? 'chk-off' : '') + '">' +
+                '<input type="checkbox" ' + chkMarcado + ' ' + chkDisabled +
+                    ' onchange="toggleRevisado(\'' + escaparId(d.idDespesa) + '\', this.checked)"> Revisado' +
+            '</label>';
+
+        // Editar/Excluir sempre disponiveis; se excluido, vira "Desfazer".
+        let botoes;
+        if (estaExcluido) {
+            botoes = '<button class="btn-mini btn-desfazer" onclick="desfazer(\'' + escaparId(d.idDespesa) + '\')">↩ Desfazer exclusão</button>';
+        } else if (estaEditado) {
+            botoes =
+                '<button class="btn-mini btn-edit" onclick="abrirEdicao(' + i + ')">✏️ Editar de novo</button>' +
+                '<button class="btn-mini btn-excl" onclick="excluirRascunho(\'' + escaparId(d.idDespesa) + '\')">🗑️ Excluir</button>' +
+                '<button class="btn-mini btn-desfazer" onclick="desfazer(\'' + escaparId(d.idDespesa) + '\')">↩ Desfazer edição</button>';
         } else {
-            acoes =
-                '<button class="btn-mini btn-rev" onclick="marcarRevisadoRascunho(\'' + escaparId(d.idDespesa) + '\')">✓ Revisado</button>' +
+            botoes =
                 '<button class="btn-mini btn-edit" onclick="abrirEdicao(' + i + ')">✏️ Editar</button>' +
                 '<button class="btn-mini btn-excl" onclick="excluirRascunho(\'' + escaparId(d.idDespesa) + '\')">🗑️ Excluir</button>';
         }
+        const acoes = '<div class="linha-acoes">' + checkbox + '<span class="sep-acoes"></span>' + botoes + '</div>';
 
-        return '<div class="desp-card ' + selo.card + ' ' + classeStatus + '" id="card-' + i + '">' +
+        return '<div class="desp-card ' + selo.card + classeGrave + ' ' + classeStatus + '" id="card-' + i + '">' +
             tag +
             '<div class="desp-info">' +
                 '<div class="desp-topo"><span class="desp-tipo">' + escaparHtml(dado.tipo) + '</span>' +
                     '<span class="desp-valor">' + formatarReal(valorMostrar) + '</span></div>' +
                 '<span class="selo-motivo ' + selo.cls + '">' + selo.txt + '</span>' +
+                avisoGrave +
                 '<div class="desp-linha"><b>Data:</b> ' + escaparHtml(dado.data) + '</div>' +
                 '<div class="desp-linha"><b>Cliente:</b> ' + escaparHtml(dado.cliente) + ' — ' + escaparHtml(dado.unidade) + '</div>' +
                 '<div class="desp-linha"><b>Supervisor:</b> ' + escaparHtml(d.supervisor) + '</div>' +
@@ -307,16 +343,23 @@
     }
 
     // ---- Acoes de rascunho (nao gravam no servidor) ----
-    function marcarRevisadoRascunho(id) {
-        rascunho[id] = { acao:'revisado' };
-        renderLista(); atualizarBarra();
+    // Checkbox Revisado: marcado = vai gravar como revisado; desmarcado = pendente.
+    function toggleRevisado(id, marcado) {
+        if (marcado) {
+            rascunho[id] = { acao:'revisado' };
+        } else {
+            delete rascunho[id]; // desmarcar = deixar pendente (nao grava nada)
+        }
+        atualizarBarra();
+        // Nao re-renderiza a lista toda (evita "pular" a tela ao clicar); so a barra.
     }
     function excluirRascunho(id) {
         rascunho[id] = { acao:'excluido' };
         renderLista(); atualizarBarra();
     }
     function desfazer(id) {
-        delete rascunho[id];
+        // Desfazer volta ao padrao: revisado marcado.
+        rascunho[id] = { acao:'revisado' };
         renderLista(); atualizarBarra();
     }
 
@@ -378,7 +421,8 @@
     function atualizarBarra() {
         const chaves = Object.keys(rascunho);
         const barra = document.getElementById('barra-gravar');
-        if (!chaves.length) { barra.style.display = 'none'; return; }
+        const totalItens = listaAtual.length;
+        if (!totalItens) { barra.style.display = 'none'; return; }
         barra.style.display = 'block';
         let nRev=0, nEdit=0, nExcl=0;
         chaves.forEach(k => {
@@ -386,9 +430,11 @@
             else if (rascunho[k].acao === 'editado') nEdit++;
             else if (rascunho[k].acao === 'excluido') nExcl++;
         });
+        const nPendentes = totalItens - chaves.length; // desmarcados = continuam pendentes
         document.getElementById('pendencias-txt').innerHTML =
-            'Pendente: <b>' + nExcl + '</b> exclusão(ões), <b>' + nEdit + '</b> edição(ões), <b>' + nRev + '</b> revisado(s).';
-        document.getElementById('btn-gravar').disabled = false;
+            'Ao gravar: <b>' + nExcl + '</b> exclusão(ões), <b>' + nEdit + '</b> edição(ões), <b>' + nRev + '</b> como revisado(s). ' +
+            '<span style="color:#b8860b;">' + nPendentes + ' ficará(ão) pendente(s).</span>';
+        document.getElementById('btn-gravar').disabled = (chaves.length === 0);
     }
 
     async function gravarTudo() {
