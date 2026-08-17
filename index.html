@@ -568,6 +568,7 @@
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-supervisor" style="display:none !important;">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
+            <button class="btn btn-primary w-100 py-2 fw-bold" onclick="abrirAnaliseInventarios()">📦 Análise de Inventários</button>
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
             <button class="btn btn-warning w-100 py-2 fw-bold" onclick="abrirRevisaoLancamentos()">🔎 Revisar Lançamentos</button>
@@ -3111,6 +3112,14 @@
         window.open(url, '_blank');
     }
 
+    function abrirAnaliseInventarios() {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'inventario.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir a Análise de Inventários.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
+        window.open(url, '_blank');
+    }
+
     function abrirRevisaoLancamentos() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'revisao.html';
         const tok = window.tokenSessao || '';
@@ -3807,7 +3816,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r38';
+    const VERSAO_ESPERADA = '2026-08-06-r39';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');

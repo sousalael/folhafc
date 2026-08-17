@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formula Code — Auditoria de Estoque</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{--fc-navy:#051323;--fc-navy-light:#0B2545;--fc-green:#00B74A;--fc-gl:#E8F8EF;--fc-gd:#009B3E;--fc-red:#D32F2F;--fc-rl:#FDEAEA;--fc-amb:#F57C00;--fc-al:#FFF3E0;--fc-blue:#1565C0;--fc-bl:#E3F2FD;--fc-bg:#f5f6f8;--fc-card:#fff;--fc-border:#e0e0e0;--fc-text:#333;--fc-muted:#888;--fc-light:#f5f5f5}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--fc-bg);color:var(--fc-text);font-size:14px;line-height:1.5}
+.app{max-width:1200px;margin:0 auto}
+.header{background:var(--fc-navy);padding:12px 24px;display:flex;align-items:center;gap:16px}
+.header img{height:40px}
+.header-right{margin-left:auto;text-align:right}
+.header-title{color:rgba(255,255,255,.95);font-size:14px;font-weight:600}
+.header-sub{color:rgba(255,255,255,.5);font-size:11px}
+.tabs{display:flex;background:var(--fc-card);border-bottom:2px solid var(--fc-border);padding:0 24px;overflow-x:auto}
+.tab{padding:12px 16px;font-size:13px;color:var(--fc-muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:5px;transition:color .2s}
+.tab:hover{color:var(--fc-text)}
+.tab.active{color:var(--fc-green);border-bottom-color:var(--fc-green);font-weight:600}
+.tab.disabled{opacity:.4;pointer-events:none}
+.body{background:var(--fc-card);padding:24px;min-height:500px}
+.panel{display:none}
+.panel.active{display:block}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px}
+.metric{background:var(--fc-light);border-radius:8px;padding:14px 16px}
+.metric-label{font-size:11px;color:var(--fc-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.metric-value{font-size:22px;font-weight:700}
+.metric-detail{font-size:11px;color:var(--fc-muted);margin-top:2px}
+.section-title{font-size:14px;font-weight:600;color:var(--fc-navy);margin:20px 0 12px;display:flex;align-items:center;gap:6px}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}
+.cat-card{border-radius:8px;padding:12px 14px;border:1px solid var(--fc-border);background:var(--fc-card)}
+.cat-name{font-size:13px;font-weight:600;margin-bottom:6px}
+.cat-row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}
+.cat-label{color:var(--fc-muted)}
+.cat-val{font-weight:600}
+.chart-wrap{position:relative;width:100%;margin-bottom:20px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:12px;color:var(--fc-muted)}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-dot{width:10px;height:10px;border-radius:2px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.search-input{padding:7px 12px;border:1px solid var(--fc-border);border-radius:6px;font-size:13px;width:220px;outline:none}
+.search-input:focus{border-color:var(--fc-green)}
+.pill{display:inline-flex;padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid var(--fc-border);background:var(--fc-card);color:var(--fc-muted);cursor:pointer;transition:all .2s}
+.pill:hover{border-color:var(--fc-navy)}
+.pill.active{background:var(--fc-navy);color:#fff;border-color:var(--fc-navy)}
+.pill.cat-pill.active{background:var(--fc-green);border-color:var(--fc-green);color:#fff}
+.btn-export{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:7px 16px;background:var(--fc-green);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn-export:hover{opacity:.85}
+.btn-pdf{background:var(--fc-navy)}
+.table-wrap{border:1px solid var(--fc-border);border-radius:8px;overflow-x:auto;margin-bottom:12px}
+table.data-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+table.data-table th{background:var(--fc-navy);color:#fff;padding:9px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;position:sticky;top:0;white-space:nowrap}
+table.data-table td{padding:7px 10px;border-bottom:1px solid #f0f0f0}
+table.data-table tr:nth-child(even) td{background:var(--fc-light)}
+table.data-table tr:hover td{background:#eef6ff}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-falta{background:var(--fc-rl);color:var(--fc-red)}
+.badge-ok{background:var(--fc-gl);color:var(--fc-gd)}
+.badge-sobra{background:var(--fc-al);color:var(--fc-amb)}
+.badge-a{background:var(--fc-rl);color:var(--fc-red)}
+.badge-b{background:var(--fc-al);color:var(--fc-amb)}
+.badge-c{background:var(--fc-light);color:var(--fc-muted)}
+.text-red{color:var(--fc-red)}
+.text-green{color:var(--fc-green)}
+.text-amber{color:var(--fc-amb)}
+.text-blue{color:var(--fc-blue)}
+.text-muted{color:var(--fc-muted)}
+.text-right{text-align:right}
+.text-center{text-align:center}
+.upload-zone{border:2px dashed var(--fc-border);border-radius:10px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:20px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--fc-green);background:#fafff6}
+.upload-icon{font-size:36px;color:var(--fc-green);margin-bottom:8px}
+.upload-title{font-size:15px;font-weight:600;margin-bottom:4px}
+.upload-sub{font-size:12px;color:var(--fc-muted)}
+.file-slots{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.file-slot{background:var(--fc-light);border-radius:8px;padding:14px 16px;border:1px solid var(--fc-border);cursor:pointer;transition:border-color .2s}
+.file-slot:hover{border-color:var(--fc-green);background:#fafff6}
+.file-slot-label{font-size:11px;color:var(--fc-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.file-slot-name{font-size:13px;font-weight:600}
+.file-slot-status{font-size:11px;margin-top:4px}
+.file-slot-status.loaded{color:var(--fc-green)}
+.file-slot-status.pending{color:var(--fc-muted)}
+.abc-selector{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:14px 16px;background:var(--fc-light);border-radius:8px}
+.abc-label{font-size:13px;color:var(--fc-muted)}
+.btn-process{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--fc-green);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn-process:hover{opacity:.85}
+.btn-process:disabled{opacity:.4;cursor:not-allowed}
+.progress-bar{width:100%;height:6px;background:var(--fc-border);border-radius:3px;margin:16px 0;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--fc-green);border-radius:3px;width:0;transition:width .3s}
+.mapping-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
+.mapping-modal.active{display:flex}
+.mapping-content{background:#fff;border-radius:12px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto}
+.mapping-title{font-size:16px;font-weight:600;color:var(--fc-navy);margin-bottom:16px}
+.mapping-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f0f0f0}
+.mapping-field{font-size:13px;font-weight:600;width:160px;flex-shrink:0}
+.mapping-select{flex:1;padding:6px 10px;border:1px solid var(--fc-border);border-radius:6px;font-size:13px}
+.mapping-arrow{color:var(--fc-muted);font-size:16px}
+.btn-mapping{padding:10px 24px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px}
+.btn-mapping-confirm{background:var(--fc-green);color:#fff}
+.btn-mapping-cancel{background:var(--fc-light);color:var(--fc-text);margin-left:8px}
+.alert{border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:8px;font-size:13px}
+.alert-danger{background:var(--fc-rl);border:1px solid var(--fc-red);color:#791F1F}
+.alert-warning{background:var(--fc-al);border:1px solid var(--fc-amb);color:#7A4706}
+.alert-info{background:var(--fc-bl);border:1px solid var(--fc-blue);color:#0C447C}
+.alert i{font-size:16px;margin-top:1px;flex-shrink:0}
+.loss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.loss-card{border-radius:8px;padding:14px;text-align:center}
+.loss-card.a{background:var(--fc-rl);border:1px solid var(--fc-red)}
+.loss-card.b{background:var(--fc-al);border:1px solid var(--fc-amb)}
+.loss-card.c{background:var(--fc-light);border:1px solid var(--fc-border)}
+.loss-title{font-size:11px;font-weight:600;margin-bottom:4px}
+.loss-card.a .loss-title,.loss-card.a .loss-main{color:var(--fc-red)}
+.loss-card.b .loss-title,.loss-card.b .loss-main{color:var(--fc-amb)}
+.loss-card.c .loss-title{color:var(--fc-muted)}
+.loss-main{font-size:20px;font-weight:700;margin-bottom:2px}
+.loss-sub{font-size:11px;color:var(--fc-muted)}
+.dist-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.dist-card{border-radius:8px;padding:12px;text-align:center}
+.dist-card.crit{background:var(--fc-rl);border:1px solid var(--fc-red)}
+.dist-card.low{background:var(--fc-al);border:1px solid var(--fc-amb)}
+.dist-card.ok{background:var(--fc-gl);border:1px solid var(--fc-green)}
+.dist-card.high{background:var(--fc-bl);border:1px solid var(--fc-blue)}
+.dist-label{font-size:11px;font-weight:600;margin-bottom:2px}
+.dist-card.crit .dist-label,.dist-card.crit .dist-val{color:var(--fc-red)}
+.dist-card.low .dist-label,.dist-card.low .dist-val{color:var(--fc-amb)}
+.dist-card.ok .dist-label,.dist-card.ok .dist-val{color:var(--fc-gd)}
+.dist-card.high .dist-label,.dist-card.high .dist-val{color:var(--fc-blue)}
+.dist-val{font-size:18px;font-weight:700}
+.dist-sub{font-size:10px;color:var(--fc-muted)}
+.summary-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.summary-card{border-radius:8px;border:1px solid var(--fc-border);overflow:hidden}
+.summary-header{padding:10px 14px;font-size:12px;font-weight:600;color:#fff}
+.summary-header.fat{background:var(--fc-navy)}
+.summary-header.luc{background:var(--fc-gd)}
+.summary-row{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid #f0f0f0;font-size:12px}
+.summary-row:last-child{border-bottom:none}
+.summary-class{font-weight:700;width:24px}
+.bar-track{flex:1;height:14px;background:var(--fc-light);border-radius:7px;margin:0 10px;overflow:hidden}
+.bar-fill{height:100%;border-radius:7px}
+.summary-pct{font-size:11px;color:var(--fc-muted);width:120px;text-align:right}
+.export-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
+.export-modal.active{display:flex}
+.export-content{background:#fff;border-radius:12px;padding:24px;max-width:400px;width:90%}
+.export-title{font-size:16px;font-weight:600;color:var(--fc-navy);margin-bottom:16px}
+.export-check{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
+.export-check input{accent-color:var(--fc-green);width:16px;height:16px}
+.note{font-size:12px;color:var(--fc-muted);background:var(--fc-light);border-radius:8px;padding:12px 16px;margin-top:12px;display:flex;align-items:flex-start;gap:6px}
+.note i{font-size:14px;margin-top:1px;flex-shrink:0}
+.footer{text-align:center;padding:16px;font-size:11px;color:var(--fc-muted)}
+.row-a{border-left:3px solid var(--fc-red)}
+.row-b{border-left:3px solid var(--fc-amb)}
+.row-c{border-left:3px solid var(--fc-border)}
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;font-size:13px}
+.pagination button{padding:4px 12px;border:1px solid var(--fc-border);border-radius:4px;background:var(--fc-card);cursor:pointer;font-size:12px}
+.pagination button:disabled{opacity:.3;cursor:not-allowed}
+.pagination button.active{background:var(--fc-navy);color:#fff;border-color:var(--fc-navy)}
+.info-fields{margin-bottom:20px}
+.info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.info-group{display:flex;flex-direction:column}
+.info-label{font-size:12px;font-weight:600;color:var(--fc-navy);margin-bottom:4px}
+.info-input{padding:9px 12px;border:1px solid var(--fc-border);border-radius:6px;font-size:14px;outline:none;background:var(--fc-card);color:var(--fc-text)}
+.info-input:focus{border-color:var(--fc-green)}
+@media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}}
+</style>
+</head>
+<body>
+<!-- ============ PROTECAO POR SESSAO (mesmo login do Folha de Ponto) ============ -->
+<div id="bloqueio-sessao" style="display:none;position:fixed;inset:0;background:#051323;color:#fff;z-index:99999;align-items:center;justify-content:center;text-align:center;padding:30px;font-family:system-ui,sans-serif;">
+  <div>
+    <div style="font-size:1.4rem;font-weight:700;margin-bottom:10px;">🔒 Sessão não encontrada</div>
+    <div style="opacity:.8;">Abra a Análise de Inventários pelo botão no Folha de Ponto.</div>
+  </div>
+</div>
+<div class="app">
+  <div class="header">
+    <img id="logo" alt="Formula Code" />
+    <div class="header-right">
+      <div class="header-title">Análise de Inventários</div>
+      <div class="header-sub" id="headerDate"></div>
+      <div style="color:rgba(255,255,255,.35);font-size:10px;margin-top:2px">v3.8</div>
+    </div>
+    <button id="btnSalvarDrive" onclick="salvarNoDrive()" style="margin-left:16px;display:none;align-items:center;gap:6px;padding:8px 16px;background:#00B74A;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">💾 Salvar análise no Drive</button>
+    <button id="btnHistorico" onclick="abrirHistorico()" style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#0B2545;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">🗂️ Histórico</button>
+  </div>
+  <div class="tabs" id="tabBar">
+    <div class="tab active" data-tab="upload"><i class="ti ti-upload"></i> Upload</div>
+    <div class="tab disabled" data-tab="critica"><i class="ti ti-list-check"></i> Crítica</div>
+    <div class="tab disabled" data-tab="ruptura"><i class="ti ti-alert-triangle"></i> Ruptura</div>
+    <div class="tab disabled" data-tab="dias"><i class="ti ti-clock"></i> Dias de estoque</div>
+    <div class="tab disabled" data-tab="abc"><i class="ti ti-chart-pie"></i> Investimento ABC</div>
+    <div class="tab disabled" data-tab="perda"><i class="ti ti-trending-down"></i> Projeção de perda</div>
+  </div>
+  <div class="body">
+    <!-- UPLOAD -->
+    <div class="panel active" id="panel-upload">
+      <div class="upload-zone" id="dropZone">
+        <div class="upload-icon"><i class="ti ti-cloud-upload"></i></div>
+        <div class="upload-title">Arraste seus arquivos aqui ou clique para selecionar</div>
+        <div class="upload-sub">Excel (.xlsx, .xls), CSV ou TXT — múltiplos arquivos aceitos</div>
+        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.txt" style="display:none">
+      </div>
+      <div class="info-fields">
+        <div class="info-row">
+          <div class="info-group"><label class="info-label">Cliente <span style="color:var(--fc-red)">*</span></label><input type="text" class="info-input" id="infoCliente" placeholder="Ex: Rede Farma Ltda"></div>
+          <div class="info-group"><label class="info-label">Unidade / Filial <span style="color:var(--fc-red)">*</span></label><input type="text" class="info-input" id="infoUnidade" placeholder="Ex: Loja Centro — Ilhéus"></div>
+          <div class="info-group"><label class="info-label">Data do inventário <span style="color:var(--fc-red)">*</span></label><input type="date" class="info-input" id="infoData"></div>
+          <div class="info-group"><label class="info-label">Dias de venda</label><input type="number" class="info-input" id="infoDiasVenda" value="90" min="1" max="365" placeholder="90" style="max-width:100px"></div>
+        </div>
+      </div>
+      <div class="file-slots" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="file-slot" id="slot-estoque"><div class="file-slot-label">Estoque sistema</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-contagem"><div class="file-slot-label">Contagem física</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-vendas"><div class="file-slot-label">Vendas 90 dias</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-cadastro"><div class="file-slot-label">Cadastro (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-exclusoes"><div class="file-slot-label">Exclusões (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">SKUs a excluir da análise</div></div>
+      </div>
+      <div class="abc-selector">
+        <div class="abc-label">Curva ABC por:</div>
+        <span class="pill active" data-abc="faturamento"><i class="ti ti-check" style="font-size:12px"></i> Faturamento</span>
+        <span class="pill active" data-abc="lucro"><i class="ti ti-check" style="font-size:12px"></i> Lucro</span>
+      </div>
+      <button class="btn-process" id="btnProcess" disabled><i class="ti ti-player-play" style="font-size:18px"></i> Processar relatórios</button>
+      <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+    <!-- CRITICA -->
+    <div class="panel" id="panel-critica"></div>
+    <!-- RUPTURA -->
+    <div class="panel" id="panel-ruptura"></div>
+    <!-- DIAS ESTOQUE -->
+    <div class="panel" id="panel-dias"></div>
+    <!-- INVESTIMENTO ABC -->
+    <div class="panel" id="panel-abc"></div>
+    <!-- PROJECAO PERDA -->
+    <div class="panel" id="panel-perda"></div>
+  </div>
+  <div class="footer">Formula Code Tecnologia, Gestão e Automação — Sistema de Auditoria de Estoque</div>
+</div>
+
+<!-- MAPPING MODAL -->
+<div class="mapping-modal" id="mappingModal">
+  <div class="mapping-content">
+    <div class="mapping-title" id="mappingTitle">Mapeamento de colunas</div>
+    <div id="mappingBody"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-mapping btn-mapping-confirm" id="btnMappingConfirm">Confirmar mapeamento</button>
+      <button class="btn-mapping btn-mapping-cancel" id="btnMappingCancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="export-modal" id="exportModal">
+  <div class="export-content">
+    <div class="export-title">Exportar para Excel</div>
+    <div id="exportChecks">
+      <div class="export-check"><input type="checkbox" id="exp-critica-resumo" checked><label for="exp-critica-resumo">Crítica — Resumo</label></div>
+      <div class="export-check"><input type="checkbox" id="exp-critica-detalhe" checked><label for="exp-critica-detalhe">Crítica — Detalhado</label></div>
+      <div class="export-check"><input type="checkbox" id="exp-ruptura" checked><label for="exp-ruptura">Ruptura</label></div>
+      <div class="export-check"><input type="checkbox" id="exp-dias" checked><label for="exp-dias">Dias de estoque</label></div>
+      <div class="export-check"><input type="checkbox" id="exp-abc" checked><label for="exp-abc">Investimento ABC</label></div>
+      <div class="export-check"><input type="checkbox" id="exp-perda" checked><label for="exp-perda">Projeção de perda</label></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-mapping btn-mapping-confirm" id="btnExportConfirm"><i class="ti ti-download"></i> Exportar</button>
+      <button class="btn-mapping btn-mapping-cancel" id="btnExportCancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="export.js"></script>
+<script src="app.js"></script>
+
+<!-- ============ INTEGRACAO COM O FOLHA DE PONTO (sessao + Drive + historico) ============ -->
+<script>
+(function(){
+  var API_URL = 'https://script.google.com/macros/s/AKfycbxV6bx-q7pVeDy05uXzCzL8rqPhd3_nhFD_IoGcGEFw4x3gdXZwOsAjIE4hbnYzoFZF/exec';
+  var params = new URLSearchParams(window.location.search);
+  var TOKEN = params.get('token') || '';
+  var CPF = params.get('cpf') || '';
+
+  // Sem token = bloqueia (so entra pelo botao no Folha de Ponto).
+  if (!TOKEN) { document.getElementById('bloqueio-sessao').style.display = 'flex'; }
+
+  function chamar(payload){
+    payload.token = TOKEN;
+    return fetch(API_URL, { method:'POST', body: JSON.stringify(payload) })
+      .then(function(r){ return r.text(); })
+      .then(function(t){ var j; try{ j=JSON.parse(t); }catch(e){ throw new Error('Resposta invalida do servidor.'); }
+        if(!j||j.error) throw new Error(j&&j.error?j.error:'Erro desconhecido.'); return j; });
+  }
+
+  function blobParaBase64(blob){
+    return new Promise(function(res, rej){
+      var r = new FileReader();
+      r.onload = function(){ res(String(r.result).split(',')[1]); };
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  // Mostra o botao "Salvar no Drive" quando ha resultado processado.
+  var obs = setInterval(function(){
+    try {
+      if (window.State && State.results && Object.keys(State.results).length > 0) {
+        document.getElementById('btnSalvarDrive').style.display = 'inline-flex';
+      }
+    } catch(e){}
+  }, 1500);
+
+  // Gera os arquivos (Excel de cada analise + planilhas de entrada) em memoria
+  // e envia ao servidor, que cria a subpasta no Drive e registra o historico.
+  window.salvarNoDrive = function(){
+    if (!window.State || !State.results || !Object.keys(State.results).length) {
+      alert('Processe uma análise antes de salvar.'); return;
+    }
+    var btn = document.getElementById('btnSalvarDrive');
+    btn.disabled = true; var txtOrig = btn.innerText; btn.innerText = '⏳ Salvando...';
+
+    var arquivos = [];
+    var tarefas = [];
+
+    // 1) Excel consolidado (usa o Export existente, capturando o blob).
+    try {
+      var wbBlob = gerarExcelBlob();
+      if (wbBlob) tarefas.push(blobParaBase64(wbBlob).then(function(b64){
+        arquivos.push({ nome: nomeArq('auditoria','xlsx'), mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base64:b64 });
+      }));
+    } catch(e){ console.error('Excel:', e); }
+
+    // 2) Planilhas de ENTRADA (o que foi carregado), como JSON.
+    try {
+      ['estoque','contagem','vendas','cadastro','exclusoes'].forEach(function(tipo){
+        var dados = State.rawData && State.rawData[tipo];
+        if (dados && dados.length) {
+          var json = JSON.stringify(dados, null, 2);
+          var blob = new Blob([json], {type:'application/json'});
+          tarefas.push(blobParaBase64(blob).then(function(b64){
+            arquivos.push({ nome:'entrada_'+tipo+'.json', mimeType:'application/json', base64:b64 });
+          }));
+        }
+      });
+    } catch(e){ console.error('Entradas:', e); }
+
+    // 3) Resultado completo (as 5 analises), como JSON.
+    try {
+      var jsonRes = JSON.stringify(State.results, null, 2);
+      var blobRes = new Blob([jsonRes], {type:'application/json'});
+      tarefas.push(blobParaBase64(blobRes).then(function(b64){
+        arquivos.push({ nome:'resultado_completo.json', mimeType:'application/json', base64:b64 });
+      }));
+    } catch(e){ console.error('Resultado:', e); }
+
+    Promise.all(tarefas).then(function(){
+      var resumo = montarResumo();
+      return chamar({
+        action:'salvarAnaliseInventario', cpf: CPF,
+        cliente: State.info.cliente, unidade: State.info.unidade,
+        dataInventario: State.info.dataInventario,
+        resumo: resumo, arquivos: arquivos
+      });
+    }).then(function(res){
+      btn.disabled = false; btn.innerText = txtOrig;
+      alert('✅ Análise salva no Drive!\n\n' + res.arquivosSalvos + ' arquivos guardados.\n\nAbra a pasta: ' + res.linkPasta);
+      window.open(res.linkPasta, '_blank');
+    }).catch(function(err){
+      btn.disabled = false; btn.innerText = txtOrig;
+      alert('⚠️ ' + err.message);
+    });
+  };
+
+  function nomeArq(prefixo, ext){
+    var lim = function(s){ return String(s||'').replace(/[^a-zA-Z0-9]/g,'_'); };
+    return prefixo+'_'+lim(State.info.cliente)+'_'+lim(State.info.unidade)+'_'+lim(State.info.dataInventario)+'.'+ext;
+  }
+
+  // Gera o Excel em memoria (reaproveita a logica do Export, mas retorna o blob).
+  function gerarExcelBlob(){
+    // O Export.generateExcel baixa direto; aqui montamos um workbook simples com
+    // os resultados. Se o Export expuser um metodo de blob, usamos ele.
+    if (window.Export && typeof Export.generateExcelBlob === 'function') {
+      return Export.generateExcelBlob(State.results, State.processDate, State.info);
+    }
+    // Fallback: cria um resumo em uma aba unica.
+    var wb = XLSX.utils.book_new();
+    var resumo = montarResumo();
+    var linhas = Object.keys(resumo).map(function(k){ return [k, resumo[k]]; });
+    var ws = XLSX.utils.aoa_to_sheet([['Métrica','Valor']].concat(linhas));
+    XLSX.utils.book_append_sheet(wb, ws, 'Resumo');
+    var out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    return new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
+
+  function montarResumo(){
+    var r = {};
+    try {
+      r.cliente = State.info.cliente;
+      r.unidade = State.info.unidade;
+      r.data = State.info.dataInventario;
+      if (State.results.critica) {
+        var c = State.results.critica;
+        r.itens_analisados = c.length;
+        var faltas = c.filter(function(i){return i.status==='Falta';}).length;
+        var sobras = c.filter(function(i){return i.status==='Sobra';}).length;
+        r.faltas = faltas; r.sobras = sobras;
+      }
+    } catch(e){}
+    return r;
+  }
+
+  // ===== HISTORICO =====
+  window.abrirHistorico = function(){
+    if (!TOKEN) { document.getElementById('bloqueio-sessao').style.display='flex'; return; }
+    var painel = document.getElementById('painel-historico');
+    painel.style.display = 'flex';
+    var corpo = document.getElementById('historico-corpo');
+    corpo.innerHTML = '<div style="padding:30px;text-align:center;color:#888;">Carregando…</div>';
+    chamar({ action:'getHistoricoInventarios', cpf: CPF }).then(function(res){
+      if (!res.lista || !res.lista.length) {
+        corpo.innerHTML = '<div style="padding:30px;text-align:center;color:#888;">Nenhuma análise salva ainda.</div>';
+        return;
+      }
+      var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<thead><tr style="background:#051323;color:#fff;"><th style="padding:8px;text-align:left;">Cliente</th><th style="padding:8px;text-align:left;">Unidade</th><th style="padding:8px;text-align:left;">Data</th><th style="padding:8px;text-align:left;">Feito por</th><th style="padding:8px;text-align:left;">Quando</th><th style="padding:8px;">Pasta</th></tr></thead><tbody>';
+      res.lista.forEach(function(a){
+        html += '<tr style="border-bottom:1px solid #eee;">' +
+          '<td style="padding:8px;">'+esc(a.cliente)+'</td>' +
+          '<td style="padding:8px;">'+esc(a.unidade)+'</td>' +
+          '<td style="padding:8px;">'+esc(a.dataInventario)+'</td>' +
+          '<td style="padding:8px;">'+esc(a.feitoPor)+'</td>' +
+          '<td style="padding:8px;">'+esc(a.timestamp)+'</td>' +
+          '<td style="padding:8px;text-align:center;"><a href="'+esc(a.linkPasta)+'" target="_blank" style="color:#00B74A;font-weight:600;">Abrir</a></td>' +
+        '</tr>';
+      });
+      html += '</tbody></table>';
+      corpo.innerHTML = html;
+    }).catch(function(err){
+      corpo.innerHTML = '<div style="padding:30px;text-align:center;color:#D32F2F;">⚠️ '+esc(err.message)+'</div>';
+    });
+  };
+  window.fecharHistorico = function(){ document.getElementById('painel-historico').style.display='none'; };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+})();
+</script>
+
+<!-- Painel de historico (sobreposto) -->
+<div id="painel-historico" style="display:none;position:fixed;inset:0;background:rgba(5,19,35,.7);z-index:9998;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;">
+  <div style="background:#fff;border-radius:12px;max-width:900px;width:100%;padding:24px;">
+    <div style="display:flex;align-items:center;margin-bottom:16px;">
+      <div style="font-size:1.2rem;font-weight:700;color:#051323;">🗂️ Histórico de Análises</div>
+      <button onclick="fecharHistorico()" style="margin-left:auto;background:#eee;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600;">Fechar</button>
+    </div>
+    <div id="historico-corpo"></div>
+  </div>
+</div>
+</body>
+</html>
