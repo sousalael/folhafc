@@ -566,11 +566,11 @@
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelDespesas" onclick="prepararRelDespesas()">📑 Relatório de Despesas</button>
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBiDespesas" onclick="prepararBiDespesas()">📊 BI de Despesas</button>
         </div>
-        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-supervisor" style="display:none !important;">
+        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-supervisor" style="display:none;">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold" onclick="abrirRelatorioVisual()">🖼️ Relatório Visual com Fotos</button>
             <button class="btn btn-primary w-100 py-2 fw-bold" onclick="abrirAnaliseInventarios()">📦 Análise de Inventários</button>
         </div>
-        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none !important;">
+        <div class="d-flex flex-column flex-md-row gap-2 mt-2" id="area-relatorio-visual" style="display:none;">
             <button class="btn btn-warning w-100 py-2 fw-bold" onclick="abrirRevisaoLancamentos()">🔎 Revisar Lançamentos</button>
         </div>
         <div class="small text-muted mt-2" id="aviso-escopo-despesas"></div>
@@ -3816,7 +3816,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-06-r39';
+    const VERSAO_ESPERADA = '2026-08-06-r40';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
