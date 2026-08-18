@@ -175,7 +175,7 @@ function showFileTypeSelector(result){
   var types=[
     {value:'estoque',label:'Estoque Sistema',desc:'Saldo do ERP antes da contagem'},
     {value:'contagem',label:'Contagem Física',desc:'Resultado da contagem no local'},
-    {value:'vendas',label:'Vendas 90 dias',desc:'Histórico de vendas do período'},
+    {value:'vendas',label:'ABC Vendas',desc:'Histórico de vendas do período'},
     {value:'cadastro',label:'Cadastro de Produtos',desc:'Descrição e categoria dos SKUs'},
     {value:'exclusoes',label:'Lista de Exclusões',desc:'SKUs a excluir de todas as análises'}
   ];

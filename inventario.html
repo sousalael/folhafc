@@ -168,6 +168,7 @@ table.data-table tr:hover td{background:#eef6ff}
 .info-input{padding:9px 12px;border:1px solid var(--fc-border);border-radius:6px;font-size:14px;outline:none;background:var(--fc-card);color:var(--fc-text)}
 .info-input:focus{border-color:var(--fc-green)}
 @media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}}
+@keyframes pulseSalvar { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,183,74,.5);} 50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(0,183,74,0);} }
 </style>
 </head>
 <body>
@@ -217,7 +218,7 @@ table.data-table tr:hover td{background:#eef6ff}
       <div class="file-slots" style="grid-template-columns:1fr 1fr 1fr">
         <div class="file-slot" id="slot-estoque"><div class="file-slot-label">Estoque sistema</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
         <div class="file-slot" id="slot-contagem"><div class="file-slot-label">Contagem física</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
-        <div class="file-slot" id="slot-vendas"><div class="file-slot-label">Vendas 90 dias</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-vendas"><div class="file-slot-label">ABC Vendas</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
         <div class="file-slot" id="slot-cadastro"><div class="file-slot-label">Cadastro (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
         <div class="file-slot" id="slot-exclusoes"><div class="file-slot-label">Exclusões (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">SKUs a excluir da análise</div></div>
       </div>
@@ -227,6 +228,7 @@ table.data-table tr:hover td{background:#eef6ff}
         <span class="pill active" data-abc="lucro"><i class="ti ti-check" style="font-size:12px"></i> Lucro</span>
       </div>
       <button class="btn-process" id="btnProcess" disabled><i class="ti ti-player-play" style="font-size:18px"></i> Processar relatórios</button>
+      <button id="btnSalvarDrive2" onclick="salvarNoDrive()" style="display:none;width:100%;margin-top:10px;padding:14px;background:#00B74A;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">💾 Salvar esta análise no Drive</button>
       <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
     </div>
     <!-- CRITICA -->
@@ -307,13 +309,24 @@ table.data-table tr:hover td{background:#eef6ff}
   }
 
   // Mostra o botao "Salvar no Drive" quando ha resultado processado.
+  var jaApareceu = false;
   var obs = setInterval(function(){
     try {
       if (window.State && State.results && Object.keys(State.results).length > 0) {
-        document.getElementById('btnSalvarDrive').style.display = 'inline-flex';
+        var bs = document.getElementById('btnSalvarDrive');
+        var bs2 = document.getElementById('btnSalvarDrive2');
+        if (bs && !jaApareceu) {
+          bs.style.display = 'inline-flex';
+          bs.style.animation = 'pulseSalvar 1.2s ease-in-out 3';
+          if (bs2) { bs2.style.display = 'block'; bs2.style.animation = 'pulseSalvar 1.2s ease-in-out 3'; }
+          jaApareceu = true;
+        }
+      } else {
+        // Se resetar (novo processamento), volta a permitir mostrar.
+        if (window.State && State.results && Object.keys(State.results).length === 0) jaApareceu = false;
       }
     } catch(e){}
-  }, 1500);
+  }, 600);
 
   // Gera os arquivos (Excel de cada analise + planilhas de entrada) em memoria
   // e envia ao servidor, que cria a subpasta no Drive e registra o historico.
