@@ -592,6 +592,28 @@ window.App = {
   },
   getState:function(){return State;},
   limparSlot:limparSlot,
+  carregarSlotExterno:function(type,result){
+    // Coloca um arquivo (ja lido) num slot, como se fosse upload. Usado ao
+    // recarregar uma analise do historico.
+    State.files[type]=result;
+    if(State.rawData)State.rawData[type]=result.rows||[];
+    updateSlot(type,result.filename||'(recuperado)',result.rowCount||(result.rows?result.rows.length:0));
+    checkReady();
+  },
+  preencherInfo:function(cliente,unidade,data){
+    if(cliente!=null){$('infoCliente').value=cliente;State.info.cliente=cliente;}
+    if(unidade!=null){$('infoUnidade').value=unidade;State.info.unidade=unidade;}
+    if(data!=null){
+      // Converte "26/07/2026" -> "2026-07-26" para o input date.
+      var d=String(data);
+      if(/^\d{2}\/\d{2}\/\d{4}$/.test(d)){var p=d.split('/');d=p[2]+'-'+p[1]+'-'+p[0];}
+      $('infoData').value=d;
+      // State.info.dataInventario segue o padrao do app: dd/mm/yyyy.
+      var dv=$('infoData').value;
+      State.info.dataInventario=dv?dv.split('-').reverse().join('/'):'';
+    }
+    checkReady();
+  },
   exportPDF:function(type){Export.generatePDF(type,State.results,State.processDate,LOGO,State.info);}
 };
 

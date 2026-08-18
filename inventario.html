@@ -420,9 +420,8 @@ table.data-table tr:hover td{background:#eef6ff}
       });
     }).then(function(res){
       [b1,b2].forEach(function(b){ if(b){ b.disabled=false; b.innerText=b.dataset.txt||'💾 Salvar esta análise no Drive'; }});
-      alert('✅ Arquivos salvos no Drive!\n\n' + res.arquivosSalvos + ' arquivo(s)-fonte guardado(s).\n' +
-            (res.modo==='substituir'?'(análise anterior substituída)\n':'') + '\nAbrindo a pasta…');
-      window.open(res.linkPasta, '_blank');
+      alert('✅ Arquivos salvos no Drive!\n\n' + res.arquivosSalvos + ' arquivo(s)-fonte guardado(s).' +
+            (res.modo==='substituir'?'\n(análise anterior substituída)':''));
     }).catch(function(err){
       [b1,b2].forEach(function(b){ if(b){ b.disabled=false; b.innerText=b.dataset.txt||'💾 Salvar esta análise no Drive'; }});
       alert('⚠️ ' + err.message);
@@ -481,15 +480,19 @@ table.data-table tr:hover td{background:#eef6ff}
         return;
       }
       var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
-        '<thead><tr style="background:#051323;color:#fff;"><th style="padding:8px;text-align:left;">Cliente</th><th style="padding:8px;text-align:left;">Unidade</th><th style="padding:8px;text-align:left;">Data</th><th style="padding:8px;text-align:left;">Feito por</th><th style="padding:8px;text-align:left;">Quando</th><th style="padding:8px;">Pasta</th></tr></thead><tbody>';
-      res.lista.forEach(function(a){
+        '<thead><tr style="background:#051323;color:#fff;"><th style="padding:8px;text-align:left;">Cliente</th><th style="padding:8px;text-align:left;">Unidade</th><th style="padding:8px;text-align:left;">Data</th><th style="padding:8px;text-align:left;">Feito por</th><th style="padding:8px;text-align:left;">Quando</th><th style="padding:8px;">Ação</th></tr></thead><tbody>';
+      res.lista.forEach(function(a, idx){
+        window._histCache = window._histCache || {};
+        window._histCache[idx] = a;
         html += '<tr style="border-bottom:1px solid #eee;">' +
           '<td style="padding:8px;">'+esc(a.cliente)+'</td>' +
           '<td style="padding:8px;">'+esc(a.unidade)+'</td>' +
           '<td style="padding:8px;">'+esc(a.dataInventario)+'</td>' +
           '<td style="padding:8px;">'+esc(a.feitoPor)+'</td>' +
           '<td style="padding:8px;">'+esc(a.timestamp)+'</td>' +
-          '<td style="padding:8px;text-align:center;"><a href="'+esc(a.linkPasta)+'" target="_blank" style="color:#00B74A;font-weight:600;">Abrir</a></td>' +
+          '<td style="padding:8px;text-align:center;white-space:nowrap;">' +
+            '<button onclick="carregarAnaliseHistorico('+idx+')" style="background:#00B74A;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px;">↻ Carregar nos slots</button>' +
+          '</td>' +
         '</tr>';
       });
       html += '</tbody></table>';
@@ -498,6 +501,53 @@ table.data-table tr:hover td{background:#eef6ff}
       corpo.innerHTML = '<div style="padding:30px;text-align:center;color:#D32F2F;">⚠️ '+esc(err.message)+'</div>';
     });
   };
+  window.carregarAnaliseHistorico = function(idx){
+    var a = window._histCache && window._histCache[idx];
+    if (!a) { alert('Análise não encontrada.'); return; }
+    if (!a.pastaId) { alert('Não foi possível localizar a pasta desta análise.'); return; }
+
+    // Avisa se ja ha arquivos carregados (vai substituir).
+    var st = getState();
+    var temAlgum = st && st.files && ['estoque','contagem','vendas','cadastro','exclusoes'].some(function(t){
+      return st.files[t] && st.files[t].rows && st.files[t].rows.length;
+    });
+    if (temAlgum && !confirm('Isto vai SUBSTITUIR os arquivos atualmente carregados nos slots pela análise selecionada. Continuar?')) return;
+
+    var corpo = document.getElementById('historico-corpo');
+    var htmlAntigo = corpo.innerHTML;
+    corpo.innerHTML = '<div style="padding:30px;text-align:center;color:#888;">Baixando arquivos da análise…</div>';
+
+    chamar({ action:'getArquivosInventario', cpf: CPF, pastaId: a.pastaId }).then(function(res){
+      if (!res.arquivos || !res.arquivos.length) throw new Error('Nenhum arquivo-fonte encontrado nesta análise.');
+
+      // Reconstroi cada slot a partir do xlsx baixado.
+      res.arquivos.forEach(function(arq){
+        try {
+          var bytes = Uint8Array.from(atob(arq.base64), function(c){ return c.charCodeAt(0); });
+          var wb = XLSX.read(bytes, {type:'array'});
+          var sh = wb.Sheets[wb.SheetNames[0]];
+          var json = XLSX.utils.sheet_to_json(sh, {defval:''});
+          var result = { headers: json.length?Object.keys(json[0]):[], rows: json, filename: arq.nome, rowCount: json.length };
+          // Coloca no State e atualiza a UI do slot (reusa o App).
+          if (window.App && typeof App.carregarSlotExterno === 'function') {
+            App.carregarSlotExterno(arq.tipo, result);
+          }
+        } catch(e){ console.error('Falha ao ler '+arq.nome, e); }
+      });
+
+      // Preenche cliente/unidade/data.
+      if (window.App && typeof App.preencherInfo === 'function') {
+        App.preencherInfo(a.cliente, a.unidade, a.dataInventario);
+      }
+
+      fecharHistorico();
+      alert('✅ Arquivos carregados nos slots!\n\nCliente: '+a.cliente+'\nUnidade: '+a.unidade+'\nData: '+a.dataInventario+'\n\nRevise e clique em "Processar relatórios" para rodar a análise novamente.');
+    }).catch(function(err){
+      corpo.innerHTML = htmlAntigo;
+      alert('⚠️ ' + err.message);
+    });
+  };
+
   window.fecharHistorico = function(){ document.getElementById('painel-historico').style.display='none'; };
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 })();
