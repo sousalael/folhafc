@@ -254,8 +254,22 @@ function updateSlot(type,fn,cnt){
   var s=$('slot-'+type);
   s.querySelector('.file-slot-name').textContent=fn;
   var st=s.querySelector('.file-slot-status');
-  st.textContent='✓ '+cnt.toLocaleString('pt-BR')+' linhas carregadas';
+  st.innerHTML='✓ '+cnt.toLocaleString('pt-BR')+' linhas carregadas &nbsp;<a href="#" onclick="App.limparSlot(\''+type+'\');return false;" style="color:#D32F2F;font-weight:600;text-decoration:none;">✕ Excluir</a>';
   st.className='file-slot-status loaded';
+}
+
+// Remove o arquivo de um slot (tira da analise atual; nao mexe no Drive).
+function limparSlot(type){
+  if(!confirm('Excluir o arquivo deste campo da análise?'))return;
+  State.files[type]=null;
+  if(State.rawData)State.rawData[type]=[];
+  var s=$('slot-'+type);
+  s.querySelector('.file-slot-name').textContent='—';
+  var st=s.querySelector('.file-slot-status');
+  var labels={estoque:'Clique para selecionar arquivo',contagem:'Clique para selecionar arquivo',vendas:'Clique para selecionar arquivo',cadastro:'Clique para selecionar arquivo',exclusoes:'SKUs a excluir da análise'};
+  st.textContent=labels[type]||'Clique para selecionar arquivo';
+  st.className='file-slot-status pending';
+  checkReady();
 }
 
 function checkReady(){
@@ -577,6 +591,7 @@ window.App = {
     $('exportModal').classList.add('active');
   },
   getState:function(){return State;},
+  limparSlot:limparSlot,
   exportPDF:function(type){Export.generatePDF(type,State.results,State.processDate,LOGO,State.info);}
 };
 

@@ -313,11 +313,16 @@ table.data-table tr:hover td{background:#eef6ff}
     });
   }
 
-  // Mostra o botao "Salvar no Drive" quando ha resultado processado.
+  // Mostra o botao "Salvar no Drive" quando ha ARQUIVOS carregados nos slots
+  // (o salvamento agora guarda os arquivos-fonte, disponiveis antes de processar).
   var jaApareceu = false;
   var obs = setInterval(function(){
     try {
-      var st=getState(); if (st && st.results && Object.keys(st.results).length > 0) {
+      var st=getState();
+      var temArquivo = st && st.files && ['estoque','contagem','vendas','cadastro','exclusoes'].some(function(t){
+        return st.files[t] && st.files[t].rows && st.files[t].rows.length;
+      });
+      if (temArquivo) {
         var bs = document.getElementById('btnSalvarDrive');
         var bs2 = document.getElementById('btnSalvarDrive2');
         if (bs && !jaApareceu) {
@@ -327,72 +332,102 @@ table.data-table tr:hover td{background:#eef6ff}
           jaApareceu = true;
         }
       } else {
-        // Se resetar (novo processamento), volta a permitir mostrar.
-        if (st && st.results && Object.keys(st.results).length === 0) jaApareceu = false;
+        jaApareceu = false;
+        var b1 = document.getElementById('btnSalvarDrive');
+        var b2 = document.getElementById('btnSalvarDrive2');
+        if (b1) b1.style.display = 'none';
+        if (b2) b2.style.display = 'none';
       }
     } catch(e){}
   }, 600);
 
-  // Gera os arquivos (Excel de cada analise + planilhas de entrada) em memoria
-  // e envia ao servidor, que cria a subpasta no Drive e registra o historico.
-  window.salvarNoDrive = function(){
-    var st=getState(); if (!st || !st.results || !Object.keys(st.results).length) {
-      alert('Processe uma análise antes de salvar.'); return;
-    }
-    var btn = document.getElementById('btnSalvarDrive');
-    btn.disabled = true; var txtOrig = btn.innerText; btn.innerText = '⏳ Salvando...';
+  // Gera um .xlsx LIMPO (so dados) de cada slot carregado e envia ao servidor.
+  // Salva apenas os arquivos-fonte (estoque, contagem, vendas, cadastro, exclusoes).
+  var SLOTS_SALVAR = [
+    {tipo:'estoque',  rotulo:'Estoque_Sistema'},
+    {tipo:'contagem', rotulo:'Contagem_Fisica'},
+    {tipo:'vendas',   rotulo:'ABC_Vendas'},
+    {tipo:'cadastro', rotulo:'Cadastro'},
+    {tipo:'exclusoes',rotulo:'Exclusoes'}
+  ];
 
+  // Monta um .xlsx a partir das linhas cruas (rows) do slot.
+  function xlsxDoSlot(rows){
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.json_to_sheet(rows || []);
+    XLSX.utils.book_append_sheet(wb, ws, 'Dados');
+    var out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    return new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
+
+  window.salvarNoDrive = function(){
+    var st = getState();
+    if (!st || !st.info || !st.info.cliente || !st.info.unidade || !st.info.dataInventario) {
+      alert('Preencha Cliente, Unidade e Data do inventário antes de salvar.'); return;
+    }
+    // Confere se ha ao menos um arquivo carregado.
+    var temAlgum = SLOTS_SALVAR.some(function(s){
+      var f = st.files && st.files[s.tipo];
+      return f && f.rows && f.rows.length;
+    });
+    if (!temAlgum) { alert('Carregue ao menos um arquivo antes de salvar.'); return; }
+
+    // Passo 1: pergunta ao servidor se ja existe analise com esse cliente/unidade/data.
+    chamar({ action:'checarInventarioExistente', cpf: CPF,
+      cliente: st.info.cliente, unidade: st.info.unidade, dataInventario: st.info.dataInventario
+    }).then(function(chk){
+      var modo = 'novo';
+      if (chk && chk.existe) {
+        var r = confirm('Já existe uma análise salva para este Cliente / Unidade / Data.\n\n' +
+          'OK = SUBSTITUIR a análise existente\n' +
+          'Cancelar = CRIAR UMA NOVA (mantém a anterior)');
+        modo = r ? 'substituir' : 'novo';
+      }
+      enviarSalvamento(modo);
+    }).catch(function(err){ alert('⚠️ ' + err.message); });
+  };
+
+  function enviarSalvamento(modo){
+    var st = getState();
+    var b1 = document.getElementById('btnSalvarDrive');
+    var b2 = document.getElementById('btnSalvarDrive2');
+    [b1,b2].forEach(function(b){ if(b){ b.disabled=true; b.dataset.txt=b.innerText; b.innerText='⏳ Salvando...'; }});
+
+    var lim = function(s){ return String(s||'').replace(/[^a-zA-Z0-9]/g,'_'); };
+    var sufixo = lim(st.info.cliente)+'_'+lim(st.info.unidade)+'_'+lim(st.info.dataInventario);
     var arquivos = [];
     var tarefas = [];
 
-    // 1) Excel consolidado (usa o Export existente, capturando o blob).
-    try {
-      var wbBlob = gerarExcelBlob();
-      if (wbBlob) tarefas.push(blobParaBase64(wbBlob).then(function(b64){
-        arquivos.push({ nome: nomeArq('auditoria','xlsx'), mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base64:b64 });
-      }));
-    } catch(e){ console.error('Excel:', e); }
-
-    // 2) Planilhas de ENTRADA (o que foi carregado), como JSON.
-    try {
-      ['estoque','contagem','vendas','cadastro','exclusoes'].forEach(function(tipo){
-        var dados = getState().rawData && getState().rawData[tipo];
-        if (dados && dados.length) {
-          var json = JSON.stringify(dados, null, 2);
-          var blob = new Blob([json], {type:'application/json'});
-          tarefas.push(blobParaBase64(blob).then(function(b64){
-            arquivos.push({ nome:'entrada_'+tipo+'.json', mimeType:'application/json', base64:b64 });
-          }));
-        }
-      });
-    } catch(e){ console.error('Entradas:', e); }
-
-    // 3) Resultado completo (as 5 analises), como JSON.
-    try {
-      var jsonRes = JSON.stringify(getState().results, null, 2);
-      var blobRes = new Blob([jsonRes], {type:'application/json'});
-      tarefas.push(blobParaBase64(blobRes).then(function(b64){
-        arquivos.push({ nome:'resultado_completo.json', mimeType:'application/json', base64:b64 });
-      }));
-    } catch(e){ console.error('Resultado:', e); }
+    SLOTS_SALVAR.forEach(function(slot){
+      var f = st.files && st.files[slot.tipo];
+      if (f && f.rows && f.rows.length){
+        var blob = xlsxDoSlot(f.rows);
+        tarefas.push(blobParaBase64(blob).then(function(b64){
+          arquivos.push({
+            nome: slot.rotulo+'_'+sufixo+'.xlsx',
+            mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64:b64
+          });
+        }));
+      }
+    });
 
     Promise.all(tarefas).then(function(){
-      var resumo = montarResumo();
       return chamar({
         action:'salvarAnaliseInventario', cpf: CPF,
-        cliente: getState().info.cliente, unidade: getState().info.unidade,
-        dataInventario: getState().info.dataInventario,
-        resumo: resumo, arquivos: arquivos
+        cliente: st.info.cliente, unidade: st.info.unidade, dataInventario: st.info.dataInventario,
+        resumo: montarResumo(), arquivos: arquivos, modo: modo
       });
     }).then(function(res){
-      btn.disabled = false; btn.innerText = txtOrig;
-      alert('✅ Análise salva no Drive!\n\n' + res.arquivosSalvos + ' arquivos guardados.\n\nAbra a pasta: ' + res.linkPasta);
+      [b1,b2].forEach(function(b){ if(b){ b.disabled=false; b.innerText=b.dataset.txt||'💾 Salvar esta análise no Drive'; }});
+      alert('✅ Arquivos salvos no Drive!\n\n' + res.arquivosSalvos + ' arquivo(s)-fonte guardado(s).\n' +
+            (res.modo==='substituir'?'(análise anterior substituída)\n':'') + '\nAbrindo a pasta…');
       window.open(res.linkPasta, '_blank');
     }).catch(function(err){
-      btn.disabled = false; btn.innerText = txtOrig;
+      [b1,b2].forEach(function(b){ if(b){ b.disabled=false; b.innerText=b.dataset.txt||'💾 Salvar esta análise no Drive'; }});
       alert('⚠️ ' + err.message);
     });
-  };
+  }
 
   function nomeArq(prefixo, ext){
     var lim = function(s){ return String(s||'').replace(/[^a-zA-Z0-9]/g,'_'); };
