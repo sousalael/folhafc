@@ -576,6 +576,7 @@ window.App = {
     $('exp-perda').disabled=!r.perda;$('exp-perda').checked=!!r.perda;
     $('exportModal').classList.add('active');
   },
+  getState:function(){return State;},
   exportPDF:function(type){Export.generatePDF(type,State.results,State.processDate,LOGO,State.info);}
 };
 

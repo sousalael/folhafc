@@ -287,6 +287,11 @@ table.data-table tr:hover td{background:#eef6ff}
   var params = new URLSearchParams(window.location.search);
   var TOKEN = params.get('token') || '';
   var CPF = params.get('cpf') || '';
+  function getState(){
+    try { return (window.App && typeof window.App.getState==='function') ? window.App.getState() : (window.State||null); }
+    catch(e){ return null; }
+  }
+
 
   // Sem token = bloqueia (so entra pelo botao no Folha de Ponto).
   if (!TOKEN) { document.getElementById('bloqueio-sessao').style.display = 'flex'; }
@@ -312,7 +317,7 @@ table.data-table tr:hover td{background:#eef6ff}
   var jaApareceu = false;
   var obs = setInterval(function(){
     try {
-      if (window.State && State.results && Object.keys(State.results).length > 0) {
+      var st=getState(); if (st && st.results && Object.keys(st.results).length > 0) {
         var bs = document.getElementById('btnSalvarDrive');
         var bs2 = document.getElementById('btnSalvarDrive2');
         if (bs && !jaApareceu) {
@@ -323,7 +328,7 @@ table.data-table tr:hover td{background:#eef6ff}
         }
       } else {
         // Se resetar (novo processamento), volta a permitir mostrar.
-        if (window.State && State.results && Object.keys(State.results).length === 0) jaApareceu = false;
+        if (st && st.results && Object.keys(st.results).length === 0) jaApareceu = false;
       }
     } catch(e){}
   }, 600);
@@ -331,7 +336,7 @@ table.data-table tr:hover td{background:#eef6ff}
   // Gera os arquivos (Excel de cada analise + planilhas de entrada) em memoria
   // e envia ao servidor, que cria a subpasta no Drive e registra o historico.
   window.salvarNoDrive = function(){
-    if (!window.State || !State.results || !Object.keys(State.results).length) {
+    var st=getState(); if (!st || !st.results || !Object.keys(st.results).length) {
       alert('Processe uma análise antes de salvar.'); return;
     }
     var btn = document.getElementById('btnSalvarDrive');
@@ -351,7 +356,7 @@ table.data-table tr:hover td{background:#eef6ff}
     // 2) Planilhas de ENTRADA (o que foi carregado), como JSON.
     try {
       ['estoque','contagem','vendas','cadastro','exclusoes'].forEach(function(tipo){
-        var dados = State.rawData && State.rawData[tipo];
+        var dados = getState().rawData && getState().rawData[tipo];
         if (dados && dados.length) {
           var json = JSON.stringify(dados, null, 2);
           var blob = new Blob([json], {type:'application/json'});
@@ -364,7 +369,7 @@ table.data-table tr:hover td{background:#eef6ff}
 
     // 3) Resultado completo (as 5 analises), como JSON.
     try {
-      var jsonRes = JSON.stringify(State.results, null, 2);
+      var jsonRes = JSON.stringify(getState().results, null, 2);
       var blobRes = new Blob([jsonRes], {type:'application/json'});
       tarefas.push(blobParaBase64(blobRes).then(function(b64){
         arquivos.push({ nome:'resultado_completo.json', mimeType:'application/json', base64:b64 });
@@ -375,8 +380,8 @@ table.data-table tr:hover td{background:#eef6ff}
       var resumo = montarResumo();
       return chamar({
         action:'salvarAnaliseInventario', cpf: CPF,
-        cliente: State.info.cliente, unidade: State.info.unidade,
-        dataInventario: State.info.dataInventario,
+        cliente: getState().info.cliente, unidade: getState().info.unidade,
+        dataInventario: getState().info.dataInventario,
         resumo: resumo, arquivos: arquivos
       });
     }).then(function(res){
@@ -391,7 +396,7 @@ table.data-table tr:hover td{background:#eef6ff}
 
   function nomeArq(prefixo, ext){
     var lim = function(s){ return String(s||'').replace(/[^a-zA-Z0-9]/g,'_'); };
-    return prefixo+'_'+lim(State.info.cliente)+'_'+lim(State.info.unidade)+'_'+lim(State.info.dataInventario)+'.'+ext;
+    return prefixo+'_'+lim(getState().info.cliente)+'_'+lim(getState().info.unidade)+'_'+lim(getState().info.dataInventario)+'.'+ext;
   }
 
   // Gera o Excel em memoria (reaproveita a logica do Export, mas retorna o blob).
@@ -399,7 +404,7 @@ table.data-table tr:hover td{background:#eef6ff}
     // O Export.generateExcel baixa direto; aqui montamos um workbook simples com
     // os resultados. Se o Export expuser um metodo de blob, usamos ele.
     if (window.Export && typeof Export.generateExcelBlob === 'function') {
-      return Export.generateExcelBlob(State.results, State.processDate, State.info);
+      return Export.generateExcelBlob(getState().results, getState().processDate, getState().info);
     }
     // Fallback: cria um resumo em uma aba unica.
     var wb = XLSX.utils.book_new();
@@ -414,11 +419,11 @@ table.data-table tr:hover td{background:#eef6ff}
   function montarResumo(){
     var r = {};
     try {
-      r.cliente = State.info.cliente;
-      r.unidade = State.info.unidade;
-      r.data = State.info.dataInventario;
-      if (State.results.critica) {
-        var c = State.results.critica;
+      r.cliente = getState().info.cliente;
+      r.unidade = getState().info.unidade;
+      r.data = getState().info.dataInventario;
+      if (getState().results.critica) {
+        var c = getState().results.critica;
         r.itens_analisados = c.length;
         var faltas = c.filter(function(i){return i.status==='Falta';}).length;
         var sobras = c.filter(function(i){return i.status==='Sobra';}).length;

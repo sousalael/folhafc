@@ -33,51 +33,64 @@ function top20Cat(items){var m={};items.forEach(function(i){var c=i.categoria||'
 /* ===== RESUMOS EXECUTIVOS ===== */
 function sumCritica(c){
   var w=c.categorias.filter(function(x){return x.nome!=='Sem categoria';}).sort(function(a,b){return a.acuracidade-b.acuracidade;});
-  var wn=w.slice(0,2).map(function(x){return x.nome+' ('+PCT(x.acuracidade)+')';}).join(' e ');
-  var t='A unidade apresentou acuracidade de '+PCT(c.acuracidade);
-  t+='. Das '+NUM(c.totalSKUs)+' posições auditadas, '+NUM(c.faltaCount)+' apresentaram faltas totalizando '+BRLi(c.totalFaltas)+', concentradas nas categorias de maior perecibilidade. As sobras somaram '+BRLi(c.totalSobras)+', resultando em saldo líquido negativo de '+BRLi(c.saldoLiquido)+'.';
-  if(w.length&&w[0].acuracidade<90)t+=' A categoria '+wn+' merece atenção especial, sugerindo fragilidade no controle de produtos com alta perecibilidade.';
+  var desvio=Math.round((100-c.acuracidade)*10)/10;
+  var t='A auditoria comparou '+NUM(c.totalSKUs)+' SKUs entre o saldo do sistema e a contagem física, apurando uma acuracidade de '+PCT(c.acuracidade)+' — ou seja, '+NUM(c.okCount)+' itens sem qualquer divergência. Foram registradas '+NUM(c.faltaCount)+' faltas (itens com saldo físico menor que o sistema), somando '+BRLi(c.totalFaltas)+' em valor não localizado, e '+NUM(c.sobraCount)+' sobras, no valor de '+BRLi(c.totalSobras)+'. O resultado é um saldo líquido de '+BRLi(c.saldoLiquido)+', que representa o impacto financeiro direto das divergências sobre o estoque registrado.';
+  t+='\n\nUma acuracidade de '+PCT(c.acuracidade)+' indica que a cada 100 posições, cerca de '+desvio+' apresentam algum desvio — número que serve de termômetro para a confiabilidade do estoque no ERP.';
+  if(w.length){
+    var c1=w[0], nomes=c1.nome+' ('+PCT(c1.acuracidade)+')';
+    if(w.length>1){nomes+=' e '+w[1].nome+' ('+PCT(w[1].acuracidade)+')';}
+    t+=' As categorias com menor acuracidade foram '+nomes+', que concentram a maior fragilidade de controle e devem ser priorizadas em recontagens e na revisão dos processos de entrada e baixa de mercadoria.';
+  }
+  t+=' Faltas em produtos perecíveis costumam apontar para inversão de códigos no registro de vendas ou perdas não registradas (quebra, vencimento, furto, desidratação), enquanto sobras sugerem falhas de lançamento na entrada.';
   return t;
 }
 function metCritica(){return'Cada SKU é comparado entre o saldo registrado no sistema (ERP) e a contagem física realizada no inventário. A diferença (contado - sistema) determina a classificação: Falta (negativo), Sobra (positivo) ou Sem divergência (zero). O valor financeiro da divergência é calculado multiplicando a diferença pelo custo unitário do produto. A acuracidade representa o percentual de SKUs sem nenhuma divergência sobre o total analisado.';}
 function sumRuptura(r){
-  var t='Foram identificados '+NUM(r.totalRupturas)+' itens em ruptura (presentes no depósito mas ausentes no salão de vendas), correspondendo a uma taxa de ruptura de '+PCT(r.taxaRuptura)+'.';
-  if(r.rupturaA>0)t+=' Destes, '+NUM(r.rupturaA)+' são itens curva A por faturamento — produtos de alta demanda cuja ausência na gôndola gera perda direta de receita.';
+  var t='Foram identificados '+NUM(r.totalRupturas)+' itens armazenados e não expostos — produtos com saldo no depósito, porém ausentes (quantidade zero) no salão de vendas —, o que representa uma taxa de ruptura de '+PCT(r.taxaRuptura)+' sobre os '+NUM(r.totalComDeposito)+' itens disponíveis em estoque. Cada item nessa condição é uma venda potencial perdida: o produto existe na loja, mas não está acessível ao consumidor na gôndola.';
+  t+='\n\nDo total, '+NUM(r.rupturaA)+' itens são curva A por faturamento e '+NUM(r.rupturaB)+' são curva B — as faixas de maior giro, cuja ausência gera perda direta e imediata de receita, além da possibilidade de gerar insatisfação nos clientes da loja.';
   var wCat=r.categorias.filter(function(x){return x.rupturaA>0;}).sort(function(a,b){return b.rupturaA-a.rupturaA;});
-  if(wCat.length)t+=' A categoria '+wCat[0].nome+' concentra o maior número de rupturas curva A, indicando possível falha no processo de reposição.';
+  if(wCat.length)t+=' A categoria '+wCat[0].nome+' concentra o maior número de rupturas curva A, o que aponta para uma falha no processo de reposição desses produtos: vale investigar se o problema está na frequência de abastecimento da gôndola, na conferência de estoque ou no ponto de pedido.';
+  t+=' Reduzir a ruptura dos itens A é a ação de retorno mais rápido, pois converte estoque parado em venda sem necessidade de nova compra.';
   return t;
 }
-function metRuptura(){return'Analisa-se a contagem física por local (depósito vs. loja/salão). Itens que possuem estoque no depósito mas quantidade zero na loja são classificados como ruptura — produto disponível no estoque que não está acessível ao consumidor. A classificação ABC é aplicada com base no faturamento e no lucro dos últimos 90 dias, permitindo priorizar as rupturas de maior impacto financeiro.';}
-function sumDias(d){
+function metRuptura(dias){dias=dias||90;return'Analisa-se a contagem física por local (depósito vs. loja/salão). Itens que possuem estoque no depósito mas quantidade zero na loja são classificados como ruptura — produto disponível no estoque que não está acessível ao consumidor. A classificação ABC é aplicada com base no faturamento e no lucro dos últimos '+dias+' dias, permitindo priorizar as rupturas de maior impacto financeiro.';}
+function sumDias(d,dias){
+  dias=dias||90;
   var t='A cobertura geral do estoque é de '+d.coberturaGeral+' dias';
-  if(d.coberturaGeral>=16&&d.coberturaGeral<=30)t+=', considerada adequada para o varejo alimentar';
-  t+='. Entretanto, itens curva A apresentam cobertura de apenas '+d.coberturaA+' dias';
-  if(d.coberturaA<10)t+=', representando alto risco de desabastecimento dos produtos mais vendidos';
-  t+='. Na direção oposta, '+NUM(d.excessos)+' SKUs apresentam excesso de cobertura (acima de 30 dias), imobilizando '+BRLi(d.valorExcesso||0)+' em capital.';
-  if(d.semGiro>0)t+=' Há ainda '+NUM(d.semGiro)+' itens sem giro nos últimos 90 dias, candidatos a ação de liquidação ou devolução ao fornecedor.';
+  if(d.coberturaGeral>=16&&d.coberturaGeral<=30)t+=' (considerada adequada para o varejo alimentar)';
+  t+=', o que indica por quantos dias o estoque atual sustentaria a venda no ritmo médio dos últimos '+dias+' dias. Essa média, porém, esconde desequilíbrios importantes entre as curvas: os itens de curva A cobrem apenas '+d.coberturaA+' dias';
+  if(d.coberturaA<10)t+=' (alto risco de desabastecimento dos produtos mais vendidos)';
+  t+=', enquanto a curva C cobre '+d.coberturaC+' dias — sinal de compra equivocada, com falta no que mais vende e excesso no que menos gira.';
+  t+='\n\nA distribuição por faixa revela '+NUM(d.ruptura)+' itens já em ruptura, '+NUM(d.altoRisco)+' em alto risco (3–5 dias) e '+NUM(d.medioRisco)+' em risco médio — todos candidatos a reposição prioritária. No extremo oposto, '+NUM(d.excessos)+' SKUs estão em excesso de cobertura (acima de 30 dias), imobilizando '+BRLi(d.valorExcesso||0)+' em capital de giro que poderia ser liberado.';
+  if(d.semGiro>0)t+=' Há ainda '+NUM(d.semGiro)+' itens sem giro nos últimos '+dias+' dias — estoque parado, que merece ter a causa investigada e solucionada o quanto antes.';
+  t+=' O equilíbrio ideal passa por realocar capital da cauda (C e sem giro) para investir nos itens A.';
   return t;
 }
-function metDias(){return'A cobertura em dias é obtida dividindo o estoque atual pela venda média diária (venda dos últimos 90 dias / 90). O resultado é classificado em faixas: Ruptura (0-2 dias), Alto risco (3-5 dias), Médio risco (6-15 dias), Cobertura ideal (16-30 dias), Excesso de cobertura (31+ dias) e Sem giro (nenhuma venda em 90 dias). A cobertura por curva ABC pondera o estoque e a demanda de todos os itens daquela curva.';}
-function sumABC(a){
-  var t='O estoque total inventariado soma '+BRLi(a.totalInvest)+'. Itens curva A (faturamento) representam '+PCT(a.fatA.pctInvest)+' do valor em estoque e respondem por '+PCT(a.fatA.pctFat)+' do faturamento';
-  if(a.fatA.pctFat>a.fatA.pctInvest)t+=' — proporção saudável';
-  t+='. Já itens curva C consomem '+PCT(a.fatC.pctInvest)+' do capital investido gerando apenas '+PCT(a.fatC.pctFat)+' da receita';
-  if(a.fatC.pctInvest>a.fatC.pctFat+5)t+=', sinalizando oportunidade de redução de estoque nessa faixa';
-  t+='. A análise por lucro revela que a curva A por lucratividade não coincide integralmente com a curva A por faturamento, indicando que alguns itens de alto giro operam com margens reduzidas.';
+function metDias(dias){dias=dias||90;return'A cobertura em dias é obtida dividindo o estoque atual pela venda média diária (venda dos últimos '+dias+' dias / '+dias+'). O resultado é classificado em faixas: Ruptura (0-2 dias), Alto risco (3-5 dias), Médio risco (6-15 dias), Cobertura ideal (16-30 dias), Excesso de cobertura (31+ dias) e Sem giro (nenhuma venda em '+dias+' dias). A cobertura por curva ABC pondera o estoque e a demanda de todos os itens daquela curva.';}
+function sumABC(a,dias){
+  dias=dias||90;
+  var t='O estoque total inventariado soma '+BRLi(a.totalInvest)+', distribuído segundo o princípio de Pareto entre as três curvas. Os itens curva A por faturamento representam '+PCT(a.fatA.pctInvest)+' do capital em estoque e respondem por '+PCT(a.fatA.pctFat)+' do faturamento dos últimos '+dias+' dias';
+  if(a.fatA.pctFat>a.fatA.pctInvest)t+=' (proporção saudável, pois pouco capital gera muita receita)';
+  t+='. A curva B ocupa '+PCT(a.fatB.pctInvest)+' do estoque para '+PCT(a.fatB.pctFat)+' da receita, e a curva C consome '+PCT(a.fatC.pctInvest)+' do capital gerando apenas '+PCT(a.fatC.pctFat)+' do faturamento';
+  if(a.fatC.pctInvest>a.fatC.pctFat+5)t+=' (sinalizando oportunidade de redução de estoque nessa faixa)';
+  t+='.';
+  t+='\n\nO cruzamento faturamento × lucro é o ponto mais estratégico da análise: a curva A por lucratividade não coincide integralmente com a curva A por faturamento. Itens que vendem muito (alto faturamento) mas operam com margem baixa aparecem em A no faturamento e caem para B/C no lucro — são produtos de "giro que não paga". Na direção inversa, itens de menor volume mas alta margem sobem para A no lucro: são os que mais contribuem para o resultado e merecem proteção contra ruptura. A curva A por lucro concentra '+PCT(a.lucA.pctLuc)+' do lucro total consumindo '+PCT(a.lucA.pctInvest)+' do capital.';
+  t+='\n\nLeitura gerencial: o capital deve migrar da curva C (muito investimento, pouco retorno) para sustentar os itens A — priorizando, dentro de A, aqueles que são A tanto em faturamento quanto em lucro, pois combinam volume e rentabilidade. Uma redução planejada do estoque C libera capital de giro sem afetar receita relevante, e a atenção redobrada aos itens A-lucro protege a margem do negócio.';
   return t;
 }
-function metABC(){return'A classificação ABC ordena todos os SKUs pelo valor acumulado (faturamento ou lucro dos últimos 90 dias). Os itens que representam até 80% do valor acumulado são classificados como curva A, de 80% a 95% como curva B, e os demais como curva C. O valor em estoque de cada item é calculado pela quantidade em estoque multiplicada pelo custo unitário (derivado do CMV quando não informado diretamente).';}
-function sumPerda(p){
-  var t='Foram identificados '+NUM(p.totalSKUs)+' itens com venda nos últimos 90 dias que não constam na contagem física, gerando uma perda estimada de '+BRLi(p.totalPerdaFat)+'/dia em faturamento e '+BRLi(p.totalPerdaLucro)+'/dia em lucro bruto. Projetando 30 dias, o impacto mensal é de '+BRLi(p.perdaMensal)+' em receita não realizada.';
+function metABC(dias){dias=dias||90;return'A classificação ABC ordena todos os SKUs pelo valor acumulado (faturamento ou lucro dos últimos '+dias+' dias). Os itens que representam até 80% do valor acumulado são classificados como curva A, de 80% a 95% como curva B, e os demais como curva C. O valor em estoque de cada item é calculado pela quantidade em estoque multiplicada pelo custo unitário (derivado do CMV quando não informado diretamente).';}
+function sumPerda(p,dias){
+  dias=dias||90;
+  var t='Foram identificados '+NUM(p.totalSKUs)+' itens com venda registrada nos últimos '+dias+' dias que não constam na contagem física (zerados ou ausentes) — ou seja, produtos que comprovadamente vendiam e hoje não estão disponíveis. Com base na demanda média diária de cada um, projeta-se uma perda de '+BRLi(p.totalPerdaFat)+'/dia em faturamento e '+BRLi(p.totalPerdaLucro)+'/dia em lucro bruto. Estendendo ao mês, o impacto é de '+BRLi(p.perdaMensal)+' em receita não realizada — dinheiro que o negócio deixa de faturar enquanto o abastecimento não é regularizado.';
   if(p.classA.count>0){
-    t+=' Os itens curva A respondem por '+PCT(p.classA.pct)+' dessa perda';
+    t+='\n\nA perda está fortemente concentrada: os itens curva A respondem por '+PCT(p.classA.pct)+' do total';
     var topP=p.items.filter(function(i){return i.abcFat==='A';}).slice(0,2);
-    if(topP.length>=2)t+=', com destaque para '+topP[0].descricao+' e '+topP[1].descricao+' entre os maiores ofensores';
-    t+='. A regularização do abastecimento desses itens é a ação de maior retorno financeiro no curto prazo.';
+    if(topP.length>=2)t+=', com destaque para '+topP[0].descricao+' e '+topP[1].descricao+' entre os maiores ofensores individuais';
+    t+='. Essa concentração é uma boa notícia operacional — significa que regularizar poucos itens de alto impacto recupera a maior parte da perda. A curva B contribui com '+PCT(p.classB.pct)+' e a C com '+PCT(p.classC.pct)+'. A ação de maior retorno financeiro no curto prazo é repor com urgência os itens A ausentes, seguida da investigação da causa raiz (o item não foi comprado, foi perdido, ou há erro de contagem?).';
   }
   return t;
 }
-function metPerda(){return'Para cada item com venda registrada nos últimos 90 dias e que não consta na contagem física (quantidade contada igual a zero ou ausente), projeta-se a venda perdida com base na demanda média diária. A perda diária de faturamento é a venda média diária em R$; a perda de lucro é o lucro médio diário. A projeção mensal multiplica esses valores por 30 dias. A premissa é que a demanda média dos últimos 90 dias representa o padrão normal de consumo.';}
+function metPerda(dias){dias=dias||90;return'Para cada item com venda registrada nos últimos '+dias+' dias e que não consta na contagem física (quantidade contada igual a zero ou ausente), projeta-se a venda perdida com base na demanda média diária. A perda diária de faturamento é a venda média diária em R$; a perda de lucro é o lucro médio diário. A projeção mensal multiplica esses valores por 30 dias. A premissa é que a demanda média dos últimos '+dias+' dias representa o padrão normal de consumo.';}
 
 /* ===== GERAR EXCEL ===== */
 /* Monta o workbook (sem baixar) — usado pelo download e pela gravacao no Drive. */
@@ -162,7 +175,7 @@ function generatePDF(rt,data,pd,logo,info){
     var r=data.ruptura;var temVendas=r.items.some(function(i){return i.vendaMediaDia>0;});
     ttl('Ruptura — Resumo executivo');
     sec('Análise');bloco(temVendas?sumRuptura(r):'Foram identificados '+NUM(r.totalRupturas)+' itens em ruptura (presentes no depósito mas ausentes no salão de vendas). Sem dados de vendas disponíveis para análise de impacto financeiro.');
-    sec('Metodologia');bloco(metRuptura());
+    sec('Metodologia');bloco(metRuptura(info.diasVenda));
     sec('Indicadores gerais');kpi(['TAXA DE RUPTURA','SKUS EM RUPTURA','RUPTURA CURVA A (FAT.)','RUPTURA CURVA A (LUCRO)'],[PCT(r.taxaRuptura),NUM(r.totalRupturas),PCT(r.taxaA),PCT(r.taxaALucro)],[[211,47,47],[51,51,51],[211,47,47],[211,47,47]]);
     if(temVendas){
       sec('Rupturas curva A — Top 30');var topA=r.items.filter(function(i){return i.abc_valorVendido90==='A';}).slice(0,30);
@@ -179,7 +192,7 @@ function generatePDF(rt,data,pd,logo,info){
   }
   else if(rt==='dias'){
     var d=data.dias,fv=fxV(d.items);ttl('Dias de estoque — Resumo executivo');
-    sec('Análise');bloco(sumDias(d));sec('Metodologia');bloco(metDias());
+    sec('Análise');bloco(sumDias(d,info.diasVenda));sec('Metodologia');bloco(metDias(info.diasVenda));
     sec('Indicadores gerais');kpi(['COBERTURA GERAL','CURVA A','CURVA B','CURVA C'],[d.coberturaGeral+' dias',d.coberturaA+' dias',d.coberturaB+' dias',d.coberturaC+' dias'],[[51,51,51],[211,47,47],[245,124,0],[136,136,136]]);
     sec('Distribuição por faixa');var fo=['Ruptura','Alto risco','Médio risco','Cobertura ideal','Excesso de cobertura','Sem giro'];
     aT(['Faixa','SKUs','% SKUs','Valor Estoque (R$)','% do Valor'],fo.map(function(f){var cn=d.items.filter(function(i){return i.faixa===f;}).length;var vl=fv.f[f]||0;return[f,cn,PCT(d.total?cn/d.total*100:0),BRLi(vl),PCT(fv.t?vl/fv.t*100:0)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
@@ -189,13 +202,13 @@ function generatePDF(rt,data,pd,logo,info){
   }
   else if(rt==='abc'){
     var a=data.abc;ttl('Investimento por curva ABC — Resumo executivo');
-    sec('Análise');bloco(sumABC(a));sec('Metodologia');bloco(metABC());
+    sec('Análise');bloco(sumABC(a,info.diasVenda));sec('Metodologia');bloco(metABC(info.diasVenda));
     sec('Curva ABC por faturamento');aT(['Curva','Valor Estoque (R$)','% Estoque','Faturamento (R$)','% Faturamento'],[['A',BRLi(a.fatA.invest),PCT(a.fatA.pctInvest),BRLi(a.fatA.fat),PCT(a.fatA.pctFat)],['B',BRLi(a.fatB.invest),PCT(a.fatB.pctInvest),BRLi(a.fatB.fat),PCT(a.fatB.pctFat)],['C',BRLi(a.fatC.invest),PCT(a.fatC.pctInvest),BRLi(a.fatC.fat),PCT(a.fatC.pctFat)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
     sec('Curva ABC por lucro');aT(['Curva','Valor Estoque (R$)','% Estoque','Lucro (R$)','% Lucro'],[['A',BRLi(a.lucA.invest),PCT(a.lucA.pctInvest),BRLi(a.lucA.luc),PCT(a.lucA.pctLuc)],['B',BRLi(a.lucB.invest),PCT(a.lucB.pctInvest),BRLi(a.lucB.luc),PCT(a.lucB.pctLuc)],['C',BRLi(a.lucC.invest),PCT(a.lucC.pctInvest),BRLi(a.lucC.luc),PCT(a.lucC.pctLuc)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
   }
   else if(rt==='perda'){
     var p=data.perda;ttl('Projeção de venda perdida — Resumo executivo');
-    sec('Análise');bloco(sumPerda(p));sec('Metodologia');bloco(metPerda());
+    sec('Análise');bloco(sumPerda(p,info.diasVenda));sec('Metodologia');bloco(metPerda(info.diasVenda));
     sec('Indicadores gerais');kpi(['PERDA FAT./DIA','PERDA LUCRO/DIA','PERDA MENSAL','SKUS'],[BRLi(p.totalPerdaFat),BRLi(p.totalPerdaLucro),BRLi(p.perdaMensal),NUM(p.totalSKUs)],[[211,47,47],[211,47,47],[211,47,47],[51,51,51]]);
     sec('Impacto por curva ABC');aT(['Curva','SKUs','Perda Fat./Dia','Perda Lucro/Dia','% Perda','Perda Mensal'],[['A',p.classA.count,BRLi(p.classA.perda),BRLi(p.classA.lucro),PCT(p.classA.pct),BRLi(p.classA.perda*30)],['B',p.classB.count,BRLi(p.classB.perda),BRLi(p.classB.lucro),PCT(p.classB.pct),BRLi(p.classB.perda*30)],['C',p.classC.count,BRLi(p.classC.perda),BRLi(p.classC.lucro),PCT(p.classC.pct),BRLi(p.classC.perda*30)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}});
     var pH2=['SKU','Descrição','Categoria','Perda Fat./Mês','Perda Lucro/Mês'],pO2={3:{halign:'right'},4:{halign:'right'}};
