@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Auditoria de Operação — Sistema de Gestão FC</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+:root{--navy:#002B50;--green:#61CF00;--orange:#E8872B;--dark:#051323;--bg:#F4F6F8;--text:#1A2A3A;--text-light:#6B7B8D;--border:#E2E8F0;--white:#FFF;--red:#E05252;--amber:#D4A017}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* HEADER */
+.app-header{background:var(--dark);padding:24px 16px;text-align:center}
+.app-header img{height:52px;margin-bottom:10px}
+.app-header .header-bar{display:flex;align-items:center;justify-content:space-between;max-width:560px;margin:0 auto}
+.app-header .badge-mod{background:var(--green);color:var(--dark);font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;letter-spacing:.5px}
+.app-header .btn-voltar{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);font-size:11px;padding:4px 12px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.app-header .btn-voltar:hover{border-color:rgba(255,255,255,.5);color:#FFF}
+.app-header .badge-mod{background:var(--green);color:var(--dark);font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:.5px}
+
+/* TELA INICIAL */
+.tela-inicial{max-width:480px;margin:40px auto;padding:0 16px}
+.card-inicio{background:var(--white);border-radius:16px;padding:28px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:none}
+.card-inicio h2{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.card-inicio p{font-size:13px;color:var(--text-light);margin-bottom:20px}
+.btn-fc{border:none;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:600;width:100%;cursor:pointer;transition:all .2s}
+.btn-fc-green{background:var(--green);color:var(--dark)}.btn-fc-green:hover{background:#56b800;color:var(--dark)}
+.btn-fc-navy{background:var(--navy);color:var(--white)}.btn-fc-navy:hover{background:#001d38;color:var(--white)}
+.btn-fc-orange{background:var(--orange);color:var(--white)}.btn-fc-orange:hover{background:#cf7520;color:var(--white)}
+.btn-fc-outline{background:transparent;border:2px solid var(--border);color:var(--text)}.btn-fc-outline:hover{border-color:var(--navy);color:var(--navy)}
+
+/* RASCUNHOS */
+.rascunho-item{background:var(--white);border-radius:12px;padding:16px;margin-bottom:10px;border:2px solid var(--border);cursor:pointer;transition:all .2s}
+.rascunho-item:hover{border-color:var(--green)}.rascunho-item .ri-titulo{font-weight:600;font-size:14px;color:var(--navy)}
+.rascunho-item .ri-sub{font-size:12px;color:var(--text-light);margin-top:2px}
+.rascunho-item .ri-badge{display:inline-block;background:var(--orange);color:var(--white);font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;margin-top:6px}
+
+/* STEPPER */
+.stepper-bar{background:var(--white);border-bottom:1px solid var(--border);padding:10px 16px;position:sticky;top:0;z-index:99;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+.stepper-bar::-webkit-scrollbar{display:none}
+.step-dot{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;margin-right:4px;cursor:pointer;transition:all .2s;border:2px solid transparent;color:var(--text-light);background:var(--bg)}
+.step-dot.active{background:var(--navy);color:var(--white);border-color:var(--navy)}
+.step-dot.done{background:rgba(97,207,0,.15);color:#3a8000;border-color:var(--green)}
+.step-dot .bi{font-size:12px}
+
+/* FORM CONTAINER */
+.form-container{max-width:560px;margin:0 auto;padding:16px}
+.secao-card{background:var(--white);border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.secao-titulo{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.secao-subtitulo{font-size:12px;color:var(--text-light);margin-bottom:20px;padding-left:28px}
+
+/* SUBSECAO ACCORDION */
+.subsecao{border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.subsecao-header{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:var(--bg);transition:all .2s}
+.subsecao-header:hover{background:#e8ecf0}
+.subsecao-header .sh-titulo{font-size:13px;font-weight:600;color:var(--text)}
+.subsecao-header .sh-badge{font-size:11px;padding:2px 8px;border-radius:8px;font-weight:600}
+.subsecao-header .sh-badge.pendente{background:#fef3cd;color:#856404}
+.subsecao-header .sh-badge.preenchido{background:rgba(97,207,0,.15);color:#3a8000}
+.subsecao-body{padding:16px;display:none;border-top:1px solid var(--border)}
+.subsecao.aberta .subsecao-body{display:block}
+.subsecao.aberta .subsecao-header{background:var(--white)}
+
+/* CRITERIO */
+.criterio{margin-bottom:20px}
+.criterio:last-child{margin-bottom:0}
+.criterio-label{font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px;line-height:1.4}
+.escala-hints{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;color:var(--text-light)}
+.rating-row{display:flex;gap:4px;flex-wrap:wrap}
+.rating-btn{width:calc((100% - 20px) / 6);min-width:0;height:38px;border:2px solid var(--border);border-radius:8px;background:var(--white);font-size:13px;font-weight:600;color:var(--text-light);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+.rating-btn:hover{border-color:var(--navy);color:var(--navy)}
+.rating-btn.selected{color:var(--white);border-color:transparent}
+.rating-btn.selected.score-low{background:var(--red)}
+.rating-btn.selected.score-mid{background:var(--orange)}
+.rating-btn.selected.score-ok{background:var(--amber)}
+.rating-btn.selected.score-high{background:var(--green)}
+.rating-btn.na-btn{font-size:11px;letter-spacing:.5px}
+.rating-btn.na-btn.selected{background:var(--text-light)}
+
+/* CAMPOS */
+.campo-obs textarea{width:100%;border:2px solid var(--border);border-radius:10px;padding:12px;font-size:13px;resize:vertical;min-height:80px;font-family:inherit;transition:border-color .2s}
+.campo-obs textarea:focus{outline:none;border-color:var(--navy)}
+.campo-obs label{font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+
+.campo-input{margin-bottom:16px}
+.campo-input label{font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+.campo-input input,.campo-input select{width:100%;border:2px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-family:inherit;transition:border-color .2s;background:var(--white);color:var(--text)}
+.campo-input input:focus,.campo-input select:focus{outline:none;border-color:var(--navy)}
+
+/* FOTOS */
+.fotos-section{margin-top:16px}
+.fotos-section label{font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:block}
+.fotos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.foto-slot{aspect-ratio:4/3;border:2px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-direction:column;cursor:pointer;transition:all .2s;overflow:hidden;position:relative;background:var(--bg)}
+.foto-slot:hover{border-color:var(--navy)}
+.foto-slot .bi{font-size:20px;color:var(--text-light)}
+.foto-slot span{font-size:10px;color:var(--text-light);margin-top:2px}
+.foto-slot img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.foto-slot .foto-remove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:var(--white);border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+
+/* NAVIGATION */
+.nav-bottom{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:10px;z-index:100;justify-content:center;max-width:560px;margin:0 auto}
+.nav-bottom .btn-fc{width:auto;flex:1;max-width:200px}
+.body-pad{padding-bottom:80px}
+
+/* PROGRESS */
+.progress-info{text-align:center;padding:8px;font-size:11px;color:var(--text-light);background:var(--white);border-top:1px solid var(--border)}
+
+/* STATUS */
+.status-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--white);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none}
+.status-toast.show{opacity:1}
+
+/* LOADING */
+.loading-overlay{position:fixed;inset:0;background:rgba(5,19,35,.7);display:flex;align-items:center;justify-content:center;z-index:300;flex-direction:column;gap:12px;color:var(--white);font-size:14px}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.3);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* SCORE PREVIEW */
+.score-preview{display:flex;align-items:center;gap:8px;margin-top:12px;padding:10px 14px;background:var(--bg);border-radius:10px}
+.score-preview .sp-valor{font-size:22px;font-weight:700;color:var(--navy)}
+.score-preview .sp-label{font-size:11px;color:var(--text-light)}
+
+@media(max-width:380px){.rating-btn{font-size:12px}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="app-header">
+  <img src="data:image/jpeg;base64,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" alt="Formula Code">
+  <div class="header-bar">
+    <a class="btn-voltar" onclick="window.history.back()"><i class="bi bi-arrow-left"></i> Voltar</a>
+    <span class="badge-mod">AUDITORIA DE OPERAÇÃO</span>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="status-toast"></div>
+
+<!-- LOADING -->
+<div id="loading" class="loading-overlay" style="display:none">
+  <div class="spinner"></div>
+  <span id="loadingMsg">Carregando...</span>
+</div>
+
+<!-- APP -->
+<div id="app"></div>
+
+<!-- INPUT CAMERA OCULTO -->
+<input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   CONSTANTES
+   ═══════════════════════════════════════════════════════ */
+const API_URL = 'https://script.google.com/macros/s/AKfycbxV6bx-q7pVeDy05uXzCzL8rqPhd3_nhFD_IoGcGEFw4x3gdXZwOsAjIE4hbnYzoFZF/exec';
+const VERSAO = 'r47';
+
+/* ═══════════════════════════════════════════════════════
+   DEFINIÇÃO DOS CRITÉRIOS (fonte da verdade)
+   ═══════════════════════════════════════════════════════ */
+const SECOES = [
+  // ── 0. IDENTIFICAÇÃO ──
+  {
+    id:'identificacao', titulo:'Identificação', icone:'bi-clipboard-check',
+    tipo:'identificacao',
+    campos:[
+      {id:'tipo_avaliacao',label:'Tipo de Avaliação',tipo:'select',opcoes:['PRÉ-OPERAÇÃO','DURANTE A OPERAÇÃO']},
+      {id:'cliente',label:'Cliente',tipo:'select_cliente'},
+      {id:'unidade',label:'Unidade',tipo:'select_unidade'},
+      {id:'data_auditoria',label:'Data da Auditoria',tipo:'date'},
+      {id:'responsavel_cliente',label:'Responsável do Cliente',tipo:'text'}
+    ]
+  },
+  // ── 1. ESTRUTURA FÍSICA ──
+  {
+    id:'estrutura_fisica', titulo:'Estrutura Física', icone:'bi-building',
+    estrutura:'Retaguarda', departamento:'Estrutura Física',
+    criterios:[
+      {id:'ef_iluminacao',label:'Iluminação — suficiente para a contagem'},
+      {id:'ef_equipamentos',label:'Equipamentos de suporte aéreo — quantidade adequada'}
+    ],
+    fotos:{max:3,label:'Fotos da estrutura física'}
+  },
+  // ── 2. DEPÓSITO LINHA SECA ──
+  {
+    id:'deposito', titulo:'Depósito Linha Seca', icone:'bi-box-seam',
+    estrutura:'Retaguarda', departamento:'Mercearia', secao:'Depósito linha seca',
+    criterios:[
+      {id:'dls_acesso',label:'Acesso aos produtos — fácil e sem obstruções'},
+      {id:'dls_layout',label:'Loteamento de produtos adequado para mapeamento'},
+      {id:'dls_espaco',label:'Espaço para movimentação de produtos'},
+      {id:'dls_separacao',label:'Separação física da mercadoria'},
+      {id:'dls_organizacao',label:'Organização dos produtos'}
+    ],
+    observacao:{id:'obs_deposito',label:'Observações sobre o depósito'},
+    fotos:{max:3,label:'Fotos do depósito'}
+  },
+  // ── 3. AÉREOS E SUB-AÉREOS — RETAGUARDA ──
+  {
+    id:'aereos_retaguarda', titulo:'Aéreos e Sub-aéreos — Retaguarda', icone:'bi-box-arrow-up',
+    estrutura:'Retaguarda', departamento:'Mercearia',
+    subsecoes:[
+      {id:'sub_aereos_ret',titulo:'Aéreos',criterios:[
+        {id:'ret_aer_pallets',label:'Aéreos com pallets full'},
+        {id:'ret_aer_org',label:'Produtos organizados'},
+        {id:'ret_aer_qtd',label:'Quantidade de produtos',tipo:'escala_volume'}
+      ]},
+      {id:'sub_subaereos_ret',titulo:'Sub-aéreos',criterios:[
+        {id:'ret_sub_qtd',label:'Quantidade de produtos',tipo:'escala_volume'},
+        {id:'ret_sub_org',label:'Produtos organizados'}
+      ]}
+    ],
+    fotos:{max:3,label:'Fotos dos aéreos e sub-aéreos — retaguarda'}
+  },
+  // ── 4. EQUIPE DE APOIO — RETAGUARDA ──
+  {
+    id:'equipe_retaguarda', titulo:'Equipe de Apoio — Retaguarda', icone:'bi-people',
+    estrutura:'Retaguarda', departamento:'Mercearia', secao:'Equipe do Cliente',
+    criterios:[
+      {id:'eq_ret_qtd',label:'Equipe de suporte em quantidade suficiente'},
+      {id:'eq_ret_prest',label:'Disponibilidade da equipe — foram prestativos?'}
+    ]
+  },
+  // ── 4. CÂMARAS FRIGORÍFICAS ──
+  {
+    id:'camaras', titulo:'Câmaras Frigoríficas', icone:'bi-snow2',
+    estrutura:'Retaguarda', departamento:'Perecíveis',
+    subsecoes:[
+      {id:'sub_congelados',titulo:'Congelados',criterios:[
+        {id:'cam_cong_org',label:'Organização da Câmara'},
+        {id:'cam_cong_vol',label:'Volume de mercadoria'},
+        {id:'cam_cong_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
+        {id:'cam_cong_eq_prest',label:'Equipe de suporte — prestatividade'}
+      ]},
+      {id:'sub_resfriados',titulo:'Resfriados',criterios:[
+        {id:'cam_resf_org',label:'Organização da Câmara'},
+        {id:'cam_resf_vol',label:'Volume de mercadoria'},
+        {id:'cam_resf_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
+        {id:'cam_resf_eq_prest',label:'Equipe de suporte — prestatividade'}
+      ]},
+      {id:'sub_embutidos',titulo:'Embutidos',criterios:[
+        {id:'cam_emb_org',label:'Organização da Câmara'},
+        {id:'cam_emb_vol',label:'Volume de mercadoria'}
+      ]},
+      {id:'sub_hortifruti_ret',titulo:'Hortifruti',criterios:[
+        {id:'cam_hort_pesagem',label:'Equipe de pesagem — quantidade suficiente'}
+      ]}
+    ],
+    observacao:{id:'obs_camaras',label:'Observações sobre as câmaras'},
+    fotos:{max:3,label:'Fotos das câmaras'}
+  },
+  // ── 5. PERECÍVEIS — ÁREA DE VENDAS ──
+  {
+    id:'av_pereciveis', titulo:'Perecíveis — Área de Vendas', icone:'bi-thermometer-snow',
+    estrutura:'Área de Vendas', departamento:'Perecíveis',
+    subsecoes:[
+      {id:'sub_ilhas_cong',titulo:'Ilhas de Congelados',criterios:[
+        {id:'av_ic_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_ic_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_iogurtes',titulo:'Geladeiras de Iogurtes',criterios:[
+        {id:'av_iog_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_iog_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_margarinas',titulo:'Margarinas / Manteigas / Requeijões',criterios:[
+        {id:'av_marg_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_marg_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_padaria',titulo:'Padaria',criterios:[
+        {id:'av_pad_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pad_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_bebidas',titulo:'Geladeiras de Bebidas',criterios:[
+        {id:'av_beb_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_beb_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_polpas',titulo:'Polpas de Frutas',criterios:[
+        {id:'av_pol_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pol_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_sorvetes',titulo:'Sorvetes',criterios:[
+        {id:'av_sorv_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_sorv_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_pesagem_av',titulo:'Equipe de Pesagem — Área de Vendas',criterios:[
+        {id:'av_pes_cong',label:'Pesagem Congelados — equipe suficiente'},
+        {id:'av_pes_resf',label:'Pesagem Resfriados — equipe suficiente'},
+        {id:'av_pes_hort',label:'Pesagem Hortifruti — equipe suficiente'}
+      ]}
+    ],
+    fotos:{max:5,label:'Fotos da área de vendas — perecíveis'}
+  },
+  // ── 6. MERCEARIA — ÁREA DE VENDAS ──
+  {
+    id:'av_mercearia', titulo:'Mercearia — Área de Vendas', icone:'bi-cart3',
+    estrutura:'Área de Vendas', departamento:'Mercearia',
+    subsecoes:[
+      {id:'sub_aereos_av',titulo:'Aéreos',criterios:[
+        {id:'av_aer_pallets',label:'Aéreos com pallets full'},
+        {id:'av_aer_org',label:'Produtos organizados'},
+        {id:'av_aer_qtd',label:'Quantidade de produtos',tipo:'escala_volume'}
+      ]},
+      {id:'sub_subaereos_av',titulo:'Sub-aéreos',criterios:[
+        {id:'av_sub_qtd',label:'Quantidade de produtos',tipo:'escala_volume'},
+        {id:'av_sub_org',label:'Produtos organizados'}
+      ]},
+      {id:'sub_pontos_extra',titulo:'Pontos-Extra',criterios:[
+        {id:'av_pe_sku',label:'Amarrações consecutivas identificadas',tipo:'escala_sku'}
+      ]},
+      {id:'sub_bazar',titulo:'Bazar',criterios:[
+        {id:'av_baz_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_baz_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_liquida',titulo:'Líquida',criterios:[
+        {id:'av_liq_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_liq_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_biscoitos',titulo:'Biscoitos',criterios:[
+        {id:'av_bis_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_bis_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_cereais',titulo:'Cereais',criterios:[
+        {id:'av_cer_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_cer_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_condimentos',titulo:'Condimentos e Temperos',criterios:[
+        {id:'av_con_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_con_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_diet',titulo:'Diet / Light',criterios:[
+        {id:'av_diet_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_diet_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_doces',titulo:'Doces e Sobremesas',criterios:[
+        {id:'av_doc_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_doc_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_laticinios',titulo:'Laticínios',criterios:[
+        {id:'av_lat_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_lat_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_limpeza',titulo:'Limpeza',criterios:[
+        {id:'av_lim_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_lim_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_massas',titulo:'Massas e Sopas',criterios:[
+        {id:'av_mas_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_mas_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_matinais',titulo:'Matinais',criterios:[
+        {id:'av_mat_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_mat_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_perfumaria',titulo:'Perfumaria',criterios:[
+        {id:'av_perf_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_perf_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_petshop',titulo:'Pet Shop',criterios:[
+        {id:'av_pet_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pet_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]},
+      {id:'sub_salgadinhos',titulo:'Salgadinhos e Snacks',criterios:[
+        {id:'av_salg_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_salg_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
+      ]}
+    ],
+    fotos:{max:5,label:'Fotos da área de vendas — mercearia'}
+  },
+  // ── 7. FINALIZAÇÃO ──
+  {
+    id:'finalizacao', titulo:'Finalização', icone:'bi-check-circle',
+    tipo:'finalizacao',
+    observacao:{id:'obs_area_vendas',label:'Observações sobre a área de vendas'}
+  }
+];
+
+
+/* ═══════════════════════════════════════════════════════
+   ESTADO DA APLICAÇÃO
+   ═══════════════════════════════════════════════════════ */
+let state = {
+  usuario: null,       // dados do login
+  auditoriaId: null,   // ID da auditoria em andamento
+  secaoAtual: 0,       // índice da seção visível
+  respostas: {},       // { criterioId: valor(1-10) ou 'NA' }
+  observacoes: {},     // { obsId: texto }
+  fotos: {},           // { secaoId: [{ base64, legenda }] }
+  identificacao: {},   // campos da tela de identificação
+  clientes: [],        // lista de clientes carregada
+  unidades: {},        // { cliente: [unidades] }
+  rascunhos: [],       // lista de rascunhos do usuário
+  status: 'NOVO'       // NOVO | RASCUNHO | CONCLUIDO
+};
+
+/* ═══════════════════════════════════════════════════════
+   UTILITÁRIOS
+   ═══════════════════════════════════════════════════════ */
+function $(sel) { return document.querySelector(sel); }
+function $$(sel) { return document.querySelectorAll(sel); }
+
+function toast(msg, ms=2500) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function showLoading(msg='Carregando...') {
+  $('#loadingMsg').textContent = msg;
+  $('#loading').style.display = 'flex';
+}
+function hideLoading() { $('#loading').style.display = 'none'; }
+
+function getToken() {
+  return new URLSearchParams(window.location.search).get('token') || sessionStorage.getItem('fc_token');
+}
+
+function scoreClass(v) {
+  if (v <= 3) return 'score-low';
+  if (v <= 5) return 'score-mid';
+  if (v <= 7) return 'score-ok';
+  return 'score-high';
+}
+
+function scoreColor(v) {
+  if (v <= 3) return 'var(--red)';
+  if (v <= 5) return 'var(--orange)';
+  if (v <= 7) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+function calcMediaSecao(secao) {
+  let criterios = secao.criterios || [];
+  if (secao.subsecoes) criterios = secao.subsecoes.flatMap(s => s.criterios);
+  const notas = criterios.map(c => state.respostas[c.id]).filter(v => v && v !== 'NA');
+  if (!notas.length) return null;
+  return (notas.reduce((a,b) => a+b, 0) / notas.length).toFixed(1);
+}
+
+function secaoPreenchida(secao) {
+  let criterios = secao.criterios || [];
+  if (secao.subsecoes) criterios = secao.subsecoes.flatMap(s => s.criterios);
+  if (secao.tipo === 'identificacao') {
+    const obrigatorios = ['tipo_avaliacao','cliente','unidade','data_auditoria'];
+    return obrigatorios.every(c => state.identificacao[c]);
+  }
+  if (secao.tipo === 'finalizacao') return true;
+  return criterios.length > 0 && criterios.every(c => state.respostas[c.id] !== undefined);
+}
+
+function subsecaoPreenchida(sub) {
+  return sub.criterios.every(c => state.respostas[c.id] !== undefined);
+}
+
+/* ═══════════════════════════════════════════════════════
+   API (comunicação com o backend)
+   ═══════════════════════════════════════════════════════ */
+async function apiCall(action, dados={}) {
+  try {
+    // O doPost do sistema espera JSON com 'action' no corpo
+    const cpf = new URLSearchParams(window.location.search).get('cpf') || '';
+    const payload = Object.assign({ action: action, cpf: cpf }, dados);
+    const r = await fetch(API_URL, {
+      method:'POST',
+      body: JSON.stringify(payload)
+    });
+    return await r.json();
+  } catch(e) {
+    console.error('API error:', e);
+    return { ok:false, erro: e.message };
+  }
+}
+
+async function salvarRascunho(silencioso) {
+  const dados = {
+    id: state.auditoriaId,
+    identificacao: state.identificacao,
+    respostas: state.respostas,
+    observacoes: state.observacoes,
+    secaoAtual: state.secaoAtual,
+    status: 'RASCUNHO'
+  };
+  // Backup local sempre
+  localStorage.setItem('fc_aud_' + (state.auditoriaId || 'temp'), JSON.stringify(dados));
+  // Salvar no servidor
+  const r = await apiCall('salvarAuditoria', dados);
+  if (!silencioso) {
+    if (r.ok) toast('Progresso salvo');
+    else toast('Salvo localmente (sem conexão)');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDERIZAÇÃO — TELA INICIAL
+   ═══════════════════════════════════════════════════════ */
+async function renderTelaInicial() {
+  showLoading('Carregando...');
+  // Buscar rascunhos do servidor
+  let rascunhos = [];
+  const r = await apiCall('listarRascunhosAuditoria', {});
+  if (r.ok && r.rascunhos && r.rascunhos.length) {
+    rascunhos = r.rascunhos.map(x => ({
+      id: x.id,
+      identificacao: { cliente: x.cliente, unidade: x.unidade, data_auditoria: x.dataAuditoria, tipo_avaliacao: x.tipoAvaliacao },
+      secaoAtual: x.secaoAtual,
+      status: 'RASCUNHO'
+    }));
+  } else {
+    // Fallback: buscar do localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith('fc_aud_')) {
+        try {
+          const d = JSON.parse(localStorage.getItem(k));
+          if (d.status === 'RASCUNHO') rascunhos.push(d);
+        } catch(e) {}
+      }
+    }
+  }
+  // Carregar lista de clientes
+  const rc = await apiCall('listarClientesFC', {});
+  if (rc.ok) {
+    state.clientes = rc.clientes || [];
+    state.unidades = {};
+    const det = rc.detalhes || {};
+    for (const c in det) { state.unidades[c] = det[c].unidades || []; state.emailsCliente = state.emailsCliente || {}; for (const u in det[c].emails) state.emailsCliente[c+'|'+u] = det[c].emails[u]; }
+  }
+  state.rascunhos = rascunhos;
+  hideLoading();
+
+  let rascunhosHtml = '';
+  if (rascunhos.length) {
+    rascunhosHtml = `
+      <div class="card-inicio">
+        <h2><i class="bi bi-pencil-square"></i> Continuar Avaliação</h2>
+        <p>Avaliações em andamento</p>
+        ${rascunhos.map((r,i) => `
+          <div class="rascunho-item" onclick="carregarRascunho(${i})">
+            <div class="ri-titulo">${r.identificacao.cliente || 'Cliente não definido'}</div>
+            <div class="ri-sub">${r.identificacao.unidade || '—'} • ${r.identificacao.data_auditoria || '—'}</div>
+            <span class="ri-badge">RASCUNHO</span>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+
+  $('#app').innerHTML = `
+    <div class="tela-inicial">
+      <div class="card-inicio" style="text-align:center;padding:36px 28px">
+        <h2 style="font-size:20px">Auditoria de Operação</h2>
+        <p style="margin-bottom:0">Avaliação das condições do ambiente para a operação de inventário</p>
+      </div>
+      <div class="card-inicio">
+        <h2><i class="bi bi-plus-circle"></i> Nova Avaliação</h2>
+        <p>Iniciar uma nova auditoria de operação</p>
+        <button class="btn-fc btn-fc-green" onclick="novaAvaliacao()">
+          <i class="bi bi-play-fill"></i> Iniciar Nova Avaliação
+        </button>
+      </div>
+      ${rascunhosHtml}
+      <div class="card-inicio">
+        <h2><i class="bi bi-clock-history"></i> Histórico</h2>
+        <p>Auditorias concluídas — ver relatórios e enviar por e-mail</p>
+        <button class="btn-fc btn-fc-outline" onclick="verHistorico()">
+          <i class="bi bi-list-ul"></i> Ver Histórico
+        </button>
+      </div>
+    </div>`;
+}
+
+function novaAvaliacao() {
+  state.auditoriaId = 'aud_' + Date.now();
+  state.respostas = {};
+  state.observacoes = {};
+  state.fotos = {};
+  state.identificacao = {};
+  state.secaoAtual = 0;
+  state.status = 'RASCUNHO';
+  renderFormulario();
+}
+
+async function carregarRascunho(idx) {
+  showLoading('Carregando avaliação...');
+  const rascunho = state.rascunhos[idx];
+  state.auditoriaId = rascunho.id;
+
+  // Tentar carregar do servidor (dados completos)
+  const r = await apiCall('carregarAuditoria', { id: rascunho.id });
+  if (r.ok && r.auditoria) {
+    state.respostas = r.auditoria.respostas || {};
+    state.observacoes = r.auditoria.observacoes || {};
+    state.fotos = {};
+    state.identificacao = r.auditoria.identificacao || {};
+    state.secaoAtual = r.auditoria.secaoAtual || 0;
+  } else {
+    // Fallback: dados do localStorage
+    const local = localStorage.getItem('fc_aud_' + rascunho.id);
+    if (local) {
+      const d = JSON.parse(local);
+      state.respostas = d.respostas || {};
+      state.observacoes = d.observacoes || {};
+      state.fotos = d.fotos || {};
+      state.identificacao = d.identificacao || {};
+      state.secaoAtual = d.secaoAtual || 0;
+    } else {
+      state.respostas = {};
+      state.observacoes = {};
+      state.fotos = {};
+      state.identificacao = rascunho.identificacao || {};
+      state.secaoAtual = 0;
+    }
+  }
+  state.status = 'RASCUNHO';
+  hideLoading();
+  renderFormulario();
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   RENDERIZAÇÃO — FORMULÁRIO
+   ═══════════════════════════════════════════════════════ */
+function renderFormulario() {
+  const secao = SECOES[state.secaoAtual];
+
+  // Stepper
+  const stepperHtml = SECOES.map((s,i) => {
+    let cls = '';
+    if (i === state.secaoAtual) cls = 'active';
+    else if (secaoPreenchida(s)) cls = 'done';
+    const icon = cls === 'done' ? '<i class="bi bi-check-lg"></i>' : (i+1);
+    return `<span class="step-dot ${cls}" onclick="irParaSecao(${i})">${icon} <span class="d-none d-sm-inline">${s.titulo}</span></span>`;
+  }).join('');
+
+  // Conteúdo da seção
+  let conteudo = '';
+  if (secao.tipo === 'identificacao') {
+    conteudo = renderIdentificacao(secao);
+  } else if (secao.tipo === 'finalizacao') {
+    conteudo = renderFinalizacao(secao);
+  } else {
+    conteudo = renderSecaoAvaliacao(secao);
+  }
+
+  // Navegação
+  const prevBtn = state.secaoAtual > 0
+    ? `<button class="btn-fc btn-fc-outline" onclick="secaoAnterior()"><i class="bi bi-chevron-left"></i> Anterior</button>` : '';
+  const nextLabel = state.secaoAtual < SECOES.length - 1 ? 'Próxima <i class="bi bi-chevron-right"></i>' : '';
+  const nextBtn = state.secaoAtual < SECOES.length - 1
+    ? `<button class="btn-fc btn-fc-navy" onclick="proximaSecao()">${nextLabel}</button>` : '';
+
+  const progresso = `${state.secaoAtual + 1} de ${SECOES.length}`;
+
+  $('#app').innerHTML = `
+    <div class="stepper-bar">${stepperHtml}</div>
+    <div class="form-container body-pad">${conteudo}</div>
+    <div class="progress-info">Seção ${progresso}</div>
+    <div class="nav-bottom">${prevBtn}${nextBtn}</div>`;
+
+  // Scroll stepper para a posição ativa
+  setTimeout(() => {
+    const active = document.querySelector('.step-dot.active');
+    if (active) active.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  }, 100);
+}
+
+/* ── IDENTIFICAÇÃO ── */
+function renderIdentificacao(secao) {
+  const v = state.identificacao;
+  return `
+    <div class="secao-card">
+      <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
+      <div class="secao-subtitulo">Preencha os dados da operação</div>
+
+      <div class="campo-input">
+        <label>Tipo de Avaliação</label>
+        <select onchange="setIdent('tipo_avaliacao',this.value)">
+          <option value="">Selecione...</option>
+          <option value="PRÉ-OPERAÇÃO" ${v.tipo_avaliacao==='PRÉ-OPERAÇÃO'?'selected':''}>PRÉ-OPERAÇÃO (Diretor)</option>
+          <option value="DURANTE A OPERAÇÃO" ${v.tipo_avaliacao==='DURANTE A OPERAÇÃO'?'selected':''}>DURANTE A OPERAÇÃO (Supervisor)</option>
+        </select>
+      </div>
+
+      <div class="campo-input">
+        <label>Cliente</label>
+        <input type="text" list="listaClientes" value="${v.cliente||''}" placeholder="Digite ou selecione o cliente"
+               oninput="setIdent('cliente',this.value)" onchange="setIdent('cliente',this.value)">
+        <datalist id="listaClientes">
+          ${state.clientes.map(c => `<option value="${c}">`).join('')}
+        </datalist>
+      </div>
+
+      <div class="campo-input">
+        <label>Unidade</label>
+        <input type="text" list="listaUnidades" value="${v.unidade||''}" placeholder="Digite ou selecione a unidade"
+               oninput="setIdent('unidade',this.value)" onchange="setIdent('unidade',this.value)">
+        <datalist id="listaUnidades">
+          ${(state.unidades[v.cliente]||[]).map(u => `<option value="${u}">`).join('')}
+        </datalist>
+      </div>
+
+      <div class="campo-input">
+        <label>Data da Auditoria</label>
+        <input type="date" value="${v.data_auditoria||new Date().toISOString().slice(0,10)}"
+               onchange="setIdent('data_auditoria',this.value)">
+      </div>
+
+      <div class="campo-input">
+        <label>Responsável do Cliente</label>
+        <input type="text" value="${v.responsavel_cliente||''}" placeholder="Nome do responsável na unidade"
+               oninput="setIdent('responsavel_cliente',this.value)">
+      </div>
+    </div>`;
+}
+
+function setIdent(campo, valor) {
+  state.identificacao[campo] = valor;
+  // Auto-fill data se não preenchida
+  if (campo === 'tipo_avaliacao' && !state.identificacao.data_auditoria) {
+    state.identificacao.data_auditoria = new Date().toISOString().slice(0,10);
+  }
+}
+
+/* ── SEÇÃO DE AVALIAÇÃO (critérios, subsecões, fotos, obs) ── */
+function renderSecaoAvaliacao(secao) {
+  let html = `<div class="secao-card">
+    <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
+    <div class="secao-subtitulo">${secao.estrutura} → ${secao.departamento || ''}</div>`;
+
+  // Critérios diretos
+  if (secao.criterios) {
+    html += secao.criterios.map(c => renderCriterio(c)).join('');
+  }
+
+  // Subseções (accordion)
+  if (secao.subsecoes) {
+    html += secao.subsecoes.map(sub => {
+      const preenchido = subsecaoPreenchida(sub);
+      const aberta = !preenchido;
+      return `
+        <div class="subsecao ${aberta?'aberta':''}" id="sub_${sub.id}">
+          <div class="subsecao-header" onclick="toggleSubsecao('sub_${sub.id}')">
+            <span class="sh-titulo">${sub.titulo}</span>
+            <span class="sh-badge ${preenchido?'preenchido':'pendente'}">
+              ${preenchido ? '<i class="bi bi-check-lg"></i> OK' : 'Pendente'}
+            </span>
+          </div>
+          <div class="subsecao-body">
+            ${sub.criterios.map(c => renderCriterio(c)).join('')}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Score parcial
+  const media = calcMediaSecao(secao);
+  if (media) {
+    html += `<div class="score-preview">
+      <span class="sp-valor" style="color:${scoreColor(parseFloat(media))}">${media}</span>
+      <span class="sp-label">Score parcial desta seção</span>
+    </div>`;
+  }
+
+  html += '</div>';
+
+  // Observação
+  if (secao.observacao) {
+    html += `<div class="secao-card">
+      <div class="campo-obs">
+        <label>${secao.observacao.label}</label>
+        <textarea placeholder="Registre suas observações..."
+          oninput="setObs('${secao.observacao.id}',this.value)">${state.observacoes[secao.observacao.id]||''}</textarea>
+      </div>
+    </div>`;
+  }
+
+  // Fotos
+  if (secao.fotos) {
+    html += renderFotos(secao);
+  }
+
+  return html;
+}
+
+/* ── CRITÉRIO INDIVIDUAL ── */
+function renderCriterio(crit) {
+  const val = state.respostas[crit.id];
+  const tipo = crit.tipo || 'escala';
+
+  let hints = '';
+  if (tipo === 'escala_sku') hints = '<div class="escala-hints"><span>Até 10%</span><span>Acima de 90%</span></div>';
+  else if (tipo === 'escala_volume') hints = '<div class="escala-hints"><span>Excessiva</span><span>Ideal</span></div>';
+
+  let botoes = '';
+  for (let i = 1; i <= 10; i++) {
+    const sel = val === i;
+    botoes += `<button class="rating-btn ${sel ? 'selected ' + scoreClass(i) : ''}"
+      onclick="setNota('${crit.id}',${i})">${i}</button>`;
+  }
+  const naSel = val === 'NA';
+  botoes += `<button class="rating-btn na-btn ${naSel ? 'selected' : ''}"
+    onclick="setNota('${crit.id}','NA')">N/A</button>`;
+
+  return `
+    <div class="criterio" id="crit_${crit.id}">
+      <div class="criterio-label">${crit.label}</div>
+      ${hints}
+      <div class="rating-row">${botoes}</div>
+    </div>`;
+}
+
+function setNota(criterioId, valor) {
+  state.respostas[criterioId] = valor;
+  // Re-render apenas o critério afetado e o score
+  const secao = SECOES[state.secaoAtual];
+  // Atualizar botões do critério
+  const container = document.getElementById('crit_' + criterioId);
+  if (container) {
+    container.querySelectorAll('.rating-btn').forEach(btn => {
+      btn.classList.remove('selected','score-low','score-mid','score-ok','score-high');
+      const btnVal = btn.classList.contains('na-btn') ? 'NA' : parseInt(btn.textContent);
+      if (btnVal === valor) {
+        btn.classList.add('selected');
+        if (typeof valor === 'number') btn.classList.add(scoreClass(valor));
+      }
+    });
+  }
+  // Atualizar badges de subseção
+  if (secao.subsecoes) {
+    secao.subsecoes.forEach(sub => {
+      const el = document.getElementById('sub_' + sub.id);
+      if (el) {
+        const badge = el.querySelector('.sh-badge');
+        if (subsecaoPreenchida(sub)) {
+          badge.className = 'sh-badge preenchido';
+          badge.innerHTML = '<i class="bi bi-check-lg"></i> OK';
+        }
+      }
+    });
+  }
+  // Atualizar score preview
+  const media = calcMediaSecao(secao);
+  const sp = document.querySelector('.score-preview');
+  if (sp && media) {
+    sp.querySelector('.sp-valor').textContent = media;
+    sp.querySelector('.sp-valor').style.color = scoreColor(parseFloat(media));
+  }
+  // Atualizar stepper dot
+  updateStepper();
+}
+
+function setObs(obsId, valor) {
+  state.observacoes[obsId] = valor;
+}
+
+function toggleSubsecao(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('aberta');
+}
+
+
+/* ── FOTOS ── */
+function renderFotos(secao) {
+  const fotos = state.fotos[secao.id] || [];
+  const max = secao.fotos.max;
+  let slots = '';
+  for (let i = 0; i < max; i++) {
+    if (fotos[i]) {
+      slots += `
+        <div class="foto-slot">
+          <img src="${fotos[i].base64}" alt="Foto ${i+1}">
+          <button class="foto-remove" onclick="removerFoto('${secao.id}',${i})"><i class="bi bi-x"></i></button>
+        </div>`;
+    } else {
+      slots += `
+        <div class="foto-slot" onclick="capturarFoto('${secao.id}')">
+          <i class="bi bi-camera"></i>
+          <span>Foto ${i+1}</span>
+        </div>`;
+    }
+  }
+  return `
+    <div class="secao-card">
+      <div class="fotos-section">
+        <label><i class="bi bi-camera"></i> ${secao.fotos.label}</label>
+        <div class="fotos-grid">${slots}</div>
+      </div>
+    </div>`;
+}
+
+let fotoTargetSecao = null;
+function capturarFoto(secaoId) {
+  fotoTargetSecao = secaoId;
+  document.getElementById('cameraInput').click();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('cameraInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file || !fotoTargetSecao) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      // Comprimir imagem
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = h * maxDim / w; w = maxDim; }
+          else { w = w * maxDim / h; h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.7);
+        if (!state.fotos[fotoTargetSecao]) state.fotos[fotoTargetSecao] = [];
+        const secao = SECOES.find(s => s.id === fotoTargetSecao);
+        if (state.fotos[fotoTargetSecao].length < (secao?.fotos?.max || 3)) {
+          state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
+          renderFormulario();
+        } else {
+          toast('Limite de fotos atingido');
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+});
+
+function removerFoto(secaoId, idx) {
+  if (state.fotos[secaoId]) {
+    state.fotos[secaoId].splice(idx, 1);
+    renderFormulario();
+  }
+}
+
+/* ── FINALIZAÇÃO ── */
+function renderFinalizacao(secao) {
+  // Verificar seções pendentes
+  const pendentes = SECOES.filter((s,i) => i < SECOES.length-1 && !secaoPreenchida(s));
+
+  // Calcular scores
+  const secoesPontuadas = SECOES.filter(s => s.criterios || s.subsecoes);
+  let todasNotas = [];
+  let notasEquipe = [];
+  secoesPontuadas.forEach(s => {
+    let criterios = s.criterios || [];
+    if (s.subsecoes) criterios = s.subsecoes.flatMap(sub => sub.criterios);
+    criterios.forEach(c => {
+      const v = state.respostas[c.id];
+      if (v && v !== 'NA') {
+        todasNotas.push(v);
+        if (c.id.includes('eq_') || c.id.includes('_eq_') || c.id.includes('_pes_') || c.id.includes('pesagem')) {
+          notasEquipe.push(v);
+        }
+      }
+    });
+  });
+
+  const scoreGeral = todasNotas.length ? (todasNotas.reduce((a,b)=>a+b,0)/todasNotas.length).toFixed(1) : '—';
+  const scoreEquipe = notasEquipe.length ? (notasEquipe.reduce((a,b)=>a+b,0)/notasEquipe.length).toFixed(1) : '—';
+
+  // Scores por seção
+  const scoresSecoes = secoesPontuadas.map(s => ({
+    titulo: s.titulo,
+    media: calcMediaSecao(s)
+  })).filter(s => s.media);
+
+  let html = '';
+
+  // Observação da área de vendas
+  if (secao.observacao) {
+    html += `<div class="secao-card">
+      <div class="campo-obs">
+        <label>${secao.observacao.label}</label>
+        <textarea placeholder="Registre suas observações..."
+          oninput="setObs('${secao.observacao.id}',this.value)">${state.observacoes[secao.observacao.id]||''}</textarea>
+      </div>
+    </div>`;
+  }
+
+  // Resumo de scores
+  html += `
+    <div class="secao-card" style="text-align:center">
+      <div class="secao-titulo" style="justify-content:center"><i class="bi ${secao.icone}"></i> Resumo da Avaliação</div>
+      <div style="margin:20px 0">
+        <div style="font-size:48px;font-weight:700;color:${todasNotas.length ? scoreColor(parseFloat(scoreGeral)) : 'var(--text-light)'}">${scoreGeral}</div>
+        <div style="font-size:12px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Score Geral</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        ${scoresSecoes.map(s => `
+          <div style="background:var(--bg);padding:12px;border-radius:10px">
+            <div style="font-size:20px;font-weight:700;color:${scoreColor(parseFloat(s.media))}">${s.media}</div>
+            <div style="font-size:10px;color:var(--text-light)">${s.titulo}</div>
+          </div>
+        `).join('')}
+        <div style="background:var(--bg);padding:12px;border-radius:10px;border:2px solid var(--orange)">
+          <div style="font-size:20px;font-weight:700;color:var(--orange)">${scoreEquipe}</div>
+          <div style="font-size:10px;color:var(--text-light)">Equipe de Apoio</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Pendências
+  if (pendentes.length) {
+    html += `
+      <div class="secao-card" style="border-left:4px solid var(--orange)">
+        <div style="font-size:13px;font-weight:600;color:var(--orange);margin-bottom:8px">
+          <i class="bi bi-exclamation-triangle"></i> Seções pendentes
+        </div>
+        ${pendentes.map(p => `
+          <div style="font-size:13px;color:var(--text);padding:4px 0">
+            • ${p.titulo}
+          </div>
+        `).join('')}
+        <div style="font-size:11px;color:var(--text-light);margin-top:8px">
+          Seções com N/A são consideradas preenchidas. Você pode finalizar mesmo com seções pendentes (critérios não avaliados serão ignorados no relatório).
+        </div>
+      </div>`;
+  }
+
+  // Botão finalizar
+  html += `
+    <div class="secao-card" style="text-align:center">
+      <button class="btn-fc btn-fc-green" onclick="finalizarAvaliacao()" style="font-size:16px;padding:16px 32px">
+        <i class="bi bi-check-circle"></i> Finalizar Avaliação
+      </button>
+      <div style="font-size:11px;color:var(--text-light);margin-top:10px">
+        Ao finalizar, o relatório será gerado automaticamente.
+      </div>
+    </div>`;
+
+  return html;
+}
+
+/* ═══════════════════════════════════════════════════════
+   NAVEGAÇÃO
+   ═══════════════════════════════════════════════════════ */
+function irParaSecao(idx) {
+  salvarRascunho();
+  state.secaoAtual = idx;
+  renderFormulario();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function proximaSecao() {
+  if (state.secaoAtual < SECOES.length - 1) {
+    salvarRascunho();
+    state.secaoAtual++;
+    renderFormulario();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+}
+
+function secaoAnterior() {
+  if (state.secaoAtual > 0) {
+    state.secaoAtual--;
+    renderFormulario();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+}
+
+function updateStepper() {
+  document.querySelectorAll('.step-dot').forEach((dot, i) => {
+    dot.classList.remove('active','done');
+    if (i === state.secaoAtual) dot.classList.add('active');
+    else if (secaoPreenchida(SECOES[i])) dot.classList.add('done');
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   FINALIZAR
+   ═══════════════════════════════════════════════════════ */
+async function finalizarAvaliacao() {
+  // Validar identificação mínima
+  if (!state.identificacao.tipo_avaliacao || !state.identificacao.cliente || !state.identificacao.unidade) {
+    toast('Preencha a Identificação (tipo, cliente e unidade)');
+    return;
+  }
+
+  if (!confirm('Confirma a finalização desta avaliação?\n\nO relatório será gerado automaticamente.')) return;
+
+  showLoading('Finalizando avaliação e enviando fotos...');
+
+  state.status = 'CONCLUIDO';
+
+  const dados = {
+    id: state.auditoriaId,
+    identificacao: state.identificacao,
+    respostas: state.respostas,
+    observacoes: state.observacoes,
+    fotos: state.fotos,
+    status: 'CONCLUIDO',
+    versao: VERSAO
+  };
+
+  // Backup local
+  localStorage.setItem('fc_aud_' + state.auditoriaId, JSON.stringify(dados));
+
+  // Enviar pro servidor (inclui upload de fotos)
+  const r = await apiCall('finalizarAuditoria', dados);
+  if (r.ok) {
+    // Limpar rascunho local após sucesso
+    localStorage.removeItem('fc_aud_' + state.auditoriaId);
+  }
+
+  // Gerar relatório via Claude API
+  $('#app').innerHTML = `
+    <div class="tela-inicial">
+      <div class="secao-card" style="text-align:center;padding:40px 28px">
+        <div class="spinner" style="margin:0 auto 16px"></div>
+        <h2 style="font-size:18px;color:var(--navy);margin-bottom:8px">Gerando Relatório...</h2>
+        <p style="color:var(--text-light)">A inteligência artificial está analisando a avaliação e redigindo o relatório.</p>
+      </div>
+    </div>`;
+
+  const rr = await apiCall('gerarRelatorioAuditoria', { auditoriaId: state.auditoriaId });
+  hideLoading();
+
+  if (rr.ok) {
+    state.ultimoRelatorio = rr;
+    renderTelaRelatorioGerado();
+  } else {
+    // Mesmo com erro no relatório, a avaliação foi salva
+    $('#app').innerHTML = `
+      <div class="tela-inicial">
+        <div class="secao-card" style="text-align:center;padding:40px 28px">
+          <div style="font-size:56px;margin-bottom:16px">✅</div>
+          <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Avaliação Finalizada</h2>
+          <p style="color:var(--text-light);margin-bottom:16px">
+            ${state.identificacao.cliente} — ${state.identificacao.unidade}
+          </p>
+          <div style="background:#FEF3CD;padding:12px;border-radius:10px;margin-bottom:20px;font-size:13px;color:#856404">
+            <i class="bi bi-exclamation-triangle"></i> O relatório não pôde ser gerado agora: ${rr.erro || 'erro desconhecido'}.<br>
+            Você pode gerar novamente pelo histórico.
+          </div>
+          <button class="btn-fc btn-fc-navy" onclick="renderTelaInicial()">
+            <i class="bi bi-arrow-left"></i> Voltar ao Início
+          </button>
+        </div>
+      </div>`;
+  }
+}
+
+function renderTelaRelatorioGerado() {
+  const rel = state.ultimoRelatorio;
+  const ident = state.identificacao;
+
+  $('#app').innerHTML = `
+    <div class="tela-inicial">
+      <div class="secao-card" style="text-align:center;padding:40px 28px">
+        <div style="font-size:56px;margin-bottom:16px">✅</div>
+        <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Relatório Gerado com Sucesso</h2>
+        <p style="color:var(--text-light);margin-bottom:24px">
+          ${ident.cliente} — ${ident.unidade}<br>${ident.data_auditoria}
+        </p>
+        <p style="font-size:13px;color:var(--text);margin-bottom:8px">
+          Score Geral: <strong style="color:var(--navy)">${rel.scoreGeral || '—'}</strong> &nbsp;|&nbsp;
+          Equipe de Apoio: <strong style="color:var(--orange)">${rel.scoreEquipe || '—'}</strong>
+        </p>
+      </div>
+
+      <div class="secao-card">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <a href="${rel.linkHTML || '#'}" target="_blank" class="btn-fc btn-fc-navy" style="text-align:center;text-decoration:none">
+            <i class="bi bi-file-earmark-text"></i> Ver Relatório (HTML)
+          </a>
+          <a href="${rel.linkPDF || '#'}" target="_blank" class="btn-fc btn-fc-outline" style="text-align:center;text-decoration:none">
+            <i class="bi bi-file-earmark-pdf"></i> Baixar PDF
+          </a>
+        </div>
+      </div>
+
+      <div class="secao-card" id="emailCard">
+        <div style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px">
+          <i class="bi bi-envelope"></i> Enviar por E-mail
+        </div>
+        <div class="campo-input" style="margin-bottom:12px">
+          <label>E-mail do cliente</label>
+          <input type="email" id="emailCliente" placeholder="email@cliente.com.br"
+                 value="${state.emailsCliente && state.emailsCliente[ident.cliente+'|'+ident.unidade] || ''}">
+        </div>
+        <button class="btn-fc btn-fc-orange" onclick="enviarEmail()">
+          <i class="bi bi-send"></i> Enviar Relatório
+        </button>
+      </div>
+
+      <button class="btn-fc btn-fc-outline" onclick="renderTelaInicial()" style="margin-top:10px;max-width:480px;margin-left:auto;margin-right:auto;display:block">
+        <i class="bi bi-arrow-left"></i> Voltar ao Início
+      </button>
+    </div>`;
+}
+
+async function enviarEmail() {
+  const email = document.getElementById('emailCliente').value.trim();
+  if (!email || !email.includes('@')) {
+    toast('Informe um e-mail válido');
+    return;
+  }
+
+  showLoading('Enviando relatório...');
+  const r = await apiCall('enviarRelatorioAuditoria', {
+    auditoriaId: state.auditoriaId,
+    email: email
+  });
+  hideLoading();
+
+  if (r.ok) {
+    toast('Relatório enviado para ' + email);
+    const card = document.getElementById('emailCard');
+    if (card) {
+      card.innerHTML = `
+        <div style="text-align:center;padding:16px">
+          <div style="font-size:32px;margin-bottom:8px">📧</div>
+          <div style="font-size:14px;font-weight:600;color:var(--green)">Enviado com sucesso</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:4px">${email}</div>
+        </div>`;
+    }
+  } else {
+    toast('Erro: ' + (r.erro || 'falha no envio'));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HISTÓRICO (acessível da tela inicial — futuro)
+   ═══════════════════════════════════════════════════════ */
+async function verHistorico() {
+  showLoading('Carregando histórico...');
+  const r = await apiCall('listarHistoricoAuditorias', {});
+  hideLoading();
+
+  if (!r.ok || !r.auditorias || !r.auditorias.length) {
+    toast('Nenhuma auditoria concluída encontrada');
+    return;
+  }
+
+  let itens = r.auditorias.map(a => `
+    <div class="rascunho-item" style="cursor:default">
+      <div class="ri-titulo">${a.cliente} — ${a.unidade}</div>
+      <div class="ri-sub">${a.dataAuditoria} • ${a.auditor} • ${a.tipoAvaliacao}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:var(--navy)">Score: ${a.scoreGeral || '—'}</span>
+        <span style="font-size:12px;color:var(--orange)">Equipe: ${a.scoreEquipe || '—'}</span>
+        ${a.dataEnvio ? '<span style="font-size:11px;color:var(--green)">✓ Enviado</span>' : '<span style="font-size:11px;color:var(--text-light)">Não enviado</span>'}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:12px" onclick="abrirRelatorio('${a.id}')">Ver Relatório</button>
+        <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:12px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">Enviar E-mail</button>
+      </div>
+    </div>
+  `).join('');
+
+  $('#app').innerHTML = `
+    <div class="tela-inicial">
+      <div class="secao-card">
+        <div class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico de Auditorias</div>
+        <div class="secao-subtitulo">Auditorias concluídas</div>
+      </div>
+      ${itens}
+      <button class="btn-fc btn-fc-outline" onclick="renderTelaInicial()" style="margin-top:10px">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </button>
+    </div>`;
+}
+
+async function abrirRelatorio(auditoriaId) {
+  showLoading('Buscando relatório...');
+  const r = await apiCall('obterRelatorio', { auditoriaId });
+  hideLoading();
+  if (r.ok && r.relatorio && r.relatorio.linkHTML) {
+    window.open(r.relatorio.linkHTML, '_blank');
+  } else {
+    // Relatório não gerado ainda — gerar agora
+    if (confirm('O relatório ainda não foi gerado. Deseja gerar agora?')) {
+      showLoading('Gerando relatório...');
+      const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
+      hideLoading();
+      if (rg.ok && rg.linkHTML) window.open(rg.linkHTML, '_blank');
+      else toast('Erro: ' + (rg.erro || 'falha'));
+    }
+  }
+}
+
+async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
+  const email = prompt('E-mail do cliente:', emailSalvo || '');
+  if (!email || !email.includes('@')) return;
+
+  showLoading('Enviando...');
+  // Garantir que relatório existe
+  let r = await apiCall('obterRelatorio', { auditoriaId });
+  if (!r.ok || !r.relatorio) {
+    r = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
+  }
+  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email });
+  hideLoading();
+  if (re.ok) {
+    toast('Enviado para ' + email);
+    verHistorico(); // Recarregar lista
+  } else {
+    toast('Erro: ' + (re.erro || 'falha'));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   INICIALIZAÇÃO
+   ═══════════════════════════════════════════════════════ */
+function init() {
+  state.emailsCliente = {};
+  renderTelaInicial();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
