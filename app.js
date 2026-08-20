@@ -596,7 +596,10 @@ window.App = {
     // Coloca um arquivo (ja lido) num slot, como se fosse upload. Usado ao
     // recarregar uma analise do historico.
     State.files[type]=result;
-    if(State.rawData)State.rawData[type]=result.rows||[];
+    // Aplica o mapeamento automatico (mesma logica do upload manual)
+    var mapping=autoMapHeadersForType(result.headers||Object.keys(result.rows[0]||{}), type);
+    State.mappings[type]=mapping;
+    State.rawData[type]=applyMapping(result.rows,mapping);
     updateSlot(type,result.filename||'(recuperado)',result.rowCount||(result.rows?result.rows.length:0));
     checkReady();
   },
