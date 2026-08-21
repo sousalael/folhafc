@@ -10,6 +10,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
 :root{--fc-navy:#051323;--fc-navy-light:#0B2545;--fc-green:#00B74A;--fc-gl:#E8F8EF;--fc-gd:#009B3E;--fc-red:#D32F2F;--fc-rl:#FDEAEA;--fc-amb:#F57C00;--fc-al:#FFF3E0;--fc-blue:#1565C0;--fc-bl:#E3F2FD;--fc-bg:#f5f6f8;--fc-card:#fff;--fc-border:#e0e0e0;--fc-text:#333;--fc-muted:#888;--fc-light:#f5f5f5}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -204,8 +206,8 @@ table.data-table tr:hover td{background:#eef6ff}
       <div class="upload-zone" id="dropZone">
         <div class="upload-icon"><i class="ti ti-cloud-upload"></i></div>
         <div class="upload-title">Arraste seus arquivos aqui ou clique para selecionar</div>
-        <div class="upload-sub">Excel (.xlsx, .xls), CSV ou TXT — múltiplos arquivos aceitos</div>
-        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.txt" style="display:none">
+        <div class="upload-sub">Excel (.xlsx, .xls), CSV, TXT ou PDF — múltiplos arquivos aceitos</div>
+        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.txt,.pdf" style="display:none">
       </div>
       <div class="info-fields">
         <div class="info-row">
@@ -220,6 +222,7 @@ table.data-table tr:hover td{background:#eef6ff}
         <div class="file-slot" id="slot-contagem"><div class="file-slot-label">Contagem física</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
         <div class="file-slot" id="slot-vendas"><div class="file-slot-label">ABC Vendas</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
         <div class="file-slot" id="slot-cadastro"><div class="file-slot-label">Cadastro (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
+        <div class="file-slot" id="slot-custo"><div class="file-slot-label">Custo (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">SKU + Custo Unitário</div></div>
         <div class="file-slot" id="slot-exclusoes"><div class="file-slot-label">Exclusões (opcional)</div><div class="file-slot-name">—</div><div class="file-slot-status pending">SKUs a excluir da análise</div></div>
       </div>
       <div class="abc-selector">
@@ -319,7 +322,7 @@ table.data-table tr:hover td{background:#eef6ff}
   var obs = setInterval(function(){
     try {
       var st=getState();
-      var temArquivo = st && st.files && ['estoque','contagem','vendas','cadastro','exclusoes'].some(function(t){
+      var temArquivo = st && st.files && ['estoque','contagem','vendas','cadastro','custo','exclusoes'].some(function(t){
         return st.files[t] && st.files[t].rows && st.files[t].rows.length;
       });
       if (temArquivo) {

@@ -8,7 +8,7 @@ var LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALAAAAAsCAYAAADFEzJmAAAj
 document.getElementById('logo').src=LOGO;
 
 /* ===== STATE ===== */
-var State = {files:{estoque:null,contagem:null,vendas:null,cadastro:null,exclusoes:null},mappings:{},rawData:{estoque:[],contagem:[],vendas:[],cadastro:[],exclusoes:[]},results:{},processDate:'',charts:{},info:{cliente:'',unidade:'',dataInventario:'',diasVenda:90}};
+var State = {files:{estoque:null,contagem:null,vendas:null,cadastro:null,custo:null,exclusoes:null},mappings:{},rawData:{estoque:[],contagem:[],vendas:[],cadastro:[],custo:[],exclusoes:[]},results:{},processDate:'',charts:{},info:{cliente:'',unidade:'',dataInventario:'',diasVenda:90}};
 
 /* ===== FUZZY MAPPING — com contexto de tipo de arquivo ===== */
 var SYNONYMS = {
@@ -29,7 +29,8 @@ var TYPE_PRIORITY = {
   estoque:{qtdSistema:['qde','qtde','qt','quantidade','qtd','saldo','estoque']},
   contagem:{qtdContada:['qde','qtde','qt','quantidade','qtd']},
   vendas:{qtdVendida:['qde','qtde','qt','quantidade','qtd','vendas','venda'],valorVendido:['venda r$','vendas r$'],custoVendido:['cmv r$','cmv']},
-  cadastro:{}
+  cadastro:{},
+  custo:{custoUnit:['custo','custo unit','custo unitario','custo unitário','preco','preço','valor','price','cost','vlr unit','vlr unitario','vlr','valor unit']}
 };
 function fuzzyMatch(header,excludeFields){
   var h=String(header).toLowerCase().trim().replace(/[_\-\.]/g,' ').replace(/\s+/g,' ');
@@ -70,9 +71,12 @@ function parseCSVLine(line,sep){var r=[],cur='',inQ=false;for(var i=0;i<line.len
 function readFile(file,cb){
   var r=new FileReader();
   var isText=/\.(csv|txt)$/i.test(file.name);
+  var isPDF=/\.pdf$/i.test(file.name);
   r.onload=function(e){
     var d=new Uint8Array(e.target.result);
-    if(isText){
+    if(isPDF){
+      parsePDF(d,file.name,cb);
+    }else if(isText){
       var text=new TextDecoder('utf-8').decode(d);
       if(text.indexOf('\ufffd')>=0)text=new TextDecoder('latin1').decode(d);
       var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
@@ -88,6 +92,61 @@ function readFile(file,cb){
       cb({headers:json.length?Object.keys(json[0]):[],rows:json,filename:file.name,rowCount:json.length});
     }
   };r.readAsArrayBuffer(file);
+}
+/* parsePDF: extrai texto do PDF e converte em tabela */
+function parsePDF(data,filename,cb){
+  if(typeof pdfjsLib==='undefined'){alert('Biblioteca PDF não carregada. Tente novamente.');cb({headers:[],rows:[],filename:filename,rowCount:0});return;}
+  var loadingTask=pdfjsLib.getDocument({data:data});
+  loadingTask.promise.then(function(pdf){
+    var allText=[];
+    var pagesProcessed=0;
+    for(var p=1;p<=pdf.numPages;p++){
+      (function(pageNum){
+        pdf.getPage(pageNum).then(function(page){
+          page.getTextContent().then(function(tc){
+            var pageLines={};
+            tc.items.forEach(function(item){
+              var y=Math.round(item.transform[5]);
+              if(!pageLines[y])pageLines[y]='';
+              pageLines[y]+=item.str+'  ';
+            });
+            var sortedYs=Object.keys(pageLines).sort(function(a,b){return Number(b)-Number(a);});
+            sortedYs.forEach(function(y){allText.push(pageLines[y].trim());});
+            pagesProcessed++;
+            if(pagesProcessed===pdf.numPages){
+              // Converter linhas de texto em tabela
+              var lines=allText.filter(function(l){return l.trim();});
+              if(!lines.length){cb({headers:[],rows:[],filename:filename,rowCount:0});return;}
+              var sep='\t';
+              if(lines[0].indexOf('\t')<0){
+                // Tentar separar por 2+ espaços
+                sep='  ';
+                lines=lines.map(function(l){return l.replace(/\s{2,}/g,'\t');});
+                sep='\t';
+              }
+              var headers=lines[0].split(sep).map(function(h){return h.trim();}).filter(function(h){return h;});
+              var rows=[];
+              for(var i=1;i<lines.length;i++){
+                var vals=lines[i].split(sep).map(function(v){return v.trim();});
+                if(vals.length>=2){
+                  var row={};
+                  for(var j=0;j<headers.length;j++){row[headers[j]]=vals[j]||'';}
+                  rows.push(row);
+                }
+              }
+              if(rows.length===0&&headers.length<2){
+                alert('⚠️ PDF com poucas colunas detectadas. O arquivo pode ter layout complexo. Tente converter para Excel antes de importar.');
+              }
+              cb({headers:headers,rows:rows,filename:filename,rowCount:rows.length});
+            }
+          });
+        });
+      })(p);
+    }
+  }).catch(function(err){
+    alert('Erro ao ler PDF: '+err.message);
+    cb({headers:[],rows:[],filename:filename,rowCount:0});
+  });
 }
 /* parseNumBR: número JS passa direto; string BR converte (ponto=milhar, vírgula=decimal) */
 var NUMERIC_FIELDS={qtdSistema:1,qtdContada:1,custoUnit:1,qtdVendida:1,valorVendido:1,custoVendido:1,lucro:1};
@@ -122,7 +181,7 @@ document.querySelectorAll('.tab').forEach(function(tab){
 });
 
 /* ===== UPLOAD — cada slot é clicável ===== */
-var SLOT_TYPES = ['estoque','contagem','vendas','cadastro','exclusoes'];
+var SLOT_TYPES = ['estoque','contagem','vendas','cadastro','custo','exclusoes'];
 var slotFileInputs = {};
 
 // Drop zone geral — abre seletor de tipo depois de ler o arquivo
@@ -147,7 +206,7 @@ function handleFilesGeneric(files){
 SLOT_TYPES.forEach(function(type){
   var slot = $('slot-'+type);
   var inp = document.createElement('input');
-  inp.type='file';inp.accept='.xlsx,.xls,.csv,.txt';inp.style.display='none';
+  inp.type='file';inp.accept='.xlsx,.xls,.csv,.txt,.pdf';inp.style.display='none';
   inp.dataset.slotType=type;
   slot.appendChild(inp);
   slotFileInputs[type]=inp;
@@ -212,7 +271,7 @@ function assignFileToSlot(type, result){
 }
 
 function showMappingConfirmation(type, result, currentMapping){
-  var typeLabels={estoque:'Estoque Sistema',contagem:'Contagem Física',vendas:'Vendas 90 dias',cadastro:'Cadastro'};
+  var typeLabels={estoque:'Estoque Sistema',contagem:'Contagem Física',vendas:'Vendas 90 dias',cadastro:'Cadastro',custo:'Custo Unitário'};
   $('mappingTitle').textContent='Confirme o mapeamento — '+typeLabels[type];
   var body=$('mappingBody');
   body.innerHTML='<div style="margin-bottom:12px;font-size:13px">Arquivo: <strong>'+result.filename+'</strong> ('+result.rowCount.toLocaleString('pt-BR')+' linhas)</div>';
@@ -266,7 +325,7 @@ function limparSlot(type){
   var s=$('slot-'+type);
   s.querySelector('.file-slot-name').textContent='—';
   var st=s.querySelector('.file-slot-status');
-  var labels={estoque:'Clique para selecionar arquivo',contagem:'Clique para selecionar arquivo',vendas:'Clique para selecionar arquivo',cadastro:'Clique para selecionar arquivo',exclusoes:'SKUs a excluir da análise'};
+  var labels={estoque:'Clique para selecionar arquivo',contagem:'Clique para selecionar arquivo',vendas:'Clique para selecionar arquivo',cadastro:'Clique para selecionar arquivo',custo:'SKU + Custo Unitário',exclusoes:'SKUs a excluir da análise'};
   st.textContent=labels[type]||'Clique para selecionar arquivo';
   st.className='file-slot-status pending';
   checkReady();
@@ -299,7 +358,7 @@ function processAll(){
   var excludeSet={};
   if(State.rawData.exclusoes&&State.rawData.exclusoes.length){
     State.rawData.exclusoes.forEach(function(r){var s=String(r.sku||'').trim();if(s)excludeSet[s]=true;});
-    ['estoque','contagem','vendas','cadastro'].forEach(function(tipo){
+    ['estoque','contagem','vendas','cadastro','custo'].forEach(function(tipo){
       State.rawData[tipo]=State.rawData[tipo].filter(function(r){return!excludeSet[String(r.sku||'').trim()];});
     });
     hasEstoque=State.rawData.estoque.length>0;
@@ -308,8 +367,24 @@ function processAll(){
   }
   State.results={};
   var avail={critica:false,ruptura:false,dias:false,abc:false,perda:false};
-  // Mapa global de custo derivado do CMV das vendas
+  // Cadeia de prioridade de custo: estoque > arquivo custo > calculado ABC vendas > contagem
   var custoMap = hasVendas ? Engine.buildCustoMap(State.rawData.vendas) : {};
+  // Custo do arquivo dedicado (sobrepõe o calculado das vendas)
+  if(State.rawData.custo && State.rawData.custo.length){
+    State.rawData.custo.forEach(function(r){
+      var sku=String(r.sku||'').trim();
+      var cu=Number(r.custoUnit)||0;
+      if(sku && cu>0) custoMap[sku]=cu;
+    });
+  }
+  // Custo da contagem (menor prioridade — só preenche se ninguém preencheu)
+  if(State.rawData.contagem && State.rawData.contagem.length){
+    State.rawData.contagem.forEach(function(r){
+      var sku=String(r.sku||'').trim();
+      var cu=Number(r.custoUnit)||0;
+      if(sku && cu>0 && !custoMap[sku]) custoMap[sku]=cu;
+    });
+  }
 
   setTimeout(function(){
     fill.style.width='20%';
