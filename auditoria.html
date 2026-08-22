@@ -156,7 +156,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbxV6bx-q7pVeDy05uXzCzL8rqPhd3_nhFD_IoGcGEFw4x3gdXZwOsAjIE4hbnYzoFZF/exec';
-const VERSAO = 'r53';
+const VERSAO = 'r54';
 
 /* ═══════════════════════════════════════════════════════
    DEFINIÇÃO DOS CRITÉRIOS (fonte da verdade)
@@ -258,31 +258,31 @@ const SECOES = [
     estrutura:'Área de Vendas', departamento:'Perecíveis',
     subsecoes:[
       {id:'sub_ilhas_cong',titulo:'Ilhas de Congelados',criterios:[
-        {id:'av_ic_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_ic_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_ic_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_iogurtes',titulo:'Geladeiras de Iogurtes',criterios:[
-        {id:'av_iog_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_iog_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_iog_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_margarinas',titulo:'Margarinas / Manteigas / Requeijões',criterios:[
-        {id:'av_marg_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_marg_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_marg_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_padaria',titulo:'Padaria',criterios:[
-        {id:'av_pad_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pad_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_pad_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_bebidas',titulo:'Geladeiras de Bebidas',criterios:[
-        {id:'av_beb_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_beb_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_beb_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_polpas',titulo:'Polpas de Frutas',criterios:[
-        {id:'av_pol_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pol_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_pol_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_sorvetes',titulo:'Sorvetes',criterios:[
-        {id:'av_sorv_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_sorv_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_sorv_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_pesagem_av',titulo:'Equipe de Pesagem — Área de Vendas',criterios:[
@@ -308,62 +308,62 @@ const SECOES = [
         {id:'av_sub_org',label:'Produtos organizados'}
       ]},
       {id:'sub_pontos_extra',titulo:'Pontos-Extra',criterios:[
-        {id:'av_pe_sku',label:'Amarrações consecutivas identificadas',tipo:'escala_sku'}
+        {id:'av_pe_sku',label:'Organização das amarrações',tipo:'escala_sku'}
       ]},
       {id:'sub_bazar',titulo:'Bazar',criterios:[
-        {id:'av_baz_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_baz_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_baz_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_liquida',titulo:'Líquida',criterios:[
-        {id:'av_liq_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_liq_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_liq_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_biscoitos',titulo:'Biscoitos',criterios:[
-        {id:'av_bis_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_bis_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_bis_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_cereais',titulo:'Cereais',criterios:[
-        {id:'av_cer_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_cer_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_cer_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_condimentos',titulo:'Condimentos e Temperos',criterios:[
-        {id:'av_con_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_con_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_con_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_diet',titulo:'Diet / Light',criterios:[
-        {id:'av_diet_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_diet_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_diet_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_doces',titulo:'Doces e Sobremesas',criterios:[
-        {id:'av_doc_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_doc_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_doc_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_laticinios',titulo:'Laticínios',criterios:[
-        {id:'av_lat_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_lat_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_lat_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_limpeza',titulo:'Limpeza',criterios:[
-        {id:'av_lim_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_lim_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_lim_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_massas',titulo:'Massas e Sopas',criterios:[
-        {id:'av_mas_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_mas_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_mas_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_matinais',titulo:'Matinais',criterios:[
-        {id:'av_mat_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_mat_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_mat_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_perfumaria',titulo:'Perfumaria',criterios:[
-        {id:'av_perf_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_perf_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_perf_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_petshop',titulo:'Pet Shop',criterios:[
-        {id:'av_pet_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_pet_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_pet_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_salgadinhos',titulo:'Salgadinhos e Snacks',criterios:[
-        {id:'av_salg_sku',label:'Mercadorias agrupadas por SKU',tipo:'escala_sku'},
+        {id:'av_salg_sku',label:'Organização dos produtos por SKU',tipo:'escala_sku'},
         {id:'av_salg_qtd',label:'Quantidade de mercadoria',tipo:'escala_volume'}
       ]}
     ],
@@ -1271,7 +1271,8 @@ async function verHistorico() {
         ${a.dataEnvio ? '<span style="font-size:11px;color:var(--green)">✓ Enviado</span>' : '<span style="font-size:11px;color:var(--text-light)">Não enviado</span>'}
       </div>
       <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:12px" onclick="abrirRelatorio('${a.id}')">Ver Relatório</button>
+        <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 HTML</button>
+        <button class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','pdf')">📥 PDF</button>
         <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:12px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">Enviar E-mail</button>
       </div>
     </div>
@@ -1290,21 +1291,23 @@ async function verHistorico() {
     </div>`;
 }
 
-async function abrirRelatorio(auditoriaId) {
+async function abrirRelatorio(auditoriaId, formato) {
   showLoading('Buscando relatório...');
   const r = await apiCall('obterRelatorio', { auditoriaId });
   hideLoading();
-  if (r.ok && r.relatorio && r.relatorio.linkHTML) {
-    window.open(r.relatorio.linkHTML, '_blank');
-  } else {
-    // Relatório não gerado ainda — gerar agora
-    if (confirm('O relatório ainda não foi gerado. Deseja gerar agora?')) {
-      showLoading('Gerando relatório...');
-      const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
-      hideLoading();
-      if (rg.ok && rg.linkHTML) window.open(rg.linkHTML, '_blank');
-      else toast('Erro: ' + (rg.erro || 'falha'));
-    }
+  if (r.ok && r.relatorio) {
+    const link = formato === 'pdf' ? r.relatorio.linkPDF : r.relatorio.linkHTML;
+    if (link) { window.open(link, '_blank'); return; }
+  }
+  if (confirm('O relatório ainda não foi gerado. Deseja gerar agora?')) {
+    showLoading('Gerando relatório...');
+    const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
+    hideLoading();
+    if (rg.ok) {
+      const link = formato === 'pdf' ? rg.linkPDF : rg.linkHTML;
+      if (link) window.open(link, '_blank');
+      else toast('Relatório gerado. Reabra o histórico.');
+    } else { toast('Erro: ' + (rg.erro || 'falha')); }
   }
 }
 
