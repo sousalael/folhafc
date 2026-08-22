@@ -693,21 +693,39 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
       <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
-        <h5 class="modal-title fw-bold">Relatório de Múltiplos Projetos</h5>
+        <h5 class="modal-title fw-bold">📑 Relatório de Múltiplos Projetos</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-2">Selecione abaixo os projetos encerrados que deseja unificar no Excel:</p>
-        <div id="lista-projetos-multi" class="border p-2 mb-3 rounded bg-light" style="max-height: 300px; overflow-y: auto;">
+        <div class="bg-light rounded p-3 mb-3">
+          <div class="text-muted small fw-bold text-uppercase mb-2" style="letter-spacing:1px;font-size:11px">Filtros</div>
+          <div class="d-flex gap-2 mb-2">
+            <div class="flex-fill">
+              <label class="form-label mb-1" style="font-size:11px;color:#6B7B8D;font-weight:600">Período — De</label>
+              <input type="date" id="multi-data-ini" class="form-control form-control-sm" onchange="filtrarProjetosMulti()">
+            </div>
+            <div class="flex-fill">
+              <label class="form-label mb-1" style="font-size:11px;color:#6B7B8D;font-weight:600">Período — Até</label>
+              <input type="date" id="multi-data-fim" class="form-control form-control-sm" onchange="filtrarProjetosMulti()">
+            </div>
+          </div>
+          <div>
+            <label class="form-label mb-1" style="font-size:11px;color:#6B7B8D;font-weight:600">Cliente</label>
+            <input type="text" id="multi-cliente" class="form-control form-control-sm" placeholder="Todos os clientes" list="datalist-clientes-multi" oninput="filtrarProjetosMulti()">
+            <datalist id="datalist-clientes-multi"></datalist>
+          </div>
+        </div>
+        <p class="text-muted small mb-2" id="multi-contador">Selecione os projetos encerrados:</p>
+        <div id="lista-projetos-multi" class="border p-2 mb-3 rounded bg-light" style="max-height: 260px; overflow-y: auto;">
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-secondary w-50" onclick="marcarTodosMulti(true)">Marcar Todos</button>
-            <button class="btn btn-sm btn-outline-secondary w-50" onclick="marcarTodosMulti(false)">Desmarcar</button>
+            <button class="btn btn-sm btn-secondary w-50" onclick="marcarTodosMulti(true)">✓ Marcar Todos</button>
+            <button class="btn btn-sm btn-outline-secondary w-50" onclick="marcarTodosMulti(false)">✕ Desmarcar</button>
         </div>
       </div>
       <div class="modal-footer border-top-0">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-primary fw-bold" id="btn-gerar-multi" onclick="gerarRelatorioMultiplo()">Gerar Excel Unificado</button>
+        <button type="button" class="btn btn-primary fw-bold" id="btn-gerar-multi" onclick="gerarRelatorioMultiplo()">📥 Gerar Excel Unificado</button>
       </div>
     </div>
   </div>
@@ -1483,15 +1501,49 @@
     }
     
     function popularModalMulti() {
+        // Popular datalist de clientes únicos
+        const clientesUnicos = [...new Set(projetosEncerradosGlobal.map(p => p.cliente))].sort();
+        document.getElementById('datalist-clientes-multi').innerHTML = clientesUnicos.map(c => `<option value="${c}">`).join('');
+        // Limpar filtros
+        document.getElementById('multi-data-ini').value = '';
+        document.getElementById('multi-data-fim').value = '';
+        document.getElementById('multi-cliente').value = '';
+        filtrarProjetosMulti();
+    }
+
+    function filtrarProjetosMulti() {
+        const dataIni = document.getElementById('multi-data-ini').value;
+        const dataFim = document.getElementById('multi-data-fim').value;
+        const clienteFiltro = document.getElementById('multi-cliente').value.toLowerCase().trim();
         const container = document.getElementById('lista-projetos-multi');
-        if(projetosEncerradosGlobal.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center m-0">Nenhum projeto encerrado disponível.</p>';
+
+        let filtrados = projetosEncerradosGlobal.filter(p => {
+            // Filtro por cliente
+            if (clienteFiltro && !(p.cliente || '').toLowerCase().includes(clienteFiltro)) return false;
+            // Filtro por período (data do projeto no formato dd/mm/yyyy)
+            if (dataIni || dataFim) {
+                const partes = (p.data || '').split('/');
+                if (partes.length === 3) {
+                    const dataProj = parseInt(partes[2] + partes[1] + partes[0], 10);
+                    if (dataIni) { const ini = parseInt(dataIni.replace(/-/g, ''), 10); if (dataProj < ini) return false; }
+                    if (dataFim) { const fim = parseInt(dataFim.replace(/-/g, ''), 10); if (dataProj > fim) return false; }
+                }
+            }
+            return true;
+        });
+
+        document.getElementById('multi-contador').innerHTML = filtrados.length
+            ? `<strong>${filtrados.length} projeto${filtrados.length > 1 ? 's' : ''} encontrado${filtrados.length > 1 ? 's' : ''}</strong> — selecione os que deseja incluir:`
+            : '<span class="text-warning">Nenhum projeto encontrado com esses filtros.</span>';
+
+        if (filtrados.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center m-0 py-3">Nenhum projeto corresponde aos filtros.</p>';
             return;
         }
-        container.innerHTML = projetosEncerradosGlobal.map((p, i) => `
+        container.innerHTML = filtrados.map((p, i) => `
             <div class="form-check border-bottom pb-1 mb-1">
                 <input class="form-check-input chk-multi" type="checkbox" value='${JSON.stringify(p)}' id="chk-multi-${i}">
-                <label class="form-check-label w-100" for="chk-multi-${i}" style="cursor:pointer;">${p.data} - ${p.cliente} - ${p.unidade}</label>
+                <label class="form-check-label w-100" for="chk-multi-${i}" style="cursor:pointer;"><strong>${p.data}</strong> — ${p.cliente} — ${p.unidade}</label>
             </div>
         `).join('');
     }
@@ -1521,7 +1573,13 @@
 
             let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
             let downloadLink = document.createElement("a");
-            downloadLink.download = `Relatorio_Multiplos_Projetos.csv`;
+            let nomeArquivo = 'Relatorio_Multiplos_Projetos';
+            const cFiltro = document.getElementById('multi-cliente').value.trim();
+            const dIni = document.getElementById('multi-data-ini').value;
+            const dFim = document.getElementById('multi-data-fim').value;
+            if (cFiltro) nomeArquivo += '_' + cFiltro.replace(/\s+/g,'_');
+            if (dIni || dFim) nomeArquivo += '_' + (dIni||'inicio') + '_a_' + (dFim||'fim');
+            downloadLink.download = nomeArquivo + '.csv';
             downloadLink.href = window.URL.createObjectURL(csvFile);
             downloadLink.click();
         } catch(err) {
@@ -3825,7 +3883,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-08-22-r51';
+    const VERSAO_ESPERADA = '2026-08-22-r53';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
