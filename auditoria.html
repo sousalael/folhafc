@@ -156,7 +156,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbxV6bx-q7pVeDy05uXzCzL8rqPhd3_nhFD_IoGcGEFw4x3gdXZwOsAjIE4hbnYzoFZF/exec';
-const VERSAO = 'r56';
+const VERSAO = 'r57';
 
 /* ═══════════════════════════════════════════════════════
    DEFINIÇÃO DOS CRITÉRIOS (fonte da verdade)
@@ -1131,125 +1131,29 @@ async function finalizarAvaliacao() {
     try { localStorage.removeItem('fc_aud_' + state.auditoriaId); } catch(e) {}
   }
 
-  // 3. Gerar relatório
-  $('#app').innerHTML = `
-    <div class="tela-inicial">
-      <div class="secao-card" style="text-align:center;padding:40px 28px">
-        <div class="spinner" style="margin:0 auto 16px"></div>
-        <h2 style="font-size:18px;color:var(--navy);margin-bottom:8px">Gerando Relatório...</h2>
-        <p style="color:var(--text-light)">Analisando a avaliação e redigindo o relatório.</p>
-      </div>
-    </div>`;
-
-  const rr = await apiCall('gerarRelatorioAuditoria', { auditoriaId: state.auditoriaId });
   hideLoading();
 
-  if (rr.ok) {
-    state.ultimoRelatorio = rr;
-    renderTelaRelatorioGerado();
-  } else {
-    // Mesmo com erro no relatório, a avaliação foi salva
-    $('#app').innerHTML = `
-      <div class="tela-inicial">
-        <div class="secao-card" style="text-align:center;padding:40px 28px">
-          <div style="font-size:56px;margin-bottom:16px">✅</div>
-          <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Avaliação Finalizada</h2>
-          <p style="color:var(--text-light);margin-bottom:16px">
-            ${state.identificacao.cliente} — ${state.identificacao.unidade}
-          </p>
-          <div style="background:#FEF3CD;padding:12px;border-radius:10px;margin-bottom:20px;font-size:13px;color:#856404">
-            <i class="bi bi-exclamation-triangle"></i> O relatório não pôde ser gerado agora: ${rr.erro || 'erro desconhecido'}.<br>
-            Você pode gerar novamente pelo histórico.
-          </div>
-          <button class="btn-fc btn-fc-navy" onclick="renderTelaInicial()">
-            <i class="bi bi-arrow-left"></i> Voltar ao Início
-          </button>
-        </div>
-      </div>`;
-  }
-}
-
-function renderTelaRelatorioGerado() {
-  const rel = state.ultimoRelatorio;
-  const ident = state.identificacao;
-
+  // Sucesso — relatório será gerado sob demanda pelo histórico
   $('#app').innerHTML = `
     <div class="tela-inicial">
       <div class="secao-card" style="text-align:center;padding:40px 28px">
         <div style="font-size:56px;margin-bottom:16px">✅</div>
-        <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Relatório Gerado com Sucesso</h2>
-        <p style="color:var(--text-light);margin-bottom:24px">
-          ${ident.cliente} — ${ident.unidade}<br>${ident.data_auditoria}
+        <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Avaliação Finalizada</h2>
+        <p style="color:var(--text-light);margin-bottom:16px">
+          ${state.identificacao.cliente} — ${state.identificacao.unidade}<br>${state.identificacao.data_auditoria}
         </p>
-        <p style="font-size:13px;color:var(--text);margin-bottom:8px">
-          Score Geral: <strong style="color:var(--navy)">${rel.scoreGeral || '—'}</strong> &nbsp;|&nbsp;
-          Equipe de Apoio: <strong style="color:var(--orange)">${rel.scoreEquipe || '—'}</strong>
+        <p style="font-size:13px;color:var(--text);margin-bottom:24px">
+          A avaliação foi salva com sucesso. O relatório pode ser gerado a qualquer momento pelo <strong>Histórico</strong>.
         </p>
-      </div>
-
-      <div class="secao-card">
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <a href="${rel.linkHTML || '#'}" target="_blank" class="btn-fc btn-fc-navy" style="text-align:center;text-decoration:none">
-            <i class="bi bi-file-earmark-text"></i> Ver Relatório (HTML)
-          </a>
-          <a href="${rel.linkPDF || '#'}" target="_blank" class="btn-fc btn-fc-outline" style="text-align:center;text-decoration:none">
-            <i class="bi bi-file-earmark-pdf"></i> Baixar PDF
-          </a>
-        </div>
-      </div>
-
-      <div class="secao-card" id="emailCard">
-        <div style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px">
-          <i class="bi bi-envelope"></i> Enviar por E-mail
-        </div>
-        <div class="campo-input" style="margin-bottom:12px">
-          <label>E-mail do cliente</label>
-          <input type="email" id="emailCliente" placeholder="email@cliente.com.br"
-                 value="${state.emailsCliente && state.emailsCliente[ident.cliente+'|'+ident.unidade] || ''}">
-        </div>
-        <button class="btn-fc btn-fc-orange" onclick="enviarEmail()">
-          <i class="bi bi-send"></i> Enviar Relatório
+        <button class="btn-fc btn-fc-navy" onclick="renderTelaInicial()" style="margin-bottom:10px">
+          <i class="bi bi-arrow-left"></i> Voltar ao Início
         </button>
       </div>
-
-      <button class="btn-fc btn-fc-outline" onclick="renderTelaInicial()" style="margin-top:10px;max-width:480px;margin-left:auto;margin-right:auto;display:block">
-        <i class="bi bi-arrow-left"></i> Voltar ao Início
-      </button>
     </div>`;
 }
 
-async function enviarEmail() {
-  const email = document.getElementById('emailCliente').value.trim();
-  if (!email || !email.includes('@')) {
-    toast('Informe um e-mail válido');
-    return;
-  }
-
-  showLoading('Enviando relatório...');
-  const r = await apiCall('enviarRelatorioAuditoria', {
-    auditoriaId: state.auditoriaId,
-    email: email
-  });
-  hideLoading();
-
-  if (r.ok) {
-    toast('Relatório enviado para ' + email);
-    const card = document.getElementById('emailCard');
-    if (card) {
-      card.innerHTML = `
-        <div style="text-align:center;padding:16px">
-          <div style="font-size:32px;margin-bottom:8px">📧</div>
-          <div style="font-size:14px;font-weight:600;color:var(--green)">Enviado com sucesso</div>
-          <div style="font-size:12px;color:var(--text-light);margin-top:4px">${email}</div>
-        </div>`;
-    }
-  } else {
-    toast('Erro: ' + (r.erro || 'falha no envio'));
-  }
-}
-
 /* ═══════════════════════════════════════════════════════
-   HISTÓRICO (acessível da tela inicial — futuro)
+   HISTÓRICO
    ═══════════════════════════════════════════════════════ */
 async function verHistorico() {
   showLoading('Carregando histórico...');
@@ -1292,22 +1196,15 @@ async function verHistorico() {
 }
 
 async function abrirRelatorio(auditoriaId, formato) {
-  showLoading('Buscando relatório...');
-  const r = await apiCall('obterRelatorio', { auditoriaId });
+  showLoading('Gerando relatório...');
+  const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
   hideLoading();
-  if (r.ok && r.relatorio) {
-    const link = formato === 'pdf' ? r.relatorio.linkPDF : r.relatorio.linkHTML;
-    if (link) { window.open(link, '_blank'); return; }
-  }
-  if (confirm('O relatório ainda não foi gerado. Deseja gerar agora?')) {
-    showLoading('Gerando relatório...');
-    const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
-    hideLoading();
-    if (rg.ok) {
-      const link = formato === 'pdf' ? rg.linkPDF : rg.linkHTML;
-      if (link) window.open(link, '_blank');
-      else toast('Relatório gerado. Reabra o histórico.');
-    } else { toast('Erro: ' + (rg.erro || 'falha')); }
+  if (rg.ok) {
+    const link = formato === 'pdf' ? rg.linkPDF : rg.linkHTML;
+    if (link) window.open(link, '_blank');
+    else toast('Relatório gerado mas link indisponível');
+  } else {
+    toast('Erro: ' + (rg.erro || 'falha ao gerar'));
   }
 }
 
@@ -1315,17 +1212,16 @@ async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
   const email = prompt('E-mail do cliente:', emailSalvo || '');
   if (!email || !email.includes('@')) return;
 
-  showLoading('Enviando...');
-  // Garantir que relatório existe
-  let r = await apiCall('obterRelatorio', { auditoriaId });
-  if (!r.ok || !r.relatorio) {
-    r = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
-  }
+  showLoading('Gerando relatório e enviando...');
+  // Gerar relatório primeiro
+  const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
+  if (!rg.ok) { hideLoading(); toast('Erro ao gerar: ' + (rg.erro || 'falha')); return; }
+  // Enviar
   const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email });
   hideLoading();
   if (re.ok) {
     toast('Enviado para ' + email);
-    verHistorico(); // Recarregar lista
+    verHistorico();
   } else {
     toast('Erro: ' + (re.erro || 'falha'));
   }
