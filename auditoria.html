@@ -150,13 +150,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <!-- INPUT CAMERA OCULTO -->
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="galeriaInput" accept="image/*" style="display:none" multiple>
 
 <script>
 /* ═══════════════════════════════════════════════════════
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbxV6bx-q7pVeDy05uXzCzL8rqPhd3_nhFD_IoGcGEFw4x3gdXZwOsAjIE4hbnYzoFZF/exec';
-const VERSAO = 'r57';
+const VERSAO = 'r58';
 
 /* ═══════════════════════════════════════════════════════
    DEFINIÇÃO DOS CRITÉRIOS (fonte da verdade)
@@ -879,9 +880,13 @@ function renderFotos(secao) {
         </div>`;
     } else {
       slots += `
-        <div class="foto-slot" onclick="capturarFoto('${secao.id}')">
+        <div class="foto-slot" onclick="capturarFoto('${secao.id}','camera')" style="cursor:pointer">
           <i class="bi bi-camera"></i>
-          <span>Foto ${i+1}</span>
+          <span>Câmera</span>
+        </div>
+        <div class="foto-slot" onclick="capturarFoto('${secao.id}','galeria')" style="cursor:pointer">
+          <i class="bi bi-image"></i>
+          <span>Galeria</span>
         </div>`;
     }
   }
@@ -895,44 +900,45 @@ function renderFotos(secao) {
 }
 
 let fotoTargetSecao = null;
-function capturarFoto(secaoId) {
+function capturarFoto(secaoId, modo) {
   fotoTargetSecao = secaoId;
-  document.getElementById('cameraInput').click();
+  document.getElementById(modo === 'galeria' ? 'galeriaInput' : 'cameraInput').click();
+}
+
+function processarFotoFile(file) {
+  if (!file || !fotoTargetSecao) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxDim = 1200;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = h * maxDim / w; w = maxDim; }
+        else { w = w * maxDim / h; h = maxDim; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.7);
+      if (!state.fotos[fotoTargetSecao]) state.fotos[fotoTargetSecao] = [];
+      const secao = SECOES.find(s => s.id === fotoTargetSecao);
+      if (state.fotos[fotoTargetSecao].length < (secao?.fotos?.max || 3)) {
+        state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
+        renderFormulario();
+      } else { toast('Limite de fotos atingido'); }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cameraInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file || !fotoTargetSecao) return;
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      // Comprimir imagem
-      const img = new Image();
-      img.onload = function() {
-        const canvas = document.createElement('canvas');
-        const maxDim = 1200;
-        let w = img.width, h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = h * maxDim / w; w = maxDim; }
-          else { w = w * maxDim / h; h = maxDim; }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL('image/jpeg', 0.7);
-        if (!state.fotos[fotoTargetSecao]) state.fotos[fotoTargetSecao] = [];
-        const secao = SECOES.find(s => s.id === fotoTargetSecao);
-        if (state.fotos[fotoTargetSecao].length < (secao?.fotos?.max || 3)) {
-          state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
-          renderFormulario();
-        } else {
-          toast('Limite de fotos atingido');
-        }
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    processarFotoFile(e.target.files[0]); e.target.value = '';
+  });
+  document.getElementById('galeriaInput').addEventListener('change', function(e) {
+    Array.from(e.target.files).forEach(f => processarFotoFile(f)); e.target.value = '';
   });
 });
 
