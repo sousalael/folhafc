@@ -665,7 +665,7 @@ window.App = {
     $('exp-perda').disabled=!r.perda;$('exp-perda').checked=!!r.perda;
     $('exportModal').classList.add('active');
   },
-  getState:function(){return State;},
+  getState:function(){State.apiUrl=typeof API_URL!=='undefined'?API_URL:null;return State;},
   limparSlot:limparSlot,
   carregarSlotExterno:function(type,result){
     // Coloca um arquivo (ja lido) num slot, como se fosse upload. Usado ao
