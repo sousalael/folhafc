@@ -183,7 +183,7 @@ const SECOES = [
       {id:'ef_iluminacao',label:'Iluminação — suficiente para a contagem'},
       {id:'ef_equipamentos',label:'Equipamentos de suporte aéreo — quantidade adequada'}
     ],
-    fotos:{max:3,label:'Fotos da estrutura física'}
+    fotos:{max:99,label:'Fotos da estrutura física'}
   },
   // ── 2. DEPÓSITO LINHA SECA ──
   {
@@ -197,7 +197,7 @@ const SECOES = [
       {id:'dls_organizacao',label:'Organização dos produtos'}
     ],
     observacao:{id:'obs_deposito',label:'Observações sobre o depósito'},
-    fotos:{max:3,label:'Fotos do depósito'}
+    fotos:{max:99,label:'Fotos do depósito'}
   },
   // ── 3. AÉREOS E SUB-AÉREOS — RETAGUARDA ──
   {
@@ -214,7 +214,7 @@ const SECOES = [
         {id:'ret_sub_org',label:'Organização dos produtos'}
       ]}
     ],
-    fotos:{max:3,label:'Fotos dos aéreos e sub-aéreos — retaguarda'}
+    fotos:{max:99,label:'Fotos dos aéreos e sub-aéreos — retaguarda'}
   },
   // ── 4. EQUIPE DE APOIO — RETAGUARDA ──
   {
@@ -251,7 +251,7 @@ const SECOES = [
       ]}
     ],
     observacao:{id:'obs_camaras',label:'Observações sobre as câmaras'},
-    fotos:{max:3,label:'Fotos das câmaras'}
+    fotos:{max:99,label:'Fotos das câmaras'}
   },
   // ── 5. PERECÍVEIS — ÁREA DE VENDAS ──
   {
@@ -384,16 +384,19 @@ const SECOES = [
    ═══════════════════════════════════════════════════════ */
 let state = {
   usuario: null,       // dados do login
+  perfil: '',          // SUPERVISOR ou DIRETOR
   auditoriaId: null,   // ID da auditoria em andamento
   secaoAtual: 0,       // índice da seção visível
   respostas: {},       // { criterioId: valor(1-10) ou 'NA' }
   observacoes: {},     // { obsId: texto }
   fotos: {},           // { secaoId: [{ base64, legenda }] }
+  fotosIds: {},        // { secaoId: [fileId] } — fotos já salvas no Drive
   identificacao: {},   // campos da tela de identificação
   clientes: [],        // lista de clientes carregada
   unidades: {},        // { cliente: [unidades] }
   rascunhos: [],       // lista de rascunhos do usuário
-  status: 'NOVO'       // NOVO | RASCUNHO | CONCLUIDO
+  status: 'NOVO',      // NOVO | RASCUNHO | CONCLUIDO
+  editando: false      // true quando editando auditoria existente
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -506,6 +509,7 @@ async function renderTelaInicial() {
   // Buscar rascunhos do servidor
   let rascunhos = [];
   const r = await apiCall('listarRascunhosAuditoria', {});
+  if (r.perfil) state.perfil = r.perfil;
   if (r.ok && r.rascunhos && r.rascunhos.length) {
     rascunhos = r.rascunhos.map(x => ({
       id: x.id,
@@ -869,27 +873,34 @@ function toggleSubsecao(id) {
 /* ── FOTOS ── */
 function renderFotos(secao) {
   const fotos = state.fotos[secao.id] || [];
-  const max = secao.fotos.max;
+  const fotosIds = state.fotosIds ? (state.fotosIds[secao.id] || []) : [];
   let slots = '';
-  for (let i = 0; i < max; i++) {
-    if (fotos[i]) {
-      slots += `
-        <div class="foto-slot">
-          <img src="${fotos[i].base64}" alt="Foto ${i+1}">
-          <button class="foto-remove" onclick="removerFoto('${secao.id}',${i})"><i class="bi bi-x"></i></button>
-        </div>`;
-    } else {
-      slots += `
-        <div class="foto-slot" onclick="capturarFoto('${secao.id}','camera')" style="cursor:pointer">
-          <i class="bi bi-camera"></i>
-          <span>Câmera</span>
-        </div>
-        <div class="foto-slot" onclick="capturarFoto('${secao.id}','galeria')" style="cursor:pointer">
-          <i class="bi bi-image"></i>
-          <span>Galeria</span>
-        </div>`;
-    }
-  }
+  // Fotos já capturadas (base64 local)
+  fotos.forEach((foto, i) => {
+    slots += `
+      <div class="foto-slot">
+        <img src="${foto.base64}" alt="Foto ${i+1}">
+        <button class="foto-remove" onclick="removerFoto('${secao.id}',${i})"><i class="bi bi-x"></i></button>
+      </div>`;
+  });
+  // Fotos já salvas no Drive (ao editar auditoria concluída)
+  fotosIds.forEach((fid, i) => {
+    slots += `
+      <div class="foto-slot">
+        <img src="https://lh3.googleusercontent.com/d/${fid}" alt="Foto salva ${i+1}">
+        <button class="foto-remove" onclick="removerFotoSalva('${secao.id}',${i})"><i class="bi bi-x"></i></button>
+      </div>`;
+  });
+  // Botão "+" para adicionar mais fotos
+  slots += `
+    <div class="foto-slot" onclick="capturarFoto('${secao.id}','camera')" style="cursor:pointer">
+      <i class="bi bi-camera" style="font-size:18px"></i>
+      <span>Câmera</span>
+    </div>
+    <div class="foto-slot" onclick="capturarFoto('${secao.id}','galeria')" style="cursor:pointer">
+      <i class="bi bi-image" style="font-size:18px"></i>
+      <span>Galeria</span>
+    </div>`;
   return `
     <div class="secao-card">
       <div class="fotos-section">
@@ -897,6 +908,12 @@ function renderFotos(secao) {
         <div class="fotos-grid">${slots}</div>
       </div>
     </div>`;
+}
+
+function removerFotoSalva(secaoId, idx) {
+  if (!state.fotosIds || !state.fotosIds[secaoId]) return;
+  state.fotosIds[secaoId].splice(idx, 1);
+  renderFormulario();
 }
 
 let fotoTargetSecao = null;
@@ -922,11 +939,8 @@ function processarFotoFile(file) {
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       const compressed = canvas.toDataURL('image/jpeg', 0.7);
       if (!state.fotos[fotoTargetSecao]) state.fotos[fotoTargetSecao] = [];
-      const secao = SECOES.find(s => s.id === fotoTargetSecao);
-      if (state.fotos[fotoTargetSecao].length < (secao?.fotos?.max || 3)) {
-        state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
-        renderFormulario();
-      } else { toast('Limite de fotos atingido'); }
+      state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
+      renderFormulario();
     };
     img.src = ev.target.result;
   };
@@ -1171,7 +1185,30 @@ async function verHistorico() {
     return;
   }
 
-  let itens = r.auditorias.map(a => `
+  const perfil = state.perfil || '';
+  const isDiretor = perfil === 'DIRETOR';
+
+  let itens = r.auditorias.map(a => {
+    let botoes = '';
+    if (isDiretor) {
+      botoes = `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 HTML</button>
+          <button class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','pdf')">📥 PDF</button>
+          <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ E-mail</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#F4F6F8;color:var(--navy)" onclick="editarAuditoria('${a.id}')">✏️ Editar</button>
+          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#FDEAEA;color:#E05252" onclick="excluirAuditoria('${a.id}','${a.cliente} — ${a.unidade}')">🗑️ Excluir</button>
+        </div>`;
+    } else {
+      // Supervisor: somente leitura se relatório já gerado
+      botoes = `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 Ver Relatório</button>
+        </div>`;
+    }
+    return `
     <div class="rascunho-item" style="cursor:default">
       <div class="ri-titulo">${a.cliente} — ${a.unidade}</div>
       <div class="ri-sub">${a.dataAuditoria} • ${a.auditor} • ${a.tipoAvaliacao}</div>
@@ -1180,13 +1217,9 @@ async function verHistorico() {
         <span style="font-size:12px;color:var(--orange)">Equipe: ${a.scoreEquipe || '—'}</span>
         ${a.dataEnvio ? '<span style="font-size:11px;color:var(--green)">✓ Enviado</span>' : '<span style="font-size:11px;color:var(--text-light)">Não enviado</span>'}
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 HTML</button>
-        <button class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','pdf')">📥 PDF</button>
-        <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:12px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">Enviar E-mail</button>
-      </div>
-    </div>
-  `).join('');
+      ${botoes}
+    </div>`;
+  }).join('');
 
   $('#app').innerHTML = `
     <div class="tela-inicial">
@@ -1199,6 +1232,34 @@ async function verHistorico() {
         <i class="bi bi-arrow-left"></i> Voltar
       </button>
     </div>`;
+}
+
+async function editarAuditoria(auditoriaId) {
+  showLoading('Carregando auditoria...');
+  const r = await apiCall('carregarAuditoria', { id: auditoriaId });
+  hideLoading();
+  if (!r.ok || !r.auditoria) { toast('Erro: ' + (r.erro || 'não encontrada')); return; }
+  const a = r.auditoria;
+  state.auditoriaId = a.id;
+  state.identificacao = a.identificacao || {};
+  state.respostas = a.respostas || {};
+  state.observacoes = a.observacoes || {};
+  state.fotos = {};
+  state.fotosIds = a.fotosIds || {};
+  state.status = a.status || 'CONCLUIDO';
+  state.secaoAtual = 0;
+  state.editando = true;
+  renderFormulario();
+}
+
+async function excluirAuditoria(auditoriaId, nome) {
+  if (!confirm('Excluir a auditoria "' + nome + '"?')) return;
+  if (!confirm('Confirma a exclusão definitiva?')) return;
+  showLoading('Excluindo...');
+  const r = await apiCall('excluirAuditoria', { auditoriaId });
+  hideLoading();
+  if (r.ok) { toast('Auditoria excluída'); verHistorico(); }
+  else toast('Erro: ' + (r.erro || 'falha'));
 }
 
 async function abrirRelatorio(auditoriaId, formato) {
