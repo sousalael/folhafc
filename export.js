@@ -247,5 +247,117 @@ function _generatePDFInternal(rt,data,pd,logo,info){
   doc.text('Nota: relatório baseado em dados processados em '+pd+'. Valores projetados são estimativas.',M,y);
   doc.save('resumo_'+rt+'_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.unidade||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.pdf');
 }
-return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF};
+/* ========== PDF COMPARATIVO ========== */
+function generateComparativoPDF(comp, units, info, iaTextos){
+  iaTextos=iaTextos||{};info=info||{};
+  var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var W=210,H=297,M=15,y=0;
+  var pd=new Date().toLocaleString('pt-BR');
+
+  function hdr(){doc.setFillColor(5,19,35);doc.rect(0,0,W,22,'F');try{var st=window.App?window.App.getState():null;if(st){var logoSrc=document.getElementById('logo').src;if(logoSrc)doc.addImage(logoSrc,'PNG',M,3,36,12);}}catch(e){}doc.setFontSize(9);doc.setTextColor(255,255,255);doc.text('COMPARATIVO — '+(info.cliente||''),W-M,7,{align:'right'});doc.setFontSize(7);doc.setTextColor(200,220,255);doc.text(comp.unidades.map(function(u){return u.unidade;}).join(' × '),W-M,12,{align:'right'});doc.setTextColor(180,180,200);doc.text('Inventário: '+(info.dataInventario||'—')+' | Gerado em '+pd,W-M,17,{align:'right'});y=28;}
+  function ftr(pg){doc.setFontSize(7);doc.setTextColor(150,150,150);doc.text('Formula Code Tecnologia, Gestão e Automação',M,H-6);doc.text('Página '+pg,W-M,H-6,{align:'right'});doc.setDrawColor(200,200,200);doc.line(M,H-10,W-M,H-10);}
+  function chk(n){if(y+n>H-18){doc.addPage();hdr();ftr(doc.getNumberOfPages());}}
+  function ttl(t){chk(12);doc.setFontSize(14);doc.setTextColor(5,19,35);doc.setFont(undefined,'bold');doc.text(t,M,y);y+=6;doc.setFontSize(8);doc.setTextColor(150,150,150);doc.setFont(undefined,'normal');doc.text('Relatório comparativo gerado pelo Sistema Formula Code',M,y);y+=8;}
+  function sec(t){chk(10);doc.setFontSize(11);doc.setTextColor(5,19,35);doc.setFont(undefined,'bold');doc.text(t,M,y);y+=6;doc.setFont(undefined,'normal');}
+  function bloco(txt){if(!txt)return;chk(16);doc.setFontSize(8);doc.setTextColor(80,80,80);doc.setFont(undefined,'normal');var lines=doc.splitTextToSize(txt,W-2*M);doc.text(lines,M,y);y+=lines.length*3.5+4;}
+  function aT(h,b,o){chk(20);doc.autoTable({startY:y,head:[h],body:b,margin:{left:M,right:M},headStyles:{fillColor:[5,19,35],fontSize:7,fontStyle:'bold',halign:'left'},bodyStyles:{fontSize:7,halign:'left'},alternateRowStyles:{fillColor:[245,245,245]},styles:{cellPadding:1.5,lineColor:[220,220,220],lineWidth:0.2},columnStyles:o||{}});y=doc.lastAutoTable.finalY+6;}
+  function kpi(lb,vl,cl){chk(18);var cw=(W-2*M)/lb.length;doc.setFillColor(245,245,245);doc.roundedRect(M,y-2,W-2*M,16,2,2,'F');for(var i=0;i<lb.length;i++){var x=M+i*cw+4;doc.setFontSize(7);doc.setTextColor(150,150,150);doc.setFont(undefined,'bold');doc.text(lb[i],x,y+3);doc.setFontSize(11);doc.setFont(undefined,'bold');var cc=cl[i]||[51,51,51];doc.setTextColor(cc[0],cc[1],cc[2]);doc.text(String(vl[i]),x,y+10);}doc.setFont(undefined,'normal');y+=20;}
+
+  hdr();ftr(1);
+  ttl('Comparativo entre unidades — '+comp.unidades.length+' unidades');
+
+  /* KPIs globais */
+  if(comp.skuOverlap){
+    sec('Sobreposição de SKUs');
+    kpi(['SKUS ÚNICOS (TOTAL)','EM COMUM','SOBREPOSIÇÃO'],
+      [NUM(comp.skuOverlap.totalUnique),NUM(comp.skuOverlap.emComum),PCT(comp.skuOverlap.pctComum)],
+      [[51,51,51],[0,183,74],[0,183,74]]);
+  }
+
+  /* IA resumo comparativo */
+  sec('Análise comparativa');
+  bloco(iaTextos.resumo_comparativo||'Análise comparativa entre '+comp.unidades.length+' unidades do cliente '+(info.cliente||'')+' referente ao inventário de '+(info.dataInventario||'')+'.');
+
+  /* Tabela de rankings */
+  sec('Ranking por métrica');
+  var tH=['Métrica'];comp.unidades.forEach(function(u){tH.push(u.unidade);});
+  var tB=[];
+  comp.rankings.forEach(function(r){
+    var row=[r.label];
+    r.valores.forEach(function(v){
+      var fmtVal=v.valor;
+      if(r.fmt==='pct')fmtVal=PCT(v.valor);
+      else if(r.fmt==='brl')fmtVal=BRLi(v.valor);
+      else if(r.fmt==='num')fmtVal=NUM(v.valor);
+      row.push(String(fmtVal)+(r.melhor&&v.unidade===r.melhor?' ★':'')+(r.pior&&v.unidade===r.pior?' ▼':''));
+    });
+    tB.push(row);
+  });
+  var colStyles={0:{fontStyle:'bold'}};
+  for(var ci=1;ci<=comp.unidades.length;ci++)colStyles[ci]={halign:'right'};
+  aT(tH,tB,colStyles);
+
+  /* IA por dimensão */
+  if(iaTextos.analise_critica){sec('Análise — Crítica do inventário');bloco(iaTextos.analise_critica);}
+  if(iaTextos.analise_ruptura){sec('Análise — Ruptura');bloco(iaTextos.analise_ruptura);}
+  if(iaTextos.analise_cobertura){sec('Análise — Cobertura de estoque');bloco(iaTextos.analise_cobertura);}
+  if(iaTextos.analise_perda){sec('Análise — Projeção de perda');bloco(iaTextos.analise_perda);}
+
+  /* Recomendações */
+  if(iaTextos.recomendacoes){
+    sec('Recomendações');
+    bloco(iaTextos.recomendacoes);
+  }
+
+  /* Legenda */
+  chk(12);doc.setFontSize(7);doc.setTextColor(150,150,150);
+  doc.text('★ = melhor desempenho na métrica · ▼ = pior. Relatório gerado em '+pd+'.',M,y);
+  doc.save('comparativo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.pdf');
+}
+
+/* ========== EXCEL COMPARATIVO ========== */
+function generateComparativoExcel(comp, units, info){
+  info=info||{};var pd=new Date().toLocaleString('pt-BR');
+  var wb=XLSX.utils.book_new();
+  var ws={},R=0;
+  var nUnits=comp.unidades.length;
+  var TC=nUnits+2;
+  R=addBH(ws,R,info,pd,TC);
+  R=addST(ws,R,'COMPARATIVO — '+nUnits+' UNIDADES');
+
+  /* SKU overlap */
+  if(comp.skuOverlap){
+    R=addKR(ws,R,['SKUS ÚNICOS','EM COMUM','SOBREPOSIÇÃO'],[NUM(comp.skuOverlap.totalUnique),NUM(comp.skuOverlap.emComum),PCT(comp.skuOverlap.pctComum)],[C.text,C.green,C.green]);
+  }
+
+  /* Rankings */
+  R=addST(ws,R,'RANKING POR MÉTRICA');
+  var hdr=['Métrica'];comp.unidades.forEach(function(u){hdr.push(u.unidade);});
+  var rows=comp.rankings.map(function(r){
+    var row=[r.label];
+    r.valores.forEach(function(v){
+      var fmtVal=v.valor;
+      if(r.fmt==='pct')fmtVal=PCT(v.valor);
+      else if(r.fmt==='brl')fmtVal=BRLi(v.valor);
+      else if(r.fmt==='num')fmtVal=NUM(v.valor);
+      row.push(fmtVal);
+    });
+    return row;
+  });
+  var ca={0:'left'};for(var i=1;i<=nUnits;i++)ca[i]='right';
+  R=addDT(ws,R,hdr,rows,ca);
+
+  var colWidths=[{wch:28}];for(var j=0;j<nUnits;j++)colWidths.push({wch:20});
+  ws['!cols']=colWidths;
+  ws['!rows']=[{hpt:28},{hpt:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'Comparativo');
+
+  var out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  var blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;
+  a.download='comparativo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.xlsx';
+  a.click();URL.revokeObjectURL(url);
+}
+
+return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF,generateComparativoPDF:generateComparativoPDF,generateComparativoExcel:generateComparativoExcel};
 })();

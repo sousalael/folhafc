@@ -169,7 +169,33 @@ table.data-table tr:hover td{background:#eef6ff}
 .info-label{font-size:12px;font-weight:600;color:var(--fc-navy);margin-bottom:4px}
 .info-input{padding:9px 12px;border:1px solid var(--fc-border);border-radius:6px;font-size:14px;outline:none;background:var(--fc-card);color:var(--fc-text)}
 .info-input:focus{border-color:var(--fc-green)}
-@media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}}
+/* ===== UNIT TABS ===== */
+.unit-bar{display:flex;align-items:center;gap:0;margin-bottom:16px;background:var(--fc-light);border-radius:8px;padding:4px;overflow-x:auto}
+.unit-tab{padding:8px 16px;font-size:13px;color:var(--fc-muted);cursor:pointer;border-radius:6px;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:all .2s;position:relative}
+.unit-tab:hover{color:var(--fc-text);background:rgba(255,255,255,.5)}
+.unit-tab.active{background:#fff;color:var(--fc-navy);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.unit-tab .unit-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.unit-tab .unit-status.pending{background:var(--fc-border)}
+.unit-tab .unit-status.loaded{background:var(--fc-amb)}
+.unit-tab .unit-status.done{background:var(--fc-green)}
+.unit-tab .unit-remove{font-size:11px;color:var(--fc-muted);cursor:pointer;margin-left:2px;opacity:.5;transition:opacity .2s}
+.unit-tab .unit-remove:hover{opacity:1;color:var(--fc-red)}
+.btn-add-unit{padding:6px 12px;font-size:18px;color:var(--fc-green);cursor:pointer;border-radius:6px;transition:background .2s;background:none;border:none;font-weight:700}
+.btn-add-unit:hover{background:rgba(0,183,74,.1)}
+/* Comparativo panel */
+.comp-section{margin-bottom:24px}
+.comp-table{width:100%;border-collapse:collapse;font-size:13px}
+.comp-table th{background:var(--fc-navy);color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+.comp-table td{padding:8px 12px;border-bottom:1px solid #f0f0f0}
+.comp-table tr:nth-child(even) td{background:var(--fc-light)}
+.comp-best{color:var(--fc-gd);font-weight:700}
+.comp-worst{color:var(--fc-red);font-weight:600}
+.comp-info{font-weight:600}
+.comp-overlap{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px}
+.comp-overlap-card{background:var(--fc-light);border-radius:8px;padding:14px;text-align:center}
+.comp-overlap-val{font-size:22px;font-weight:700;color:var(--fc-navy)}
+.comp-overlap-label{font-size:11px;color:var(--fc-muted);margin-top:2px}
+@media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}.unit-bar{flex-wrap:nowrap}}
 @keyframes pulseSalvar { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,183,74,.5);} 50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(0,183,74,0);} }
 </style>
 </head>
@@ -199,6 +225,7 @@ table.data-table tr:hover td{background:#eef6ff}
     <div class="tab disabled" data-tab="dias"><i class="ti ti-clock"></i> Dias de estoque</div>
     <div class="tab disabled" data-tab="abc"><i class="ti ti-chart-pie"></i> Investimento ABC</div>
     <div class="tab disabled" data-tab="perda"><i class="ti ti-trending-down"></i> Projeção de perda</div>
+    <div class="tab disabled" data-tab="comparativo" id="tabComparativo" style="border-bottom-color:var(--fc-amb)"><i class="ti ti-arrows-exchange"></i> Comparativo</div>
   </div>
   <div class="body">
     <!-- UPLOAD -->
@@ -210,12 +237,19 @@ table.data-table tr:hover td{background:#eef6ff}
         <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.txt,.pdf" style="display:none">
       </div>
       <div class="info-fields">
-        <div class="info-row">
+        <div class="info-row" style="grid-template-columns:1fr 1fr 120px">
           <div class="info-group"><label class="info-label">Cliente <span style="color:var(--fc-red)">*</span></label><input type="text" class="info-input" id="infoCliente" placeholder="Ex: Rede Farma Ltda"></div>
-          <div class="info-group"><label class="info-label">Unidade / Filial <span style="color:var(--fc-red)">*</span></label><input type="text" class="info-input" id="infoUnidade" placeholder="Ex: Loja Centro — Ilhéus"></div>
           <div class="info-group"><label class="info-label">Data do inventário <span style="color:var(--fc-red)">*</span></label><input type="date" class="info-input" id="infoData"></div>
-          <div class="info-group"><label class="info-label">Dias de venda</label><input type="number" class="info-input" id="infoDiasVenda" value="90" min="1" max="365" placeholder="90" style="max-width:100px"></div>
+          <div class="info-group"><label class="info-label">Dias de venda</label><input type="number" class="info-input" id="infoDiasVenda" value="90" min="1" max="365" placeholder="90"></div>
         </div>
+      </div>
+      <!-- UNIT TAB BAR -->
+      <div class="unit-bar" id="unitBar">
+        <div class="unit-tab active" data-unit-idx="0"><span class="unit-status pending"></span><span class="unit-name">Unidade 1</span></div>
+        <button class="btn-add-unit" id="btnAddUnit" title="Adicionar unidade">+</button>
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="info-group"><label class="info-label">Nome desta unidade <span style="color:var(--fc-red)">*</span></label><input type="text" class="info-input" id="infoUnidade" placeholder="Ex: Loja Centro — Ilhéus"></div>
       </div>
       <div class="file-slots" style="grid-template-columns:1fr 1fr 1fr">
         <div class="file-slot" id="slot-estoque"><div class="file-slot-label">Estoque sistema</div><div class="file-slot-name">—</div><div class="file-slot-status pending">Clique para selecionar arquivo</div></div>
@@ -244,6 +278,8 @@ table.data-table tr:hover td{background:#eef6ff}
     <div class="panel" id="panel-abc"></div>
     <!-- PROJECAO PERDA -->
     <div class="panel" id="panel-perda"></div>
+    <!-- COMPARATIVO -->
+    <div class="panel" id="panel-comparativo"></div>
   </div>
   <div class="footer">Formula Code Tecnologia, Gestão e Automação — Sistema de Auditoria de Estoque</div>
 </div>

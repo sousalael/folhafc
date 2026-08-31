@@ -409,5 +409,170 @@ var Engine = (function(){
     return Object.keys(skuMap).map(function(k){ return skuMap[k]; });
   }
 
-  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt};
+  /* ========== 6. COMPARATIVO ENTRE UNIDADES ========== */
+  /* Recebe array de objetos {unidade:'nome', results:{critica,ruptura,dias,abc,perda}, info:{...}}
+     Retorna objeto com métricas lado a lado, rankings e overlap de SKUs. */
+  function calcComparativo(unidades){
+    if(!unidades || unidades.length < 2) return null;
+    var comp = {unidades:[], rankings:[], skuOverlap:null};
+
+    var rows = [];
+    unidades.forEach(function(u){
+      var r = u.results || {};
+      rows.push({
+        unidade: u.unidade || u.info.unidade || '?',
+        data: u.info.dataInventario || '',
+        /* Crítica */
+        acuracidade: r.critica ? r.critica.acuracidade : null,
+        totalSKUs: r.critica ? r.critica.totalSKUs : null,
+        faltaCount: r.critica ? r.critica.faltaCount : null,
+        sobraCount: r.critica ? r.critica.sobraCount : null,
+        totalFaltas: r.critica ? r.critica.totalFaltas : null,
+        totalSobras: r.critica ? r.critica.totalSobras : null,
+        saldoLiquido: r.critica ? r.critica.saldoLiquido : null,
+        /* Ruptura */
+        taxaRuptura: r.ruptura ? r.ruptura.taxaRuptura : null,
+        totalRupturas: r.ruptura ? r.ruptura.totalRupturas : null,
+        rupturaA: r.ruptura ? r.ruptura.rupturaA : null,
+        /* Dias de estoque */
+        coberturaGeral: r.dias ? r.dias.coberturaGeral : null,
+        coberturaA: r.dias ? r.dias.coberturaA : null,
+        semGiro: r.dias ? r.dias.semGiro : null,
+        valorExcesso: r.dias ? r.dias.valorExcesso : null,
+        /* ABC */
+        totalInvest: r.abc ? r.abc.totalInvest : null,
+        totalFat: r.abc ? r.abc.totalFat : null,
+        pctInvestA: r.abc ? r.abc.fatA.pctInvest : null,
+        pctFatA: r.abc ? r.abc.fatA.pctFat : null,
+        /* Perda */
+        perdaFatDia: r.perda ? r.perda.totalPerdaFat : null,
+        perdaMensal: r.perda ? r.perda.perdaMensal : null,
+        perdaSKUs: r.perda ? r.perda.totalSKUs : null,
+        /* Categorias por dimensão */
+        categoriasCritica: r.critica ? r.critica.categorias : [],
+        categoriasRuptura: r.ruptura ? r.ruptura.categorias : [],
+        categoriasDias: r.dias ? r.dias.categorias : [],
+        categoriasPerda: r.perda ? r.perda.categorias : []
+      });
+    });
+    comp.unidades = rows;
+
+    /* Rankings por métrica */
+    var metricasDefs = [
+      {key:'acuracidade',   label:'Acuracidade (%)',          melhor:'max',      fmt:'pct'},
+      {key:'totalFaltas',   label:'Valor Faltas (R$)',        melhor:'min_abs',  fmt:'brl'},
+      {key:'saldoLiquido',  label:'Saldo Líquido (R$)',       melhor:'min_abs',  fmt:'brl'},
+      {key:'taxaRuptura',   label:'Taxa de Ruptura (%)',      melhor:'min',      fmt:'pct'},
+      {key:'totalRupturas', label:'Itens em Ruptura',         melhor:'min',      fmt:'num'},
+      {key:'rupturaA',      label:'Rupturas Curva A',         melhor:'min',      fmt:'num'},
+      {key:'coberturaGeral',label:'Cobertura (dias)',          melhor:'target30', fmt:'num'},
+      {key:'coberturaA',    label:'Cobertura Curva A (dias)',  melhor:'target15', fmt:'num'},
+      {key:'semGiro',       label:'Itens Sem Giro',           melhor:'min',      fmt:'num'},
+      {key:'valorExcesso',  label:'Valor em Excesso (R$)',    melhor:'min',      fmt:'brl'},
+      {key:'totalInvest',   label:'Valor Total Estoque (R$)', melhor:'info',     fmt:'brl'},
+      {key:'perdaFatDia',   label:'Perda Fat./Dia (R$)',      melhor:'min',      fmt:'brl'},
+      {key:'perdaMensal',   label:'Perda Mensal (R$)',        melhor:'min',      fmt:'brl'}
+    ];
+
+    metricasDefs.forEach(function(def){
+      var vals = rows.map(function(r){ return {unidade:r.unidade, valor:r[def.key]}; })
+        .filter(function(v){ return v.valor !== null && v.valor !== undefined; });
+      if(vals.length < 2) return;
+
+      var sorted;
+      if(def.melhor === 'max'){
+        sorted = vals.slice().sort(function(a,b){ return b.valor - a.valor; });
+      } else if(def.melhor === 'min_abs'){
+        sorted = vals.slice().sort(function(a,b){ return Math.abs(a.valor) - Math.abs(b.valor); });
+      } else if(def.melhor === 'target30' || def.melhor === 'target15'){
+        var alvo = def.melhor === 'target30' ? 23 : 10;
+        sorted = vals.slice().sort(function(a,b){ return Math.abs(a.valor-alvo) - Math.abs(b.valor-alvo); });
+      } else {
+        sorted = vals.slice().sort(function(a,b){ return a.valor - b.valor; });
+      }
+
+      comp.rankings.push({
+        key: def.key, label: def.label, fmt: def.fmt,
+        valores: vals,
+        melhor: def.melhor !== 'info' ? sorted[0].unidade : null,
+        pior:   def.melhor !== 'info' ? sorted[sorted.length-1].unidade : null
+      });
+    });
+
+    /* SKU overlap entre unidades */
+    if(rows.length >= 2){
+      var skuSets = unidades.map(function(u){
+        var set = {};
+        if(u.results.critica){
+          u.results.critica.items.forEach(function(it){ set[it.sku] = true; });
+        }
+        return {unidade: u.info.unidade, set: set, count: Object.keys(set).length};
+      });
+      var allSkus = {};
+      skuSets.forEach(function(ss){ Object.keys(ss.set).forEach(function(s){ allSkus[s] = (allSkus[s]||0) + 1; }); });
+      var totalUnique = Object.keys(allSkus).length;
+      var emComum = Object.keys(allSkus).filter(function(s){ return allSkus[s] === skuSets.length; }).length;
+      comp.skuOverlap = {
+        totalUnique: totalUnique,
+        emComum: emComum,
+        pctComum: totalUnique ? round2(emComum/totalUnique*100) : 0,
+        porUnidade: skuSets.map(function(s){ return {unidade:s.unidade, total:s.count}; })
+      };
+    }
+
+    return comp;
+  }
+
+  /* ========== 7. HISTÓRICO TEMPORAL ========== */
+  /* Recebe array de {data, results, info} da mesma unidade em datas diferentes.
+     Retorna séries temporais e tendências. Será consumido pela UI na Sessão 3. */
+  function calcHistorico(analises){
+    if(!analises || analises.length < 2) return null;
+
+    /* Ordenar por data (dd/mm/yyyy -> yyyymmdd) */
+    var sorted = analises.slice().sort(function(a,b){
+      var dA = a.info.dataInventario || '';
+      var dB = b.info.dataInventario || '';
+      var pA = dA.split('/'); var pB = dB.split('/');
+      var nA = pA.length===3 ? (pA[2]+pA[1]+pA[0]) : dA;
+      var nB = pB.length===3 ? (pB[2]+pB[1]+pB[0]) : dB;
+      return nA < nB ? -1 : (nA > nB ? 1 : 0);
+    });
+
+    var series = {
+      datas:[], acuracidade:[], taxaRuptura:[],
+      coberturaGeral:[], perdaMensal:[], totalInvest:[]
+    };
+
+    sorted.forEach(function(a){
+      var r = a.results || {};
+      series.datas.push(a.info.dataInventario || '?');
+      series.acuracidade.push(r.critica ? r.critica.acuracidade : null);
+      series.taxaRuptura.push(r.ruptura ? r.ruptura.taxaRuptura : null);
+      series.coberturaGeral.push(r.dias ? r.dias.coberturaGeral : null);
+      series.perdaMensal.push(r.perda ? r.perda.perdaMensal : null);
+      series.totalInvest.push(r.abc ? r.abc.totalInvest : null);
+    });
+
+    /* Tendência: último vs primeiro */
+    var tendencias = {};
+    ['acuracidade','taxaRuptura','coberturaGeral','perdaMensal','totalInvest'].forEach(function(k){
+      var vals = series[k].filter(function(v){ return v !== null; });
+      if(vals.length >= 2){
+        var primeiro = vals[0], ultimo = vals[vals.length-1];
+        var dif = ultimo - primeiro;
+        /* Para taxaRuptura e perdaMensal, diminuir é bom */
+        var positivo = (k === 'taxaRuptura' || k === 'perdaMensal') ? dif < 0 : dif > 0;
+        tendencias[k] = {
+          primeiro: primeiro, ultimo: ultimo,
+          dif: round2(dif), positivo: positivo,
+          estavel: Math.abs(dif) < 0.5
+        };
+      }
+    });
+
+    return {series:series, tendencias:tendencias, totalPeriodos:sorted.length};
+  }
+
+  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico};
 })();
