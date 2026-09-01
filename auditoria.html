@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r71';
+const VERSAO = 'r72';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1320,7 +1320,9 @@ const SECOES_META_APRESENTACAO = {
   aereos_retaguarda:  { titulo:'Aéreos e Sub-aéreos — Retaguarda' },
   camaras:            { titulo:'Câmaras Frigoríficas', obsId:'obs_camaras' },
   av_pereciveis:      { titulo:'Perecíveis — Área de Vendas' },
-  av_mercearia:       { titulo:'Mercearia — Área de Vendas' }
+  av_mercearia:       { titulo:'Mercearia — Área de Vendas' },
+  // r72: espelha o backend — observação geral da Finalização, sem foto própria.
+  finalizacao:        { titulo:'Observações Gerais — Área de Vendas', obsId:'obs_area_vendas', semFotos:true }
 };
 
 // Fontes alternativas do PptxGenJS 3.12.0, em domínios diferentes do CDN
@@ -1404,6 +1406,12 @@ function mostrarLinksApresentacao(cliente, unidade, salvo, variante) {
   const label = LABEL_VARIANTE[variante] || variante;
   const obj = salvo[variante];
 
+  function escHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
   const bloco = (!obj || (!obj.linkPPTX && !obj.linkPDF))
     ? `<div style="font-size:12px;color:var(--text-light);margin-top:10px">Não foi possível gerar a apresentação.</div>`
     : `
@@ -1411,7 +1419,7 @@ function mostrarLinksApresentacao(cliente, unidade, salvo, variante) {
         ${obj.linkPPTX ? `<a class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px;text-decoration:none;text-align:center" href="${obj.linkPPTX}" target="_blank">📽️ PPTX</a>` : ''}
         ${obj.linkPDF ? `<a class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px;text-decoration:none;text-align:center" href="${obj.linkPDF}" target="_blank">📄 PDF</a>` : ''}
       </div>
-      ${(obj.linkPPTX && !obj.linkPDF) ? `<div style="font-size:11px;color:var(--text-light);margin-top:8px">PPTX gerado; a conversão automática para PDF falhou. Abra o PPTX e exporte como PDF, se precisar.</div>` : ''}`;
+      ${(obj.linkPPTX && !obj.linkPDF) ? `<div style="font-size:11px;color:var(--text-light);margin-top:8px">PPTX gerado; a conversão automática para PDF falhou${obj.erroPDF ? (': <strong>' + escHtml(obj.erroPDF) + '</strong>') : ''}. Abra o PPTX e exporte como PDF, se precisar.</div>` : ''}`;
 
   $('#app').innerHTML = `
     <div class="tela-inicial">
@@ -1506,6 +1514,25 @@ function montarPptxApresentacao(prep, variante) {
       });
       painelInfo(s2);
 
+      /* Slide 2b — Notas por Setor (só na Detalhada) — r72 */
+      const notasPorSetor = prep.notasPorSetor || [];
+      if (isDetalhada && notasPorSetor.length) {
+        const sN = pres.addSlide();
+        splitBg(sN);
+        rotulo(sN, 'NOTAS POR SETOR');
+        sN.addText([
+          { text:'Notas ', options:{ color: DARK } },
+          { text:'por Setor', options:{ color: GREEN } }
+        ], { x:0.8, y:0.9, w:5.7, h:0.6, fontSize:26, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+        notasPorSetor.forEach(function(n, i) {
+          const ky = 1.75 + i * 0.5;
+          sN.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.34, fill:{ color: corScore(n.media) } });
+          sN.addText(n.media + '/10', { x:1.05, y:ky-0.03, w:1.15, h:0.32, fontSize:16, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+          sN.addText(n.setor, { x:2.3, y:ky+0.02, w:3.7, h:0.3, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0 });
+        });
+        painelInfo(sN);
+      }
+
       /* Slide 3 — Resumo (cenário geral) */
       const s3 = pres.addSlide();
       splitBg(s3);
@@ -1518,13 +1545,15 @@ function montarPptxApresentacao(prep, variante) {
       s3.addText(resumoTxt, { x:0.8, y:1.7, w:5.7, h:2.4, fontSize:13, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4 });
       painelInfo(s3);
 
-      /* Slides seguintes — um por seção com fotos disponíveis,
-         com a observação do auditor (reescrita pela IA) quando existir. */
+      /* Slides seguintes — um por seção com foto e/ou observação
+         disponível (r72: não depende mais só de ter foto), com a
+         observação do auditor (reescrita pela IA) quando existir. */
       fotosSet.forEach(function(secao) {
         const s = pres.addSlide();
         splitBg(s);
-        rotulo(s, 'REGISTROS FOTOGRÁFICOS');
         const meta = SECOES_META_APRESENTACAO[secao.secaoId] || {};
+        const temFotos = (secao.fotos || []).length > 0;
+        rotulo(s, temFotos ? 'REGISTROS FOTOGRÁFICOS' : 'OBSERVAÇÕES');
         s.addText(secao.titulo || meta.titulo || '', { x:0.8, y:0.9, w:5.6, h:0.55, fontSize:22, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
 
         let obsTxt = '';
@@ -1537,12 +1566,20 @@ function montarPptxApresentacao(prep, variante) {
           s.addText(obsTxt, { x:0.8, y:1.5, w:5.7, h:0.85, fontSize:11, fontFace:'Arial', color: BODY, italic:true, isTextBox:true, margin:0, lineSpacingMultiple:1.3 });
           yFotos = 2.5;
         }
-        const fotos = (secao.fotos || []).slice(0, 3);
-        const cols = fotos.length || 1;
-        const imgW = 5.7 / cols;
+        // r72: grade de até 3 colunas (a Detalhada pode trazer até 6
+        // fotos por seção agora, não só 1-3) em vez de espremer tudo
+        // numa única linha.
+        const fotos = secao.fotos || [];
+        const cols = Math.min(fotos.length, 3) || 1;
+        const rows = Math.ceil(fotos.length / cols) || 1;
+        const cellW = 5.7 / cols;
+        const cellH = (5.35 - yFotos) / rows;
+        const tam = Math.max(0.1, Math.min(cellW, cellH) - 0.1);
         fotos.forEach(function(f, idx) {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
           try {
-            s.addImage({ data:'data:image/jpeg;base64,' + f.base64, x: 0.8 + idx*imgW, y: yFotos, w: imgW - 0.1, h: imgW - 0.1 });
+            s.addImage({ data:'data:image/jpeg;base64,' + f.base64, x: 0.8 + col*cellW, y: yFotos + row*cellH, w: tam, h: tam });
           } catch(e) {}
         });
         painelInfo(s);
