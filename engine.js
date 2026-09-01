@@ -574,5 +574,92 @@ var Engine = (function(){
     return {series:series, tendencias:tendencias, totalPeriodos:sorted.length};
   }
 
-  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico};
+  // ── r68: Geração de recomendações baseadas nos dados ──
+  function gerarRecomendacoes(results, info) {
+    var recs = [];
+    var diasVenda = info && info.diasVenda ? info.diasVenda : 30;
+
+    // 1. Acuracidade / Crítica
+    if (results.critica) {
+      var c = results.critica;
+      if (c.acuracidade < 90) {
+        recs.push({dim:'critica', prioridade:1, texto:'Acuracidade crítica de ' + c.acuracidade + '%. Recomenda-se recontagem completa com foco nos setores de maior divergência, revisão dos processos de entrada e saída de mercadorias e auditoria no sistema de gestão de estoque.'});
+      } else if (c.acuracidade < 95) {
+        recs.push({dim:'critica', prioridade:2, texto:'Acuracidade de ' + c.acuracidade + '% — abaixo da meta de 95%. Recomenda-se recontagem cíclica focada nos SKUs com divergência e revisão dos procedimentos de conferência no recebimento.'});
+      } else {
+        recs.push({dim:'critica', prioridade:3, texto:'Acuracidade de ' + c.acuracidade + '% está dentro da meta. Manter os processos atuais e monitorar para garantir consistência nas próximas contagens.'});
+      }
+      if (c.faltaCount > c.sobraCount * 2) {
+        recs.push({dim:'critica', prioridade:1, texto:'Faltas superam sobras em mais do dobro (' + c.faltaCount + ' faltas vs ' + c.sobraCount + ' sobras). Investigar possíveis perdas operacionais, furtos ou falhas de registro no sistema.'});
+      }
+    }
+
+    // 2. Ruptura
+    if (results.ruptura) {
+      var r = results.ruptura;
+      if (r.taxaRuptura > 10) {
+        recs.push({dim:'ruptura', prioridade:1, texto:'Taxa de ruptura elevada: ' + r.taxaRuptura + '% (' + r.totalRupturas + ' SKUs). Ação imediata necessária: revisar processo de reposição, frequência de pedidos e lead time de fornecedores para os itens em falta.'});
+      } else if (r.taxaRuptura > 5) {
+        recs.push({dim:'ruptura', prioridade:2, texto:'Taxa de ruptura de ' + r.taxaRuptura + '% requer atenção. Priorizar reposição dos ' + r.totalRupturas + ' SKUs zerados, especialmente os da curva A.'});
+      } else if (r.taxaRuptura > 0) {
+        recs.push({dim:'ruptura', prioridade:3, texto:'Taxa de ruptura controlada em ' + r.taxaRuptura + '%. Manter monitoramento e garantir reposição dos ' + r.totalRupturas + ' itens identificados.'});
+      }
+      if (r.rupturaA > 0) {
+        recs.push({dim:'ruptura', prioridade:1, texto:r.rupturaA + ' itens da curva A em ruptura — produtos que representam a maior parcela do faturamento. Reposição prioritária e urgente destes SKUs.'});
+      }
+    }
+
+    // 3. Dias de Estoque / Cobertura
+    if (results.dias) {
+      var d = results.dias;
+      if (d.coberturaGeral > diasVenda * 2) {
+        recs.push({dim:'dias', prioridade:2, texto:'Cobertura média de ' + round2(d.coberturaGeral) + ' dias — mais que o dobro do período de venda (' + diasVenda + ' dias). Estoque excessivo eleva custos de armazenagem. Avaliar redução nos pedidos de reposição.'});
+      } else if (d.coberturaGeral < 15) {
+        recs.push({dim:'dias', prioridade:1, texto:'Cobertura média de apenas ' + round2(d.coberturaGeral) + ' dias — risco de desabastecimento. Reforçar pedidos de reposição para garantir continuidade.'});
+      } else {
+        recs.push({dim:'dias', prioridade:3, texto:'Cobertura média de ' + round2(d.coberturaGeral) + ' dias está adequada. Monitorar variações sazonais e manter equilíbrio entre estoque e demanda.'});
+      }
+      if (d.semGiro > 0) {
+        recs.push({dim:'dias', prioridade:2, texto:d.semGiro + ' SKUs sem giro identificados (estoque parado). Avaliar promoções de liquidação, devoluções ao fornecedor ou remanejamento entre unidades.'});
+      }
+      if (d.excessos > 0) {
+        recs.push({dim:'dias', prioridade:2, texto:d.excessos + ' SKUs com excesso de estoque. Valor imobilizado em excesso: R$ ' + formatNum(d.valorExcesso) + '. Reduzir pedidos futuros destes itens.'});
+      }
+    }
+
+    // 4. Curva ABC / Investimento
+    if (results.abc) {
+      var a = results.abc;
+      var pctA = a.totalInvest > 0 ? round2(a.investA / a.totalInvest * 100) : 0;
+      if (pctA > 50) {
+        recs.push({dim:'abc', prioridade:2, texto:'Curva A concentra ' + pctA + '% do investimento total (R$ ' + formatNum(a.investA) + '). Garantir que estes SKUs tenham alta acuracidade e reposição prioritária.'});
+      }
+      if (a.totalInvest > 0) {
+        recs.push({dim:'abc', prioridade:3, texto:'Investimento total em estoque: R$ ' + formatNum(a.totalInvest) + '. Faturamento 90 dias: R$ ' + formatNum(a.totalFat) + '. Giro de estoque de ' + round2(a.totalFat / a.totalInvest) + 'x no período.'});
+      }
+    }
+
+    // 5. Projeção de Perda
+    if (results.perda) {
+      var pe = results.perda;
+      if (pe.perdaMensal > 50000) {
+        recs.push({dim:'perda', prioridade:1, texto:'Projeção de perda mensal elevada: R$ ' + formatNum(pe.perdaMensal) + '. Ação urgente: investigar causas (avarias, furtos, erros de registro), reforçar controles e monitorar os ' + pe.totalSKUs + ' SKUs identificados.'});
+      } else if (pe.perdaMensal > 10000) {
+        recs.push({dim:'perda', prioridade:2, texto:'Projeção de perda mensal de R$ ' + formatNum(pe.perdaMensal) + '. Recomenda-se investigação focada nos SKUs de maior impacto financeiro e revisão dos processos de conferência.'});
+      } else if (pe.perdaMensal > 0) {
+        recs.push({dim:'perda', prioridade:3, texto:'Projeção de perda mensal de R$ ' + formatNum(pe.perdaMensal) + '. Nível dentro do aceitável, mas manter monitoramento contínuo.'});
+      }
+    }
+
+    // Ordenar por prioridade (1=urgente, 3=informativo)
+    recs.sort(function(a,b){ return a.prioridade - b.prioridade; });
+    return recs;
+  }
+
+  function formatNum(v) {
+    if (v == null || isNaN(v)) return '0';
+    return Number(v).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0});
+  }
+
+  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, formatNum:formatNum};
 })();

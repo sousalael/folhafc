@@ -267,6 +267,8 @@ document.querySelectorAll('.tab').forEach(function(tab){
     $('panel-'+this.dataset.tab).classList.add('active');
     /* Auto-run comparativo ao clicar na aba */
     if(this.dataset.tab==='comparativo')runComparativo();
+    /* r68: auto-render resumo ao clicar na aba */
+    if(this.dataset.tab==='resumo')renderResumo();
   });
 });
 
@@ -546,6 +548,10 @@ function enableTabs(avail){
     if(avail[name])tab.classList.remove('disabled');else tab.classList.add('disabled');
   });
   document.querySelector('.tab[data-tab="upload"]').classList.remove('disabled');
+  /* r68: habilita Resumo se pelo menos 1 dimensão está disponível */
+  var hasAny=avail.critica||avail.ruptura||avail.dias||avail.abc||avail.perda;
+  var tabResumo=$('tabResumo');
+  if(tabResumo){if(hasAny)tabResumo.classList.remove('disabled');else tabResumo.classList.add('disabled');}
   _checkComparativoTab();
   var first=['critica','ruptura','dias','abc','perda'].find(function(n){return avail[n];});
   if(first)document.querySelector('.tab[data-tab="'+first+'"]').click();
@@ -604,6 +610,112 @@ function renderAll(avail){
       $('panel-'+name).innerHTML='<div class="alert alert-info"><i class="ti ti-info-circle"></i><div>Este relatório não pôde ser gerado com os arquivos carregados.<br><strong>Arquivos necessários:</strong> '+depMsg[name]+'</div></div>';
     }
   });
+}
+
+
+/* ===== r68: RESUMO EXECUTIVO ===== */
+function renderResumo(){
+  var p=$('panel-resumo');if(!p)return;
+  var r=State.results;
+  var avail={critica:!!r.critica,ruptura:!!r.ruptura,dias:!!r.dias,abc:!!r.abc,perda:!!r.perda};
+  var hasAny=avail.critica||avail.ruptura||avail.dias||avail.abc||avail.perda;
+  if(!hasAny){p.innerHTML='<div class="alert alert-info"><i class="ti ti-info-circle"></i><div>Processe ao menos um relatório para gerar o resumo executivo.</div></div>';return;}
+
+  var info=State.info;
+  var recs=Engine.gerarRecomendacoes(r,info);
+  var diasVenda=info.diasVenda||90;
+  var html='';
+
+  /* Header */
+  html+='<div class="resumo-header">';
+  html+='<h2>Resumo Executivo</h2>';
+  html+='<div class="resumo-sub">'+info.cliente;
+  if(Units[activeUnitIdx].nome)html+=' — '+Units[activeUnitIdx].nome;
+  html+=' &nbsp;·&nbsp; '+(info.dataInventario||'')+' &nbsp;·&nbsp; '+diasVenda+' dias de venda</div>';
+  html+='</div>';
+
+  /* Cards */
+  html+='<div class="resumo-cards">';
+
+  if(avail.critica){
+    var c=r.critica;
+    var cls=c.acuracidade>=95?'ok':(c.acuracidade>=90?'alerta':'critico');
+    html+='<div class="resumo-card '+cls+'">';
+    html+='<div class="resumo-card-label">ACURACIDADE</div>';
+    html+='<div class="resumo-card-valor">'+PCT(c.acuracidade)+'</div>';
+    html+='<div class="resumo-card-titulo">Precisão do estoque</div>';
+    html+='<div class="resumo-card-detalhe">'+NUM(c.totalSKUs)+' SKUs analisados &nbsp;·&nbsp; '+NUM(c.faltaCount)+' faltas &nbsp;·&nbsp; '+NUM(c.sobraCount)+' sobras</div>';
+    html+='</div>';
+  }
+
+  if(avail.ruptura){
+    var ru=r.ruptura;
+    var cls=ru.taxaRuptura<=5?'ok':(ru.taxaRuptura<=10?'alerta':'critico');
+    html+='<div class="resumo-card '+cls+'">';
+    html+='<div class="resumo-card-label">RUPTURA</div>';
+    html+='<div class="resumo-card-valor">'+PCT(ru.taxaRuptura)+'</div>';
+    html+='<div class="resumo-card-titulo">'+NUM(ru.totalRupturas)+' SKUs em falta</div>';
+    html+='<div class="resumo-card-detalhe">Curva A: '+NUM(ru.rupturaA)+' &nbsp;·&nbsp; B: '+NUM(ru.rupturaB)+' &nbsp;·&nbsp; C: '+NUM(ru.rupturaC)+'</div>';
+    html+='</div>';
+  }
+
+  if(avail.dias){
+    var d=r.dias;
+    var cls=d.coberturaGeral<=45?'ok':(d.coberturaGeral<=90?'alerta':'critico');
+    html+='<div class="resumo-card '+cls+'">';
+    html+='<div class="resumo-card-label">COBERTURA</div>';
+    html+='<div class="resumo-card-valor">'+Engine.round2(d.coberturaGeral)+' dias</div>';
+    html+='<div class="resumo-card-titulo">Dias de estoque médio</div>';
+    html+='<div class="resumo-card-detalhe">Sem giro: '+NUM(d.semGiro)+' &nbsp;·&nbsp; Excesso: '+NUM(d.excessos)+' &nbsp;·&nbsp; Total: '+NUM(d.total)+' SKUs</div>';
+    html+='</div>';
+  }
+
+  if(avail.abc){
+    var a=r.abc;
+    html+='<div class="resumo-card">';
+    html+='<div class="resumo-card-label">INVESTIMENTO ABC</div>';
+    html+='<div class="resumo-card-valor">R$ '+Engine.formatNum(a.totalInvest)+'</div>';
+    html+='<div class="resumo-card-titulo">Investimento em estoque</div>';
+    html+='<div class="resumo-card-detalhe">Faturamento: R$ '+Engine.formatNum(a.totalFat)+' &nbsp;·&nbsp; Giro: '+Engine.round2(a.totalFat/a.totalInvest)+'x</div>';
+    html+='</div>';
+  }
+
+  if(avail.perda){
+    var pe=r.perda;
+    var cls=pe.perdaMensal<=10000?'ok':(pe.perdaMensal<=50000?'alerta':'critico');
+    html+='<div class="resumo-card '+cls+'">';
+    html+='<div class="resumo-card-label">PROJEÇÃO DE PERDA</div>';
+    html+='<div class="resumo-card-valor">R$ '+Engine.formatNum(pe.perdaMensal)+'</div>';
+    html+='<div class="resumo-card-titulo">Perda mensal estimada</div>';
+    html+='<div class="resumo-card-detalhe">'+NUM(pe.totalSKUs)+' SKUs identificados &nbsp;·&nbsp; Perda diária: R$ '+Engine.formatNum(pe.totalPerdaFat)+'</div>';
+    html+='</div>';
+  }
+
+  html+='</div>'; /* /resumo-cards */
+
+  /* Recomendações */
+  if(recs.length>0){
+    html+='<div class="resumo-recs">';
+    html+='<h3><i class="ti ti-bulb" style="color:var(--fc-amb)"></i> Recomendações</h3>';
+    recs.forEach(function(rec){
+      var badgeCls=rec.prioridade===1?'p1':(rec.prioridade===2?'p2':'p3');
+      var badgeIcon=rec.prioridade===1?'!':(rec.prioridade===2?'▲':'✓');
+      html+='<div class="resumo-rec-item">';
+      html+='<div class="resumo-rec-badge '+badgeCls+'">'+badgeIcon+'</div>';
+      html+='<div class="resumo-rec-texto">'+rec.texto+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  /* Botões de exportação */
+  html+='<div class="resumo-export">';
+  html+='<button class="btn-pdf-texto" onclick="App.exportResumoPDF()"><i class="ti ti-file-text"></i> PDF Documento</button>';
+  html+='<button class="btn-pptx" onclick="App.exportResumoPPTX()"><i class="ti ti-presentation"></i> Apresentação PPTX</button>';
+  html+='<button class="btn-pdf-apres" onclick="App.exportResumoPDFApres()"><i class="ti ti-file-analytics"></i> Apresentação PDF</button>';
+  html+='</div>';
+
+  p.innerHTML=html;
 }
 
 
@@ -901,7 +1013,20 @@ window.App = {
     }
     checkReady();
   },
-  exportPDF:function(type){Export.generatePDF(type,State.results,State.processDate,LOGO,State.info);}
+  exportPDF:function(type){Export.generatePDF(type,State.results,State.processDate,LOGO,State.info);},
+  /* r68: Resumo Executivo exports */
+  exportResumoPDF:function(){
+    var recs=Engine.gerarRecomendacoes(State.results,State.info);
+    Export.generateResumoPDF(State.results,recs,State.info,Units[activeUnitIdx].nome,LOGO);
+  },
+  exportResumoPPTX:function(){
+    var recs=Engine.gerarRecomendacoes(State.results,State.info);
+    Export.generateResumoPPTX(State.results,recs,State.info,Units[activeUnitIdx].nome,LOGO);
+  },
+  exportResumoPDFApres:function(){
+    var recs=Engine.gerarRecomendacoes(State.results,State.info);
+    Export.generateResumoPPTX(State.results,recs,State.info,Units[activeUnitIdx].nome,LOGO,true);
+  }
 };
 
 $('btnExportConfirm').addEventListener('click',function(){var sel={criticaResumo:$('exp-critica-resumo').checked,criticaDetalhe:$('exp-critica-detalhe').checked,ruptura:$('exp-ruptura').checked,dias:$('exp-dias').checked,abc:$('exp-abc').checked,perda:$('exp-perda').checked};Export.generateExcel(State.results,sel,State.processDate,State.info);$('exportModal').classList.remove('active');});

@@ -359,5 +359,176 @@ function generateComparativoExcel(comp, units, info){
   a.click();URL.revokeObjectURL(url);
 }
 
-return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF,generateComparativoPDF:generateComparativoPDF,generateComparativoExcel:generateComparativoExcel};
+return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF,generateComparativoPDF:generateComparativoPDF,generateComparativoExcel:generateComparativoExcel,generateResumoPDF:generateResumoPDF,generateResumoPPTX:generateResumoPPTX};
+
+/* ===== r68: RESUMO EXECUTIVO — PDF Documento ===== */
+function generateResumoPDF(results,recs,info,unidade,logo){
+  var jsPDF=window.jspdf.jsPDF;
+  var doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var W=210,H=297,M=20,cw=W-2*M;
+  var y=M;
+  var navy=[0,43,80],green=[97,207,0],dark=[5,19,35];
+
+  /* Cover */
+  doc.setFillColor.apply(doc,dark);doc.rect(0,0,W,H,'F');
+  doc.setFillColor.apply(doc,green);doc.rect(0,0,W,2,'F');
+  if(logo){try{doc.addImage(logo,'PNG',60,30,90,23);}catch(e){}}
+  doc.setFontSize(28);doc.setTextColor(255,255,255);
+  doc.text('Resumo Executivo',W/2,80,{align:'center'});
+  doc.setFontSize(14);doc.setTextColor.apply(doc,green);
+  doc.text('Análise de Inventário',W/2,92,{align:'center'});
+  doc.setFontSize(12);doc.setTextColor(136,153,170);
+  var sub=info.cliente||'';
+  if(unidade)sub+=' — '+unidade;
+  sub+='  ·  '+(info.dataInventario||'');
+  doc.text(sub,W/2,106,{align:'center'});
+  doc.addPage();
+
+  /* Content page */
+  y=M;
+  doc.setFillColor.apply(doc,navy);doc.rect(0,0,W,12,'F');
+  doc.setFontSize(10);doc.setTextColor(255,255,255);
+  doc.text('RESUMO EXECUTIVO — '+(info.cliente||'').toUpperCase(),M,8);
+  y=20;
+
+  doc.setFontSize(18);doc.setTextColor.apply(doc,navy);
+  doc.text('Indicadores-Chave',M,y);y+=10;
+
+  var dims=[];
+  if(results.critica)dims.push({label:'Acuracidade',valor:results.critica.acuracidade+'%',detalhe:results.critica.totalSKUs+' SKUs · '+results.critica.faltaCount+' faltas · '+results.critica.sobraCount+' sobras'});
+  if(results.ruptura)dims.push({label:'Ruptura',valor:results.ruptura.taxaRuptura+'%',detalhe:results.ruptura.totalRupturas+' SKUs em falta · Curva A: '+results.ruptura.rupturaA});
+  if(results.dias)dims.push({label:'Cobertura',valor:Engine.round2(results.dias.coberturaGeral)+' dias',detalhe:'Sem giro: '+results.dias.semGiro+' · Excesso: '+results.dias.excessos});
+  if(results.abc)dims.push({label:'Investimento',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),detalhe:'Faturamento: R$ '+Engine.formatNum(results.abc.totalFat)});
+  if(results.perda)dims.push({label:'Perda Mensal',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),detalhe:results.perda.totalSKUs+' SKUs identificados'});
+
+  dims.forEach(function(d){
+    doc.setFontSize(9);doc.setTextColor.apply(doc,green);
+    doc.text(d.label.toUpperCase(),M,y);y+=5;
+    doc.setFontSize(20);doc.setTextColor.apply(doc,navy);
+    doc.text(d.valor,M,y);y+=5;
+    doc.setFontSize(10);doc.setTextColor(85,102,119);
+    doc.text(d.detalhe,M,y);y+=12;
+    if(y>260){doc.addPage();y=M;}
+  });
+
+  /* Recomendações */
+  if(recs.length>0){
+    y+=5;
+    if(y>240){doc.addPage();y=M;}
+    doc.setFontSize(18);doc.setTextColor.apply(doc,navy);
+    doc.text('Recomendações',M,y);y+=10;
+
+    recs.forEach(function(rec){
+      if(y>265){doc.addPage();y=M;}
+      var icon=rec.prioridade===1?'[!]':(rec.prioridade===2?'[▲]':'[✓]');
+      var color=rec.prioridade===1?[204,51,51]:(rec.prioridade===2?[232,135,43]:[34,139,34]);
+      doc.setFontSize(10);doc.setTextColor.apply(doc,color);
+      doc.text(icon,M,y);
+      doc.setTextColor(68,85,102);
+      var lines=doc.splitTextToSize(rec.texto,cw-10);
+      doc.text(lines,M+10,y);
+      y+=lines.length*5+6;
+    });
+  }
+
+  doc.save('resumo_executivo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'.pdf');
+}
+
+/* ===== r68: RESUMO EXECUTIVO — PPTX (e PDF apresentação) ===== */
+function generateResumoPPTX(results,recs,info,unidade,logo,asPDF){
+  if(typeof PptxGenJS==='undefined'){alert('Biblioteca PptxGenJS não carregada.');return;}
+  var pres=new PptxGenJS();
+  pres.layout='LAYOUT_16x9';
+
+  var NAVY='002B50',GREEN='61CF00',DARK='051323',BODY='556677',LABEL='8899AA';
+
+  function addLogo(s){if(logo){try{s.addImage({data:logo,x:7.05,y:4.55,w:2.7,h:0.7});}catch(e){}}}
+  function splitBg(s){
+    s.background={fill:'FFFFFF'};
+    s.addShape(pres.ShapeType.rect,{x:6.8,y:0,w:3.2,h:5.625,fill:{color:DARK}});
+    addLogo(s);
+  }
+
+  /* Slide 1: Capa */
+  var s1=pres.addSlide();
+  s1.background={fill:DARK};
+  s1.addShape(pres.ShapeType.rect,{x:0,y:0,w:10,h:0.04,fill:{color:GREEN}});
+  s1.addText([
+    {text:'Resumo ',options:{color:'FFFFFF',fontSize:36,fontFace:'Calibri',bold:true}},
+    {text:'Executivo',options:{color:GREEN,fontSize:36,fontFace:'Calibri',bold:true}}
+  ],{x:0.8,y:0.8,w:8.4,h:1.0,isTextBox:true,margin:0});
+  s1.addText('Análise de Inventário',{x:0.8,y:1.9,w:6,h:0.4,fontSize:16,fontFace:'Calibri',color:GREEN,isTextBox:true,margin:0});
+  var sub2=info.cliente||'';if(unidade)sub2+=' — '+unidade;sub2+='  ·  '+(info.dataInventario||'');
+  s1.addText(sub2,{x:0.8,y:2.5,w:6,h:0.4,fontSize:13,fontFace:'Arial',color:LABEL,isTextBox:true,margin:0});
+  if(logo){try{s1.addImage({data:logo,x:3.2,y:4.35,w:3.6,h:0.94});}catch(e){}}
+
+  /* Slide 2: Indicadores */
+  var s2=pres.addSlide();
+  splitBg(s2);
+  s2.addText('01 / INDICADORES-CHAVE',{x:0.8,y:0.45,w:5.5,h:0.25,fontSize:9,fontFace:'Arial',bold:true,color:GREEN,isTextBox:true,margin:0,charSpacing:3});
+  s2.addText([
+    {text:'Diagnóstico do ',options:{color:DARK}},
+    {text:'Inventário',options:{color:GREEN}}
+  ],{x:0.8,y:0.9,w:5.6,h:0.6,fontSize:28,fontFace:'Calibri',bold:true,isTextBox:true,margin:0});
+
+  var dims=[];
+  if(results.critica)dims.push({label:'ACURACIDADE',valor:results.critica.acuracidade+'%',sub:'Meta: 95%',accent:results.critica.acuracidade<95});
+  if(results.ruptura)dims.push({label:'RUPTURA',valor:results.ruptura.taxaRuptura+'%',sub:results.ruptura.totalRupturas+' SKUs em falta',accent:true});
+  if(results.dias)dims.push({label:'COBERTURA',valor:Engine.round2(results.dias.coberturaGeral)+' dias',sub:'Sem giro: '+results.dias.semGiro+' SKUs',accent:results.dias.coberturaGeral>45});
+  if(results.abc)dims.push({label:'INVESTIMENTO',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),sub:'Giro: '+Engine.round2(results.abc.totalFat/results.abc.totalInvest)+'x',accent:false});
+  if(results.perda)dims.push({label:'PERDA MENSAL',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),sub:results.perda.totalSKUs+' SKUs',accent:true});
+
+  dims.forEach(function(d,i){
+    var ky=1.7+i*0.7;
+    s2.addShape(pres.ShapeType.rect,{x:0.8,y:ky,w:0.04,h:0.5,fill:{color:d.accent?GREEN:NAVY}});
+    s2.addText(d.valor,{x:1.05,y:ky,w:2.0,h:0.3,fontSize:22,fontFace:'Calibri',bold:true,color:DARK,isTextBox:true,margin:0});
+    s2.addText(d.label,{x:3.1,y:ky,w:1.8,h:0.18,fontSize:8,fontFace:'Arial',bold:true,color:GREEN,isTextBox:true,margin:0,charSpacing:2});
+    s2.addText(d.sub,{x:3.1,y:ky+0.18,w:2.5,h:0.18,fontSize:10,fontFace:'Arial',color:BODY,isTextBox:true,margin:0});
+  });
+
+  /* Right panel info */
+  s2.addText((info.cliente||'')+'\n'+(unidade||''),{x:7.05,y:0.8,w:2.7,h:0.5,fontSize:12,fontFace:'Arial',bold:true,color:'FFFFFF',isTextBox:true,margin:0});
+  s2.addText((info.dataInventario||'')+'\n'+(info.diasVenda||90)+' dias de venda',{x:7.05,y:1.5,w:2.7,h:0.5,fontSize:10,fontFace:'Arial',color:LABEL,isTextBox:true,margin:0,lineSpacingMultiple:1.4});
+
+  /* Slide 3: Recomendações */
+  if(recs.length>0){
+    var s3=pres.addSlide();
+    splitBg(s3);
+    s3.addText('02 / RECOMENDAÇÕES',{x:0.8,y:0.45,w:5.5,h:0.25,fontSize:9,fontFace:'Arial',bold:true,color:GREEN,isTextBox:true,margin:0,charSpacing:3});
+    s3.addText([
+      {text:'Ações ',options:{color:DARK}},
+      {text:'Recomendadas',options:{color:GREEN}}
+    ],{x:0.8,y:0.9,w:5.6,h:0.6,fontSize:28,fontFace:'Calibri',bold:true,isTextBox:true,margin:0});
+
+    var ry=1.7;
+    var maxRecs=Math.min(recs.length,6); /* Max 6 per slide */
+    for(var i=0;i<maxRecs;i++){
+      var rec=recs[i];
+      var color=rec.prioridade===1?'CC3333':(rec.prioridade===2?'E8872B':'228B22');
+      var icon=rec.prioridade===1?'!':(rec.prioridade===2?'▲':'✓');
+
+      s3.addShape(pres.ShapeType.ellipse,{x:0.8,y:ry,w:0.25,h:0.25,fill:{color:color}});
+      s3.addText(icon,{x:0.8,y:ry,w:0.25,h:0.25,fontSize:10,fontFace:'Arial',bold:true,color:'FFFFFF',align:'center',valign:'middle',isTextBox:true,margin:0});
+
+      /* Truncar texto para caber */
+      var txt=rec.texto;
+      if(txt.length>150)txt=txt.substring(0,147)+'...';
+      s3.addText(txt,{x:1.15,y:ry,w:5.3,h:0.55,fontSize:10,fontFace:'Arial',color:BODY,isTextBox:true,margin:0,lineSpacingMultiple:1.3});
+      ry+=0.62;
+    }
+
+    s3.addText((info.cliente||'')+'\n'+(unidade||''),{x:7.05,y:0.8,w:2.7,h:0.5,fontSize:12,fontFace:'Arial',bold:true,color:'FFFFFF',isTextBox:true,margin:0});
+  }
+
+  /* Generate */
+  if(asPDF){
+    /* Download as PDF — pptxgenjs doesn't natively export PDF,
+       so we save as PPTX and note the limitation */
+    pres.writeFile({fileName:'resumo_executivo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'.pptx'});
+    setTimeout(function(){alert('Para converter em PDF: abra o arquivo PPTX no PowerPoint ou Google Slides e exporte como PDF.');},500);
+  }else{
+    pres.writeFile({fileName:'resumo_executivo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'.pptx'});
+  }
+}
+
 })();

@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgenjs.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
@@ -182,6 +183,34 @@ table.data-table tr:hover td{background:#eef6ff}
 .unit-tab .unit-remove:hover{opacity:1;color:var(--fc-red)}
 .btn-add-unit{padding:6px 12px;font-size:18px;color:var(--fc-green);cursor:pointer;border-radius:6px;transition:background .2s;background:none;border:none;font-weight:700}
 .btn-add-unit:hover{background:rgba(0,183,74,.1)}
+/* Resumo Executivo (r68) */
+.resumo-header{text-align:center;margin-bottom:28px}
+.resumo-header h2{font-size:22px;color:var(--fc-navy);margin:0 0 4px}
+.resumo-header .resumo-sub{font-size:13px;color:var(--fc-muted)}
+.resumo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+.resumo-card{background:#fff;border-radius:12px;padding:20px;position:relative;border-left:4px solid var(--fc-navy);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.resumo-card.alerta{border-left-color:var(--fc-amb)}
+.resumo-card.critico{border-left-color:var(--fc-red)}
+.resumo-card.ok{border-left-color:var(--fc-gd)}
+.resumo-card-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--fc-green);font-weight:700;margin-bottom:8px}
+.resumo-card-valor{font-size:32px;font-weight:700;color:var(--fc-navy);line-height:1.1}
+.resumo-card-titulo{font-size:14px;font-weight:600;color:var(--fc-navy);margin-top:4px}
+.resumo-card-detalhe{font-size:12px;color:var(--fc-muted);margin-top:6px}
+.resumo-recs{background:var(--fc-light);border-radius:12px;padding:24px;margin-bottom:20px}
+.resumo-recs h3{font-size:16px;color:var(--fc-navy);margin:0 0 16px}
+.resumo-rec-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #e8ecf0}
+.resumo-rec-item:last-child{border-bottom:none}
+.resumo-rec-badge{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.resumo-rec-badge.p1{background:var(--fc-red)}
+.resumo-rec-badge.p2{background:var(--fc-amb)}
+.resumo-rec-badge.p3{background:var(--fc-gd)}
+.resumo-rec-texto{font-size:13px;color:#445566;line-height:1.5}
+.resumo-export{display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+.resumo-export button{padding:12px 24px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;transition:opacity .2s}
+.resumo-export button:hover{opacity:.85}
+.btn-pdf-texto{background:var(--fc-navy);color:#fff}
+.btn-pptx{background:var(--fc-green);color:var(--fc-navy)}
+.btn-pdf-apres{background:var(--fc-amb);color:#fff}
 /* Comparativo panel */
 .comp-section{margin-bottom:24px}
 .comp-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -225,6 +254,7 @@ table.data-table tr:hover td{background:#eef6ff}
     <div class="tab disabled" data-tab="dias"><i class="ti ti-clock"></i> Dias de estoque</div>
     <div class="tab disabled" data-tab="abc"><i class="ti ti-chart-pie"></i> Investimento ABC</div>
     <div class="tab disabled" data-tab="perda"><i class="ti ti-trending-down"></i> Projeção de perda</div>
+    <div class="tab disabled" data-tab="resumo" id="tabResumo" style="border-bottom-color:var(--fc-green)"><i class="ti ti-report-analytics"></i> Resumo</div>
     <div class="tab disabled" data-tab="comparativo" id="tabComparativo" style="border-bottom-color:var(--fc-amb)"><i class="ti ti-arrows-exchange"></i> Comparativo</div>
   </div>
   <div class="body">
@@ -278,6 +308,8 @@ table.data-table tr:hover td{background:#eef6ff}
     <div class="panel" id="panel-abc"></div>
     <!-- PROJECAO PERDA -->
     <div class="panel" id="panel-perda"></div>
+    <!-- RESUMO EXECUTIVO (r68) -->
+    <div class="panel" id="panel-resumo"></div>
     <!-- COMPARATIVO -->
     <div class="panel" id="panel-comparativo"></div>
   </div>
