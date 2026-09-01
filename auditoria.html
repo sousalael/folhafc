@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r69';
+const VERSAO = 'r70';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1203,7 +1203,8 @@ async function verHistorico() {
           <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ E-mail</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E3F2FD;color:var(--navy)" onclick="gerarApresentacaoAuditoria('${a.id}','${a.cliente}','${a.unidade}')">🎬 Gerar/Atualizar Apresentação</button>
+          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E3F2FD;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','curta')">🎬 Curta (PPTX+PDF)</button>
+          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E8EAF6;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','detalhada')">🎬 Detalhada (PPTX+PDF)</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#F4F6F8;color:var(--navy)" onclick="editarAuditoria('${a.id}')">✏️ Editar</button>
@@ -1322,61 +1323,77 @@ const SECOES_META_APRESENTACAO = {
   av_mercearia:       { titulo:'Mercearia — Área de Vendas' }
 };
 
-async function gerarApresentacaoAuditoria(auditoriaId, cliente, unidade) {
-  if (typeof PptxGenJS === 'undefined') {
-    toast('Biblioteca de apresentação não carregada. Recarregue a página.');
+// Aguarda a lib PptxGenJS carregar (tolera race de timing no load do script
+// via CDN). Faz polling curto antes de desistir e avisar o usuário — r70.
+function aguardarPptxGenJS(tentativas) {
+  return new Promise(function (resolve) {
+    var max = tentativas || 20; // 20 x 150ms = 3s
+    var n = 0;
+    (function tick() {
+      if (typeof PptxGenJS !== 'undefined') { resolve(true); return; }
+      n++;
+      if (n >= max) { resolve(false); return; }
+      setTimeout(tick, 150);
+    })();
+  });
+}
+
+const LABEL_VARIANTE = { curta: 'Curta', detalhada: 'Detalhada' };
+
+async function gerarApresentacaoVariante(auditoriaId, cliente, unidade, variante) {
+  const label = LABEL_VARIANTE[variante] || variante;
+
+  const disponivel = await aguardarPptxGenJS();
+  if (!disponivel) {
+    toast('Biblioteca de apresentação não carregada. Recarregue a página (Ctrl+Shift+R) e tente novamente.');
     return;
   }
-  if (!confirm('Gerar a apresentação executiva (versão curta e detalhada) desta auditoria?\n\nSe já existir uma apresentação anterior para esta auditoria, ela será substituída.')) return;
+  if (!confirm('Gerar a apresentação executiva — versão ' + label + ' — desta auditoria?\n\nSe já existir uma versão ' + label + ' anterior para esta auditoria, ela será substituída.')) return;
 
   showLoading('Preparando dados da apresentação...');
   const prep = await apiCall('prepararApresentacaoAuditoria', { auditoriaId });
   if (!prep.ok) { hideLoading(); toast('Erro: ' + (prep.erro || 'falha ao preparar dados')); return; }
 
   try {
-    showLoading('Montando apresentação curta...');
-    const pptxCurtaB64 = await montarPptxApresentacao(prep, 'curta');
-
-    showLoading('Montando apresentação detalhada...');
-    const pptxDetB64 = await montarPptxApresentacao(prep, 'detalhada');
+    showLoading('Montando apresentação ' + label.toLowerCase() + '...');
+    const pptxB64 = await montarPptxApresentacao(prep, variante);
 
     showLoading('Salvando no Drive e convertendo em PDF...');
-    const salvo = await apiCall('salvarApresentacaoAuditoria', {
-      auditoriaId: auditoriaId,
-      curtaPPTXBase64: pptxCurtaB64,
-      detalhadaPPTXBase64: pptxDetB64
-    });
+    const payload = { auditoriaId: auditoriaId };
+    if (variante === 'curta') payload.curtaPPTXBase64 = pptxB64;
+    else payload.detalhadaPPTXBase64 = pptxB64;
+
+    const salvo = await apiCall('salvarApresentacaoAuditoria', payload);
     hideLoading();
 
     if (!salvo.ok) { toast('Erro ao salvar: ' + (salvo.erro || 'falha')); return; }
-    mostrarLinksApresentacao(cliente, unidade, salvo);
+    mostrarLinksApresentacao(cliente, unidade, salvo, variante);
   } catch (e) {
     hideLoading();
     toast('Erro ao montar apresentação: ' + e.message);
   }
 }
 
-function mostrarLinksApresentacao(cliente, unidade, salvo) {
-  function linha(label, obj) {
-    if (!obj || (!obj.linkPPTX && !obj.linkPDF)) {
-      return `<div style="font-size:12px;color:var(--text-light);margin-top:10px">${label}: não foi possível gerar.</div>`;
-    }
-    return `
-      <div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-top:14px;margin-bottom:6px;text-align:left">${label}</div>
-      <div style="display:flex;gap:6px">
+function mostrarLinksApresentacao(cliente, unidade, salvo, variante) {
+  const label = LABEL_VARIANTE[variante] || variante;
+  const obj = salvo[variante];
+
+  const bloco = (!obj || (!obj.linkPPTX && !obj.linkPDF))
+    ? `<div style="font-size:12px;color:var(--text-light);margin-top:10px">Não foi possível gerar a apresentação.</div>`
+    : `
+      <div style="display:flex;gap:6px;margin-top:14px">
         ${obj.linkPPTX ? `<a class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px;text-decoration:none;text-align:center" href="${obj.linkPPTX}" target="_blank">📽️ PPTX</a>` : ''}
         ${obj.linkPDF ? `<a class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px;text-decoration:none;text-align:center" href="${obj.linkPDF}" target="_blank">📄 PDF</a>` : ''}
-      </div>`;
-  }
+      </div>
+      ${(obj.linkPPTX && !obj.linkPDF) ? `<div style="font-size:11px;color:var(--text-light);margin-top:8px">PPTX gerado; a conversão automática para PDF falhou. Abra o PPTX e exporte como PDF, se precisar.</div>` : ''}`;
 
   $('#app').innerHTML = `
     <div class="tela-inicial">
       <div class="secao-card" style="text-align:center">
         <div style="font-size:40px;margin-bottom:8px">🎬</div>
-        <h2 style="font-size:18px;color:var(--navy);margin-bottom:4px">Apresentação Gerada</h2>
+        <h2 style="font-size:18px;color:var(--navy);margin-bottom:4px">Apresentação ${label} Gerada</h2>
         <p style="color:var(--text-light);margin-bottom:4px">${cliente} — ${unidade}</p>
-        ${linha('Versão Curta', salvo.curta)}
-        ${linha('Versão Detalhada', salvo.detalhada)}
+        ${bloco}
         <button class="btn-fc btn-fc-outline" onclick="verHistorico()" style="margin-top:24px">
           <i class="bi bi-arrow-left"></i> Voltar ao Histórico
         </button>
