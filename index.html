@@ -298,7 +298,7 @@
             <div class="d-flex align-items-center flex-wrap gap-2">
                 <h5 class="alert-heading mb-0">Painel de Gestão</h5>
                 <button class="btn btn-sm fw-bold ms-auto" id="btn-inventarios-topo" onclick="abrirAnaliseInventarios()" style="display:none; background:#00B74A; color:#fff; border:none;">📦 Análise de Inventários</button>
-                <button class="btn btn-sm fw-bold" id="btn-auditoria-topo" onclick="abrirAuditoriaOperacao()" style="display:none; background:#E8872B; color:#fff; border:none;">📋 Auditoria de Operação</button>
+                <button class="btn btn-sm fw-bold" id="btn-auditoria-topo" onclick="abrirAuditoriaOperacao()" style="display:none; background:#E8872B; color:#fff; border:none;">📋 Análise de Preparação para Inventário</button>
                 <button class="btn btn-sm btn-outline-secondary fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar Sessão</button>
             </div>
             <hr class="border-opacity-25">
@@ -3187,7 +3187,7 @@
     function abrirAuditoriaOperacao() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'auditoria.html';
         const tok = window.tokenSessao || '';
-        if (!tok) { alert('Faça login novamente para abrir a Auditoria de Operação.'); return; }
+        if (!tok) { alert('Faça login novamente para abrir a Análise de Preparação para Inventário.'); return; }
         const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
         window.open(url, '_blank');
     }
@@ -3888,7 +3888,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-01-r68';
+    const VERSAO_ESPERADA = '2026-09-01-r69';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
