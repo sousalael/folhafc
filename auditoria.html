@@ -6,7 +6,7 @@
 <title>Análise de Preparação para Inventário — Sistema de Gestão FC</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgenjs.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
 :root{--navy:#002B50;--green:#61CF00;--orange:#E8872B;--dark:#051323;--bg:#F4F6F8;--text:#1A2A3A;--text-light:#6B7B8D;--border:#E2E8F0;--white:#FFF;--red:#E05252;--amber:#D4A017}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r70';
+const VERSAO = 'r71';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1328,8 +1328,8 @@ const SECOES_META_APRESENTACAO = {
 // estiver bloqueado (rede corporativa, extensão de bloqueio etc.), tenta
 // os próximos antes de desistir — r70.1.
 const PPTXGENJS_CDNS_ALT = [
-  'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgenjs.bundle.js',
-  'https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgenjs.bundle.js'
+  'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js'
 ];
 
 function carregarScriptExterno(url) {
