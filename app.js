@@ -167,7 +167,17 @@ function parseNumBR(val){
   s=s.replace(/\./g,'').replace(',','.');
   var n=Number(s);return isNaN(n)?0:n;
 }
-function normalizeSKU(val){var s=String(val||'').trim();if(/^[\d.,\s]+$/.test(s))s=s.replace(/[.,\s]/g,'');return s;}
+function normalizeSKU(val){
+  var s=String(val||'').trim();
+  if(/^[\d.,\s]+$/.test(s))s=s.replace(/[.,\s]/g,'');
+  /* r81: remove zeros à esquerda de SKU puramente numérico. Sem isso, o mesmo código de
+     barras/SKU contado em endereços diferentes podia virar duas chaves diferentes dentro
+     do MESMO arquivo — ex.: "0123456" (célula em texto, zero preservado) e "123456"
+     (célula em número, Excel descarta o zero à esquerda) — e as quantidades contadas em
+     cada endereço acabavam em linhas separadas em vez de somadas no mesmo SKU. */
+  if(/^\d+$/.test(s))s=s.replace(/^0+(?=\d)/,'');
+  return s;
+}
 function applyMapping(rows,mapping){return rows.map(function(row){var o={};Object.keys(mapping).forEach(function(f){var v=row[mapping[f]];if(f==='sku'){o[f]=normalizeSKU(v);}else if(NUMERIC_FIELDS[f]){o[f]=parseNumBR(v);}else{o[f]=v;}});return o;});}
 
 /* ===== UI HELPERS ===== */

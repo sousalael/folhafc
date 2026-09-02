@@ -647,6 +647,8 @@ var Engine = (function(){
     var paragrafos = [];
 
     // 1) Achado principal + impacto financeiro — sem reexplicar universo/fórmula (isso é a Metodologia)
+    // r82: nunca dar a entender que a qualidade/confiabilidade da contagem está comprometida —
+    // divergência é sempre atribuída aos processos de entrada, transformação e saída de mercadoria.
     paragrafos.push(
       'Com ' + pct(c.acuracidade) + ' de acuracidade em valor, a contagem física localizou ' + brl(c.valorEstoqueContado) + ' de um estoque de sistema de ' + brl(c.valorEstoque)
       + ' — uma diferença de ' + brl(Math.abs(c.saldoLiquido)) + ' sobre ' + num(c.totalSKUs) + ' SKUs analisados.'
@@ -654,10 +656,28 @@ var Engine = (function(){
           ? ' Esse patamar está dentro da faixa considerada saudável para o varejo.'
           : (c.acuracidade >= 90
               ? ' Esse patamar está abaixo da meta de 95%, mas ainda longe de um quadro crítico.'
-              : ' Esse patamar já compromete a confiabilidade do estoque contábil e pede atenção.'))
+              : ' Esse patamar representa uma divergência relevante, concentrada nos processos de entrada, transformação e saída de mercadoria — e pede atenção prioritária nessas frentes.'))
     );
 
-    // 2) Faltas x sobras em % da base analisada — leitura de comportamento, não só valor
+    // 2) Perda de estoque % — indicador único que resume o tamanho financeiro da divergência
+    if (typeof c.perdaEstoquePct === 'number' && c.totalSKUs) {
+      var perdaAbs = Math.abs(c.perdaEstoquePct);
+      paragrafos.push(
+        'O indicador de perda de estoque — que resume num único número o tamanho financeiro da divergência apurada — fica em ' + pct(perdaAbs)
+        + (c.perdaEstoquePct < 0
+            ? ' sobre o valor registrado em sistema, com predomínio de valor não localizado na contagem física.'
+            : ' sobre o valor registrado em sistema, com predomínio de valor excedente encontrado na contagem física.')
+      );
+    }
+
+    // 3) Base sem divergência — contexto de quantos SKUs bateram exatamente, não só os que divergiram
+    if (c.totalSKUs) {
+      paragrafos.push(
+        'Do total de ' + num(c.totalSKUs) + ' SKUs analisados, ' + num(c.okCount) + ' (' + pct(c.okCount / c.totalSKUs * 100) + ') não apresentaram nenhuma divergência entre o sistema e a contagem física — uma base de comparação relevante para acompanhar a evolução dos processos de entrada, transformação e saída de mercadoria ao longo das próximas contagens.'
+      );
+    }
+
+    // 4) Faltas x sobras em % da base analisada — leitura de comportamento, não só valor
     var pctFalta = c.totalSKUs ? (c.faltaCount / c.totalSKUs * 100) : 0;
     var pctSobra = c.totalSKUs ? (c.sobraCount / c.totalSKUs * 100) : 0;
     paragrafos.push(
@@ -676,7 +696,7 @@ var Engine = (function(){
       }
     }
 
-    // 3) Categorias críticas
+    // 5) Categorias críticas — e, quando houver mais de duas, a categoria de referência (melhor controle)
     var temCategoriaCritica = false;
     if (c.hasCategorias && c.categorias && c.categorias.length) {
       var piores = c.categorias.filter(function(x){return x.nome!=='Sem categoria';}).slice().sort(function(a,b){return a.acuracidade-b.acuracidade;});
@@ -684,11 +704,16 @@ var Engine = (function(){
       if (piores.length) {
         var nomes = piores[0].nome + ' (' + pct(piores[0].acuracidade) + ')';
         if (piores.length > 1) nomes += ' e ' + piores[1].nome + ' (' + pct(piores[1].acuracidade) + ')';
-        paragrafos.push('Entre as categorias analisadas, ' + nomes + ' destoam da média e concentram a maior fragilidade de controle — candidatas prioritárias para reforço nos processos de entrada, transformação e saída de mercadoria.');
+        paragrafos.push('Entre as categorias analisadas, ' + nomes + ' destoam da média e concentram a maior fragilidade nos processos de entrada, transformação e saída de mercadoria — candidatas prioritárias para reforço de controle.');
+      }
+      if (piores.length > 2) {
+        var melhor = piores[piores.length - 1];
+        paragrafos.push('No outro extremo, ' + melhor.nome + ' se destaca com ' + pct(melhor.acuracidade) + ' de acuracidade — uma referência interna de processo bem controlado, que pode servir de modelo para as demais categorias.');
       }
     }
 
-    // 4) Recomendação final — reconcilia resultado geral com exceções por categoria; nunca sugere recontagem
+    // 6) Recomendação final — reconcilia resultado geral com exceções por categoria; nunca sugere recontagem
+    // e nunca atribui a divergência à qualidade da contagem em si (r82)
     if (c.acuracidade >= 95 && !temCategoriaCritica) {
       paragrafos.push('Recomendação: o controle de estoque está dentro de um padrão saudável — manter o acompanhamento dos processos de entrada, transformação e saída de mercadoria e monitorar a acuracidade nas próximas contagens para evitar deterioração gradual.');
     } else if (c.acuracidade >= 95 && temCategoriaCritica) {
@@ -696,7 +721,7 @@ var Engine = (function(){
     } else if (c.acuracidade >= 90) {
       paragrafos.push('Recomendação: melhorar e acompanhar mais de perto os processos de entrada, transformação e saída de mercadoria, com foco nos SKUs e categorias de maior divergência financeira, deve ser suficiente para aproximar o estoque físico do contábil.');
     } else {
-      paragrafos.push('Recomendação: o volume de divergência já compromete a confiabilidade do estoque contábil — vale revisar a fundo os processos de entrada (conferência de recebimento), transformação (quando o produto é processado internamente) e saída (baixa de venda, quebra, transferência) de mercadoria, priorizando as categorias e SKUs de maior impacto financeiro.');
+      paragrafos.push('Recomendação: o volume de divergência aponta para processos de entrada, transformação e saída de mercadoria que precisam de revisão prioritária — vale investigar a fundo a conferência de recebimento (entrada), os lançamentos de transformação interna do produto, quando houver, e as baixas de venda, quebra e transferência (saída), priorizando as categorias e SKUs de maior impacto financeiro.');
     }
 
     return paragrafos.join('\n\n');

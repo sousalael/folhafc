@@ -35,11 +35,11 @@ function sumCritica(c){
   var w=c.categorias.filter(function(x){return x.nome!=='Sem categoria';}).sort(function(a,b){return a.acuracidade-b.acuracidade;});
   var desvio=Math.round((100-c.acuracidade)*10)/10;
   var t='A auditoria comparou '+NUM(c.totalSKUs)+' SKUs entre o saldo do sistema e a contagem física, apurando uma acuracidade de '+PCT(c.acuracidade)+' — ou seja, '+NUM(c.okCount)+' itens sem qualquer divergência. Foram registradas '+NUM(c.faltaCount)+' faltas (itens com saldo físico menor que o sistema), somando '+BRLi(c.totalFaltas)+' em valor não localizado, e '+NUM(c.sobraCount)+' sobras, no valor de '+BRLi(c.totalSobras)+'. O resultado é um saldo líquido de '+BRLi(c.saldoLiquido)+', que representa o impacto financeiro direto das divergências sobre o estoque registrado.';
-  t+='\n\nUma acuracidade de '+PCT(c.acuracidade)+' indica que a cada 100 posições, cerca de '+desvio+' apresentam algum desvio — número que serve de termômetro para a confiabilidade do estoque no ERP.';
+  t+='\n\nUma acuracidade de '+PCT(c.acuracidade)+' indica que a cada 100 posições, cerca de '+desvio+' apresentam algum desvio — número que resume o tamanho financeiro da divergência apurada nos processos de entrada, transformação e saída de mercadoria.';
   if(w.length){
     var c1=w[0], nomes=c1.nome+' ('+PCT(c1.acuracidade)+')';
     if(w.length>1){nomes+=' e '+w[1].nome+' ('+PCT(w[1].acuracidade)+')';}
-    t+=' As categorias com menor acuracidade foram '+nomes+', que concentram a maior fragilidade de controle e devem ser priorizadas em recontagens e na revisão dos processos de entrada e baixa de mercadoria.';
+    t+=' As categorias com menor acuracidade foram '+nomes+', que concentram a maior fragilidade nos processos de entrada, transformação e saída de mercadoria e devem ser priorizadas no reforço de controle.';
   }
   t+=' Faltas em produtos perecíveis costumam apontar para inversão de códigos no registro de vendas ou perdas não registradas (quebra, vencimento, furto, desidratação), enquanto sobras sugerem falhas de lançamento na entrada.';
   return t;
