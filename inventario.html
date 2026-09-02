@@ -37,6 +37,10 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .metric-value{font-size:22px;font-weight:700}
 .metric-detail{font-size:11px;color:var(--fc-muted);margin-top:2px}
 .section-title{font-size:14px;font-weight:600;color:var(--fc-navy);margin:20px 0 12px;display:flex;align-items:center;gap:6px}
+.analysis-box{background:var(--fc-light);border-left:3px solid var(--fc-green);border-radius:6px;padding:14px 18px;margin-bottom:20px}
+.analysis-box p{font-size:13px;line-height:1.6;color:var(--fc-text);margin:0 0 10px}
+.analysis-box p:last-child{margin-bottom:0}
+.analysis-box.loading p{color:var(--fc-muted);font-style:italic}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}
 .cat-card{border-radius:8px;padding:12px 14px;border:1px solid var(--fc-border);background:var(--fc-card)}
 .cat-name{font-size:13px;font-weight:600;margin-bottom:6px}
@@ -358,6 +362,9 @@ table.data-table tr:hover td{background:#eef6ff}
   var params = new URLSearchParams(window.location.search);
   var TOKEN = params.get('token') || '';
   var CPF = params.get('cpf') || '';
+  /* Exposto globalmente para que app.js/export.js consigam anexar o token nas chamadas de IA
+     (gerarResumoInventarioIA / gerarComparativoIA), que exigem sessão válida no backend. */
+  window.INVENTARIO_TOKEN = TOKEN;
   function getState(){
     try { return (window.App && typeof window.App.getState==='function') ? window.App.getState() : (window.State||null); }
     catch(e){ return null; }

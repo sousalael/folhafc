@@ -102,17 +102,21 @@ var Engine = (function(){
     var sobraItems = items.filter(function(i){return i.status==='Sobra'});
     var totalFaltas = faltaItems.reduce(function(s,i){return s+i.difValor},0);
     var totalSobras = sobraItems.reduce(function(s,i){return s+i.difValor},0);
+    /* Acuracidade = valor do estoque contado / valor do estoque antes da contagem (base: valor, não contagem de SKUs) */
+    function acuraciaPorValor(valEstoque, valContado){ return valEstoque ? round2(valContado/valEstoque*100) : 0; }
     var catList = groupByCategoria(items, function(g){
       var ok=g.items.filter(function(i){return i.status==='OK'}).length;
       var fv=g.items.filter(function(i){return i.status==='Falta'}).reduce(function(s,i){return s+i.difValor},0);
       var sv=g.items.filter(function(i){return i.status==='Sobra'}).reduce(function(s,i){return s+i.difValor},0);
-      return {nome:g.nome, total:g.items.length, ok:ok, faltaVal:round2(fv), sobraVal:round2(sv), acuracidade:g.items.length?round2(ok/g.items.length*100):0, saldo:round2(fv+sv), destaque:Math.abs(fv)};
+      var vE=g.items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
+      var vC=g.items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
+      return {nome:g.nome, total:g.items.length, ok:ok, faltaVal:round2(fv), sobraVal:round2(sv), valorEstoque:round2(vE), valorEstoqueContado:round2(vC), acuracidade:acuraciaPorValor(vE,vC), saldo:round2(fv+sv), destaque:Math.abs(fv)};
     });
     /* KPI Perda de Estoque % = (valor estoque - valor estoque contado) / valor estoque * -1 */
     var valorEstoque = items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
     var valorEstoqueContado = items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
     var perdaEstoquePct = valorEstoque ? round2((valorEstoque - valorEstoqueContado) / valorEstoque * -1 * 100) : 0;
-    return {items:items, totalSKUs:totalSKUs, okCount:okCount, acuracidade:totalSKUs?round2(okCount/totalSKUs*100):0, faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    return {items:items, totalSKUs:totalSKUs, okCount:okCount, acuracidade:acuraciaPorValor(valorEstoque,valorEstoqueContado), faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== ABC helper ========== */
@@ -592,6 +596,57 @@ var Engine = (function(){
     return {series:series, tendencias:tendencias, totalPeriodos:sorted.length};
   }
 
+  // ── Análise textual elaborada da Crítica (fallback sem IA — usada na tela e no PDF) ──
+  function gerarAnaliseCritica(c, info) {
+    info = info || {};
+    function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
+    function num(v){ return (v||0).toLocaleString('pt-BR'); }
+    var paragrafos = [];
+
+    paragrafos.push(
+      'A crítica do inventário comparou o saldo do sistema com a contagem física em ' + num(c.totalSKUs) + ' SKUs qualificados para a análise'
+      + ' — considerando apenas produtos com estoque de sistema positivo ou negativo, contagem física maior que zero, ou venda registrada no período; itens sem estoque, sem contagem e sem venda foram excluídos por não terem relevância para o resultado.'
+      + ' O valor do estoque calculado pelo sistema, antes da contagem, era de ' + brl(c.valorEstoque) + '; a contagem física localizou ' + brl(c.valorEstoqueContado) + ' em produtos — uma acuracidade de '
+      + pct(c.acuracidade) + ' medida pelo valor contado sobre o valor de sistema, e não apenas pela quantidade de SKUs batendo exatamente.'
+    );
+
+    var pFaltaSobra = 'Do total analisado, ' + num(c.faltaCount) + ' SKUs apresentaram falta (contagem física menor que o sistema), somando ' + brl(c.totalFaltas) + ' em valor não localizado, enquanto '
+      + num(c.sobraCount) + ' SKUs apresentaram sobra, no valor de ' + brl(c.totalSobras) + '. O saldo líquido entre as duas pontas é de ' + brl(c.saldoLiquido);
+    pFaltaSobra += c.saldoLiquido < 0
+      ? (', o que confirma uma perda de estoque de ' + pct(Math.abs(c.perdaEstoquePct)) + ' sobre o valor total antes da contagem — o físico encontrado é menor que o registrado no sistema.')
+      : (', ou seja, o valor físico encontrado na contagem supera o registrado no sistema.');
+    paragrafos.push(pFaltaSobra);
+
+    if (c.faltaCount > 0 && c.sobraCount > 0 && c.totalSobras) {
+      var razao = Math.abs(c.totalFaltas / c.totalSobras);
+      if (razao > 2) {
+        paragrafos.push('O valor das faltas supera em mais do dobro o valor das sobras — padrão que costuma indicar perda operacional real (quebra, vencimento, furto) além de simples erro de contagem, e que justifica investigação prioritária nos itens de maior valor individual.');
+      } else if (razao < 0.5) {
+        paragrafos.push('O valor das sobras supera consideravelmente o das faltas, o que costuma apontar para falhas no lançamento de entrada de mercadoria (nota fiscal não baixada, recebimento em duplicidade) mais do que para perda física de produto.');
+      }
+    }
+
+    if (c.hasCategorias && c.categorias && c.categorias.length) {
+      var piores = c.categorias.filter(function(x){return x.nome!=='Sem categoria';}).slice().sort(function(a,b){return a.acuracidade-b.acuracidade;});
+      if (piores.length) {
+        var nomes = piores[0].nome + ' (' + pct(piores[0].acuracidade) + ')';
+        if (piores.length > 1) nomes += ' e ' + piores[1].nome + ' (' + pct(piores[1].acuracidade) + ')';
+        paragrafos.push('Entre as categorias analisadas, ' + nomes + ' apresentam a menor acuracidade de valor e concentram a maior fragilidade de controle — são as primeiras candidatas a recontagem e revisão dos processos de entrada e baixa de mercadoria.');
+      }
+    }
+
+    if (c.acuracidade < 90) {
+      paragrafos.push('Com acuracidade de valor abaixo de 90%, recomenda-se recontagem completa do estoque, revisão dos processos de entrada e saída de mercadoria e auditoria pontual no sistema de gestão — o volume de divergência já compromete a confiabilidade do estoque contábil.');
+    } else if (c.acuracidade < 95) {
+      paragrafos.push('Com acuracidade de valor entre 90% e 95%, uma recontagem cíclica focada nos SKUs de maior divergência financeira, aliada à revisão dos procedimentos de conferência no recebimento, deve ser suficiente para aproximar o estoque físico do contábil.');
+    } else {
+      paragrafos.push('Com acuracidade de valor acima de 95%, o controle de estoque está dentro de um padrão saudável — o recomendável é manter os processos atuais e monitorar a acuracidade nas próximas contagens para evitar deterioração gradual.');
+    }
+
+    return paragrafos.join('\n\n');
+  }
+
   // ── r68: Geração de recomendações baseadas nos dados ──
   function gerarRecomendacoes(results, info) {
     var recs = [];
@@ -679,5 +734,5 @@ var Engine = (function(){
     return Number(v).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0});
   }
 
-  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, formatNum:formatNum};
+  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, gerarAnaliseCritica:gerarAnaliseCritica, formatNum:formatNum};
 })();
