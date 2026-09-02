@@ -670,7 +670,7 @@ function renderResumo(){
     var ru=r.ruptura;
     var cls=ru.taxaRuptura<=5?'ok':(ru.taxaRuptura<=10?'alerta':'critico');
     html+='<div class="resumo-card '+cls+'">';
-    html+='<div class="resumo-card-label">RUPTURA</div>';
+    html+='<div class="resumo-card-label">RUPTURA LOJA X DEPÓSITO</div>';
     html+='<div class="resumo-card-valor">'+PCT(ru.taxaRuptura)+'</div>';
     html+='<div class="resumo-card-titulo">'+NUM(ru.totalRupturas)+' SKUs em falta</div>';
     html+='<div class="resumo-card-detalhe">Curva A: '+NUM(ru.rupturaA)+' &nbsp;·&nbsp; B: '+NUM(ru.rupturaB)+' &nbsp;·&nbsp; C: '+NUM(ru.rupturaC)+'</div>';
@@ -817,7 +817,7 @@ function renderCritica(page){
   if(c.hasCategorias){destroyChart('chartCritica');var ctx=document.getElementById('chartCritica');if(ctx){State.charts.chartCritica=new Chart(ctx,{type:'bar',data:{labels:c.categorias.map(function(c){return c.nome;}),datasets:[{label:'Faltas',data:c.categorias.map(function(c){return Math.abs(c.faltaVal);}),backgroundColor:'#D32F2F',borderRadius:4,barPercentage:.65},{label:'Sobras',data:c.categorias.map(function(c){return c.sobraVal;}),backgroundColor:'#F57C00',borderRadius:4,barPercentage:.65}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:function(c){return c.dataset.backgroundColor;},font:{size:10,weight:'bold'},formatter:function(v){return 'R$ '+v.toLocaleString('pt-BR');}}},scales:{x:{grid:{color:'#f0f0f0'},ticks:{font:{size:10},callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:80}}}});}}
 }
 
-/* ===== 2. RUPTURA ===== */
+/* ===== 2. RUPTURA LOJA X DEPÓSITO ===== */
 function renderRuptura(page){
   var r=State.results.ruptura, p=$('panel-ruptura');
   var fA=p.dataset.filterAbc||'all', fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
@@ -831,7 +831,7 @@ function renderRuptura(page){
   html+='</div>';
   if(r.rupturaA>0) html+='<div class="alert alert-danger"><i class="ti ti-alert-circle"></i><div><strong>'+NUM(r.rupturaA)+' itens curva A</strong> estão em ruptura — produtos de maior venda ausentes no salão</div></div>';
   if(r.hasCategorias){
-    html+='<div class="section-title"><i class="ti ti-category"></i> Ruptura por categoria</div>';
+    html+='<div class="section-title"><i class="ti ti-category"></i> Ruptura Loja x Depósito por categoria</div>';
     html+=renderCatCards(r.categorias,[{label:'Rupturas',key:'totalRupturas',fmt:NUM,color:function(v){return v>0?'text-red':'';}},{label:'Taxa ruptura',key:'taxa',fmt:PCT,color:function(){return 'text-red';}},{label:'Rupturas curva A',key:'rupturaA',fmt:NUM,color:function(v){return v>0?'text-red':'text-muted';}},{label:'Perda fat./dia',key:'perdaDia',fmt:BRLi,color:function(){return 'text-red';}}]);
   }
   html+='<div class="loss-cards"><div class="loss-card a"><div class="loss-title">Curva A em ruptura</div><div class="loss-main">'+NUM(r.rupturaA)+' SKUs</div><div class="loss-sub">Ação imediata</div></div><div class="loss-card b"><div class="loss-title">Curva B em ruptura</div><div class="loss-main">'+NUM(r.rupturaB)+' SKUs</div><div class="loss-sub">Atenção</div></div><div class="loss-card c"><div class="loss-title">Curva C em ruptura</div><div class="loss-main">'+NUM(r.rupturaC)+' SKUs</div><div class="loss-sub">Monitorar</div></div></div>';
