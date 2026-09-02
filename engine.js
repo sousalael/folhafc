@@ -40,8 +40,9 @@ var Engine = (function(){
   }
 
   /* ========== 1. CRITICA ========== */
-  function calcCritica(estoque, contagem, cadastro, custoMap){
+  function calcCritica(estoque, contagem, cadastro, custoMap, vendas90){
     custoMap = custoMap || {};
+    vendas90 = vendas90 || [];
     var skuMap = {};
     estoque.forEach(function(row){
       var sku = String(row.sku||'').trim();
@@ -57,6 +58,13 @@ var Engine = (function(){
       if(row.descricao && !item.descricao) item.descricao = row.descricao;
       if(row.categoria && !item.categoria) item.categoria = row.categoria;
       if(row.custoUnit && !item.custoUnit) item.custoUnit = Number(row.custoUnit)||0;
+    });
+    /* Mapa de vendas: SKU -> qtd vendida total, usado só para qualificar o universo da acuracidade */
+    var vendaQtdMap = {};
+    vendas90.forEach(function(row){
+      var sku = String(row.sku||'').trim();
+      if(!sku) return;
+      vendaQtdMap[sku] = (vendaQtdMap[sku]||0) + (Number(row.qtdVendida)||0);
     });
     if(cadastro && cadastro.length){
       var cadMap = {};
@@ -74,8 +82,14 @@ var Engine = (function(){
     Object.keys(skuMap).forEach(function(sku){
       var it = skuMap[sku];
       it.qtdContada = it.qtdContada || 0;
+      /* Universo da acuracidade: só entra se estoque de sistema for positivo/negativo,
+         a contagem física for maior que zero, ou houver venda registrada maior que zero.
+         Qualquer produto fora dessa qualificação é removido de toda a análise
+         (inclusive Dias de Estoque e Investimento ABC, que partem destes mesmos items). */
+      var qualifica = it.qtdSistema !== 0 || it.qtdContada > 0 || (vendaQtdMap[sku]||0) > 0;
+      if(!qualifica) return;
       it.custoUnit = resolveCusto(it, custoMap);
-      it.difQtd = it.qtdContada - it.qtdSistema;
+      it.difQtd = round2(it.qtdContada - it.qtdSistema);
       it.difValor = round2(it.difQtd * it.custoUnit);
       it.status = it.difQtd < 0 ? 'Falta' : (it.difQtd > 0 ? 'Sobra' : 'OK');
       items.push(it);
@@ -94,7 +108,11 @@ var Engine = (function(){
       var sv=g.items.filter(function(i){return i.status==='Sobra'}).reduce(function(s,i){return s+i.difValor},0);
       return {nome:g.nome, total:g.items.length, ok:ok, faltaVal:round2(fv), sobraVal:round2(sv), acuracidade:g.items.length?round2(ok/g.items.length*100):0, saldo:round2(fv+sv), destaque:Math.abs(fv)};
     });
-    return {items:items, totalSKUs:totalSKUs, okCount:okCount, acuracidade:totalSKUs?round2(okCount/totalSKUs*100):0, faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    /* KPI Perda de Estoque % = (valor estoque - valor estoque contado) / valor estoque * -1 */
+    var valorEstoque = items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
+    var valorEstoqueContado = items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
+    var perdaEstoquePct = valorEstoque ? round2((valorEstoque - valorEstoqueContado) / valorEstoque * -1 * 100) : 0;
+    return {items:items, totalSKUs:totalSKUs, okCount:okCount, acuracidade:totalSKUs?round2(okCount/totalSKUs*100):0, faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== ABC helper ========== */
