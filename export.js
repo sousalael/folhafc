@@ -190,24 +190,20 @@ function generatePDF(rt,data,pd,logo,info){
   var apiUrl=st&&st.apiUrl?st.apiUrl:null;
   var apiToken=st&&st.apiToken?st.apiToken:null;
   window._iaResumos=window._iaResumos||{};
-  /* Crítica: reaproveita o texto já buscado (em segundo plano) pela própria tela — evita nova chamada. */
-  if(rt==='critica'&&st&&st.iaAnalise&&st.iaAnalise.critica){
-    window._iaResumos.critica=st.iaAnalise.critica;
+  var secaoIA=(rt==='dias')?'dias_estoque':rt; /* a IA usa a chave "dias_estoque"; internamente usamos "dias" */
+  /* Reaproveita o texto já buscado (em segundo plano) pela própria tela, para qualquer dimensão — evita nova chamada. */
+  if(st&&st.iaAnalise&&st.iaAnalise[rt]){
+    window._iaResumos[secaoIA]=st.iaAnalise[rt];
   }
-  if(apiUrl&&apiToken&&data[rt]&&!window._iaResumos[rt]){
-    var metricas='';
-    if(rt==='critica'){metricas='Total SKUs: '+data.critica.totalSKUs+'\nAcuracidade (valor contado / valor de estoque): '+PCT(data.critica.acuracidade)+'\nValor estoque (sistema, antes da contagem): '+BRLi(data.critica.valorEstoque)+'\nValor estoque contado: '+BRLi(data.critica.valorEstoqueContado)+'\nPerda de estoque: '+PCT(data.critica.perdaEstoquePct)+'\nFaltas: '+NUM(data.critica.faltaCount)+' ('+BRLi(data.critica.totalFaltas)+')\nSobras: '+NUM(data.critica.sobraCount)+' ('+BRLi(data.critica.totalSobras)+')\nSaldo líquido: '+BRLi(data.critica.saldoLiquido);if(data.critica.hasCategorias)metricas+='\nCategorias:\n'+data.critica.categorias.map(function(c){return c.nome+': '+NUM(c.total)+' SKUs, acuracidade '+PCT(c.acuracidade)+', valor estoque '+BRLi(c.valorEstoque)+', valor contado '+BRLi(c.valorEstoqueContado)+', faltas '+BRLi(c.faltaVal)+', sobras '+BRLi(c.sobraVal);}).join('\n');}
-    else if(rt==='ruptura'){metricas='Total rupturas: '+NUM(data.ruptura.totalRupturas)+'\nTaxa: '+PCT(data.ruptura.taxaRuptura)+'\nCurva A: '+NUM(data.ruptura.rupturaA)+'\nCurva B: '+NUM(data.ruptura.rupturaB);}
-    else if(rt==='dias'){metricas='Cobertura geral: '+data.dias.coberturaGeral+' dias\nCobertura A: '+data.dias.coberturaA+' dias\nCobertura B: '+data.dias.coberturaB+' dias\nTotal SKUs: '+NUM(data.dias.total);}
-    else if(rt==='abc'){metricas='Curva A Fat: '+BRLi(data.abc.fatA.invest)+' ('+PCT(data.abc.fatA.pctInvest)+' estoque, '+PCT(data.abc.fatA.pctFat)+' fat.)\nCurva B Fat: '+BRLi(data.abc.fatB.invest)+'\nCurva C Fat: '+BRLi(data.abc.fatC.invest);}
-    else if(rt==='perda'){metricas='Perda fat./dia: '+BRLi(data.perda.totalPerdaFat)+'\nPerda lucro/dia: '+BRLi(data.perda.totalPerdaLucro)+'\nPerda mensal: '+BRLi(data.perda.perdaMensal)+'\nTotal SKUs: '+NUM(data.perda.totalSKUs);}
+  if(apiUrl&&apiToken&&data[rt]&&!window._iaResumos[secaoIA]){
+    var metricas=Engine.buildMetricasIA(rt,data[rt]);
     try{
       var xhr=new XMLHttpRequest();
       xhr.open('POST',apiUrl,false);// síncrono
-      xhr.send(JSON.stringify({action:'gerarResumoInventarioIA',token:apiToken,cliente:info.cliente||'',unidade:info.unidade||'',data:info.dataInventario||'',diasVenda:info.diasVenda||90,metricas:metricas,secao:rt}));
+      xhr.send(JSON.stringify({action:'gerarResumoInventarioIA',token:apiToken,cliente:info.cliente||'',unidade:info.unidade||'',data:info.dataInventario||'',diasVenda:info.diasVenda||90,metricas:metricas,secao:secaoIA}));
       var resp=JSON.parse(xhr.responseText);
-      if(resp.ok&&resp.resumos&&resp.resumos[rt]){
-        window._iaResumos[rt]=resp.resumos[rt];
+      if(resp.ok&&resp.resumos&&resp.resumos[secaoIA]){
+        window._iaResumos[secaoIA]=resp.resumos[secaoIA];
       }
     }catch(e){console.log('IA fallback:',e);}
   }
@@ -250,7 +246,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
     var r=data.ruptura;var temVendas=r.items.some(function(i){return i.vendaMediaDia>0;});
     ttl('Ruptura — Resumo executivo');
     var iaRup=window._iaResumos&&window._iaResumos.ruptura;
-    sec('Análise');bloco(iaRup||(temVendas?sumRuptura(r):'Foram identificados '+NUM(r.totalRupturas)+' itens em ruptura (presentes no depósito mas ausentes no salão de vendas). Sem dados de vendas disponíveis para análise de impacto financeiro.'));
+    sec('Análise');bloco(iaRup||Engine.gerarAnaliseRuptura(r,info));
     sec('Metodologia');bloco(metRuptura(info.diasVenda));
     sec('Indicadores gerais');kpi(['TAXA DE RUPTURA','SKUS EM RUPTURA','RUPTURA CURVA A (FAT.)','RUPTURA CURVA A (LUCRO)'],[PCT(r.taxaRuptura),NUM(r.totalRupturas),PCT(r.taxaA),PCT(r.taxaALucro)],[[211,47,47],[51,51,51],[211,47,47],[211,47,47]]);
     sec('Gráfico — Rupturas por curva ABC');img(chartRuptura(r),60);
@@ -270,7 +266,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
   else if(rt==='dias'){
     var d=data.dias,fv=fxV(d.items);ttl('Dias de estoque — Resumo executivo');
     var iaDias=window._iaResumos&&window._iaResumos.dias_estoque;
-    sec('Análise');bloco(iaDias||sumDias(d,info.diasVenda));sec('Metodologia');bloco(metDias(info.diasVenda));
+    sec('Análise');bloco(iaDias||Engine.gerarAnaliseDias(d,info));sec('Metodologia');bloco(metDias(info.diasVenda));
     sec('Indicadores gerais');kpi(['COBERTURA GERAL','CURVA A','CURVA B','CURVA C'],[d.coberturaGeral+' dias',d.coberturaA+' dias',d.coberturaB+' dias',d.coberturaC+' dias'],[[51,51,51],[211,47,47],[245,124,0],[136,136,136]]);
     sec('Gráfico — Distribuição por faixa de cobertura');img(chartDias(d),60);
     sec('Distribuição por faixa');var fo=['Ruptura','Alto risco','Médio risco','Cobertura ideal','Excesso de cobertura','Sem giro'];
@@ -282,7 +278,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
   else if(rt==='abc'){
     var a=data.abc;ttl('Investimento por curva ABC — Resumo executivo');
     var iaABC=window._iaResumos&&window._iaResumos.abc;
-    sec('Análise');bloco(iaABC||sumABC(a,info.diasVenda));sec('Metodologia');bloco(metABC(info.diasVenda));
+    sec('Análise');bloco(iaABC||Engine.gerarAnaliseABC(a,info));sec('Metodologia');bloco(metABC(info.diasVenda));
     sec('Indicadores gerais');kpi(['VALOR TOTAL EM ESTOQUE','FATURAMENTO 90D','LUCRO 90D','SKUS ANALISADOS'],[BRLi(a.totalInvest),BRLi(a.totalFat),BRLi(a.totalLucro),NUM(a.items.length)],[[51,51,51],[0,183,74],[0,183,74],[51,51,51]]);
     sec('Gráfico — Valor em estoque × Faturamento por curva');img(chartABC(a),60);
     sec('Curva ABC por faturamento');aT(['Curva','Valor Estoque (R$)','% Estoque','Faturamento (R$)','% Faturamento'],[['A',BRLi(a.fatA.invest),PCT(a.fatA.pctInvest),BRLi(a.fatA.fat),PCT(a.fatA.pctFat)],['B',BRLi(a.fatB.invest),PCT(a.fatB.pctInvest),BRLi(a.fatB.fat),PCT(a.fatB.pctFat)],['C',BRLi(a.fatC.invest),PCT(a.fatC.pctInvest),BRLi(a.fatC.fat),PCT(a.fatC.pctFat)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
@@ -291,7 +287,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
   else if(rt==='perda'){
     var p=data.perda;ttl('Projeção de venda perdida — Resumo executivo');
     var iaPerda=window._iaResumos&&window._iaResumos.perda;
-    sec('Análise');bloco(iaPerda||sumPerda(p,info.diasVenda));sec('Metodologia');bloco(metPerda(info.diasVenda));
+    sec('Análise');bloco(iaPerda||Engine.gerarAnalisePerda(p,info));sec('Metodologia');bloco(metPerda(info.diasVenda));
     sec('Indicadores gerais');kpi(['PERDA FAT./DIA','PERDA LUCRO/DIA','PERDA MENSAL','SKUS'],[BRLi(p.totalPerdaFat),BRLi(p.totalPerdaLucro),BRLi(p.perdaMensal),NUM(p.totalSKUs)],[[211,47,47],[211,47,47],[211,47,47],[51,51,51]]);
     sec('Impacto por curva ABC');aT(['Curva','SKUs','Perda Fat./Dia','Perda Lucro/Dia','% Perda','Perda Mensal'],[['A',p.classA.count,BRLi(p.classA.perda),BRLi(p.classA.lucro),PCT(p.classA.pct),BRLi(p.classA.perda*30)],['B',p.classB.count,BRLi(p.classB.perda),BRLi(p.classB.lucro),PCT(p.classB.pct),BRLi(p.classB.perda*30)],['C',p.classC.count,BRLi(p.classC.perda),BRLi(p.classC.lucro),PCT(p.classC.pct),BRLi(p.classC.perda*30)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}});
     sec('Gráfico — Perda mensal projetada por curva');img(chartPerda(p),60);

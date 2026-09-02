@@ -512,22 +512,26 @@ function processAll(){
       if(hasContagem){
         State.results.ruptura=Engine.calcRuptura(State.rawData.contagem,hasVendas?State.rawData.vendas:[],State.rawData.cadastro,State.info.diasVenda);
         avail.ruptura=true;
+        carregarAnaliseIA('ruptura');
       }
       fill.style.width='65%';
       setTimeout(function(){
         if(itemsBase&&hasVendas){
           State.results.dias=Engine.calcDiasEstoque(itemsBase,State.rawData.vendas,custoMap,State.info.diasVenda,State.rawData.cadastro);
           avail.dias=true;
+          carregarAnaliseIA('dias');
         }
         fill.style.width='75%';
         setTimeout(function(){
           if(itemsBase&&hasVendas){
             State.results.abc=Engine.calcInvestimentoABC(itemsBase,State.rawData.vendas,custoMap,State.info.diasVenda);
             avail.abc=true;
+            carregarAnaliseIA('abc');
           }
           if(hasVendas&&(hasContagem||hasEstoque)){
             State.results.perda=Engine.calcProjecaoPerda(State.rawData.vendas,State.rawData.contagem.length?State.rawData.contagem:State.rawData.estoque,State.rawData.cadastro,State.info.diasVenda);
             avail.perda=true;
+            carregarAnaliseIA('perda');
           }
           fill.style.width='100%';
           setTimeout(function(){
@@ -726,32 +730,48 @@ function renderResumo(){
 /* ===== 1. CRITICA ===== */
 /* ===== Análise elaborada via API Claude (backend: gerarResumoInventarioIA) =====
    Busca em segundo plano, sem travar a tela — enquanto isso, o texto padrão
-   (Engine.gerarAnaliseCritica) já fica visível. Resultado é cacheado por unidade
-   (unit.iaAnalise) para não repetir a chamada a cada re-render/filtro. */
+   (Engine.gerarAnalise*) já fica visível. Resultado é cacheado por unidade
+   (unit.iaAnalise) para não repetir a chamada a cada re-render/filtro.
+   r76: estendido das 5 dimensões (antes só a Crítica tinha texto por IA na tela). */
+var DIM_IA_CONFIG={
+  critica:{resultKey:'critica',secaoIA:'critica'},
+  ruptura:{resultKey:'ruptura',secaoIA:'ruptura'},
+  dias:{resultKey:'dias',secaoIA:'dias_estoque'}, /* chave da IA no backend é "dias_estoque", chave interna é "dias" */
+  abc:{resultKey:'abc',secaoIA:'abc'},
+  perda:{resultKey:'perda',secaoIA:'perda'}
+};
 function carregarAnaliseIA(dim){
-  if(dim!=='critica') return;
+  var cfg=DIM_IA_CONFIG[dim];
+  if(!cfg) return;
   var unit=Units[activeUnitIdx];
-  var c=unit.results&&unit.results.critica;
-  if(!c) return;
+  var d=unit.results&&unit.results[cfg.resultKey];
+  if(!d) return;
   unit.iaAnalise=unit.iaAnalise||{};
-  if(unit.iaAnalise.criticaFetching||unit.iaAnalise.critica) return;
+  if(unit.iaAnalise[dim+'Fetching']||unit.iaAnalise[dim]) return;
   var st=window.App.getState();
   var apiUrl=st.apiUrl, token=st.apiToken;
   if(!apiUrl||!token) return; /* sem sessão/URL — mantém o texto padrão já exibido */
-  unit.iaAnalise.criticaFetching=true;
-  var metricas='Total SKUs: '+c.totalSKUs+'\nAcuracidade (valor contado / valor de estoque): '+PCT(c.acuracidade)+'\nValor estoque (sistema, antes da contagem): '+BRLi(c.valorEstoque)+'\nValor estoque contado: '+BRLi(c.valorEstoqueContado)+'\nPerda de estoque: '+PCT(c.perdaEstoquePct)+'\nFaltas: '+NUM(c.faltaCount)+' SKUs ('+BRLi(c.totalFaltas)+')\nSobras: '+NUM(c.sobraCount)+' SKUs ('+BRLi(c.totalSobras)+')\nSaldo líquido: '+BRLi(c.saldoLiquido);
-  if(c.hasCategorias) metricas+='\nCategorias:\n'+c.categorias.map(function(x){return x.nome+': acuracidade '+PCT(x.acuracidade)+', valor estoque '+BRLi(x.valorEstoque)+', valor contado '+BRLi(x.valorEstoqueContado)+', faltas '+BRLi(x.faltaVal)+', sobras '+BRLi(x.sobraVal);}).join('\n');
-  fetch(apiUrl,{method:'POST',body:JSON.stringify({action:'gerarResumoInventarioIA',token:token,cliente:State.info.cliente||'',unidade:unit.nome||'',data:State.info.dataInventario||'',diasVenda:State.info.diasVenda||90,metricas:metricas,secao:'critica'})})
+  unit.iaAnalise[dim+'Fetching']=true;
+  var metricas=Engine.buildMetricasIA(dim,d);
+  fetch(apiUrl,{method:'POST',body:JSON.stringify({action:'gerarResumoInventarioIA',token:token,cliente:State.info.cliente||'',unidade:unit.nome||'',data:State.info.dataInventario||'',diasVenda:State.info.diasVenda||90,metricas:metricas,secao:cfg.secaoIA})})
     .then(function(r){return r.text();})
     .then(function(t){
       var resp=null; try{resp=JSON.parse(t);}catch(e){}
-      unit.iaAnalise.criticaFetching=false;
-      if(resp&&resp.ok&&resp.resumos&&resp.resumos.critica){
-        unit.iaAnalise.critica=resp.resumos.critica;
-        if(Units[activeUnitIdx]===unit&&renderFns['panel-critica']) renderFns['panel-critica']();
+      unit.iaAnalise[dim+'Fetching']=false;
+      var texto=resp&&resp.ok&&resp.resumos&&resp.resumos[cfg.secaoIA];
+      if(texto){
+        unit.iaAnalise[dim]=texto;
+        if(Units[activeUnitIdx]===unit&&renderFns['panel-'+dim]) renderFns['panel-'+dim]();
       }
     })
-    .catch(function(){ unit.iaAnalise.criticaFetching=false; });
+    .catch(function(){ unit.iaAnalise[dim+'Fetching']=false; });
+}
+/* Monta a caixa "Análise" (texto IA ou fallback local) — usada pelas 5 abas de resultado */
+function analiseBoxHtml(dim,fallbackFn,dado){
+  var ia=State.iaAnalise||{};
+  var texto=ia[dim]?ia[dim]:fallbackFn(dado,State.info);
+  var carregando=!ia[dim]&&ia[dim+'Fetching'];
+  return '<div class="section-title"><i class="ti ti-notes"></i> Análise</div><div class="analysis-box'+(carregando?' loading':'')+'" id="analise'+dim+'Box">'+texto.split('\n\n').map(function(par){return '<p>'+par+'</p>';}).join('')+'</div>';
 }
 
 function renderCritica(page){
@@ -792,7 +812,8 @@ function renderRuptura(page){
   var r=State.results.ruptura, p=$('panel-ruptura');
   var fA=p.dataset.filterAbc||'all', fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
   var filtered=r.items.filter(function(i){if(fA!=='all'&&i.abc_valorVendido90!==fA)return false;if(fC!=='all'&&(i.categoria||'Sem categoria')!==fC)return false;if(srch&&(i.sku+' '+i.descricao).toLowerCase().indexOf(srch.toLowerCase())<0)return false;return true;});
-  var html='<div class="metrics">';
+  var html=analiseBoxHtml('ruptura',Engine.gerarAnaliseRuptura,r);
+  html+='<div class="metrics">';
   html+='<div class="metric"><div class="metric-label">Taxa de ruptura geral</div><div class="metric-value text-red">'+PCT(r.taxaRuptura)+'</div></div>';
   html+='<div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(r.totalRupturas)+'</div><div class="metric-detail">de '+NUM(r.totalComDeposito)+' com depósito</div></div>';
   html+='<div class="metric"><div class="metric-label">Ruptura curva A (fat.)</div><div class="metric-value text-red">'+PCT(r.taxaA)+'</div></div>';
@@ -818,7 +839,8 @@ function renderDias(page){
   var d=State.results.dias, p=$('panel-dias');
   var fF=p.dataset.filterFaixa||'all', fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
   var filtered=d.items.filter(function(i){if(fF!=='all'&&i.faixa!==fF)return false;if(fC!=='all'&&(i.categoria||'Sem categoria')!==fC)return false;if(srch&&(i.sku+' '+i.descricao).toLowerCase().indexOf(srch.toLowerCase())<0)return false;return true;});
-  var html='<div class="metrics" style="grid-template-columns:repeat(5,1fr)">';
+  var html=analiseBoxHtml('dias',Engine.gerarAnaliseDias,d);
+  html+='<div class="metrics" style="grid-template-columns:repeat(5,1fr)">';
   html+='<div class="metric"><div class="metric-label">Cobertura de estoque</div><div class="metric-value">'+d.coberturaGeral+' dias</div></div>';
   html+='<div class="metric"><div class="metric-label">Cobertura curva A</div><div class="metric-value">'+d.coberturaA+' dias</div></div>';
   html+='<div class="metric"><div class="metric-label">Cobertura curva B</div><div class="metric-value">'+d.coberturaB+' dias</div></div>';
@@ -857,7 +879,7 @@ function renderABC(page){
   var a=State.results.abc, p=$('panel-abc');
   var fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
   var filtered=a.items.filter(function(i){if(fC!=='all'&&(i.categoria||'Sem categoria')!==fC)return false;if(srch&&(i.sku+' '+i.descricao).toLowerCase().indexOf(srch.toLowerCase())<0)return false;return true;});
-  var html='<div class="metrics"><div class="metric"><div class="metric-label">Valor total em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div></div><div class="metric"><div class="metric-label">Faturamento 90 dias</div><div class="metric-value">'+BRLi(a.totalFat)+'</div></div><div class="metric"><div class="metric-label">Lucro 90 dias</div><div class="metric-value">'+BRLi(a.totalLucro)+'</div></div><div class="metric"><div class="metric-label">SKUs analisados</div><div class="metric-value">'+NUM(a.items.length)+'</div></div></div>';
+  var html=analiseBoxHtml('abc',Engine.gerarAnaliseABC,a)+'<div class="metrics"><div class="metric"><div class="metric-label">Valor total em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div></div><div class="metric"><div class="metric-label">Faturamento 90 dias</div><div class="metric-value">'+BRLi(a.totalFat)+'</div></div><div class="metric"><div class="metric-label">Lucro 90 dias</div><div class="metric-value">'+BRLi(a.totalLucro)+'</div></div><div class="metric"><div class="metric-label">SKUs analisados</div><div class="metric-value">'+NUM(a.items.length)+'</div></div></div>';
   html+='<div class="summary-pair"><div class="summary-card"><div class="summary-header fat">Curva ABC por faturamento</div>';
   [{c:'A',d:a.fatA},{c:'B',d:a.fatB},{c:'C',d:a.fatC}].forEach(function(x){html+='<div class="summary-row"><span class="summary-class text-'+(x.c==='A'?'red':(x.c==='B'?'amber':'muted'))+'">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctInvest+'%;background:var(--fc-navy);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctInvest)+' invest.</span></div><div class="summary-row"><span class="summary-class" style="visibility:hidden">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctFat+'%;background:var(--fc-green);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctFat)+' fat.</span></div>';});
   html+='</div><div class="summary-card"><div class="summary-header luc">Curva ABC por lucro</div>';
@@ -881,7 +903,7 @@ function renderPerda(page){
   var pe=State.results.perda, p=$('panel-perda');
   var fA=p.dataset.filterAbc||'all', fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
   var filtered=pe.items.filter(function(i){if(fA!=='all'&&i.abcFat!==fA)return false;if(fC!=='all'&&(i.categoria||'Sem categoria')!==fC)return false;if(srch&&(i.sku+' '+i.descricao).toLowerCase().indexOf(srch.toLowerCase())<0)return false;return true;});
-  var html='<div class="metrics"><div class="metric"><div class="metric-label">Venda perdida / dia</div><div class="metric-value text-red">'+BRLi(pe.totalPerdaFat)+'</div></div><div class="metric"><div class="metric-label">Lucro perdido / dia</div><div class="metric-value text-red">'+BRLi(pe.totalPerdaLucro)+'</div></div><div class="metric"><div class="metric-label">Perda mensal (fat.)</div><div class="metric-value text-red">'+BRLi(pe.perdaMensal)+'</div></div><div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(pe.totalSKUs)+'</div></div></div>';
+  var html=analiseBoxHtml('perda',Engine.gerarAnalisePerda,pe)+'<div class="metrics"><div class="metric"><div class="metric-label">Venda perdida / dia</div><div class="metric-value text-red">'+BRLi(pe.totalPerdaFat)+'</div></div><div class="metric"><div class="metric-label">Lucro perdido / dia</div><div class="metric-value text-red">'+BRLi(pe.totalPerdaLucro)+'</div></div><div class="metric"><div class="metric-label">Perda mensal (fat.)</div><div class="metric-value text-red">'+BRLi(pe.perdaMensal)+'</div></div><div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(pe.totalSKUs)+'</div></div></div>';
   html+='<div class="loss-cards"><div class="loss-card a"><div class="loss-title">Curva A — perda/dia</div><div class="loss-main">'+BRLi(pe.classA.perda)+'</div><div class="loss-sub">'+PCT(pe.classA.pct)+' — '+NUM(pe.classA.count)+' SKUs</div></div><div class="loss-card b"><div class="loss-title">Curva B — perda/dia</div><div class="loss-main">'+BRLi(pe.classB.perda)+'</div><div class="loss-sub">'+PCT(pe.classB.pct)+' — '+NUM(pe.classB.count)+' SKUs</div></div><div class="loss-card c"><div class="loss-title">Curva C — perda/dia</div><div class="loss-main">'+BRLi(pe.classC.perda)+'</div><div class="loss-sub">'+PCT(pe.classC.pct)+' — '+NUM(pe.classC.count)+' SKUs</div></div></div>';
   html+='<div class="alert alert-danger"><i class="ti ti-alert-triangle"></i><div><strong>Impacto curva A:</strong> Diário: '+BRLi(pe.classA.perda)+' | Semanal: '+BRLi(pe.classA.perda*7)+' | Mensal: '+BRLi(pe.classA.perda*30)+' | Lucro mensal perdido: '+BRLi(pe.classA.lucro*30)+'</div></div>';
   if(pe.hasCategorias){

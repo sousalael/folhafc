@@ -597,6 +597,40 @@ var Engine = (function(){
   }
 
   // ── Análise textual elaborada da Crítica (fallback sem IA — usada na tela e no PDF) ──
+  // ── r76: métricas para a IA, com rótulos limpos (sem embutir fórmula/metodologia) ──
+  function buildMetricasIA(rt, data) {
+    function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
+    function num(v){ return (v||0).toLocaleString('pt-BR'); }
+    if (!data) return '';
+    if (rt === 'critica') {
+      var c = data;
+      var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nAcuracidade: ' + pct(c.acuracidade) + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
+        + '\nPerda de estoque: ' + pct(c.perdaEstoquePct) + '\nFaltas: ' + num(c.faltaCount) + ' SKUs (' + brl(c.totalFaltas) + ')\nSobras: ' + num(c.sobraCount) + ' SKUs (' + brl(c.totalSobras) + ')\nSaldo líquido: ' + brl(c.saldoLiquido);
+      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, acuracidade ' + pct(x.acuracidade) + ', valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
+      return m;
+    }
+    if (rt === 'ruptura') {
+      var r = data;
+      return 'Total rupturas: ' + num(r.totalRupturas) + '\nTaxa de ruptura: ' + pct(r.taxaRuptura) + '\nCurva A em ruptura: ' + num(r.rupturaA) + '\nCurva B em ruptura: ' + num(r.rupturaB) + '\nCurva C em ruptura: ' + num(r.rupturaC);
+    }
+    if (rt === 'dias') {
+      var d = data;
+      return 'Cobertura geral: ' + d.coberturaGeral + ' dias\nCobertura curva A: ' + d.coberturaA + ' dias\nCobertura curva B: ' + d.coberturaB + ' dias\nCobertura curva C: ' + d.coberturaC + ' dias\nSem giro: ' + num(d.semGiro) + ' SKUs\nExcesso: ' + num(d.excessos) + ' SKUs\nTotal SKUs: ' + num(d.total);
+    }
+    if (rt === 'abc') {
+      var a = data;
+      return 'Valor total em estoque: ' + brl(a.totalInvest) + '\nFaturamento período: ' + brl(a.totalFat) + '\nLucro período: ' + brl(a.totalLucro)
+        + '\nCurva A: ' + pct(a.fatA.pctInvest) + ' do estoque, ' + pct(a.fatA.pctFat) + ' do faturamento\nCurva B: ' + pct(a.fatB.pctInvest) + ' do estoque, ' + pct(a.fatB.pctFat) + ' do faturamento\nCurva C: ' + pct(a.fatC.pctInvest) + ' do estoque, ' + pct(a.fatC.pctFat) + ' do faturamento';
+    }
+    if (rt === 'perda') {
+      var p = data;
+      return 'Perda faturamento/dia: ' + brl(p.totalPerdaFat) + '\nPerda lucro/dia: ' + brl(p.totalPerdaLucro) + '\nPerda mensal: ' + brl(p.perdaMensal) + '\nTotal SKUs: ' + num(p.totalSKUs)
+        + '\nCurva A: ' + pct(p.classA.pct) + ' da perda\nCurva B: ' + pct(p.classB.pct) + ' da perda\nCurva C: ' + pct(p.classC.pct) + ' da perda';
+    }
+    return '';
+  }
+
   function gerarAnaliseCritica(c, info) {
     info = info || {};
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
@@ -604,45 +638,166 @@ var Engine = (function(){
     function num(v){ return (v||0).toLocaleString('pt-BR'); }
     var paragrafos = [];
 
+    // 1) Achado principal + impacto financeiro — sem reexplicar universo/fórmula (isso é a Metodologia)
     paragrafos.push(
-      'A crítica do inventário comparou o saldo do sistema com a contagem física em ' + num(c.totalSKUs) + ' SKUs qualificados para a análise'
-      + ' — considerando apenas produtos com estoque de sistema positivo ou negativo, contagem física maior que zero, ou venda registrada no período; itens sem estoque, sem contagem e sem venda foram excluídos por não terem relevância para o resultado.'
-      + ' O valor do estoque calculado pelo sistema, antes da contagem, era de ' + brl(c.valorEstoque) + '; a contagem física localizou ' + brl(c.valorEstoqueContado) + ' em produtos — uma acuracidade de '
-      + pct(c.acuracidade) + ' medida pelo valor contado sobre o valor de sistema, e não apenas pela quantidade de SKUs batendo exatamente.'
+      'Com ' + pct(c.acuracidade) + ' de acuracidade em valor, a contagem física localizou ' + brl(c.valorEstoqueContado) + ' de um estoque de sistema de ' + brl(c.valorEstoque)
+      + ' — uma diferença de ' + brl(Math.abs(c.saldoLiquido)) + ' sobre ' + num(c.totalSKUs) + ' SKUs analisados.'
+      + (c.acuracidade >= 95
+          ? ' Esse patamar está dentro da faixa considerada saudável para o varejo.'
+          : (c.acuracidade >= 90
+              ? ' Esse patamar está abaixo da meta de 95%, mas ainda longe de um quadro crítico.'
+              : ' Esse patamar já compromete a confiabilidade do estoque contábil e pede atenção.'))
     );
 
-    var pFaltaSobra = 'Do total analisado, ' + num(c.faltaCount) + ' SKUs apresentaram falta (contagem física menor que o sistema), somando ' + brl(c.totalFaltas) + ' em valor não localizado, enquanto '
-      + num(c.sobraCount) + ' SKUs apresentaram sobra, no valor de ' + brl(c.totalSobras) + '. O saldo líquido entre as duas pontas é de ' + brl(c.saldoLiquido);
-    pFaltaSobra += c.saldoLiquido < 0
-      ? (', o que confirma uma perda de estoque de ' + pct(Math.abs(c.perdaEstoquePct)) + ' sobre o valor total antes da contagem — o físico encontrado é menor que o registrado no sistema.')
-      : (', ou seja, o valor físico encontrado na contagem supera o registrado no sistema.');
-    paragrafos.push(pFaltaSobra);
+    // 2) Faltas x sobras em % da base analisada — leitura de comportamento, não só valor
+    var pctFalta = c.totalSKUs ? (c.faltaCount / c.totalSKUs * 100) : 0;
+    var pctSobra = c.totalSKUs ? (c.sobraCount / c.totalSKUs * 100) : 0;
+    paragrafos.push(
+      'O detalhamento por SKU mostra um quadro mais movimentado do que o número agregado sugere: ' + num(c.faltaCount) + ' itens (' + pct(pctFalta) + ' da base) tiveram falta, somando '
+      + brl(c.totalFaltas) + ', e ' + num(c.sobraCount) + ' (' + pct(pctSobra) + ') tiveram sobra, somando ' + brl(c.totalSobras) + '.'
+    );
 
     if (c.faltaCount > 0 && c.sobraCount > 0 && c.totalSobras) {
       var razao = Math.abs(c.totalFaltas / c.totalSobras);
       if (razao > 2) {
-        paragrafos.push('O valor das faltas supera em mais do dobro o valor das sobras — padrão que costuma indicar perda operacional real (quebra, vencimento, furto) além de simples erro de contagem, e que justifica investigação prioritária nos itens de maior valor individual.');
+        paragrafos.push('O valor das faltas supera em mais do dobro o valor das sobras — padrão que costuma indicar perda não registrada (quebra, vencimento, furto) mais do que simples erro de contagem. Vale reforçar o controle na ponta de saída: baixa de quebras, conferência de descarte e acesso ao estoque.');
       } else if (razao < 0.5) {
-        paragrafos.push('O valor das sobras supera consideravelmente o das faltas, o que costuma apontar para falhas no lançamento de entrada de mercadoria (nota fiscal não baixada, recebimento em duplicidade) mais do que para perda física de produto.');
+        paragrafos.push('O valor das sobras supera consideravelmente o das faltas, o que costuma apontar para falhas no processo de entrada (nota fiscal não baixada corretamente, recebimento em duplicidade) mais do que para perda física de produto.');
+      } else {
+        paragrafos.push('Faltas e sobras estão em proporção próxima, padrão típico de erro operacional disperso — troca de código, contagem duplicada, baixa fora de hora — ao longo da operação, mais do que de um problema concentrado.');
       }
     }
 
+    // 3) Categorias críticas
+    var temCategoriaCritica = false;
     if (c.hasCategorias && c.categorias && c.categorias.length) {
       var piores = c.categorias.filter(function(x){return x.nome!=='Sem categoria';}).slice().sort(function(a,b){return a.acuracidade-b.acuracidade;});
+      temCategoriaCritica = piores.some(function(x){ return x.acuracidade < 90; });
       if (piores.length) {
         var nomes = piores[0].nome + ' (' + pct(piores[0].acuracidade) + ')';
         if (piores.length > 1) nomes += ' e ' + piores[1].nome + ' (' + pct(piores[1].acuracidade) + ')';
-        paragrafos.push('Entre as categorias analisadas, ' + nomes + ' apresentam a menor acuracidade de valor e concentram a maior fragilidade de controle — são as primeiras candidatas a recontagem e revisão dos processos de entrada e baixa de mercadoria.');
+        paragrafos.push('Entre as categorias analisadas, ' + nomes + ' destoam da média e concentram a maior fragilidade de controle — candidatas prioritárias para reforço nos processos de entrada, transformação e saída de mercadoria.');
       }
     }
 
-    if (c.acuracidade < 90) {
-      paragrafos.push('Com acuracidade de valor abaixo de 90%, recomenda-se recontagem completa do estoque, revisão dos processos de entrada e saída de mercadoria e auditoria pontual no sistema de gestão — o volume de divergência já compromete a confiabilidade do estoque contábil.');
-    } else if (c.acuracidade < 95) {
-      paragrafos.push('Com acuracidade de valor entre 90% e 95%, uma recontagem cíclica focada nos SKUs de maior divergência financeira, aliada à revisão dos procedimentos de conferência no recebimento, deve ser suficiente para aproximar o estoque físico do contábil.');
+    // 4) Recomendação final — reconcilia resultado geral com exceções por categoria; nunca sugere recontagem
+    if (c.acuracidade >= 95 && !temCategoriaCritica) {
+      paragrafos.push('Recomendação: o controle de estoque está dentro de um padrão saudável — manter o acompanhamento dos processos de entrada, transformação e saída de mercadoria e monitorar a acuracidade nas próximas contagens para evitar deterioração gradual.');
+    } else if (c.acuracidade >= 95 && temCategoriaCritica) {
+      paragrafos.push('Recomendação: apesar do resultado geral saudável, as categorias sinalizadas acima merecem atenção prioritária — reforçar o acompanhamento dos processos de entrada, transformação e saída de mercadoria especificamente nesses setores, sem necessidade de intervenção ampla no restante da operação.');
+    } else if (c.acuracidade >= 90) {
+      paragrafos.push('Recomendação: melhorar e acompanhar mais de perto os processos de entrada, transformação e saída de mercadoria, com foco nos SKUs e categorias de maior divergência financeira, deve ser suficiente para aproximar o estoque físico do contábil.');
     } else {
-      paragrafos.push('Com acuracidade de valor acima de 95%, o controle de estoque está dentro de um padrão saudável — o recomendável é manter os processos atuais e monitorar a acuracidade nas próximas contagens para evitar deterioração gradual.');
+      paragrafos.push('Recomendação: o volume de divergência já compromete a confiabilidade do estoque contábil — vale revisar a fundo os processos de entrada (conferência de recebimento), transformação (quando o produto é processado internamente) e saída (baixa de venda, quebra, transferência) de mercadoria, priorizando as categorias e SKUs de maior impacto financeiro.');
     }
+
+    return paragrafos.join('\n\n');
+  }
+
+  function gerarAnaliseRuptura(r, info) {
+    info = info || {};
+    function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function num(v){ return (v||0).toLocaleString('pt-BR'); }
+    var temVendas = r.items && r.items.some(function(i){ return i.vendaMediaDia > 0; });
+    var paragrafos = [];
+
+    if (!temVendas) {
+      paragrafos.push('Foram identificados ' + num(r.totalRupturas) + ' itens em ruptura — presentes no depósito, porém ausentes no salão de vendas. Sem dados de venda disponíveis para dimensionar o impacto financeiro dessa ausência.');
+      paragrafos.push('Recomendação: revisar o processo de reposição de gôndola para os itens listados, já que o produto existe em estoque — o problema está no fluxo até a prateleira, não na compra.');
+      return paragrafos.join('\n\n');
+    }
+
+    paragrafos.push(
+      'A taxa de ruptura de ' + pct(r.taxaRuptura) + ' (' + num(r.totalRupturas) + ' itens) representa venda potencial perdida: o produto está disponível no depósito, mas não acessível ao consumidor na gôndola — receita que deixa de acontecer sem necessidade de nova compra, só de reposição.'
+    );
+
+    paragrafos.push(
+      'Do total, ' + num(r.rupturaA) + ' itens são curva A por faturamento e ' + num(r.rupturaB) + ' são curva B — as faixas de maior giro, cuja ausência pesa mais no caixa e na percepção do cliente na loja.'
+    );
+
+    if (r.hasCategorias && r.categorias && r.categorias.length) {
+      var wCat = r.categorias.filter(function(x){ return x.rupturaA > 0; }).sort(function(a,b){ return b.rupturaA - a.rupturaA; });
+      if (wCat.length) {
+        paragrafos.push('A categoria ' + wCat[0].nome + ' concentra o maior número de rupturas curva A — vale revisar ali a frequência de abastecimento da gôndola e o ponto de pedido junto ao fornecedor.');
+      }
+    }
+
+    paragrafos.push('Recomendação: priorizar a reposição dos itens curva A em ruptura converte estoque parado em venda sem exigir nova compra — o retorno mais rápido disponível. Na sequência, revisar o processo de reposição de gôndola e o ponto de pedido para reduzir a recorrência.');
+
+    return paragrafos.join('\n\n');
+  }
+
+  function gerarAnaliseDias(d, info) {
+    info = info || {};
+    var diasVenda = (info.diasVenda) || 90;
+    function num(v){ return (v||0).toLocaleString('pt-BR'); }
+    function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
+    var paragrafos = [];
+
+    var leituraGeral = d.coberturaGeral >= 16 && d.coberturaGeral <= 30 ? ' (patamar adequado para o varejo alimentar)' : (d.coberturaGeral > 30 ? ' (acima do considerado ideal)' : ' (abaixo do considerado ideal)');
+    paragrafos.push(
+      'A cobertura geral de ' + d.coberturaGeral + ' dias' + leituraGeral + ' esconde desequilíbrios entre curvas: os itens de curva A cobrem apenas ' + d.coberturaA + ' dias'
+      + (d.coberturaA < 10 ? ' (risco de desabastecimento dos produtos mais vendidos)' : '') + ', enquanto a curva C cobre ' + d.coberturaC
+      + ' dias — sinal de compra desalinhada com a demanda real, com falta no que mais vende e excesso no que menos gira.'
+    );
+
+    paragrafos.push(
+      'A distribuição por faixa mostra ' + num(d.ruptura) + ' itens já em ruptura, ' + num(d.altoRisco) + ' em alto risco (3–5 dias) e ' + num(d.medioRisco) + ' em risco médio — candidatos a reposição prioritária. No outro extremo, '
+      + num(d.excessos) + ' SKUs estão em excesso de cobertura, imobilizando ' + brl(d.valorExcesso || 0) + ' em capital de giro que poderia ser liberado.'
+    );
+
+    if (d.semGiro > 0) {
+      paragrafos.push('Há ainda ' + num(d.semGiro) + ' itens sem giro nos últimos ' + diasVenda + ' dias — estoque parado, que merece decisão comercial (liquidação, devolução ao fornecedor) mais do que reposição.');
+    }
+
+    paragrafos.push('Recomendação: ajustar os parâmetros de compra (ponto de pedido e quantidade de reposição) para realocar capital da cauda (curva C e sem giro) em favor dos itens de curva A, aproximando a cobertura real da demanda de cada faixa.');
+
+    return paragrafos.join('\n\n');
+  }
+
+  function gerarAnaliseABC(a, info) {
+    info = info || {};
+    var diasVenda = (info.diasVenda) || 90;
+    function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
+    var paragrafos = [];
+
+    paragrafos.push(
+      'Dos ' + brl(a.totalInvest) + ' em estoque, a curva A por faturamento concentra ' + pct(a.fatA.pctInvest) + ' do capital e responde por ' + pct(a.fatA.pctFat) + ' do faturamento dos últimos ' + diasVenda + ' dias'
+      + (a.fatA.pctFat > a.fatA.pctInvest ? ' — proporção saudável, pouco capital gerando muita receita' : '') + '. A curva C consome ' + pct(a.fatC.pctInvest) + ' do capital para apenas ' + pct(a.fatC.pctFat) + ' do faturamento'
+      + (a.fatC.pctInvest > a.fatC.pctFat + 5 ? ', sinalizando oportunidade de redução de estoque nessa faixa' : '') + '.'
+    );
+
+    paragrafos.push(
+      'O cruzamento com o lucro é o ponto mais estratégico: itens de alto faturamento mas margem baixa aparecem em A no faturamento e caem para B/C no lucro — "giro que não paga". Na direção inversa, itens de menor volume e alta margem sobem para A no lucro e merecem proteção contra ruptura. A curva A por lucro concentra ' + pct(a.lucA.pctLuc) + ' do lucro total consumindo ' + pct(a.lucA.pctInvest) + ' do capital.'
+    );
+
+    paragrafos.push('Recomendação: migrar capital da curva C para sustentar os itens A — priorizando, dentro de A, os que são A tanto em faturamento quanto em lucro — libera capital de giro sem afetar receita relevante, e reforça a atenção aos itens A-lucro, que protegem a margem do negócio.');
+
+    return paragrafos.join('\n\n');
+  }
+
+  function gerarAnalisePerda(p, info) {
+    info = info || {};
+    var diasVenda = (info.diasVenda) || 90;
+    function num(v){ return (v||0).toLocaleString('pt-BR'); }
+    function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
+    var paragrafos = [];
+
+    paragrafos.push(
+      'Os ' + num(p.totalSKUs) + ' itens com venda registrada nos últimos ' + diasVenda + ' dias mas ausentes na contagem física projetam uma perda de ' + brl(p.totalPerdaFat) + '/dia em faturamento e ' + brl(p.totalPerdaLucro)
+      + '/dia em lucro — no mês, ' + brl(p.perdaMensal) + ' em receita não realizada enquanto o abastecimento não é regularizado.'
+    );
+
+    if (p.classA.count > 0) {
+      paragrafos.push(
+        'A perda está concentrada: os itens curva A respondem por ' + pct(p.classA.pct) + ' do total, contra ' + pct(p.classB.pct) + ' da curva B e ' + pct(p.classC.pct)
+        + ' da curva C. Essa concentração é uma boa notícia operacional — regularizar poucos itens de alto impacto recupera a maior parte da perda.'
+      );
+    }
+
+    paragrafos.push('Recomendação: repor com urgência os itens curva A ausentes é a ação de maior retorno no curto prazo; em seguida, investigar a causa raiz item a item — se não foi comprado, se houve perda no processo de saída, ou se há falha no registro do sistema.');
 
     return paragrafos.join('\n\n');
   }
@@ -656,14 +811,14 @@ var Engine = (function(){
     if (results.critica) {
       var c = results.critica;
       if (c.acuracidade < 90) {
-        recs.push({dim:'critica', prioridade:1, texto:'Acuracidade crítica de ' + c.acuracidade + '%. Recomenda-se recontagem completa com foco nos setores de maior divergência, revisão dos processos de entrada e saída de mercadorias e auditoria no sistema de gestão de estoque.'});
+        recs.push({dim:'critica', prioridade:1, texto:'Acuracidade crítica de ' + c.acuracidade + '%. Recomenda-se revisão a fundo dos processos de entrada (conferência de recebimento), transformação e saída (baixa de venda, quebra, transferência) de mercadoria, priorizando os setores de maior divergência.'});
       } else if (c.acuracidade < 95) {
-        recs.push({dim:'critica', prioridade:2, texto:'Acuracidade de ' + c.acuracidade + '% — abaixo da meta de 95%. Recomenda-se recontagem cíclica focada nos SKUs com divergência e revisão dos procedimentos de conferência no recebimento.'});
+        recs.push({dim:'critica', prioridade:2, texto:'Acuracidade de ' + c.acuracidade + '% — abaixo da meta de 95%. Recomenda-se reforçar o acompanhamento dos processos de entrada, transformação e saída de mercadoria, com foco nos SKUs de maior divergência financeira.'});
       } else {
         recs.push({dim:'critica', prioridade:3, texto:'Acuracidade de ' + c.acuracidade + '% está dentro da meta. Manter os processos atuais e monitorar para garantir consistência nas próximas contagens.'});
       }
       if (c.faltaCount > c.sobraCount * 2) {
-        recs.push({dim:'critica', prioridade:1, texto:'Faltas superam sobras em mais do dobro (' + c.faltaCount + ' faltas vs ' + c.sobraCount + ' sobras). Investigar possíveis perdas operacionais, furtos ou falhas de registro no sistema.'});
+        recs.push({dim:'critica', prioridade:1, texto:'Faltas superam sobras em mais do dobro (' + c.faltaCount + ' faltas vs ' + c.sobraCount + ' sobras). Investigar possíveis falhas nos processos de saída de mercadoria (quebra não lançada, furto) ou de registro no sistema.'});
       }
     }
 
@@ -734,5 +889,5 @@ var Engine = (function(){
     return Number(v).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0});
   }
 
-  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, gerarAnaliseCritica:gerarAnaliseCritica, formatNum:formatNum};
+  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, gerarAnaliseCritica:gerarAnaliseCritica, gerarAnaliseRuptura:gerarAnaliseRuptura, gerarAnaliseDias:gerarAnaliseDias, gerarAnaliseABC:gerarAnaliseABC, gerarAnalisePerda:gerarAnalisePerda, buildMetricasIA:buildMetricasIA, formatNum:formatNum};
 })();
