@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r72';
+const VERSAO = 'r73';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1203,8 +1203,7 @@ async function verHistorico() {
           <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ E-mail</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E3F2FD;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','curta')">🎬 Curta (PPTX+PDF)</button>
-          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E8EAF6;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','detalhada')">🎬 Detalhada (PPTX+PDF)</button>
+          <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E8EAF6;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','detalhada')">🎬 Gerar Apresentação (PPTX+PDF)</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#F4F6F8;color:var(--navy)" onclick="editarAuditoria('${a.id}')">✏️ Editar</button>
@@ -1366,44 +1365,42 @@ async function aguardarPptxGenJS() {
   return typeof PptxGenJS !== 'undefined';
 }
 
-const LABEL_VARIANTE = { curta: 'Curta', detalhada: 'Detalhada' };
+// r73: versão Curta eliminada — só resta uma apresentação. LABEL_VARIANTE
+// e o parâmetro "variante" ficaram (sempre 'detalhada' agora) só pra não
+// mexer no restante do fluxo, que já funciona.
+const LABEL_VARIANTE = { detalhada: 'Executiva' };
 
 async function gerarApresentacaoVariante(auditoriaId, cliente, unidade, variante) {
-  const label = LABEL_VARIANTE[variante] || variante;
-
   const disponivel = await aguardarPptxGenJS();
   if (!disponivel) {
     toast('Não foi possível carregar a biblioteca de apresentação (tentamos 3 fontes diferentes). Verifique sua conexão com a internet ou tente em outra rede/dispositivo.');
     return;
   }
-  if (!confirm('Gerar a apresentação executiva — versão ' + label + ' — desta auditoria?\n\nSe já existir uma versão ' + label + ' anterior para esta auditoria, ela será substituída.')) return;
+  if (!confirm('Gerar a apresentação executiva desta auditoria?\n\nSe já existir uma apresentação anterior para esta auditoria, ela será substituída.')) return;
 
   showLoading('Preparando dados da apresentação...');
   const prep = await apiCall('prepararApresentacaoAuditoria', { auditoriaId });
   if (!prep.ok) { hideLoading(); toast('Erro: ' + (prep.erro || 'falha ao preparar dados')); return; }
 
   try {
-    showLoading('Montando apresentação ' + label.toLowerCase() + '...');
+    showLoading('Montando apresentação...');
     const pptxB64 = await montarPptxApresentacao(prep, variante);
 
     showLoading('Salvando no Drive e convertendo em PDF...');
-    const payload = { auditoriaId: auditoriaId };
-    if (variante === 'curta') payload.curtaPPTXBase64 = pptxB64;
-    else payload.detalhadaPPTXBase64 = pptxB64;
+    const payload = { auditoriaId: auditoriaId, detalhadaPPTXBase64: pptxB64 };
 
     const salvo = await apiCall('salvarApresentacaoAuditoria', payload);
     hideLoading();
 
     if (!salvo.ok) { toast('Erro ao salvar: ' + (salvo.erro || 'falha')); return; }
-    mostrarLinksApresentacao(cliente, unidade, salvo, variante);
+    mostrarLinksApresentacao(cliente, unidade, salvo, variante, prep);
   } catch (e) {
     hideLoading();
     toast('Erro ao montar apresentação: ' + e.message);
   }
 }
 
-function mostrarLinksApresentacao(cliente, unidade, salvo, variante) {
-  const label = LABEL_VARIANTE[variante] || variante;
+function mostrarLinksApresentacao(cliente, unidade, salvo, variante, prep) {
   const obj = salvo[variante];
 
   function escHtml(s) {
@@ -1421,13 +1418,24 @@ function mostrarLinksApresentacao(cliente, unidade, salvo, variante) {
       </div>
       ${(obj.linkPPTX && !obj.linkPDF) ? `<div style="font-size:11px;color:var(--text-light);margin-top:8px">PPTX gerado; a conversão automática para PDF falhou${obj.erroPDF ? (': <strong>' + escHtml(obj.erroPDF) + '</strong>') : ''}. Abra o PPTX e exporte como PDF, se precisar.</div>` : ''}`;
 
+  // r73: aviso de diagnóstico de fotos — só aparece quando existem fotos
+  // no Drive para esta auditoria mas nenhuma entrou na apresentação
+  // (sinal de falha ao baixar do Drive, não de auditoria sem fotos).
+  let avisoFotos = '';
+  if (prep && prep.fotosDisponiveis > 0 && prep.fotosIncluidas === 0) {
+    avisoFotos = `<div style="font-size:11px;color:#E05252;background:#FDEAEA;padding:8px;border-radius:8px;margin-top:10px;text-align:left">⚠️ Havia ${prep.fotosDisponiveis} foto(s) anexada(s) a esta auditoria, mas nenhuma pôde ser incluída na apresentação. Gere de novo e, se persistir, avise — isso indica falha ao baixar as fotos do Drive.</div>`;
+  } else if (prep && typeof prep.fotosIncluidas === 'number') {
+    avisoFotos = `<div style="font-size:10px;color:var(--text-light);margin-top:10px">${prep.fotosIncluidas} foto(s) incluída(s) na apresentação.</div>`;
+  }
+
   $('#app').innerHTML = `
     <div class="tela-inicial">
       <div class="secao-card" style="text-align:center">
         <div style="font-size:40px;margin-bottom:8px">🎬</div>
-        <h2 style="font-size:18px;color:var(--navy);margin-bottom:4px">Apresentação ${label} Gerada</h2>
+        <h2 style="font-size:18px;color:var(--navy);margin-bottom:4px">Apresentação Gerada</h2>
         <p style="color:var(--text-light);margin-bottom:4px">${cliente} — ${unidade}</p>
         ${bloco}
+        ${avisoFotos}
         <button class="btn-fc btn-fc-outline" onclick="verHistorico()" style="margin-top:24px">
           <i class="bi bi-arrow-left"></i> Voltar ao Histórico
         </button>
@@ -1485,7 +1493,7 @@ function montarPptxApresentacao(prep, variante) {
         { text:'Análise de ', options:{ color:'FFFFFF', fontSize:30, fontFace:'Calibri', bold:true } },
         { text:'Preparação para Inventário', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
       ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
-      s1.addText(isDetalhada ? 'Apresentação Detalhada' : 'Resumo Executivo', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
+      s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
       const sub = (ident.cliente||'') + ' — ' + (ident.unidade||'') + '  ·  ' + (ident.data_auditoria||'');
       s1.addText(sub, { x:0.8, y:2.45, w:8, h:0.4, fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
       if (LOGO_DATA_URL) { try { s1.addImage({ data: LOGO_DATA_URL, x:3.2, y:4.35, w:3.6, h:0.94 }); } catch(e) {} }
