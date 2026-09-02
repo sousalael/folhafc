@@ -44,10 +44,18 @@ var Engine = (function(){
     custoMap = custoMap || {};
     vendas90 = vendas90 || [];
     var skuMap = {};
+    /* r79: um mesmo SKU pode aparecer em várias linhas do arquivo de Estoque (uma por
+       endereço/localização no sistema) — soma tudo, nunca sobrescreve. Mesmo padrão já
+       usado abaixo para a Contagem. */
     estoque.forEach(function(row){
       var sku = String(row.sku||'').trim();
       if(!sku) return;
-      skuMap[sku] = {sku:sku, descricao:row.descricao||'', categoria:row.categoria||'', qtdSistema:Number(row.qtdSistema)||0, custoUnit:Number(row.custoUnit)||0};
+      if(!skuMap[sku]) skuMap[sku] = {sku:sku, descricao:row.descricao||'', categoria:row.categoria||'', qtdSistema:0, custoUnit:Number(row.custoUnit)||0};
+      var item = skuMap[sku];
+      item.qtdSistema = (item.qtdSistema||0) + (Number(row.qtdSistema)||0);
+      if(row.descricao && !item.descricao) item.descricao = row.descricao;
+      if(row.categoria && !item.categoria) item.categoria = row.categoria;
+      if(row.custoUnit && !item.custoUnit) item.custoUnit = Number(row.custoUnit)||0;
     });
     contagem.forEach(function(row){
       var sku = String(row.sku||'').trim();
