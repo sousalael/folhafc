@@ -324,7 +324,18 @@
         <div class="tab-pane fade show active" id="tab-ponto">
         <!-- ############ (conteúdo original da Folha de Ponto, intacto) ############ -->
 
-        <!-- ############ NOVO: PAINEL DE CONTADORES (MTD) ############ -->
+        <!-- ############ NOVO: PAINEL DE CONTADORES (período selecionável, MTD por padrão) ############ -->
+        <div class="card mb-2 border-0 shadow-sm bg-light">
+            <div class="card-body py-2">
+                <label class="form-label fw-bold text-primary mb-1 small">Período dos contadores:</label>
+                <select id="ponto-cont-mes" class="form-select form-select-sm mb-2"></select>
+                <div class="row g-2">
+                    <div class="col-5"><input type="date" id="ponto-cont-ini" class="form-control form-control-sm"></div>
+                    <div class="col-5"><input type="date" id="ponto-cont-fim" class="form-control form-control-sm"></div>
+                    <div class="col-2"><button class="btn btn-primary btn-sm w-100 fw-bold" id="btn-buscar-ponto-cont" onclick="carregarContadoresPonto()">🔍</button></div>
+                </div>
+            </div>
+        </div>
         <div class="row g-2 mb-4" id="painel-contadores-ponto">
             <div class="col-6">
                 <div class="card border-0 shadow-sm text-center h-100">
@@ -2960,16 +2971,20 @@
     // ============================================================
     async function carregarContadoresPonto() {
         try {
-            const res = await chamarApi({ action: 'getContadoresPonto', cpf: getCpfLogado() });
+            const ini = document.getElementById('ponto-cont-ini') ? document.getElementById('ponto-cont-ini').value : '';
+            const fim = document.getElementById('ponto-cont-fim') ? document.getElementById('ponto-cont-fim').value : '';
+            const filtros = (ini && fim) ? { dataIni: ini, dataFim: fim } : null;
+            const res = await chamarApi({ action: 'getContadoresPonto', cpf: getCpfLogado(), filtros: filtros });
             if (res.error) return;
             document.getElementById('card-ponto-equipes').innerText = res.equipes;
             document.getElementById('card-ponto-participantes').innerText = res.participantes;
         } catch (e) { console.error('Contadores Ponto: ' + e.message); }
     }
 
-    async function carregarContadoresFinanceiro() {
+    async function carregarContadoresFinanceiro(ini, fim) {
         try {
-            const res = await chamarApi({ action: 'getContadoresFinanceiro', cpf: getCpfLogado() });
+            const filtros = (ini && fim) ? { dataIni: ini, dataFim: fim } : null;
+            const res = await chamarApi({ action: 'getContadoresFinanceiro', cpf: getCpfLogado(), filtros: filtros });
             if (res.error) return;
 
             const colAdto = document.getElementById('col-card-fin-adiantamentos');
@@ -3051,6 +3066,12 @@
         btn.innerText = '...'; btn.disabled = true;
         try {
             despesasGeralCompleto = await buscarDespesasPeriodo(ini, fim);
+            // CRITICO: zera o estado marcado dos 4 filtros a cada nova busca
+            // de periodo. Sem isso, a cascata tentava cruzar as selecoes do
+            // periodo ANTERIOR (ex: um cliente especifico do mes atual) com
+            // os dados do periodo NOVO — como raramente coincidem, a
+            // intersecao ficava vazia e nenhum lancamento aparecia.
+            filtrosGeralEstado = {};
             recalcularFiltrosGeralCascata();
         } catch (err) {
             document.getElementById('lista-geral-despesas').innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escaparHtml(err.message) + '</td></tr>';
@@ -3616,6 +3637,8 @@
         const fim = document.getElementById('fin-fim').value;
         if (!ini || !fim) return;
 
+        carregarContadoresFinanceiro(ini, fim);
+
         const btn = document.getElementById('btn-carregar-fin');
         btn.innerText = 'Carregando...'; btn.disabled = true;
         try {
@@ -4062,7 +4085,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-03-r90';
+    const VERSAO_ESPERADA = '2026-09-03-r91';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4163,8 +4186,10 @@
 
             if (!financeiroInicializado && getCpfLogado()) {
                 financeiroInicializado = true;
+                // popularSeletorMes ja dispara carregarDespXProv() no final,
+                // que agora tambem atualiza os cards com o mesmo periodo —
+                // nao precisa chamar carregarContadoresFinanceiro() a parte.
                 popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', carregarDespXProv);
-                carregarContadoresFinanceiro();
             }
 
             if (!despGeralInicializado && getCpfLogado()) {
@@ -4185,7 +4210,9 @@
 
             if (!pontoContadoresInicializado && getCpfLogado()) {
                 pontoContadoresInicializado = true;
-                carregarContadoresPonto();
+                // popularSeletorMes ja preenche ponto-cont-ini/fim com o mes
+                // atual (MTD) e dispara carregarContadoresPonto() no final.
+                popularSeletorMes('ponto-cont-mes', 'ponto-cont-ini', 'ponto-cont-fim', carregarContadoresPonto);
             }
 
             const chave = chaveProjeto(projetoAtivo);
