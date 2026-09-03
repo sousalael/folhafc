@@ -240,8 +240,12 @@ var Engine = (function(){
     /* Universo base: itens da crítica/contagem COM MOVIMENTAÇÃO */
     var skuSet = {};
     var items = critica.items.filter(function(it){
-      /* Só inclui se teve movimentação real */
-      if((it.qtdContada||0)>0 || (it.qtdSistema||0)>0) return true;
+      /* r89: só inclui se foi efetivamente CONTADO (qtdContada>0) ou tem VENDA no
+         período — ter apenas saldo de sistema (qtdSistema>0), sem contagem física
+         e sem venda, não é suficiente. Isso evita classificar como "Sem giro" um
+         item que na verdade não foi contado (faixa "Sem giro" deve ser exclusiva
+         de itens contados e sem venda — ver faixa mais abaixo). */
+      if((it.qtdContada||0)>0) return true;
       var v=vendasMap[it.sku];
       if(v && v.qtdVendida>0) return true;
       return false;
