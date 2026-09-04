@@ -3164,34 +3164,46 @@
             disponiveis[catAtual.prefixo] = [...new Set(filtrado.map(d => String(d[catAtual.campo] || '(vazio)')))].sort();
         });
 
-        // Fase 3: novo estado marcado = intersecao do anterior com o
-        // disponivel agora (primeira carga: tudo marcado por padrao).
-        // Guardado em variavel LOCAL (novoEstado) — nao da pra confiar em
-        // reler filtrosGeralEstado depois da Fase 4, porque
-        // popularDropdownFiltro sobrescreve esse mesmo objeto sozinho como
-        // efeito colateral interno dela (ver Fase 4).
-        const novoEstado = {};
+        // Fase 3: NAO grava mais o resultado podado em filtrosGeralEstado.
+        // filtrosGeralEstado[prefixo] passa a ser SEMPRE a intencao REAL do
+        // usuario (o que ele de fato marcou), inclusive valores que nao
+        // estao visiveis agora porque outro filtro os escondeu. So calcula,
+        // numa variavel LOCAL (visivelMarcado), a interseccao com o que
+        // esta disponivel agora — usada SO pra decidir quais caixinhas
+        // nascem marcadas nesta renderizacao. Sem essa separacao, uma opcao
+        // escondida temporariamente (ex: Supervisor sem despesa pro Cliente
+        // marcado no momento) nunca mais voltava marcada quando reaparecia
+        // — porque sua marcacao tinha sido apagada de vez, nao so ocultada.
+        // Excecao: na primeira carga (antes === null) SIM inicializamos
+        // filtrosGeralEstado com "tudo marcado" — e a unica vez que a
+        // cascata escreve nele.
+        const visivelMarcado = {};
         CATS.forEach(c => {
             const disp = disponiveis[c.prefixo];
             const antes = marcadosAntes[c.prefixo];
-            const novosMarcados = antes ? new Set(disp.filter(v => antes.has(v))) : new Set(disp);
-            novosMarcados.add('__inicializado__');
-            novoEstado[c.prefixo] = novosMarcados;
+            if (antes === null) {
+                const todosMarcados = new Set(disp);
+                todosMarcados.add('__inicializado__');
+                filtrosGeralEstado[c.prefixo] = todosMarcados;
+                visivelMarcado[c.prefixo] = todosMarcados;
+            } else {
+                const marcadosVisiveis = new Set(disp.filter(v => antes.has(v)));
+                marcadosVisiveis.add('__inicializado__');
+                visivelMarcado[c.prefixo] = marcadosVisiveis;
+            }
         });
 
-        // Fase 4: redesenha os 4 grupos de checkbox e reaplica o estado
-        // marcado por cima. CRITICO: popularDropdownFiltro sobrescreve
-        // filtrosGeralEstado[prefixo] sozinha (efeito colateral dela, nao
-        // documentado) — por isso as caixinhas sao marcadas a partir de
-        // novoEstado (a variavel local da Fase 3, sempre correta), nunca
-        // relendo filtrosGeralEstado depois da chamada. Ao final,
-        // filtrosGeralEstado e restaurado pro valor certo, senao a PROXIMA
-        // chamada desta função (proximo clique) partiria do estado errado.
+        // Fase 4: redesenha os 4 grupos de checkbox usando visivelMarcado
+        // (nunca filtrosGeralEstado — popularDropdownFiltro sobrescreve
+        // esse objeto sozinha como efeito colateral, ver nota da r95). Ao
+        // final, restauramos filtrosGeralEstado para a intencao REAL
+        // (marcadosAntes, intacta) — nunca para a versao podada — pra
+        // desfazer a sobrescrita que popularDropdownFiltro acabou de fazer.
         CATS.forEach(c => {
             popularDropdownFiltro(c.prefixo, disponiveis[c.prefixo]);
-            const marc = novoEstado[c.prefixo];
+            const marc = visivelMarcado[c.prefixo];
             document.querySelectorAll('.filtro-chk-' + c.prefixo).forEach(el => { el.checked = marc.has(el.value); });
-            filtrosGeralEstado[c.prefixo] = marc;
+            if (marcadosAntes[c.prefixo] !== null) filtrosGeralEstado[c.prefixo] = marcadosAntes[c.prefixo];
             const chkTodos = document.getElementById('chk-todos-' + c.prefixo);
             const total = document.querySelectorAll('.filtro-chk-' + c.prefixo).length;
             const marcCount = document.querySelectorAll('.filtro-chk-' + c.prefixo + ':checked').length;
@@ -3209,11 +3221,15 @@
     }
 
     function onFiltroChange(prefixo) {
-        // Atualiza o estado persistido
-        const marcados = new Set();
-        marcados.add('__inicializado__');
-        document.querySelectorAll('.filtro-chk-' + prefixo + ':checked').forEach(el => marcados.add(el.value));
-        filtrosGeralEstado[prefixo] = marcados;
+        // Sincroniza SO os valores atualmente visiveis (as checkboxes
+        // renderizadas na tela) com a intencao real do usuario — qualquer
+        // valor de fora da tela agora (escondido por outro filtro) fica
+        // intocado, preservando a marcacao dele pra quando reaparecer.
+        const atual = filtrosGeralEstado[prefixo] ? new Set(filtrosGeralEstado[prefixo]) : new Set(['__inicializado__']);
+        document.querySelectorAll('.filtro-chk-' + prefixo).forEach(el => {
+            if (el.checked) atual.add(el.value); else atual.delete(el.value);
+        });
+        filtrosGeralEstado[prefixo] = atual;
 
         // Atualiza o "Selecionar todas"
         const total = document.querySelectorAll('.filtro-chk-' + prefixo).length;
@@ -4110,7 +4126,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-03-r95';
+    const VERSAO_ESPERADA = '2026-09-03-r96';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
