@@ -202,15 +202,20 @@ var Engine = (function(){
       var rA=g.items.filter(function(i){return i.abc_valorVendido90==='A'}).length;
       var taxa=dep.length?round2(g.items.length/dep.length*100):0;
       var perdaDia=g.items.reduce(function(s,i){return s+(i.fatMediaDia||0);},0);
-      return {nome:g.nome, totalRupturas:g.items.length, totalDeposito:dep.length, taxa:taxa, rupturaA:rA, perdaDia:round2(perdaDia), destaque:g.items.length};
+      var perdaLucroDia=g.items.reduce(function(s,i){return s+(i.lucroMediaDia||0);},0);
+      var valorParado=g.items.reduce(function(s,i){return s+(i.valorEstoque||0);},0);
+      return {nome:g.nome, totalRupturas:g.items.length, totalDeposito:dep.length, taxa:taxa, rupturaA:rA, perdaDia:round2(perdaDia), perdaLucroDia:round2(perdaLucroDia), perdaMensal:round2(perdaDia*30), valorEstoqueParado:round2(valorParado), destaque:g.items.length};
     });
+    var perdaFatDiaTotal=rupturas.reduce(function(s,i){return s+(i.fatMediaDia||0);},0);
+    var perdaLucroDiaTotal=rupturas.reduce(function(s,i){return s+(i.lucroMediaDia||0);},0);
+    var valorEstoqueParadoTotal=rupturas.reduce(function(s,i){return s+(i.valorEstoque||0);},0);
     return {items:rupturas, allDeposito:comDeposito, totalComDeposito:comDeposito.length, totalRupturas:rupturas.length,
       taxaRuptura:comDeposito.length?round2(rupturas.length/comDeposito.length*100):0,
       rupturaA:ruptA.length, rupturaB:rupturas.filter(function(i){return i.abc_valorVendido90==='B'}).length,
       rupturaC:rupturas.filter(function(i){return i.abc_valorVendido90==='C'}).length,
       taxaA:comDepA.length?round2(ruptA.length/comDepA.length*100):0,
       taxaALucro:(function(){var cA=comDeposito.filter(function(i){return i.abc_lucro90==='A'});var rA2=rupturas.filter(function(i){return i.abc_lucro90==='A'});return cA.length?round2(rA2.length/cA.length*100):0;})(),
-      comDepA:comDepA.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+      comDepA:comDepA.length, perdaFatDia:round2(perdaFatDiaTotal), perdaLucroDia:round2(perdaLucroDiaTotal), perdaMensal:round2(perdaFatDiaTotal*30), valorEstoqueParado:round2(valorEstoqueParadoTotal), categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== 3. DIAS DE ESTOQUE ========== */
@@ -291,15 +296,18 @@ var Engine = (function(){
     var coberturaB = calcCobertura(items.filter(function(i){return i.abcFat==='B';}));
     var coberturaC = calcCobertura(items.filter(function(i){return i.abcFat==='C';}));
     var valExcesso=items.filter(function(i){return i.faixa==='Excesso de cobertura'}).reduce(function(s,i){return s+i.valorEstoque},0);
+    var valSemGiro=items.filter(function(i){return i.faixa==='Sem giro'}).reduce(function(s,i){return s+i.valorEstoque},0);
     var catList = groupByCategoria(items, function(g){
       var cob = calcCobertura(g.items);
       var sg=g.items.filter(function(i){return i.faixa==='Sem giro'}).length;
       var cr=g.items.filter(function(i){return i.faixa==='Ruptura'||i.faixa==='Alto risco'}).length;
       var ex=g.items.filter(function(i){return i.faixa==='Excesso de cobertura'}).length;
       var valEst=g.items.reduce(function(s,i){return s+i.valorEstoque},0);
-      return {nome:g.nome, total:g.items.length, mediaCobertura:cob, semGiro:sg, criticos:cr, excessos:ex, valorEstoque:round2(valEst), destaque:cr+sg};
+      var valSG=g.items.filter(function(i){return i.faixa==='Sem giro'}).reduce(function(s,i){return s+i.valorEstoque},0);
+      var valEx=g.items.filter(function(i){return i.faixa==='Excesso de cobertura'}).reduce(function(s,i){return s+i.valorEstoque},0);
+      return {nome:g.nome, total:g.items.length, mediaCobertura:cob, semGiro:sg, criticos:cr, excessos:ex, valorEstoque:round2(valEst), valorSemGiro:round2(valSG), valorExcesso:round2(valEx), destaque:cr+sg};
     });
-    return {items:items, coberturaGeral:coberturaGeral, coberturaA:coberturaA, coberturaB:coberturaB, coberturaC:coberturaC, semGiro:semGiro, ruptura:ruptura, altoRisco:altoRisco, medioRisco:medioRisco, coberturaIdeal:coberturaIdeal, excessos:excessos, valorExcesso:round2(valExcesso), total:items.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    return {items:items, coberturaGeral:coberturaGeral, coberturaA:coberturaA, coberturaB:coberturaB, coberturaC:coberturaC, semGiro:semGiro, ruptura:ruptura, altoRisco:altoRisco, medioRisco:medioRisco, coberturaIdeal:coberturaIdeal, excessos:excessos, valorExcesso:round2(valExcesso), valorSemGiro:round2(valSemGiro), total:items.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== 4. INVESTIMENTO ABC ========== */

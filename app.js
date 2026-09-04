@@ -577,6 +577,10 @@ function enableTabs(avail){
 
 /* ===== RENDER HELPERS ===== */
 function destroyChart(id){if(State.charts[id]){State.charts[id].destroy();delete State.charts[id];}}
+/* r97: opções padrão dos gráficos de categoria do Resumo Executivo (mesmo padrão do gráfico da aba Crítica) */
+function chartOptsRS(paddingRight){
+  return {indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:function(c){return c.dataset.backgroundColor;},font:{size:10,weight:'bold'},formatter:function(v){return 'R$ '+v.toLocaleString('pt-BR');}}},scales:{x:{grid:{color:'#f0f0f0'},ticks:{font:{size:10},callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:paddingRight||80}}};
+}
 function renderTable(p,headers,rows,page,perPage,opts){
   opts=opts||{};page=page||1;perPage=perPage||100;
   var start=(page-1)*perPage,pageRows=rows.slice(start,start+perPage),totalPages=Math.ceil(rows.length/perPage);
@@ -661,8 +665,8 @@ function renderResumo(){
     html+='<div class="resumo-card '+cls+'">';
     html+='<div class="resumo-card-label">ACURACIDADE</div>';
     html+='<div class="resumo-card-valor">'+PCT(c.acuracidade)+'</div>';
-    html+='<div class="resumo-card-titulo">Precisão do estoque</div>';
-    html+='<div class="resumo-card-detalhe">'+NUM(c.totalSKUs)+' SKUs analisados &nbsp;·&nbsp; '+NUM(c.faltaCount)+' faltas &nbsp;·&nbsp; '+NUM(c.sobraCount)+' sobras</div>';
+    html+='<div class="resumo-card-titulo">Precisão financeira do estoque</div>';
+    html+='<div class="resumo-card-detalhe">Estoque: '+BRLi(c.valorEstoque)+' &nbsp;·&nbsp; Contado: '+BRLi(c.valorEstoqueContado)+' &nbsp;·&nbsp; Divergência: '+BRLi(c.saldoLiquido)+'</div>';
     html+='</div>';
   }
 
@@ -672,8 +676,8 @@ function renderResumo(){
     html+='<div class="resumo-card '+cls+'">';
     html+='<div class="resumo-card-label">RUPTURA LOJA X DEPÓSITO</div>';
     html+='<div class="resumo-card-valor">'+PCT(ru.taxaRuptura)+'</div>';
-    html+='<div class="resumo-card-titulo">'+NUM(ru.totalRupturas)+' SKUs em falta</div>';
-    html+='<div class="resumo-card-detalhe">Curva A: '+NUM(ru.rupturaA)+' &nbsp;·&nbsp; B: '+NUM(ru.rupturaB)+' &nbsp;·&nbsp; C: '+NUM(ru.rupturaC)+'</div>';
+    html+='<div class="resumo-card-titulo">Venda potencial perdida</div>';
+    html+='<div class="resumo-card-detalhe">R$/dia: '+BRLi(ru.perdaFatDia)+' &nbsp;·&nbsp; R$/mês: '+BRLi(ru.perdaMensal)+' &nbsp;·&nbsp; Estoque parado: '+BRLi(ru.valorEstoqueParado)+'</div>';
     html+='</div>';
   }
 
@@ -684,7 +688,7 @@ function renderResumo(){
     html+='<div class="resumo-card-label">COBERTURA</div>';
     html+='<div class="resumo-card-valor">'+Engine.round2(d.coberturaGeral)+' dias</div>';
     html+='<div class="resumo-card-titulo">Dias de estoque médio</div>';
-    html+='<div class="resumo-card-detalhe">Sem giro: '+NUM(d.semGiro)+' &nbsp;·&nbsp; Excesso: '+NUM(d.excessos)+' &nbsp;·&nbsp; Total: '+NUM(d.total)+' SKUs</div>';
+    html+='<div class="resumo-card-detalhe">Sem giro: '+BRLi(d.valorSemGiro)+' &nbsp;·&nbsp; Excesso: '+BRLi(d.valorExcesso)+'</div>';
     html+='</div>';
   }
 
@@ -705,11 +709,76 @@ function renderResumo(){
     html+='<div class="resumo-card-label">PROJEÇÃO DE PERDA</div>';
     html+='<div class="resumo-card-valor">R$ '+Engine.formatNum(pe.perdaMensal)+'</div>';
     html+='<div class="resumo-card-titulo">Perda mensal estimada</div>';
-    html+='<div class="resumo-card-detalhe">'+NUM(pe.totalSKUs)+' SKUs identificados &nbsp;·&nbsp; Perda diária: R$ '+Engine.formatNum(pe.totalPerdaFat)+'</div>';
+    html+='<div class="resumo-card-detalhe">Diária: '+BRLi(pe.totalPerdaFat)+' &nbsp;·&nbsp; Mensal: '+BRLi(pe.perdaMensal)+'</div>';
     html+='</div>';
   }
 
   html+='</div>'; /* /resumo-cards */
+
+  /* r97: Detalhamento por categoria — foco financeiro em todas as dimensões */
+  if(avail.critica && r.critica.hasCategorias){
+    var c=r.critica;
+    html+='<div class="section-title"><i class="ti ti-category"></i> Acuracidade por categoria</div>';
+    html+=renderCatCards(c.categorias,[
+      {label:'Acuracidade',key:'acuracidade',fmt:PCT,color:function(){return 'text-green';}},
+      {label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},
+      {label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}
+    ]);
+    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#D32F2F"></span>Faltas (R$)</span><span class="legend-item"><span class="legend-dot" style="background:#F57C00"></span>Sobras (R$)</span></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(160,c.categorias.length*50)+'px"><canvas id="chartResumoCritica"></canvas></div>';
+  }
+
+  if(avail.ruptura && r.ruptura.hasCategorias){
+    var ru=r.ruptura;
+    html+='<div class="section-title"><i class="ti ti-category"></i> Ruptura por categoria</div>';
+    html+=renderCatCards(ru.categorias,[
+      {label:'Perda R$/dia',key:'perdaDia',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Perda lucro R$/dia',key:'perdaLucroDia',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Perda mensal',key:'perdaMensal',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Estoque parado',key:'valorEstoqueParado',fmt:BRLi,color:function(){return '';}}
+    ]);
+    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#D32F2F"></span>Perda faturamento (R$/dia)</span><span class="legend-item"><span class="legend-dot" style="background:#F57C00"></span>Perda lucro (R$/dia)</span></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(160,ru.categorias.length*50)+'px"><canvas id="chartResumoRuptura"></canvas></div>';
+  }
+
+  if(avail.dias && r.dias.hasCategorias){
+    var d=r.dias;
+    html+='<div class="section-title"><i class="ti ti-category"></i> Cobertura por categoria</div>';
+    html+=renderCatCards(d.categorias,[
+      {label:'Cobertura média',key:'mediaCobertura',fmt:function(v){return v+' dias';},color:function(){return '';}},
+      {label:'Sem giro (R$)',key:'valorSemGiro',fmt:BRLi,color:function(v){return v>0?'text-red':'text-muted';}},
+      {label:'Excesso (R$)',key:'valorExcesso',fmt:BRLi,color:function(v){return v>0?'text-blue':'text-muted';}},
+      {label:'Val. estoque',key:'valorEstoque',fmt:BRLi,color:function(){return '';}}
+    ]);
+    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#888888"></span>Sem giro (R$)</span><span class="legend-item"><span class="legend-dot" style="background:#1565C0"></span>Excesso (R$)</span></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(160,d.categorias.length*50)+'px"><canvas id="chartResumoDias"></canvas></div>';
+  }
+
+  if(avail.abc && r.abc.hasCategorias){
+    var a=r.abc;
+    html+='<div class="section-title"><i class="ti ti-category"></i> Investimento por categoria</div>';
+    html+=renderCatCards(a.categorias,[
+      {label:'Investimento',key:'investimento',fmt:BRLi,color:function(){return '';}},
+      {label:'Faturamento',key:'faturamento',fmt:BRLi,color:function(){return 'text-green';}},
+      {label:'Lucro',key:'lucro',fmt:BRLi,color:function(v){return v>=0?'text-green':'text-red';}},
+      {label:'% do investimento',key:'pctInvest',fmt:PCT,color:function(){return '';}}
+    ]);
+    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#002B50"></span>Investimento (R$)</span><span class="legend-item"><span class="legend-dot" style="background:#61CF00"></span>Faturamento (R$)</span></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(160,a.categorias.length*50)+'px"><canvas id="chartResumoAbc"></canvas></div>';
+  }
+
+  if(avail.perda && r.perda.hasCategorias){
+    var pe=r.perda;
+    html+='<div class="section-title"><i class="ti ti-category"></i> Perda projetada por categoria</div>';
+    html+=renderCatCards(pe.categorias,[
+      {label:'Perda R$/dia',key:'perdaFatDia',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Perda lucro R$/dia',key:'perdaLucroDia',fmt:BRLi,color:function(){return 'text-red';}},
+      {label:'Perda mensal',key:'perdaMensal',fmt:BRLi,color:function(){return 'text-red';}}
+    ]);
+    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#D32F2F"></span>Perda faturamento (R$/dia)</span><span class="legend-item"><span class="legend-dot" style="background:#F57C00"></span>Perda lucro (R$/dia)</span></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(160,pe.categorias.length*50)+'px"><canvas id="chartResumoPerda"></canvas></div>';
+  }
 
   /* Recomendações */
   if(recs.length>0){
@@ -734,6 +803,35 @@ function renderResumo(){
   html+='</div>';
 
   p.innerHTML=html;
+
+  /* r97: instancia os gráficos por categoria do Resumo Executivo */
+  ['chartResumoCritica','chartResumoRuptura','chartResumoDias','chartResumoAbc','chartResumoPerda'].forEach(destroyChart);
+
+  if(avail.critica && r.critica.hasCategorias){
+    var c=r.critica;
+    var ctx=document.getElementById('chartResumoCritica');
+    if(ctx){State.charts.chartResumoCritica=new Chart(ctx,{type:'bar',data:{labels:c.categorias.map(function(x){return x.nome;}),datasets:[{label:'Faltas',data:c.categorias.map(function(x){return Math.abs(x.faltaVal);}),backgroundColor:'#D32F2F',borderRadius:4,barPercentage:.65},{label:'Sobras',data:c.categorias.map(function(x){return x.sobraVal;}),backgroundColor:'#F57C00',borderRadius:4,barPercentage:.65}]},options:chartOptsRS(80)});}
+  }
+  if(avail.ruptura && r.ruptura.hasCategorias){
+    var ru=r.ruptura;
+    var ctx=document.getElementById('chartResumoRuptura');
+    if(ctx){State.charts.chartResumoRuptura=new Chart(ctx,{type:'bar',data:{labels:ru.categorias.map(function(x){return x.nome;}),datasets:[{label:'Perda fat./dia',data:ru.categorias.map(function(x){return x.perdaDia;}),backgroundColor:'#D32F2F',borderRadius:4,barPercentage:.65},{label:'Perda lucro/dia',data:ru.categorias.map(function(x){return x.perdaLucroDia;}),backgroundColor:'#F57C00',borderRadius:4,barPercentage:.65}]},options:chartOptsRS(80)});}
+  }
+  if(avail.dias && r.dias.hasCategorias){
+    var d=r.dias;
+    var ctx=document.getElementById('chartResumoDias');
+    if(ctx){State.charts.chartResumoDias=new Chart(ctx,{type:'bar',data:{labels:d.categorias.map(function(x){return x.nome;}),datasets:[{label:'Sem giro',data:d.categorias.map(function(x){return x.valorSemGiro;}),backgroundColor:'#888888',borderRadius:4,barPercentage:.65},{label:'Excesso',data:d.categorias.map(function(x){return x.valorExcesso;}),backgroundColor:'#1565C0',borderRadius:4,barPercentage:.65}]},options:chartOptsRS(80)});}
+  }
+  if(avail.abc && r.abc.hasCategorias){
+    var a=r.abc;
+    var ctx=document.getElementById('chartResumoAbc');
+    if(ctx){State.charts.chartResumoAbc=new Chart(ctx,{type:'bar',data:{labels:a.categorias.map(function(x){return x.nome;}),datasets:[{label:'Investimento',data:a.categorias.map(function(x){return x.investimento;}),backgroundColor:'#002B50',borderRadius:4,barPercentage:.65},{label:'Faturamento',data:a.categorias.map(function(x){return x.faturamento;}),backgroundColor:'#61CF00',borderRadius:4,barPercentage:.65}]},options:chartOptsRS(80)});}
+  }
+  if(avail.perda && r.perda.hasCategorias){
+    var pe=r.perda;
+    var ctx=document.getElementById('chartResumoPerda');
+    if(ctx){State.charts.chartResumoPerda=new Chart(ctx,{type:'bar',data:{labels:pe.categorias.map(function(x){return x.nome;}),datasets:[{label:'Perda fat./dia',data:pe.categorias.map(function(x){return x.perdaFatDia;}),backgroundColor:'#D32F2F',borderRadius:4,barPercentage:.65},{label:'Perda lucro/dia',data:pe.categorias.map(function(x){return x.perdaLucroDia;}),backgroundColor:'#F57C00',borderRadius:4,barPercentage:.65}]},options:chartOptsRS(80)});}
+  }
 }
 
 
