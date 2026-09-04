@@ -3166,21 +3166,32 @@
 
         // Fase 3: novo estado marcado = intersecao do anterior com o
         // disponivel agora (primeira carga: tudo marcado por padrao).
+        // Guardado em variavel LOCAL (novoEstado) — nao da pra confiar em
+        // reler filtrosGeralEstado depois da Fase 4, porque
+        // popularDropdownFiltro sobrescreve esse mesmo objeto sozinho como
+        // efeito colateral interno dela (ver Fase 4).
+        const novoEstado = {};
         CATS.forEach(c => {
             const disp = disponiveis[c.prefixo];
             const antes = marcadosAntes[c.prefixo];
             const novosMarcados = antes ? new Set(disp.filter(v => antes.has(v))) : new Set(disp);
             novosMarcados.add('__inicializado__');
-            filtrosGeralEstado[c.prefixo] = novosMarcados;
+            novoEstado[c.prefixo] = novosMarcados;
         });
 
         // Fase 4: redesenha os 4 grupos de checkbox e reaplica o estado
-        // marcado por cima (popularDropdownFiltro sozinho marca tudo por
-        // padrao — mesmo padrao ja usado pela antiga atualizarFiltrosGeral).
+        // marcado por cima. CRITICO: popularDropdownFiltro sobrescreve
+        // filtrosGeralEstado[prefixo] sozinha (efeito colateral dela, nao
+        // documentado) — por isso as caixinhas sao marcadas a partir de
+        // novoEstado (a variavel local da Fase 3, sempre correta), nunca
+        // relendo filtrosGeralEstado depois da chamada. Ao final,
+        // filtrosGeralEstado e restaurado pro valor certo, senao a PROXIMA
+        // chamada desta função (proximo clique) partiria do estado errado.
         CATS.forEach(c => {
             popularDropdownFiltro(c.prefixo, disponiveis[c.prefixo]);
-            const marc = filtrosGeralEstado[c.prefixo];
+            const marc = novoEstado[c.prefixo];
             document.querySelectorAll('.filtro-chk-' + c.prefixo).forEach(el => { el.checked = marc.has(el.value); });
+            filtrosGeralEstado[c.prefixo] = marc;
             const chkTodos = document.getElementById('chk-todos-' + c.prefixo);
             const total = document.querySelectorAll('.filtro-chk-' + c.prefixo).length;
             const marcCount = document.querySelectorAll('.filtro-chk-' + c.prefixo + ':checked').length;
@@ -4099,7 +4110,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-03-r94';
+    const VERSAO_ESPERADA = '2026-09-03-r95';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
