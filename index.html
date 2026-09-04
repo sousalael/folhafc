@@ -4099,7 +4099,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-03-r92';
+    const VERSAO_ESPERADA = '2026-09-03-r94';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4209,11 +4209,18 @@
             if (!despGeralInicializado && getCpfLogado()) {
                 despGeralInicializado = true;
                 popularSeletorMes('desp-geral-mes', 'desp-geral-ini', 'desp-geral-fim', null);
-                popularFiltrosIniciais();
-                // MTD real (dia 1 ate hoje) por cima do que o seletor de mes
-                // ja tenha marcado, e dispara a busca sozinho — sem esperar
-                // clique no 🔍. Os filtros ficam prontos (cascata) assim que
-                // a busca voltar.
+                // CRITICO: NAO chamar popularFiltrosIniciais() aqui. Ela roda
+                // em paralelo (sem await) com buscarDespesasGeral() logo
+                // abaixo, e faz 2 chamadas de API antes de popular o filtro
+                // Supervisor com [getSupervisorLogado()] — so o proprio
+                // usuario. Se essa chamada terminar DEPOIS da busca real
+                // (comum, pois tem mais round-trips), ela sobrescreve o
+                // filtro Supervisor que ja tinha vindo certo (todos os
+                // supervisores, incluindo Diretor com acesso irrestrito) de
+                // volta para "so eu mesmo" — foi exatamente esse bug
+                // reportado (Diretor so via as proprias despesas). Os 4
+                // filtros agora nascem 100% da busca real abaixo, sem
+                // nenhum pre-preenchimento de cadastro.
                 const hojeMTD = new Date();
                 const iniMTD = new Date(hojeMTD.getFullYear(), hojeMTD.getMonth(), 1);
                 const paraISO = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
