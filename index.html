@@ -3148,12 +3148,17 @@
 
         // Fase 2: para cada categoria, os valores disponiveis sao os que
         // aparecem nas despesas que passam pelas OUTRAS 3 categorias.
+        // IMPORTANTE: uma categoria com ZERO opcoes marcadas (ex: usuario
+        // clicou em "Selecionar todas" pra desmarcar tudo e comecar a
+        // escolher do zero) NAO restringe as outras — do contrario, os
+        // outros 3 filtros ficariam vazios so por essa transicao. So conta
+        // como restricao real quando ha pelo menos 1 valor de fato marcado.
         const disponiveis = {};
         CATS.forEach(catAtual => {
             const outras = CATS.filter(c => c.prefixo !== catAtual.prefixo);
             const filtrado = despesasGeralCompleto.filter(d => outras.every(o => {
                 const marc = marcadosAntes[o.prefixo];
-                if (!marc) return true; // categoria ainda sem selecao = nao restringe
+                if (!marc || marc.size <= 1) return true; // sem selecao (ou zerado) = nao restringe
                 return marc.has(String(d[o.campo] || '(vazio)'));
             }));
             disponiveis[catAtual.prefixo] = [...new Set(filtrado.map(d => String(d[catAtual.campo] || '(vazio)')))].sort();
@@ -3220,11 +3225,20 @@
         const mGrp = obterMarcados('grupo');
         const mFrm = obterMarcados('forma');
 
+        // Categoria com ZERO opcoes marcadas nao restringe (mantem o
+        // resultado de antes, como se essa categoria estivesse com tudo
+        // marcado) — so passa a restringir de verdade quando o usuario
+        // marca pelo menos 1 opcao especifica.
+        const passa = (m, valor) => {
+            if (Object.keys(m).length === 0) return true;
+            return !!m[String(valor || '(vazio)')];
+        };
+
         despesasGeralDados = despesasGeralCompleto.filter(d =>
-            mSup[String(d.supervisor || '(vazio)')] &&
-            mCli[String(d.cliente || '(vazio)')] &&
-            mGrp[String(d.grupo || '(vazio)')] &&
-            mFrm[String(d.formaPagamento || '(vazio)')]
+            passa(mSup, d.supervisor) &&
+            passa(mCli, d.cliente) &&
+            passa(mGrp, d.grupo) &&
+            passa(mFrm, d.formaPagamento)
         );
         renderDespesasGeral();
     }
@@ -4085,7 +4099,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-03-r91';
+    const VERSAO_ESPERADA = '2026-09-03-r92';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
