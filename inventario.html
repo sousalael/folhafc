@@ -51,6 +51,42 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:12px;color:var(--fc-muted)}
 .legend-item{display:flex;align-items:center;gap:4px}
 .legend-dot{width:10px;height:10px;border-radius:2px}
+/* ===== v3.9: mini-barras comparativas por categoria (Acuracidade/Investimento em Estoque) ===== */
+.minibar-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;font-size:12px;color:var(--fc-muted)}
+.minibar-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+.minibar-list{display:flex;flex-direction:column;margin-bottom:16px}
+.minibar-row{display:grid;grid-template-columns:170px 1fr 120px;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid var(--fc-border)}
+.minibar-row.inv{grid-template-columns:190px 1fr}
+.minibar-row:last-child{border-bottom:none}
+.minibar-cat{font-weight:600;font-size:13px;color:var(--fc-navy)}
+.minibar-catval{font-size:11px;color:var(--fc-muted);font-weight:400;margin-top:2px}
+.minibar-bars{display:flex;flex-direction:column;gap:6px}
+.minibar-line{display:flex;align-items:center;gap:8px}
+.minibar-tag{font-size:10px;color:var(--fc-muted);width:46px;flex-shrink:0}
+.minibar-track{flex:1;background:var(--fc-light);border-radius:4px;height:12px;overflow:hidden}
+.minibar-fill{height:100%;border-radius:4px}
+.minibar-fill.falta{background:var(--fc-red)}
+.minibar-fill.sobra{background:var(--fc-amb)}
+.minibar-fill.vendas{background:var(--fc-blue)}
+.minibar-fill.estoque{background:var(--fc-amb)}
+.minibar-val{font-size:11px;font-weight:600;min-width:66px;text-align:right;flex-shrink:0}
+.minibar-saldo{border-radius:8px;padding:8px 10px;text-align:center}
+.minibar-saldo.neg{background:var(--fc-rl);border:1px solid var(--fc-red)}
+.minibar-saldo.pos{background:var(--fc-gl);border:1px solid var(--fc-green)}
+.minibar-saldo.zero{background:var(--fc-light);border:1px solid var(--fc-border)}
+.minibar-saldo-label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--fc-muted);margin-bottom:2px}
+.minibar-saldo-val{display:block;font-size:14px;font-weight:700}
+.minibar-saldo.neg .minibar-saldo-val{color:var(--fc-red)}
+.minibar-saldo.pos .minibar-saldo-val{color:var(--fc-gd)}
+.minibar-saldo.zero .minibar-saldo-val{color:var(--fc-muted)}
+/* ===== v3.9: tabela por categoria (Cobertura) ===== */
+.cat-table-wrap{overflow-x:auto;margin-bottom:16px;border:1px solid var(--fc-border);border-radius:8px}
+.cat-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.cat-table th{background:var(--fc-navy);color:#fff;text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.cat-table th.num,.cat-table td.num{text-align:right}
+.cat-table td{padding:7px 10px;border-bottom:1px solid var(--fc-border)}
+.cat-table tr:last-child td{border-bottom:none}
+.cat-table tr:nth-child(even) td{background:var(--fc-light)}
 .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .search-input{padding:7px 12px;border:1px solid var(--fc-border);border-radius:6px;font-size:13px;width:220px;outline:none}
 .search-input:focus{border-color:var(--fc-green)}
@@ -61,6 +97,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .btn-export{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:7px 16px;background:var(--fc-green);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
 .btn-export:hover{opacity:.85}
 .btn-pdf{background:var(--fc-navy)}
+.btn-html{background:var(--fc-blue)}
 .table-wrap{border:1px solid var(--fc-border);border-radius:8px;overflow-x:auto;margin-bottom:12px}
 table.data-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
 table.data-table th{background:var(--fc-navy);color:#fff;padding:9px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;position:sticky;top:0;white-space:nowrap}
@@ -199,7 +236,7 @@ table.data-table tr:hover td{background:#eef6ff}
 .resumo-card-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--fc-green);font-weight:700;margin-bottom:8px}
 .resumo-card-valor{font-size:32px;font-weight:700;color:var(--fc-navy);line-height:1.1}
 .resumo-card-titulo{font-size:14px;font-weight:600;color:var(--fc-navy);margin-top:4px}
-.resumo-card-detalhe{font-size:12px;color:var(--fc-muted);margin-top:6px}
+.resumo-card-detalhe{font-size:10.5px;color:var(--fc-muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .resumo-recs{background:var(--fc-light);border-radius:12px;padding:24px;margin-bottom:20px}
 .resumo-recs h3{font-size:16px;color:var(--fc-navy);margin:0 0 16px}
 .resumo-rec-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #e8ecf0}
@@ -215,6 +252,7 @@ table.data-table tr:hover td{background:#eef6ff}
 .btn-pdf-texto{background:var(--fc-navy);color:#fff}
 .btn-pptx{background:var(--fc-green);color:var(--fc-navy)}
 .btn-pdf-apres{background:var(--fc-amb);color:#fff}
+.btn-html-doc{background:var(--fc-blue);color:#fff}
 /* Comparativo panel */
 .comp-section{margin-bottom:24px}
 .comp-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -228,7 +266,7 @@ table.data-table tr:hover td{background:#eef6ff}
 .comp-overlap-card{background:var(--fc-light);border-radius:8px;padding:14px;text-align:center}
 .comp-overlap-val{font-size:22px;font-weight:700;color:var(--fc-navy)}
 .comp-overlap-label{font-size:11px;color:var(--fc-muted);margin-top:2px}
-@media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}.unit-bar{flex-wrap:nowrap}}
+@media(max-width:768px){.info-row{grid-template-columns:1fr}.file-slots,.summary-pair{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.loss-cards,.dist-grid{grid-template-columns:repeat(2,1fr)}.header{padding:10px 16px}.body{padding:16px}.tabs{padding:0 12px}.unit-bar{flex-wrap:nowrap}.minibar-row,.minibar-row.inv{grid-template-columns:1fr;gap:6px}.minibar-saldo{justify-self:start}}
 @keyframes pulseSalvar { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,183,74,.5);} 50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(0,183,74,0);} }
 </style>
 </head>
@@ -246,7 +284,7 @@ table.data-table tr:hover td{background:#eef6ff}
     <div class="header-right">
       <div class="header-title">Análise de Inventários</div>
       <div class="header-sub" id="headerDate"></div>
-      <div style="color:rgba(255,255,255,.35);font-size:10px;margin-top:2px">v3.8</div>
+      <div style="color:rgba(255,255,255,.35);font-size:10px;margin-top:2px">v3.9</div>
     </div>
     <button id="btnSalvarDrive" onclick="salvarNoDrive()" style="margin-left:16px;display:none;align-items:center;gap:6px;padding:8px 16px;background:#00B74A;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">💾 Salvar análise no Drive</button>
     <button id="btnHistorico" onclick="abrirHistorico()" style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#0B2545;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">🗂️ Histórico</button>

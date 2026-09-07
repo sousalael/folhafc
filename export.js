@@ -1,4 +1,4 @@
-/* export.js — v3.0 — Excel formatado + Dashboard + PDF com resumo executivo */
+/* export.js — v3.9 — Excel formatado + Dashboard + PDF com resumo executivo + Exportação em HTML (por aba, relatório completo e comparativo) */
 var Export=(function(){
 "use strict";
 var C={navy:'051323',green:'00B74A',red:'D32F2F',amb:'F57C00',blue:'1565C0',white:'FFFFFF',light:'F5F5F5',lightG:'F0F0F0',border:'D0D0D0',text:'333333',muted:'888888'};
@@ -131,39 +131,6 @@ function chartABC(a){
 }
 function chartPerda(p){
   return _chartPNG({type:'bar',data:{labels:['Curva A','Curva B','Curva C'],datasets:[{label:'Perda mensal (R$)',data:[p.classA.perda*30,p.classB.perda*30,p.classC.perda*30],backgroundColor:['#D32F2F','#F57C00','#888888'],borderRadius:4}]},options:{plugins:{legend:{display:false},datalabels:{display:false}},scales:{y:{beginAtZero:true,ticks:{font:{size:12}}},x:{ticks:{font:{size:13}}}}}},1000,330);
-}
-/* ===== r97: gráficos por categoria (foco financeiro), usados no Resumo Executivo ===== */
-function chartRupturaCat(r){
-  if(!(r.hasCategorias&&r.categorias.length))return null;
-  var cats=r.categorias;
-  return _chartPNG({type:'bar',data:{labels:cats.map(function(x){return x.nome;}),datasets:[
-    {label:'Perda fat./dia (R$)',data:cats.map(function(x){return x.perdaDia;}),backgroundColor:'#D32F2F',borderRadius:3},
-    {label:'Perda lucro/dia (R$)',data:cats.map(function(x){return x.perdaLucroDia;}),backgroundColor:'#F57C00',borderRadius:3}
-  ]},options:{indexAxis:'y',plugins:{legend:{position:'top',labels:{font:{size:13}}},datalabels:{display:false}},scales:{x:{ticks:{font:{size:12}}},y:{ticks:{font:{size:12}}}}}},1000,Math.min(530,Math.max(305,cats.length*80)));
-}
-function chartDiasCat(d){
-  if(!(d.hasCategorias&&d.categorias.length))return null;
-  var cats=d.categorias;
-  return _chartPNG({type:'bar',data:{labels:cats.map(function(x){return x.nome;}),datasets:[
-    {label:'Sem giro (R$)',data:cats.map(function(x){return x.valorSemGiro;}),backgroundColor:'#888888',borderRadius:3},
-    {label:'Excesso (R$)',data:cats.map(function(x){return x.valorExcesso;}),backgroundColor:'#1565C0',borderRadius:3}
-  ]},options:{indexAxis:'y',plugins:{legend:{position:'top',labels:{font:{size:13}}},datalabels:{display:false}},scales:{x:{ticks:{font:{size:12}}},y:{ticks:{font:{size:12}}}}}},1000,Math.min(530,Math.max(305,cats.length*80)));
-}
-function chartAbcCat(a){
-  if(!(a.hasCategorias&&a.categorias.length))return null;
-  var cats=a.categorias;
-  return _chartPNG({type:'bar',data:{labels:cats.map(function(x){return x.nome;}),datasets:[
-    {label:'Investimento (R$)',data:cats.map(function(x){return x.investimento;}),backgroundColor:'#002B50',borderRadius:3},
-    {label:'Faturamento (R$)',data:cats.map(function(x){return x.faturamento;}),backgroundColor:'#61CF00',borderRadius:3}
-  ]},options:{indexAxis:'y',plugins:{legend:{position:'top',labels:{font:{size:13}}},datalabels:{display:false}},scales:{x:{ticks:{font:{size:12}}},y:{ticks:{font:{size:12}}}}}},1000,Math.min(530,Math.max(305,cats.length*80)));
-}
-function chartPerdaCat(p){
-  if(!(p.hasCategorias&&p.categorias.length))return null;
-  var cats=p.categorias;
-  return _chartPNG({type:'bar',data:{labels:cats.map(function(x){return x.nome;}),datasets:[
-    {label:'Perda fat./dia (R$)',data:cats.map(function(x){return x.perdaFatDia;}),backgroundColor:'#D32F2F',borderRadius:3},
-    {label:'Perda lucro/dia (R$)',data:cats.map(function(x){return x.perdaLucroDia;}),backgroundColor:'#F57C00',borderRadius:3}
-  ]},options:{indexAxis:'y',plugins:{legend:{position:'top',labels:{font:{size:13}}},datalabels:{display:false}},scales:{x:{ticks:{font:{size:12}}},y:{ticks:{font:{size:12}}}}}},1000,Math.min(530,Math.max(305,cats.length*80)));
 }
 
 /* ===== GERAR EXCEL ===== */
@@ -443,8 +410,6 @@ function generateComparativoExcel(comp, units, info){
   a.click();URL.revokeObjectURL(url);
 }
 
-return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF,generateComparativoPDF:generateComparativoPDF,generateComparativoExcel:generateComparativoExcel,generateResumoPDF:generateResumoPDF,generateResumoPPTX:generateResumoPPTX};
-
 /* ===== r68: RESUMO EXECUTIVO — PDF Documento ===== */
 function generateResumoPDF(results,recs,info,unidade,logo){
   var jsPDF=window.jspdf.jsPDF;
@@ -480,11 +445,11 @@ function generateResumoPDF(results,recs,info,unidade,logo){
 
   var red=[211,47,47],amb=[245,124,0];
   var dims=[];
-  if(results.critica)dims.push({label:'Acuracidade',valor:results.critica.acuracidade+'%',detalhe:'Estoque: '+BRLi(results.critica.valorEstoque)+' · Contado: '+BRLi(results.critica.valorEstoqueContado)+' · Divergência: '+BRLi(results.critica.saldoLiquido),cor:results.critica.acuracidade<90?red:(results.critica.acuracidade<95?amb:green)});
-  if(results.ruptura)dims.push({label:'Ruptura',valor:results.ruptura.taxaRuptura+'%',detalhe:'R$/dia: '+BRLi(results.ruptura.perdaFatDia)+' · R$/mês: '+BRLi(results.ruptura.perdaMensal)+' · Estoque parado: '+BRLi(results.ruptura.valorEstoqueParado),cor:results.ruptura.taxaRuptura>10?red:(results.ruptura.taxaRuptura>5?amb:green)});
-  if(results.dias)dims.push({label:'Cobertura',valor:Engine.round2(results.dias.coberturaGeral)+' dias',detalhe:'Sem giro: '+BRLi(results.dias.valorSemGiro)+' · Excesso: '+BRLi(results.dias.valorExcesso),cor:(results.dias.coberturaGeral<15||results.dias.coberturaGeral>60)?red:green});
-  if(results.abc)dims.push({label:'Investimento',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),detalhe:'Faturamento: R$ '+Engine.formatNum(results.abc.totalFat)+' · Giro: '+Engine.round2(results.abc.totalFat/results.abc.totalInvest)+'x',cor:navy});
-  if(results.perda)dims.push({label:'Perda Mensal',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),detalhe:'Diária: '+BRLi(results.perda.totalPerdaFat)+' · Mensal: '+BRLi(results.perda.perdaMensal),cor:results.perda.perdaMensal>50000?red:(results.perda.perdaMensal>10000?amb:green)});
+  if(results.critica)dims.push({label:'Acuracidade',valor:results.critica.acuracidade+'%',detalhe:results.critica.totalSKUs+' SKUs · '+results.critica.faltaCount+' faltas · '+results.critica.sobraCount+' sobras',cor:results.critica.acuracidade<90?red:(results.critica.acuracidade<95?amb:green)});
+  if(results.ruptura)dims.push({label:'Ruptura',valor:results.ruptura.taxaRuptura+'%',detalhe:results.ruptura.totalRupturas+' SKUs em falta · Curva A: '+results.ruptura.rupturaA,cor:results.ruptura.taxaRuptura>10?red:(results.ruptura.taxaRuptura>5?amb:green)});
+  if(results.dias)dims.push({label:'Cobertura',valor:Engine.round2(results.dias.coberturaGeral)+' dias',detalhe:'Sem giro: '+results.dias.semGiro+' · Excesso: '+results.dias.excessos,cor:(results.dias.coberturaGeral<15||results.dias.coberturaGeral>60)?red:green});
+  if(results.abc)dims.push({label:'Investimento',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),detalhe:'Faturamento: R$ '+Engine.formatNum(results.abc.totalFat),cor:navy});
+  if(results.perda)dims.push({label:'Perda Mensal',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),detalhe:results.perda.totalSKUs+' SKUs identificados',cor:results.perda.perdaMensal>50000?red:(results.perda.perdaMensal>10000?amb:green)});
 
   /* Cards em grade de 2 colunas */
   var cardGap=6,cardW=(cw-cardGap)/2,cardH=32;
@@ -502,62 +467,20 @@ function generateResumoPDF(results,recs,info,unidade,logo){
   });
   y+=Math.ceil(dims.length/2)*(cardH+cardGap)+6;
 
-  /* Detalhamento por categoria (foco financeiro em todas as dimensões) */
+  /* Gráficos por dimensão */
   function ckR(n){if(y+n>270){doc.addPage();y=M;}}
   function imgR(url,h){if(!url)return;ckR(h+10);try{doc.addImage(url,'PNG',M,y,cw,h);}catch(e){}y+=h+10;}
   function tituloR(t){ckR(14);doc.setFontSize(11);doc.setTextColor.apply(doc,navy);doc.text(t,M,y);y+=6;}
-  function tabR(h,b,o){ckR(20);doc.autoTable({startY:y,head:[h],body:b,margin:{left:M,right:M},headStyles:{fillColor:navy,fontSize:7,fontStyle:'bold',halign:'left'},bodyStyles:{fontSize:7,halign:'left'},alternateRowStyles:{fillColor:[245,245,245]},styles:{cellPadding:1.5,lineColor:[220,220,220],lineWidth:0.2},columnStyles:o||{}});y=doc.lastAutoTable.finalY+6;}
 
   if(y>245){doc.addPage();y=M;}
   doc.setFontSize(18);doc.setTextColor.apply(doc,navy);
-  doc.text('Detalhamento por categoria',M,y);y+=10;
+  doc.text('Gráficos',M,y);y+=10;
 
-  if(results.critica){
-    var cc=results.critica;
-    tituloR('Acuracidade'+(cc.hasCategorias?' por categoria':''));
-    if(cc.hasCategorias){tabR(['Categoria','SKUs','Acuracidade','Faltas (R$)','Sobras (R$)','Saldo (R$)'],cc.categorias.map(function(x){return[x.nome,x.total,PCT(x.acuracidade),BRLi(x.faltaVal),BRLi(x.sobraVal),BRLi(x.saldo)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}});}
-    imgR(chartCritica(cc),cc.hasCategorias?Math.min(80,Math.max(50,cc.categorias.length*12)):50);
-  }
-  if(results.ruptura){
-    var rr=results.ruptura;
-    tituloR('Ruptura'+(rr.hasCategorias?' por categoria':' por curva ABC'));
-    if(rr.hasCategorias){
-      tabR(['Categoria','Rupturas','Taxa ruptura','Rupturas A','Perda fat./dia','Perda lucro/dia','Perda mensal','Estoque parado'],rr.categorias.map(function(x){return[x.nome,x.totalRupturas,PCT(x.taxa),x.rupturaA,BRLi(x.perdaDia),BRLi(x.perdaLucroDia),BRLi(x.perdaMensal),BRLi(x.valorEstoqueParado)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'}});
-      imgR(chartRupturaCat(rr),Math.min(80,Math.max(50,rr.categorias.length*12)));
-    }else{
-      imgR(chartRuptura(rr),55);
-    }
-  }
-  if(results.dias){
-    var dd=results.dias;
-    tituloR('Cobertura'+(dd.hasCategorias?' por categoria':' por faixa'));
-    if(dd.hasCategorias){
-      tabR(['Categoria','SKUs','Cobertura média','Sem giro (R$)','Excesso (R$)','Val. estoque'],dd.categorias.map(function(x){return[x.nome,x.total,x.mediaCobertura+' dias',BRLi(x.valorSemGiro),BRLi(x.valorExcesso),BRLi(x.valorEstoque)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}});
-      imgR(chartDiasCat(dd),Math.min(80,Math.max(50,dd.categorias.length*12)));
-    }else{
-      imgR(chartDias(dd),55);
-    }
-  }
-  if(results.abc){
-    var aa=results.abc;
-    tituloR('Investimento'+(aa.hasCategorias?' por categoria':' por curva ABC'));
-    if(aa.hasCategorias){
-      tabR(['Categoria','Investimento (R$)','Faturamento (R$)','Lucro (R$)','% Investimento'],aa.categorias.map(function(x){return[x.nome,BRLi(x.investimento),BRLi(x.faturamento),BRLi(x.lucro),PCT(x.pctInvest)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
-      imgR(chartAbcCat(aa),Math.min(80,Math.max(50,aa.categorias.length*12)));
-    }else{
-      imgR(chartABC(aa),55);
-    }
-  }
-  if(results.perda){
-    var pp=results.perda;
-    tituloR('Perda projetada'+(pp.hasCategorias?' por categoria':' por curva ABC'));
-    if(pp.hasCategorias){
-      tabR(['Categoria','Rupturas','Perda fat./dia','Perda lucro/dia','Perda mensal'],pp.categorias.map(function(x){return[x.nome,x.totalRupturas,BRLi(x.perdaFatDia),BRLi(x.perdaLucroDia),BRLi(x.perdaMensal)];}),{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});
-      imgR(chartPerdaCat(pp),Math.min(80,Math.max(50,pp.categorias.length*12)));
-    }else{
-      imgR(chartPerda(pp),55);
-    }
-  }
+  if(results.critica){var cc=results.critica;tituloR('Crítica — Faltas e sobras'+(cc.hasCategorias?' por categoria':''));imgR(chartCritica(cc),cc.hasCategorias?Math.min(80,Math.max(50,cc.categorias.length*12)):50);}
+  if(results.ruptura){tituloR('Ruptura por curva ABC');imgR(chartRuptura(results.ruptura),55);}
+  if(results.dias){tituloR('Distribuição por faixa de cobertura');imgR(chartDias(results.dias),55);}
+  if(results.abc){tituloR('Investimento por curva ABC');imgR(chartABC(results.abc),55);}
+  if(results.perda){tituloR('Perda mensal por curva ABC');imgR(chartPerda(results.perda),55);}
 
   /* Recomendações */
   if(recs.length>0){
@@ -620,11 +543,11 @@ function generateResumoPPTX(results,recs,info,unidade,logo,asPDF){
   ],{x:0.8,y:0.9,w:5.6,h:0.6,fontSize:28,fontFace:'Calibri',bold:true,isTextBox:true,margin:0});
 
   var dims=[];
-  if(results.critica)dims.push({label:'ACURACIDADE',valor:results.critica.acuracidade+'%',sub:'Divergência: '+BRLi(results.critica.saldoLiquido),accent:results.critica.acuracidade<95});
-  if(results.ruptura)dims.push({label:'RUPTURA',valor:results.ruptura.taxaRuptura+'%',sub:'Perda: '+BRLi(results.ruptura.perdaMensal)+'/mês',accent:true});
-  if(results.dias)dims.push({label:'COBERTURA',valor:Engine.round2(results.dias.coberturaGeral)+' dias',sub:'Sem giro: '+BRLi(results.dias.valorSemGiro),accent:results.dias.coberturaGeral>45});
+  if(results.critica)dims.push({label:'ACURACIDADE',valor:results.critica.acuracidade+'%',sub:'Meta: 95%',accent:results.critica.acuracidade<95});
+  if(results.ruptura)dims.push({label:'RUPTURA',valor:results.ruptura.taxaRuptura+'%',sub:results.ruptura.totalRupturas+' SKUs em falta',accent:true});
+  if(results.dias)dims.push({label:'COBERTURA',valor:Engine.round2(results.dias.coberturaGeral)+' dias',sub:'Sem giro: '+results.dias.semGiro+' SKUs',accent:results.dias.coberturaGeral>45});
   if(results.abc)dims.push({label:'INVESTIMENTO',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),sub:'Giro: '+Engine.round2(results.abc.totalFat/results.abc.totalInvest)+'x',accent:false});
-  if(results.perda)dims.push({label:'PERDA MENSAL',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),sub:'Diária: '+BRLi(results.perda.totalPerdaFat)+' · Mensal: '+BRLi(results.perda.perdaMensal),accent:true});
+  if(results.perda)dims.push({label:'PERDA MENSAL',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),sub:results.perda.totalSKUs+' SKUs',accent:true});
 
   dims.forEach(function(d,i){
     var ky=1.7+i*0.7;
@@ -648,43 +571,10 @@ function generateResumoPPTX(results,recs,info,unidade,logo,asPDF){
       chartDims.push({title:'Crítica — Faltas × Sobras (R$)',data:[{name:'R$',labels:['Faltas','Sobras'],values:[Math.abs(cc.totalFaltas),cc.totalSobras]}],colors:['D32F2F'],legend:false});
     }
   }
-  if(results.ruptura){
-    var rr=results.ruptura;
-    if(rr.hasCategorias&&rr.categorias.length){
-      chartDims.push({title:'Ruptura — Perda por categoria (R$/dia)',data:[{name:'Perda fat./dia',labels:rr.categorias.map(function(x){return x.nome;}),values:rr.categorias.map(function(x){return x.perdaDia;})},{name:'Perda lucro/dia',labels:rr.categorias.map(function(x){return x.nome;}),values:rr.categorias.map(function(x){return x.perdaLucroDia;})}],colors:['D32F2F','F57C00'],legend:true});
-    }else{
-      var perdaA=rr.items.filter(function(i){return i.abc_valorVendido90==='A';}).reduce(function(s,i){return s+(i.fatMediaDia||0);},0);
-      var perdaB=rr.items.filter(function(i){return i.abc_valorVendido90==='B';}).reduce(function(s,i){return s+(i.fatMediaDia||0);},0);
-      var perdaC=rr.items.filter(function(i){return i.abc_valorVendido90==='C';}).reduce(function(s,i){return s+(i.fatMediaDia||0);},0);
-      chartDims.push({title:'Ruptura — Perda por curva ABC (R$/dia)',data:[{name:'Perda fat./dia',labels:['Curva A','Curva B','Curva C'],values:[Engine.round2(perdaA),Engine.round2(perdaB),Engine.round2(perdaC)]}],colors:['D32F2F'],legend:false});
-    }
-  }
-  if(results.dias){
-    var dd=results.dias;
-    if(dd.hasCategorias&&dd.categorias.length){
-      chartDims.push({title:'Cobertura — Valor por categoria (R$)',data:[{name:'Sem giro (R$)',labels:dd.categorias.map(function(x){return x.nome;}),values:dd.categorias.map(function(x){return x.valorSemGiro;})},{name:'Excesso (R$)',labels:dd.categorias.map(function(x){return x.nome;}),values:dd.categorias.map(function(x){return x.valorExcesso;})}],colors:['888888','1565C0'],legend:true});
-    }else{
-      var foD=['Ruptura','Alto risco','Médio risco','Cobertura ideal','Excesso de cobertura','Sem giro'];
-      var foVals=foD.map(function(f){return Engine.round2(dd.items.filter(function(i){return i.faixa===f;}).reduce(function(s,i){return s+(i.valorEstoque||0);},0));});
-      chartDims.push({title:'Cobertura — Valor por faixa (R$)',data:[{name:'Valor estoque (R$)',labels:foD,values:foVals}],colors:['1565C0'],legend:false});
-    }
-  }
-  if(results.abc){
-    var aa=results.abc;
-    if(aa.hasCategorias&&aa.categorias.length){
-      chartDims.push({title:'Investimento por categoria (R$)',data:[{name:'Investimento (R$)',labels:aa.categorias.map(function(x){return x.nome;}),values:aa.categorias.map(function(x){return x.investimento;})},{name:'Faturamento (R$)',labels:aa.categorias.map(function(x){return x.nome;}),values:aa.categorias.map(function(x){return x.faturamento;})}],colors:['002B50','61CF00'],legend:true});
-    }else{
-      chartDims.push({title:'Investimento por curva ABC (R$)',data:[{name:'Valor estoque (R$)',labels:['Curva A','Curva B','Curva C'],values:[aa.fatA.invest,aa.fatB.invest,aa.fatC.invest]}],colors:['002B50'],legend:false});
-    }
-  }
-  if(results.perda){
-    var pp=results.perda;
-    if(pp.hasCategorias&&pp.categorias.length){
-      chartDims.push({title:'Perda mensal por categoria (R$)',data:[{name:'Perda fat./dia',labels:pp.categorias.map(function(x){return x.nome;}),values:pp.categorias.map(function(x){return x.perdaFatDia;})},{name:'Perda lucro/dia',labels:pp.categorias.map(function(x){return x.nome;}),values:pp.categorias.map(function(x){return x.perdaLucroDia;})}],colors:['D32F2F','F57C00'],legend:true});
-    }else{
-      chartDims.push({title:'Perda mensal por curva ABC',data:[{name:'R$/mês',labels:['Curva A','Curva B','Curva C'],values:[pp.classA.perda*30,pp.classB.perda*30,pp.classC.perda*30]}],colors:['D32F2F'],legend:false});
-    }
-  }
+  if(results.ruptura){var rr=results.ruptura;chartDims.push({title:'Ruptura por curva ABC',data:[{name:'SKUs',labels:['Curva A','Curva B','Curva C'],values:[rr.rupturaA,rr.rupturaB,rr.rupturaC]}],colors:['D32F2F'],legend:false});}
+  if(results.dias){var dd=results.dias;chartDims.push({title:'Cobertura por faixa',data:[{name:'SKUs',labels:['Ruptura','Alto risco','Médio risco','Ideal','Excesso','Sem giro'],values:[dd.ruptura,dd.altoRisco,dd.medioRisco,dd.coberturaIdeal,dd.excessos,dd.semGiro]}],colors:['D32F2F'],legend:false});}
+  if(results.abc){var aa=results.abc;chartDims.push({title:'Investimento por curva ABC',data:[{name:'Valor estoque (R$)',labels:['Curva A','Curva B','Curva C'],values:[aa.fatA.invest,aa.fatB.invest,aa.fatC.invest]}],colors:['002B50'],legend:false});}
+  if(results.perda){var pp=results.perda;chartDims.push({title:'Perda mensal por curva',data:[{name:'R$/mês',labels:['Curva A','Curva B','Curva C'],values:[pp.classA.perda*30,pp.classB.perda*30,pp.classC.perda*30]}],colors:['D32F2F'],legend:false});}
 
   if(chartDims.length){
     var sG=pres.addSlide();
@@ -748,5 +638,326 @@ function generateResumoPPTX(results,recs,info,unidade,logo,asPDF){
     pres.writeFile({fileName:'resumo_executivo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'.pptx'});
   }
 }
+
+/* ========================================================================
+   v3.9 — EXPORTAÇÃO EM HTML (por aba + relatório completo + comparativo)
+   Gera um arquivo .html autônomo (CSS embutido, sem dependências externas
+   além da imagem do gráfico de Perda, já convertida em PNG embutido).
+   ======================================================================== */
+function _abbr(v){var neg=(v||0)<0;var a=Math.abs(v||0);var s;if(a>=1000000)s=(a/1000000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'M';else if(a>=1000)s=Math.round(a/1000)+'k';else s=Math.round(a).toLocaleString('pt-BR');return(neg?'-':'')+'R$ '+s;}
+
+function chartPerdaCategoria(p){
+  if(!p||!p.hasCategorias||!p.categorias||!p.categorias.length)return null;
+  var cats=p.categorias;
+  return _chartPNG({type:'bar',data:{labels:cats.map(function(c){return c.nome;}),datasets:[{label:'Perda mensal',data:cats.map(function(c){return c.perdaMensal;}),backgroundColor:'#D32F2F',borderRadius:3}]},options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#D32F2F',font:{size:11,weight:'bold'},formatter:function(v){return _abbr(v);}}},scales:{x:{ticks:{font:{size:11},callback:function(v){return _abbr(v);}}},y:{ticks:{font:{size:11}}}},layout:{padding:{right:70}}}},1000,Math.min(530,Math.max(220,cats.length*60)));
+}
+
+var _HTML_CSS=":root{--navy:#051323;--green:#00B74A;--red:#D32F2F;--amb:#F57C00;--blue:#1565C0;--bg:#f5f6f8;--border:#e0e0e0;--muted:#888;--light:#f5f5f5}"
++"*{box-sizing:border-box;margin:0;padding:0}"
++"body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:#333;font-size:14px;line-height:1.5;padding-bottom:40px}"
++".wrap{max-width:1100px;margin:0 auto}"
++".hdr{background:var(--navy);padding:16px 24px;display:flex;align-items:center;gap:16px}"
++".hdr img{height:34px}"
++".hdr-r{margin-left:auto;text-align:right;color:#fff}"
++".hdr-t{font-size:14px;font-weight:600}"
++".hdr-s{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px}"
++".body{background:#fff;padding:24px;margin:0 0 30px}"
++".section-title{font-size:14px;font-weight:600;color:var(--navy);margin:20px 0 12px}"
++".metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}"
++".metric{background:var(--light);border-radius:8px;padding:12px 14px}"
++".metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px}"
++".metric-value{font-size:20px;font-weight:700}"
++".metric-detail{font-size:11px;color:var(--muted);margin-top:2px}"
++".cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}"
++".cat-card{border-radius:8px;padding:12px 14px;border:1px solid var(--border)}"
++".cat-name{font-size:13px;font-weight:600;margin-bottom:6px}"
++".cat-row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}"
++".cat-label{color:var(--muted)}"
++".cat-val{font-weight:600}"
++".text-red{color:var(--red)}.text-green{color:var(--green)}.text-amber{color:var(--amb)}.text-blue{color:var(--blue)}.text-muted{color:var(--muted)}"
++".minibar-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;font-size:12px;color:var(--muted)}"
++".minibar-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}"
++".minibar-list{display:flex;flex-direction:column;margin-bottom:16px}"
++".minibar-row{display:grid;grid-template-columns:170px 1fr 120px;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}"
++".minibar-row.inv{grid-template-columns:190px 1fr}"
++".minibar-row:last-child{border-bottom:none}"
++".minibar-cat{font-weight:600;font-size:13px;color:var(--navy)}"
++".minibar-catval{font-size:11px;color:var(--muted);margin-top:2px}"
++".minibar-bars{display:flex;flex-direction:column;gap:6px}"
++".minibar-line{display:flex;align-items:center;gap:8px}"
++".minibar-tag{font-size:10px;color:var(--muted);width:46px;flex-shrink:0}"
++".minibar-track{flex:1;background:var(--light);border-radius:4px;height:12px;overflow:hidden}"
++".minibar-fill{height:100%;border-radius:4px}"
++".minibar-fill.falta{background:var(--red)}.minibar-fill.sobra{background:var(--amb)}.minibar-fill.vendas{background:var(--blue)}.minibar-fill.estoque{background:var(--amb)}"
++".minibar-val{font-size:11px;font-weight:600;min-width:66px;text-align:right;flex-shrink:0}"
++".minibar-saldo{border-radius:8px;padding:8px 10px;text-align:center}"
++".minibar-saldo.neg{background:#FDEAEA;border:1px solid var(--red)}.minibar-saldo.pos{background:#E8F8EF;border:1px solid var(--green)}.minibar-saldo.zero{background:var(--light);border:1px solid var(--border)}"
++".minibar-saldo-label{display:block;font-size:9px;text-transform:uppercase;color:var(--muted);margin-bottom:2px}"
++".minibar-saldo-val{display:block;font-size:14px;font-weight:700}"
++".minibar-saldo.neg .minibar-saldo-val{color:var(--red)}.minibar-saldo.pos .minibar-saldo-val{color:var(--green)}"
++".cat-table-wrap{overflow-x:auto;margin-bottom:16px;border:1px solid var(--border);border-radius:8px}"
++".cat-table{width:100%;border-collapse:collapse;font-size:12.5px}"
++".cat-table th{background:var(--navy);color:#fff;text-align:left;padding:8px 10px;font-size:11px;white-space:nowrap}"
++".cat-table th.num,.cat-table td.num{text-align:right}"
++".cat-table td{padding:7px 10px;border-bottom:1px solid var(--border)}"
++".cat-table tr:last-child td{border-bottom:none}"
++".cat-table tr:nth-child(even) td{background:var(--light)}"
++".table-wrap{border:1px solid var(--border);border-radius:8px;overflow-x:auto;margin-bottom:12px}"
++".data-table{width:100%;border-collapse:collapse;font-size:12.5px}"
++".data-table th{background:var(--navy);color:#fff;text-align:left;padding:8px 10px;font-size:10.5px;white-space:nowrap}"
++".data-table td{padding:6px 10px;border-bottom:1px solid var(--border)}"
++".data-table tr:nth-child(even) td{background:var(--light)}"
++".text-right{text-align:right}.text-center{text-align:center}"
++".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600}"
++".loss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}"
++".loss-card{border-radius:8px;padding:14px;text-align:center}"
++".loss-card.a{background:#FDEAEA;border:1px solid var(--red)}.loss-card.b{background:#FFF3E0;border:1px solid var(--amb)}.loss-card.c{background:var(--light);border:1px solid var(--border)}"
++".loss-title{font-size:11px;font-weight:600;margin-bottom:4px}"
++".loss-card.a .loss-title,.loss-card.a .loss-main{color:var(--red)}.loss-card.b .loss-title,.loss-card.b .loss-main{color:var(--amb)}.loss-card.c .loss-title{color:var(--muted)}"
++".loss-main{font-size:20px;font-weight:700;margin-bottom:2px}.loss-sub{font-size:11px;color:var(--muted)}"
++".chart-wrap img{max-width:100%;display:block;margin-bottom:16px}"
++".note{font-size:11.5px;color:var(--muted);margin-top:10px}"
++".ftr{max-width:1100px;margin:0 auto;padding:16px 24px;font-size:11px;color:var(--muted);text-align:center}"
++"h2{font-size:17px}"
++"@media(max-width:768px){.minibar-row,.minibar-row.inv{grid-template-columns:1fr;gap:6px}.loss-cards{grid-template-columns:1fr}}";
+
+function _htmlPage(titulo,info,pd,bodyHtml,logo){
+  var h='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
+  h+='<title>'+titulo+' — '+(info.cliente||'')+'</title><style>'+_HTML_CSS+'</style></head><body>';
+  h+='<div class="hdr">';
+  if(logo)h+='<img src="'+logo+'" alt="Formula Code">';
+  h+='<div class="hdr-r"><div class="hdr-t">'+titulo+'</div><div class="hdr-s">'+(info.cliente||'')+(info.unidade?' — '+info.unidade:'')+' · Inventário: '+(info.dataInventario||'—')+' · Processado em '+pd+'</div></div>';
+  h+='</div>';
+  h+='<div class="wrap"><div class="body">'+bodyHtml+'</div></div>';
+  h+='<div class="ftr">Formula Code Tecnologia, Gestão e Automação · Gerado em '+new Date().toLocaleString('pt-BR')+'</div>';
+  h+='</body></html>';
+  return h;
+}
+function _downloadHTML(filename,htmlStr){
+  var blob=new Blob([htmlStr],{type:'text/html;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+}
+
+function _catCardsHtml(catList,fields){
+  var h='<div class="cat-grid">';
+  catList.forEach(function(cat){
+    h+='<div class="cat-card"><div class="cat-name">'+cat.nome+'</div>';
+    fields.forEach(function(f){var val=f.fmt?f.fmt(cat[f.key]):cat[f.key];h+='<div class="cat-row"><span class="cat-label">'+f.label+'</span><span class="cat-val">'+val+'</span></div>';});
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
+function _catTableHtml(catList,columns){
+  var h='<div class="cat-table-wrap"><table class="cat-table"><thead><tr><th>Categoria</th>';
+  columns.forEach(function(c){h+='<th class="num">'+c.label+'</th>';});
+  h+='</tr></thead><tbody>';
+  catList.forEach(function(cat){
+    h+='<tr><td>'+cat.nome+'</td>';
+    columns.forEach(function(c){var v=c.fmt?c.fmt(cat[c.key]):cat[c.key];h+='<td class="num">'+v+'</td>';});
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+function _minibarFaltaSobraHtml(catList){
+  var maxVal=0;
+  catList.forEach(function(c){maxVal=Math.max(maxVal,Math.abs(c.faltaVal||0),c.sobraVal||0);});
+  if(maxVal<=0)maxVal=1;
+  var h='<div class="minibar-legend"><span><span class="minibar-dot" style="background:#D32F2F"></span>Faltas (R$)</span><span><span class="minibar-dot" style="background:#F57C00"></span>Sobras (R$)</span></div><div class="minibar-list">';
+  catList.forEach(function(c){
+    var wF=Math.round(Math.abs(c.faltaVal||0)/maxVal*100),wS=Math.round((c.sobraVal||0)/maxVal*100);
+    var saldoCls=c.saldo<0?'neg':(c.saldo>0?'pos':'zero');
+    h+='<div class="minibar-row"><div class="minibar-cat">'+c.nome+'</div><div class="minibar-bars">';
+    h+='<div class="minibar-line"><span class="minibar-tag">Faltas</span><div class="minibar-track"><div class="minibar-fill falta" style="width:'+wF+'%"></div></div><span class="minibar-val text-red">'+_abbr(Math.abs(c.faltaVal||0))+'</span></div>';
+    h+='<div class="minibar-line"><span class="minibar-tag">Sobras</span><div class="minibar-track"><div class="minibar-fill sobra" style="width:'+wS+'%"></div></div><span class="minibar-val text-amber">'+_abbr(c.sobraVal||0)+'</span></div>';
+    h+='</div><div class="minibar-saldo '+saldoCls+'"><span class="minibar-saldo-label">Saldo</span><span class="minibar-saldo-val">'+BRLi(c.saldo)+'</span></div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function _minibarVendaEstoqueHtml(catList){
+  var maxPct=0;
+  catList.forEach(function(c){maxPct=Math.max(maxPct,c.pctFat||0,c.pctInvest||0);});
+  if(maxPct<=0)maxPct=1;
+  var h='<div class="minibar-legend"><span><span class="minibar-dot" style="background:#1565C0"></span>Participação nas vendas</span><span><span class="minibar-dot" style="background:#F57C00"></span>Participação no valor do estoque</span></div><div class="minibar-list">';
+  catList.forEach(function(c){
+    var wV=Math.round((c.pctFat||0)/maxPct*100),wE=Math.round((c.pctInvest||0)/maxPct*100);
+    h+='<div class="minibar-row inv"><div class="minibar-cat">'+c.nome+'<div class="minibar-catval">'+BRLi(c.investimento)+' em estoque</div></div><div class="minibar-bars">';
+    h+='<div class="minibar-line"><span class="minibar-tag">Vendas</span><div class="minibar-track"><div class="minibar-fill vendas" style="width:'+wV+'%"></div></div><span class="minibar-val">'+PCT(c.pctFat)+'</span></div>';
+    h+='<div class="minibar-line"><span class="minibar-tag">Estoque</span><div class="minibar-track"><div class="minibar-fill estoque" style="width:'+wE+'%"></div></div><span class="minibar-val">'+PCT(c.pctInvest)+'</span></div>';
+    h+='</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function _dataTableHtml(cols,rows){
+  var h='<div class="table-wrap"><table class="data-table"><thead><tr>';
+  cols.forEach(function(c){h+='<th class="'+(c.align||'')+'">'+c.label+'</th>';});
+  h+='</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr>';
+    cols.forEach(function(c){
+      var v=r[c.f],out;
+      if(c.brl)out=BRL(v);else if(c.n)out=(v===null||v===undefined)?'—':NUMx(v);else out=(v===null||v===undefined||v==='')?'—':v;
+      h+='<td class="'+(c.align||'')+'">'+out+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+var NUMx=function(v){return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+
+function _bodyCritica(c){
+  var h='<div class="metrics">';
+  h+='<div class="metric"><div class="metric-label">Acuracidade</div><div class="metric-value text-green">'+PCT(c.acuracidade)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
+  h+='<div class="metric"><div class="metric-label">Valor das sobras</div><div class="metric-value text-amber">'+BRLi(c.totalSobras)+'</div><div class="metric-detail">'+NUM(c.sobraCount)+' SKUs</div></div>';
+  h+='<div class="metric"><div class="metric-label">Saldo líquido</div><div class="metric-value text-red">'+BRLi(c.saldoLiquido)+'</div></div>';
+  h+='</div>';
+  if(c.hasCategorias){
+    h+='<div class="section-title">Resultado por categoria</div>';
+    h+=_catCardsHtml(c.categorias,[{label:'Acuracidade',key:'acuracidade',fmt:PCT},{label:'Faltas',key:'faltaVal',fmt:BRLi},{label:'Sobras',key:'sobraVal',fmt:BRLi},{label:'Saldo',key:'saldo',fmt:BRLi}]);
+    h+=_minibarFaltaSobraHtml(c.categorias);
+  }
+  h+='<div class="section-title">Itens ('+NUM(c.items.length)+')</div>';
+  h+=_dataTableHtml([{label:'SKU',f:'sku'},{label:'Descrição',f:'descricao'},{label:'Categoria',f:'categoria'},{label:'Qtd sist.',f:'qtdSistema',align:'text-right',n:true},{label:'Qtd cont.',f:'qtdContada',align:'text-right',n:true},{label:'Dif. qtd',f:'difQtd',align:'text-right',n:true},{label:'Dif. R$',f:'difValor',align:'text-right',brl:true},{label:'Status',f:'status',align:'text-center'}],c.items);
+  return h;
+}
+function _bodyRuptura(r){
+  var h='<div class="metrics">';
+  h+='<div class="metric"><div class="metric-label">Taxa de ruptura geral</div><div class="metric-value text-red">'+PCT(r.taxaRuptura)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(r.totalRupturas)+'</div><div class="metric-detail">de '+NUM(r.totalComDeposito)+' com depósito</div></div>';
+  h+='<div class="metric"><div class="metric-label">Ruptura curva A (fat.)</div><div class="metric-value text-red">'+PCT(r.taxaA)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Ruptura curva A (lucro)</div><div class="metric-value text-red">'+PCT(r.taxaALucro)+'</div></div>';
+  h+='</div>';
+  h+='<div class="loss-cards"><div class="loss-card a"><div class="loss-title">Curva A em ruptura</div><div class="loss-main">'+NUM(r.rupturaA)+' SKUs</div></div><div class="loss-card b"><div class="loss-title">Curva B em ruptura</div><div class="loss-main">'+NUM(r.rupturaB)+' SKUs</div></div><div class="loss-card c"><div class="loss-title">Curva C em ruptura</div><div class="loss-main">'+NUM(r.rupturaC)+' SKUs</div></div></div>';
+  if(r.hasCategorias){
+    h+='<div class="section-title">Ruptura Loja x Depósito por categoria</div>';
+    h+=_catCardsHtml(r.categorias,[{label:'Rupturas',key:'totalRupturas',fmt:NUM},{label:'Taxa ruptura',key:'taxa',fmt:PCT},{label:'Rupturas curva A',key:'rupturaA',fmt:NUM},{label:'Perda fat./dia',key:'perdaDia',fmt:BRLi}]);
+  }
+  h+='<div class="section-title">Itens ('+NUM(r.items.length)+')</div>';
+  h+=_dataTableHtml([{label:'SKU',f:'sku'},{label:'Descrição',f:'descricao'},{label:'Categoria',f:'categoria'},{label:'ABC fat.',f:'abc_valorVendido90',align:'text-center'},{label:'Qtd depósito',f:'deposito',align:'text-right',n:true},{label:'Qtd loja',f:'loja',align:'text-right',n:true},{label:'Venda méd/dia',f:'vendaMediaDia',align:'text-right',n:true},{label:'Fat. méd/dia',f:'fatMediaDia',align:'text-right',brl:true}],r.items);
+  return h;
+}
+function _bodyDias(d){
+  var h='<div class="metrics">';
+  h+='<div class="metric"><div class="metric-label">Cobertura de estoque</div><div class="metric-value">'+d.coberturaGeral+' dias</div></div>';
+  h+='<div class="metric"><div class="metric-label">Cobertura curva A</div><div class="metric-value">'+d.coberturaA+' dias</div></div>';
+  h+='<div class="metric"><div class="metric-label">Cobertura curva B</div><div class="metric-value">'+d.coberturaB+' dias</div></div>';
+  h+='<div class="metric"><div class="metric-label">Cobertura curva C</div><div class="metric-value">'+d.coberturaC+' dias</div></div>';
+  h+='<div class="metric"><div class="metric-label">SKUs sem giro</div><div class="metric-value text-red">'+NUM(d.semGiro)+'</div></div>';
+  h+='</div>';
+  if(d.hasCategorias){
+    h+='<div class="section-title">Cobertura por categoria</div>';
+    h+=_catTableHtml(d.categorias,[{label:'Cobertura média',key:'mediaCobertura',fmt:function(v){return v+' dias';}},{label:'Val. estoque',key:'valorEstoque',fmt:BRLi},{label:'Ruptura + Alto risco',key:'criticos',fmt:NUM},{label:'Sem giro',key:'semGiro',fmt:NUM},{label:'Excesso (31+d)',key:'excessos',fmt:NUM}]);
+  }
+  h+='<div class="section-title">Itens ('+NUM(d.items.length)+')</div>';
+  h+=_dataTableHtml([{label:'SKU',f:'sku'},{label:'Descrição',f:'descricao'},{label:'Categoria',f:'categoria'},{label:'Qtd estoque',f:'qtdEstoque',align:'text-right',n:true},{label:'Dias estoque',f:'diasEstoque',align:'text-right'},{label:'Cobertura',f:'faixa',align:'text-center'},{label:'Val. estoque',f:'valorEstoque',align:'text-right',brl:true},{label:'ABC fat.',f:'abcFat',align:'text-center'}],d.items);
+  return h;
+}
+function _bodyABC(a){
+  var h='<div class="metrics">';
+  h+='<div class="metric"><div class="metric-label">Valor total em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Faturamento 90 dias</div><div class="metric-value">'+BRLi(a.totalFat)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Lucro 90 dias</div><div class="metric-value">'+BRLi(a.totalLucro)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">SKUs analisados</div><div class="metric-value">'+NUM(a.items.length)+'</div></div>';
+  h+='</div>';
+  if(a.hasCategorias){
+    h+='<div class="section-title">Investimento em Estoque</div>';
+    h+=_minibarVendaEstoqueHtml(a.categorias);
+  }
+  h+='<div class="section-title">Itens ('+NUM(a.items.length)+')</div>';
+  h+=_dataTableHtml([{label:'SKU',f:'sku'},{label:'Descrição',f:'descricao'},{label:'ABC fat.',f:'abcFat',align:'text-center'},{label:'ABC lucro',f:'abcLucro',align:'text-center'},{label:'Qtd estoque',f:'qtdEstoque',align:'text-right',n:true},{label:'Valor estoque',f:'valorInvestido',align:'text-right',brl:true},{label:'Fat. 90d',f:'fat90',align:'text-right',brl:true},{label:'Lucro 90d',f:'lucro90',align:'text-right',brl:true}],a.items);
+  return h;
+}
+function _bodyPerda(p){
+  var h='<div class="metrics">';
+  h+='<div class="metric"><div class="metric-label">Venda perdida / dia</div><div class="metric-value text-red">'+BRLi(p.totalPerdaFat)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Lucro perdido / dia</div><div class="metric-value text-red">'+BRLi(p.totalPerdaLucro)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">Perda mensal (fat.)</div><div class="metric-value text-red">'+BRLi(p.perdaMensal)+'</div></div>';
+  h+='<div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(p.totalSKUs)+'</div></div>';
+  h+='</div>';
+  h+='<div class="loss-cards"><div class="loss-card a"><div class="loss-title">Curva A — perda/dia</div><div class="loss-main">'+BRLi(p.classA.perda)+'</div></div><div class="loss-card b"><div class="loss-title">Curva B — perda/dia</div><div class="loss-main">'+BRLi(p.classB.perda)+'</div></div><div class="loss-card c"><div class="loss-title">Curva C — perda/dia</div><div class="loss-main">'+BRLi(p.classC.perda)+'</div></div></div>';
+  if(p.hasCategorias){
+    h+='<div class="section-title">Perda projetada por categoria</div>';
+    h+=_catCardsHtml(p.categorias,[{label:'Rupturas',key:'totalRupturas',fmt:NUM},{label:'Perda fat./dia',key:'perdaFatDia',fmt:BRLi},{label:'Perda lucro/dia',key:'perdaLucroDia',fmt:BRLi},{label:'Perda mensal',key:'perdaMensal',fmt:BRLi},{label:'Rupturas A',key:'rupturaA',fmt:NUM}]);
+    var img=chartPerdaCategoria(p);
+    if(img)h+='<div class="chart-wrap"><img src="'+img+'" alt="Perda projetada por categoria"></div>';
+  }
+  h+='<div class="section-title">Itens ('+NUM(p.items.length)+')</div>';
+  h+=_dataTableHtml([{label:'SKU',f:'sku'},{label:'Descrição',f:'descricao'},{label:'Categoria',f:'categoria'},{label:'ABC fat.',f:'abcFat',align:'text-center'},{label:'Perda fat./dia',f:'perdaFatDia',align:'text-right',brl:true},{label:'Perda lucro/dia',f:'perdaLucroDia',align:'text-right',brl:true},{label:'Perda fat./mês',f:'perdaFatMes',align:'text-right',brl:true}],p.items);
+  return h;
+}
+
+var _HTML_TITLES={critica:'Crítica do Inventário (Acuracidade)',ruptura:'Ruptura Loja x Depósito',dias:'Dias de Estoque (Cobertura)',abc:'Investimento em Estoque',perda:'Projeção de Perda'};
+var _HTML_BODYFN={critica:_bodyCritica,ruptura:_bodyRuptura,dias:_bodyDias,abc:_bodyABC,perda:_bodyPerda};
+
+function generateHTML(type,data,pd,logo,info){
+  info=info||{};
+  var d=data[type];
+  if(!d){alert('Este relatório ainda não foi gerado.');return;}
+  var titulo=_HTML_TITLES[type]||type;
+  var body=_HTML_BODYFN[type](d);
+  var html=_htmlPage(titulo,info,pd,body,logo);
+  _downloadHTML('auditoria_'+type+'_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.unidade||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.html',html);
+}
+
+function generateResumoHTML(results,recs,info,unidade,logo){
+  info=info||{};
+  var pd=new Date().toLocaleString('pt-BR');
+  var h='<div class="section-title" style="font-size:20px;margin-top:0">Resumo Executivo</div>';
+  h+='<div class="metrics">';
+  if(results.critica){var c=results.critica;h+='<div class="metric"><div class="metric-label">Acuracidade</div><div class="metric-value text-green">'+PCT(c.acuracidade)+'</div><div class="metric-detail">'+NUM(c.totalSKUs)+' SKUs · '+NUM(c.faltaCount)+' faltas · '+NUM(c.sobraCount)+' sobras</div></div>';}
+  if(results.ruptura){var ru=results.ruptura;h+='<div class="metric"><div class="metric-label">Ruptura loja x depósito</div><div class="metric-value text-red">'+PCT(ru.taxaRuptura)+'</div><div class="metric-detail">'+NUM(ru.totalRupturas)+' SKUs em falta</div></div>';}
+  if(results.dias){var d=results.dias;h+='<div class="metric"><div class="metric-label">Cobertura</div><div class="metric-value">'+Engine.round2(d.coberturaGeral)+' dias</div><div class="metric-detail">Sem giro: '+NUM(d.semGiro)+' · Excesso: '+NUM(d.excessos)+'</div></div>';}
+  if(results.abc){var a=results.abc;h+='<div class="metric"><div class="metric-label">Investimento em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div><div class="metric-detail">Faturamento: '+BRLi(a.totalFat)+'</div></div>';}
+  if(results.perda){var pe=results.perda;h+='<div class="metric"><div class="metric-label">Projeção de perda mensal</div><div class="metric-value text-red">'+BRLi(pe.perdaMensal)+'</div><div class="metric-detail">'+NUM(pe.totalSKUs)+' SKUs identificados</div></div>';}
+  h+='</div>';
+  if(recs&&recs.length){
+    h+='<div class="section-title">Recomendações</div><div style="background:var(--light);border-radius:8px;padding:16px 20px;margin-bottom:20px">';
+    recs.forEach(function(rec){h+='<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">'+rec.texto+'</div>';});
+    h+='</div>';
+  }
+  if(results.critica)h+='<h2 style="color:var(--navy);margin:28px 0 4px">Crítica do Inventário (Acuracidade)</h2>'+_bodyCritica(results.critica);
+  if(results.ruptura)h+='<h2 style="color:var(--navy);margin:28px 0 4px">Ruptura Loja x Depósito</h2>'+_bodyRuptura(results.ruptura);
+  if(results.dias)h+='<h2 style="color:var(--navy);margin:28px 0 4px">Dias de Estoque (Cobertura)</h2>'+_bodyDias(results.dias);
+  if(results.abc)h+='<h2 style="color:var(--navy);margin:28px 0 4px">Investimento em Estoque</h2>'+_bodyABC(results.abc);
+  if(results.perda)h+='<h2 style="color:var(--navy);margin:28px 0 4px">Projeção de Perda</h2>'+_bodyPerda(results.perda);
+  var html=_htmlPage('Relatório Completo — Análise de Inventários',info,pd,h,logo);
+  _downloadHTML('relatorio_completo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(unidade||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.html',html);
+}
+
+function generateComparativoHTML(comp,units,info,logo){
+  info=info||{};
+  var pd=new Date().toLocaleString('pt-BR');
+  var h='<div class="section-title" style="font-size:20px;margin-top:0">Comparativo entre unidades — '+comp.unidades.length+' unidades</div>';
+  if(comp.skuOverlap){
+    h+='<div class="metrics"><div class="metric"><div class="metric-label">SKUs únicos (total)</div><div class="metric-value">'+NUM(comp.skuOverlap.totalUnique)+'</div></div><div class="metric"><div class="metric-label">Em comum</div><div class="metric-value text-green">'+NUM(comp.skuOverlap.emComum)+'</div></div><div class="metric"><div class="metric-label">Sobreposição</div><div class="metric-value text-green">'+PCT(comp.skuOverlap.pctComum)+'</div></div></div>';
+  }
+  h+='<div class="section-title">Ranking por métrica</div>';
+  h+='<div class="table-wrap"><table class="data-table"><thead><tr><th>Métrica</th>';
+  comp.unidades.forEach(function(u){h+='<th class="text-right">'+u.unidade+'</th>';});
+  h+='</tr></thead><tbody>';
+  comp.rankings.forEach(function(r){
+    h+='<tr><td>'+r.label+'</td>';
+    r.valores.forEach(function(v){
+      var fv=v.valor;
+      if(r.fmt==='pct')fv=PCT(v.valor);else if(r.fmt==='brl')fv=BRLi(v.valor);else if(r.fmt==='num')fv=NUM(v.valor);
+      var marca=(r.melhor&&v.unidade===r.melhor?' ★':'')+(r.pior&&v.unidade===r.pior?' ▼':'');
+      h+='<td class="text-right">'+fv+marca+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div class="note">★ = melhor desempenho na métrica · ▼ = pior desempenho</div>';
+  var html=_htmlPage('Comparativo entre unidades',info,pd,h,logo);
+  _downloadHTML('comparativo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.html',html);
+}
+
+return{generateExcel:generateExcel,generateExcelBlob:generateExcelBlob,buildExcelWorkbook:buildExcelWorkbook,generatePDF:generatePDF,generateComparativoPDF:generateComparativoPDF,generateComparativoExcel:generateComparativoExcel,generateResumoPDF:generateResumoPDF,generateResumoPPTX:generateResumoPPTX,generateHTML:generateHTML,generateResumoHTML:generateResumoHTML,generateComparativoHTML:generateComparativoHTML};
 
 })();
