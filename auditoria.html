@@ -58,6 +58,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .subsecao-header:hover{background:#e8ecf0}
 .subsecao-header .sh-titulo{font-size:13px;font-weight:600;color:var(--text)}
 .subsecao-header .sh-badge{font-size:11px;padding:2px 8px;border-radius:8px;font-weight:600}
+.btn-remover-refeicao{background:none;border:none;color:#C0392B;font-size:15px;padding:2px 6px;cursor:pointer;border-radius:6px}
+.btn-remover-refeicao:hover{background:#FDEAEA}
 .subsecao-header .sh-badge.pendente{background:#fef3cd;color:#856404}
 .subsecao-header .sh-badge.preenchido{background:rgba(97,207,0,.15);color:#3a8000}
 .subsecao-body{padding:16px;display:none;border-top:1px solid var(--border)}
@@ -158,7 +160,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r98';
+const VERSAO = 'r101';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -265,6 +267,18 @@ const SECOES = [
     ],
     observacao:{id:'obs_camaras',label:'Observações sobre as câmaras'},
     fotos:{max:99,label:'Fotos das câmaras'}
+  },
+  // ── 4b. ALIMENTAÇÃO (r100) ──
+  // Seção dinâmica: em vez de subseções fixas, o auditor adiciona 1 entrada
+  // por refeição servida (lanche/almoço/jantar), cada uma avaliada em
+  // Qualidade e Quantidade no mesmo formato (1-10 + N/A) das demais seções.
+  // Renderização própria (renderSecaoAlimentacao) — ver 'tipo:alimentacao'.
+  {
+    id:'alimentacao', titulo:'Alimentação', icone:'bi-egg-fried',
+    tipo:'alimentacao',
+    estrutura:'Equipe', departamento:'Refeições',
+    observacao:{id:'obs_alimentacao',label:'Observações sobre a alimentação'},
+    fotos:{max:99,label:'Fotos das refeições'}
   },
   // ── 5. PERECÍVEIS — ÁREA DE VENDAS ──
   {
@@ -412,7 +426,12 @@ let state = {
   unidades: {},        // { cliente: [unidades] }
   rascunhos: [],       // lista de rascunhos do usuário
   status: 'NOVO',      // NOVO | RASCUNHO | CONCLUIDO
-  editando: false      // true quando editando auditoria existente
+  editando: false,     // true quando editando auditoria existente
+  // r100: lista dinâmica de refeições avaliadas na aba Alimentação — cada
+  // entrada vira 2 critérios (qualidade/quantidade) com o mesmo formato de
+  // avaliação das demais seções. Reconstruída a partir de respostas/observacoes
+  // sempre que uma auditoria é carregada (ver reconstruirAlimentacaoRefeicoes).
+  alimentacaoRefeicoes: [{ id: 'ref1', tipo: '' }]
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -452,9 +471,22 @@ function scoreColor(v) {
   return 'var(--green)';
 }
 
+// r100: gera os 2 IDs de critério (qualidade/quantidade) de cada refeição
+// adicionada — reaproveitados por calcMediaSecao, secaoPreenchida e pelo
+// próprio renderSecaoAlimentacao, sempre a partir da mesma fonte única.
+function criteriosAlimentacao() {
+  const out = [];
+  state.alimentacaoRefeicoes.forEach(r => {
+    out.push({ id: 'alim_' + r.id + '_qualidade', label: 'Qualidade da refeição' });
+    out.push({ id: 'alim_' + r.id + '_quantidade', label: 'Quantidade da refeição' });
+  });
+  return out;
+}
+
 function calcMediaSecao(secao) {
   let criterios = secao.criterios || [];
   if (secao.subsecoes) criterios = secao.subsecoes.flatMap(s => s.criterios);
+  if (secao.tipo === 'alimentacao') criterios = criteriosAlimentacao();
   const notas = criterios.map(c => state.respostas[c.id]).filter(v => v && v !== 'NA');
   if (!notas.length) return null;
   return (notas.reduce((a,b) => a+b, 0) / notas.length).toFixed(1);
@@ -468,6 +500,11 @@ function secaoPreenchida(secao) {
     return obrigatorios.every(c => state.identificacao[c]);
   }
   if (secao.tipo === 'finalizacao') return true;
+  if (secao.tipo === 'alimentacao') {
+    if (!state.alimentacaoRefeicoes.length) return false;
+    return state.alimentacaoRefeicoes.every(r =>
+      r.tipo && state.respostas['alim_'+r.id+'_qualidade'] !== undefined && state.respostas['alim_'+r.id+'_quantidade'] !== undefined);
+  }
   return criterios.length > 0 && criterios.every(c => state.respostas[c.id] !== undefined);
 }
 
@@ -611,6 +648,7 @@ function novaAvaliacao() {
   state.identificacao = {};
   state.secaoAtual = 0;
   state.status = 'RASCUNHO';
+  state.alimentacaoRefeicoes = [{ id: 'ref1', tipo: '' }];
   renderFormulario();
 }
 
@@ -645,6 +683,7 @@ async function carregarRascunho(idx) {
       state.secaoAtual = 0;
     }
   }
+  state.alimentacaoRefeicoes = reconstruirAlimentacaoRefeicoes(state.respostas, state.observacoes);
   state.status = 'RASCUNHO';
   hideLoading();
   renderFormulario();
@@ -672,6 +711,8 @@ function renderFormulario() {
     conteudo = renderIdentificacao(secao);
   } else if (secao.tipo === 'finalizacao') {
     conteudo = renderFinalizacao(secao);
+  } else if (secao.tipo === 'alimentacao') {
+    conteudo = renderSecaoAlimentacao(secao);
   } else {
     conteudo = renderSecaoAvaliacao(secao);
   }
@@ -885,6 +926,128 @@ function setNota(criterioId, valor) {
 
 function setObs(obsId, valor) {
   state.observacoes[obsId] = valor;
+}
+
+/* ── ALIMENTAÇÃO (r100) — seção dinâmica, uma "refeição" por vez ── */
+const TIPOS_REFEICAO = ['Lanche', 'Almoço', 'Jantar'];
+const MAX_REFEICOES = 6;
+
+function renderSecaoAlimentacao(secao) {
+  let html = `<div class="secao-card">
+    <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
+    <div class="secao-subtitulo">${secao.estrutura} → ${secao.departamento || ''}</div>`;
+
+  html += state.alimentacaoRefeicoes.map((r, idx) => {
+    const tipoOpcoes = TIPOS_REFEICAO.map(t =>
+      `<option value="${t}" ${r.tipo===t?'selected':''}>${t}</option>`
+    ).join('');
+    const removerBtn = state.alimentacaoRefeicoes.length > 1
+      ? `<button type="button" class="btn-remover-refeicao" onclick="removeRefeicao('${r.id}')" title="Remover refeição"><i class="bi bi-trash"></i></button>`
+      : '';
+    return `
+      <div class="subsecao aberta" id="sub_${r.id}">
+        <div class="subsecao-header" style="cursor:default">
+          <span class="sh-titulo">Refeição ${idx+1}${r.tipo ? ' — ' + r.tipo : ''}</span>
+          ${removerBtn}
+        </div>
+        <div class="subsecao-body">
+          <div class="campo-input">
+            <label>Tipo de refeição</label>
+            <select onchange="setAlimentacaoTipo('${r.id}',this.value)">
+              <option value="">Selecione...</option>
+              ${tipoOpcoes}
+            </select>
+          </div>
+          ${renderCriterio({ id: 'alim_'+r.id+'_qualidade', label: 'Qualidade da refeição' })}
+          ${renderCriterio({ id: 'alim_'+r.id+'_quantidade', label: 'Quantidade da refeição' })}
+        </div>
+      </div>`;
+  }).join('');
+
+  html += state.alimentacaoRefeicoes.length < MAX_REFEICOES
+    ? `<button type="button" class="btn-fc btn-fc-outline" style="margin-top:8px" onclick="addRefeicao()">
+         <i class="bi bi-plus-lg"></i> Adicionar outra refeição
+       </button>`
+    : '';
+
+  const media = calcMediaSecao(secao);
+  if (media) {
+    html += `<div class="score-preview">
+      <span class="sp-valor" style="color:${scoreColor(parseFloat(media))}">${media}</span>
+      <span class="sp-label">Score parcial desta seção</span>
+    </div>`;
+  }
+
+  html += '</div>';
+
+  if (secao.observacao) {
+    html += `<div class="secao-card">
+      <div class="campo-obs">
+        <label>${secao.observacao.label}</label>
+        <textarea placeholder="Registre suas observações..."
+          oninput="setObs('${secao.observacao.id}',this.value)">${state.observacoes[secao.observacao.id]||''}</textarea>
+      </div>
+    </div>`;
+  }
+
+  if (secao.fotos) html += renderFotos(secao);
+
+  return html;
+}
+
+function setAlimentacaoTipo(refId, valor) {
+  const r = state.alimentacaoRefeicoes.find(x => x.id === refId);
+  if (!r) return;
+  r.tipo = valor;
+  // r100: guarda o valor bruto (sufixo _raw, usado só pra reconstruir o
+  // <select> ao recarregar a auditoria — filtrado do texto do relatório em
+  // montarPromptAuditoria) e uma frase pronta pro relatório de texto.
+  setObs('obs_alim_' + refId + '_tipo_raw', valor);
+  setObs('obs_alim_' + refId + '_tipo', valor ? ('Refeição registrada: ' + valor + '.') : '');
+  const header = document.querySelector('#sub_' + refId + ' .sh-titulo');
+  if (header) {
+    const idx = state.alimentacaoRefeicoes.indexOf(r);
+    header.textContent = 'Refeição ' + (idx + 1) + (valor ? ' — ' + valor : '');
+  }
+  updateStepper();
+}
+
+function addRefeicao() {
+  if (state.alimentacaoRefeicoes.length >= MAX_REFEICOES) return;
+  const idsExistentes = state.alimentacaoRefeicoes.map(r => r.id);
+  let i = state.alimentacaoRefeicoes.length + 1, novoId = 'ref' + i;
+  while (idsExistentes.indexOf(novoId) !== -1) { i++; novoId = 'ref' + i; }
+  state.alimentacaoRefeicoes.push({ id: novoId, tipo: '' });
+  renderFormulario();
+}
+
+function removeRefeicao(refId) {
+  if (state.alimentacaoRefeicoes.length <= 1) return;
+  state.alimentacaoRefeicoes = state.alimentacaoRefeicoes.filter(r => r.id !== refId);
+  delete state.respostas['alim_' + refId + '_qualidade'];
+  delete state.respostas['alim_' + refId + '_quantidade'];
+  delete state.observacoes['obs_alim_' + refId + '_tipo'];
+  delete state.observacoes['obs_alim_' + refId + '_tipo_raw'];
+  renderFormulario();
+}
+
+// r100: reconstrói a lista de refeições a partir de respostas/observacoes já
+// salvas (Alimentação não tem coluna própria no backend — reaproveita os
+// mesmos dois blobs JSON que todas as outras seções já usam). Chamada sempre
+// que uma auditoria é criada, carregada como rascunho ou aberta pra edição.
+function reconstruirAlimentacaoRefeicoes(respostas, observacoes) {
+  respostas = respostas || {};
+  observacoes = observacoes || {};
+  const nums = new Set();
+  Object.keys(respostas).forEach(k => {
+    const m = k.match(/^alim_ref(\d+)_(qualidade|quantidade)$/);
+    if (m) nums.add(parseInt(m[1], 10));
+  });
+  if (!nums.size) return [{ id: 'ref1', tipo: '' }];
+  return Array.from(nums).sort((a,b) => a-b).map(n => ({
+    id: 'ref' + n,
+    tipo: observacoes['obs_alim_ref' + n + '_tipo_raw'] || ''
+  }));
 }
 
 function toggleSubsecao(id) {
@@ -1293,6 +1456,7 @@ async function editarAuditoria(auditoriaId) {
   state.status = a.status || 'CONCLUIDO';
   state.secaoAtual = 0;
   state.editando = true;
+  state.alimentacaoRefeicoes = reconstruirAlimentacaoRefeicoes(state.respostas, state.observacoes);
   renderFormulario();
 }
 

@@ -1,4 +1,4 @@
-/* app.js — Upload, fuzzy mapping, tab nav, rendering — v3.10: coluna SKUs/cadastro removida, Cobertura por categoria em R$, ABC com 3ª barra (lucro) + cobertura em dias + perda projetada 30d nos itens zerados, custo unitário e categoria da Perda corrigidos (herdam de Estoque/Contagem/Cadastro) */
+/* app.js — Upload, fuzzy mapping, tab nav, rendering — v3.11: nenhuma mudança de tela nesta rodada (ajustes foram todos em PDF/HTML, ver export.js) */
 (function(){
 "use strict";
 Chart.register(ChartDataLabels);
