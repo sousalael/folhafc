@@ -1,4 +1,4 @@
-/* app.js — Upload, fuzzy mapping, tab nav, rendering — v3.9: mini-barras comparativas (Acuracidade/Investimento em Estoque), tabela de Cobertura por categoria, gráfico de Perda por categoria e exportação em HTML (por aba + relatório completo) */
+/* app.js — Upload, fuzzy mapping, tab nav, rendering — v3.10: coluna SKUs/cadastro removida, Cobertura por categoria em R$, ABC com 3ª barra (lucro) + cobertura em dias + perda projetada 30d nos itens zerados, custo unitário e categoria da Perda corrigidos (herdam de Estoque/Contagem/Cadastro) */
 (function(){
 "use strict";
 Chart.register(ChartDataLabels);
@@ -484,7 +484,8 @@ function processAll(){
   }
   State.results={};
   var avail={critica:false,ruptura:false,dias:false,abc:false,perda:false};
-  // Cadeia de prioridade de custo: estoque > arquivo custo > calculado ABC vendas > contagem
+  // Cadeia de prioridade de custo: estoque/contagem/cadastro (resolvidos por item dentro de cada cálculo, via critica.items[].custoUnit) > arquivo custo dedicado > calculado do CMV das vendas > contagem (mapa global, fallback final)
+  // r99: Ruptura e Perda agora também recebem custoMap + os itens já resolvidos da Crítica, corrigindo o bug em que só Contagem/CMV eram considerados nelas.
   var custoMap = hasVendas ? Engine.buildCustoMap(State.rawData.vendas) : {};
   // Custo do arquivo dedicado (sobrepõe o calculado das vendas)
   if(State.rawData.custo && State.rawData.custo.length){
@@ -522,7 +523,7 @@ function processAll(){
     setTimeout(function(){
       fill.style.width='50%';
       if(hasContagem){
-        State.results.ruptura=Engine.calcRuptura(State.rawData.contagem,hasVendas?State.rawData.vendas:[],State.rawData.cadastro,State.info.diasVenda);
+        State.results.ruptura=Engine.calcRuptura(State.rawData.contagem,hasVendas?State.rawData.vendas:[],State.rawData.cadastro,State.info.diasVenda,custoMap,State.results.critica?State.results.critica.items:null);
         avail.ruptura=true;
         carregarAnaliseIA('ruptura');
       }
@@ -541,7 +542,7 @@ function processAll(){
             carregarAnaliseIA('abc');
           }
           if(hasVendas&&(hasContagem||hasEstoque)){
-            State.results.perda=Engine.calcProjecaoPerda(State.rawData.vendas,State.rawData.contagem.length?State.rawData.contagem:State.rawData.estoque,State.rawData.cadastro,State.info.diasVenda);
+            State.results.perda=Engine.calcProjecaoPerda(State.rawData.vendas,State.rawData.contagem.length?State.rawData.contagem:State.rawData.estoque,State.rawData.cadastro,State.info.diasVenda,State.results.critica?State.results.critica.items:null);
             avail.perda=true;
             carregarAnaliseIA('perda');
           }
@@ -654,18 +655,20 @@ function renderCatBarsFaltaSobra(catList){
 /* v3.9: mini-barras comparativas Vendas x Estoque por categoria — usada em Investimento em Estoque */
 function renderCatBarsVendaEstoque(catList){
   var maxPct=0;
-  catList.forEach(function(c){maxPct=Math.max(maxPct,c.pctFat||0,c.pctInvest||0);});
+  catList.forEach(function(c){maxPct=Math.max(maxPct,c.pctFat||0,c.pctInvest||0,c.pctLucro||0);});
   if(maxPct<=0)maxPct=1;
-  var html='<div class="minibar-legend"><span><span class="minibar-dot" style="background:var(--fc-blue)"></span>Participação nas vendas</span><span><span class="minibar-dot" style="background:var(--fc-amb)"></span>Participação no valor do estoque</span></div>';
+  var html='<div class="minibar-legend"><span><span class="minibar-dot" style="background:var(--fc-blue)"></span>Participação nas vendas</span><span><span class="minibar-dot" style="background:var(--fc-amb)"></span>Participação no valor do estoque</span><span><span class="minibar-dot" style="background:var(--fc-green)"></span>Participação no lucro</span></div>';
   html+='<div class="minibar-list">';
   catList.forEach(function(c){
-    var wV=Math.round((c.pctFat||0)/maxPct*100),wE=Math.round((c.pctInvest||0)/maxPct*100);
+    var wV=Math.round((c.pctFat||0)/maxPct*100),wE=Math.round((c.pctInvest||0)/maxPct*100),wL=Math.round((c.pctLucro||0)/maxPct*100);
     html+='<div class="minibar-row inv">';
     html+='<div class="minibar-cat">'+c.nome+'<div class="minibar-catval">'+BRLi(c.investimento)+' em estoque</div></div>';
     html+='<div class="minibar-bars">';
     html+='<div class="minibar-line"><span class="minibar-tag">Vendas</span><div class="minibar-track"><div class="minibar-fill vendas" style="width:'+wV+'%"></div></div><span class="minibar-val">'+PCT(c.pctFat)+'</span></div>';
     html+='<div class="minibar-line"><span class="minibar-tag">Estoque</span><div class="minibar-track"><div class="minibar-fill estoque" style="width:'+wE+'%"></div></div><span class="minibar-val">'+PCT(c.pctInvest)+'</span></div>';
+    html+='<div class="minibar-line"><span class="minibar-tag">Lucro</span><div class="minibar-track"><div class="minibar-fill lucro" style="width:'+wL+'%"></div></div><span class="minibar-val">'+PCT(c.pctLucro)+'</span></div>';
     html+='</div>';
+    html+='<div class="minibar-cov"><span class="minibar-cov-label">Cobertura</span><span class="minibar-cov-val">'+NUM(c.coberturaDias)+'d</span></div>';
     html+='</div>';
   });
   html+='</div>';
@@ -926,9 +929,9 @@ function renderDias(page){
     html+=renderCatTable(d.categorias,[
       {label:'Cobertura média',key:'mediaCobertura',fmt:function(v){return v+' dias';}},
       {label:'Val. estoque',key:'valorEstoque',fmt:BRLi},
-      {label:'Ruptura + Alto risco',key:'criticos',fmt:NUM},
-      {label:'Sem giro',key:'semGiro',fmt:NUM},
-      {label:'Excesso (31+d)',key:'excessos',fmt:NUM}
+      {label:'Ruptura + Alto risco',key:'valorCriticos',fmt:BRLi},
+      {label:'Sem giro',key:'valorSemGiro',fmt:BRLi},
+      {label:'Excesso (31+d)',key:'valorExcessos',fmt:BRLi}
     ]);
   }
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar..." value="'+srch+'" onkeyup="App.filterDiasSearch(this.value)">';
@@ -959,7 +962,7 @@ function renderABC(page){
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar..." value="'+srch+'" onkeyup="App.filterAbcSearch(this.value)">';
   if(a.hasCategorias) html+=renderCatFilterPills(a.categorias,fC,'filterAbcCat');
   html+='<button class="btn-export" onclick="App.openExport()"><i class="ti ti-download"></i> Excel</button><button class="btn-export btn-pdf" onclick="App.exportPDF(\'abc\')"><i class="ti ti-file-text"></i> PDF</button><button class="btn-export btn-html" onclick="App.exportHTML(\'abc\')"><i class="ti ti-file-type-html"></i> HTML</button></div>';
-  var th=[{label:'SKU',field:'sku'},{label:'Descrição',field:'descricao'},{label:'ABC fat.',align:'text-center',render:function(r){return '<span class="badge badge-'+r.abcFat.toLowerCase()+'">'+r.abcFat+'</span>';}},{label:'ABC lucro',align:'text-center',render:function(r){return '<span class="badge badge-'+r.abcLucro.toLowerCase()+'">'+r.abcLucro+'</span>';}},{label:'Qtd estoque',align:'text-right',render:function(r){return NUMBR(r.qtdEstoque);}},{label:'Valor Estoque',align:'text-right',render:function(r){return BRL(r.valorInvestido);}},{label:'Fat. 90d',align:'text-right',render:function(r){return BRL(r.fat90);}},{label:'Lucro 90d',align:'text-right',render:function(r){return BRL(r.lucro90);}}];
+  var th=[{label:'SKU',field:'sku'},{label:'Descrição',field:'descricao'},{label:'ABC fat.',align:'text-center',render:function(r){return '<span class="badge badge-'+r.abcFat.toLowerCase()+'">'+r.abcFat+'</span>';}},{label:'ABC lucro',align:'text-center',render:function(r){return '<span class="badge badge-'+r.abcLucro.toLowerCase()+'">'+r.abcLucro+'</span>';}},{label:'Qtd estoque',align:'text-right',render:function(r){return NUMBR(r.qtdEstoque);}},{label:'Valor Estoque',align:'text-right',render:function(r){return BRL(r.valorInvestido);}},{label:'Fat. 90d / Perda proj. 30d',align:'text-right',render:function(r){return r.qtdEstoque<=0?'<span class="text-red">'+BRL(r.perdaVenda30)+' (30d)</span>':BRL(r.fat90);}}];
   html+=renderTable(p,th,filtered,page||1,100);
   p.innerHTML=html; renderFns['panel-abc']=renderABC;
 }

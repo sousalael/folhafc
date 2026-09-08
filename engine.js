@@ -1,4 +1,4 @@
-/* engine.js — v1.1 (v3.9 app) — Motor de cálculos com custo derivado global e cobertura corrigida + % participação nas vendas por categoria (Investimento em Estoque) */
+/* engine.js — v1.2 (v3.10 app) — custo unitário e categoria unificados (Ruptura/Perda herdam de Estoque+Contagem+Cadastro via Crítica), valores em R$ por faixa crítica em Dias de Estoque, participação no lucro + cobertura em dias por categoria e perda de venda projetada (30d) por item no Investimento ABC */
 var Engine = (function(){
   "use strict";
   function round2(n){ return Math.round((n||0)*100)/100; }
@@ -148,8 +148,20 @@ var Engine = (function(){
   }
 
   /* ========== 2. RUPTURA ========== */
-  function calcRuptura(contagem, vendas90, cadastro, diasVenda){
+  function calcRuptura(contagem, vendas90, cadastro, diasVenda, custoMap, criticaItems){
     diasVenda = diasVenda || 90;
+    custoMap = custoMap || {};
+    /* r99: mapa de custo já resolvido pela Crítica (Estoque → Contagem → Cadastro) —
+       cadeia mais completa que a Ruptura tinha sozinha (só Contagem + CMV de Vendas).
+       Corrige o bug de "custo unitário quebrado" quando o custo só vem do arquivo de
+       Estoque, do Cadastro ou do arquivo de Custo dedicado (nenhum dos três era
+       considerado aqui antes). */
+    var critCustoMap = {};
+    if(criticaItems && criticaItems.length){
+      criticaItems.forEach(function(it){
+        if(it.sku && it.custoUnit>0) critCustoMap[String(it.sku).trim()] = it.custoUnit;
+      });
+    }
     var catMap={},descMap={};
     if(cadastro&&cadastro.length){cadastro.forEach(function(r){var s=String(r.sku||'').trim();if(s&&r.categoria)catMap[s]=r.categoria;if(s&&r.descricao)descMap[s]=r.descricao;});}
     if(vendas90&&vendas90.length){vendas90.forEach(function(r){var s=String(r.sku||'').trim();if(s&&r.categoria&&!catMap[s])catMap[s]=r.categoria;});}
@@ -183,8 +195,8 @@ var Engine = (function(){
         it.valorVendido90 = v.valorVendido||0;
         it.lucro90 = v.lucro||((v.valorVendido||0)-(v.custoVendido||0));
         if(!it.categoria) it.categoria = catMap[sku] || v.categoria || '';
-        // Custo do CMV
-        var custoU = it.custoUnit || (v.qtdVendida>0 ? round2(v.custoVendido/v.qtdVendida) : 0);
+        // Custo: contagem (já no item) > crítica (Estoque/Contagem/Cadastro) > mapa global (custo dedicado/CMV vendas) > CMV do próprio item > 0
+        var custoU = it.custoUnit || critCustoMap[sku] || custoMap[sku] || (v.qtdVendida>0 ? round2(v.custoVendido/v.qtdVendida) : 0);
         it.custoUnit = custoU;
         it.valorEstoque = round2((it.deposito + it.loja) * custoU);
         comDeposito.push(it);
@@ -297,7 +309,10 @@ var Engine = (function(){
       var cr=g.items.filter(function(i){return i.faixa==='Ruptura'||i.faixa==='Alto risco'}).length;
       var ex=g.items.filter(function(i){return i.faixa==='Excesso de cobertura'}).length;
       var valEst=g.items.reduce(function(s,i){return s+i.valorEstoque},0);
-      return {nome:g.nome, total:g.items.length, mediaCobertura:cob, semGiro:sg, criticos:cr, excessos:ex, valorEstoque:round2(valEst), destaque:cr+sg};
+      var valSg=g.items.filter(function(i){return i.faixa==='Sem giro'}).reduce(function(s,i){return s+i.valorEstoque},0);
+      var valCr=g.items.filter(function(i){return i.faixa==='Ruptura'||i.faixa==='Alto risco'}).reduce(function(s,i){return s+i.valorEstoque},0);
+      var valEx=g.items.filter(function(i){return i.faixa==='Excesso de cobertura'}).reduce(function(s,i){return s+i.valorEstoque},0);
+      return {nome:g.nome, total:g.items.length, mediaCobertura:cob, semGiro:sg, criticos:cr, excessos:ex, valorEstoque:round2(valEst), valorSemGiro:round2(valSg), valorCriticos:round2(valCr), valorExcessos:round2(valEx), destaque:cr+sg};
     });
     return {items:items, coberturaGeral:coberturaGeral, coberturaA:coberturaA, coberturaB:coberturaB, coberturaC:coberturaC, semGiro:semGiro, ruptura:ruptura, altoRisco:altoRisco, medioRisco:medioRisco, coberturaIdeal:coberturaIdeal, excessos:excessos, valorExcesso:round2(valExcesso), total:items.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
@@ -316,7 +331,13 @@ var Engine = (function(){
       var lucro=v.lucro||((v.valorVendido||0)-(v.custoVendido||0));
       if(!lucro&&v.valorVendido&&it.custoUnit) lucro=v.valorVendido-(v.qtdVendida*it.custoUnit);
       var custo = resolveCusto(it, custoMap);
-      return {sku:it.sku, descricao:it.descricao, categoria:it.categoria, qtdEstoque:it.qtdContada, custoUnit:custo, valorInvestido:round2(it.qtdContada*custo), fat90:v.valorVendido||0, lucro90:round2(lucro), qtdVendida90:v.qtdVendida||0};
+      var qtdEstoque = it.qtdContada;
+      /* r99: para itens com estoque zerado, o Fat.90d realizado não faz sentido como
+         indicador de investimento (não há investimento) — nesses casos calcula-se em
+         paralelo a projeção de perda de venda em 30 dias (mesma lógica de Perda Projetada),
+         usada pela tela/exports no lugar do Fat.90d/Lucro90d só para essas linhas. */
+      var perdaVenda30 = qtdEstoque<=0 ? round2((v.valorVendido||0)/diasVenda*30) : null;
+      return {sku:it.sku, descricao:it.descricao, categoria:it.categoria, qtdEstoque:qtdEstoque, custoUnit:custo, valorInvestido:round2(qtdEstoque*custo), fat90:v.valorVendido||0, lucro90:round2(lucro), qtdVendida90:v.qtdVendida||0, perdaVenda30:perdaVenda30};
     });
     items=calcABC(items,'fat90');
     items=calcABC(items,'lucro90');
@@ -332,7 +353,11 @@ var Engine = (function(){
       var inv=g.items.reduce(function(s,i){return s+i.valorInvestido},0);
       var fat=g.items.reduce(function(s,i){return s+i.fat90},0);
       var luc=g.items.reduce(function(s,i){return s+i.lucro90},0);
-      return {nome:g.nome, total:g.items.length, investimento:round2(inv), faturamento:round2(fat), lucro:round2(luc), pctInvest:totalInvest?round2(inv/totalInvest*100):0, pctFat:totalFat?round2(fat/totalFat*100):0, destaque:inv};
+      var qtdEst=g.items.reduce(function(s,i){return s+(i.qtdEstoque||0)},0);
+      var qtdVend=g.items.reduce(function(s,i){return s+(i.qtdVendida90||0)},0);
+      var vendaMediaDiaCat=qtdVend/diasVenda;
+      var coberturaDias=vendaMediaDiaCat>0?roundInt(qtdEst/vendaMediaDiaCat):0;
+      return {nome:g.nome, total:g.items.length, investimento:round2(inv), faturamento:round2(fat), lucro:round2(luc), pctInvest:totalInvest?round2(inv/totalInvest*100):0, pctFat:totalFat?round2(fat/totalFat*100):0, pctLucro:totalLucro?round2(luc/totalLucro*100):0, coberturaDias:coberturaDias, destaque:inv};
     });
     return {items:items, totalInvest:round2(totalInvest), totalFat:round2(totalFat), totalLucro:round2(totalLucro),
       fatA:{invest:round2(agg('A','fat90')),fat:round2(aggF('A','fat90','fat90')),pctInvest:totalInvest?round2(agg('A','fat90')/totalInvest*100):0,pctFat:totalFat?round2(aggF('A','fat90','fat90')/totalFat*100):0},
@@ -345,7 +370,7 @@ var Engine = (function(){
   }
 
   /* ========== 5. PROJECAO DE PERDA ========== */
-  function calcProjecaoPerda(vendas90, contagem, cadastro, diasVenda){
+  function calcProjecaoPerda(vendas90, contagem, cadastro, diasVenda, criticaItems){
     diasVenda = diasVenda || 90;
     /* Mapa de contagem: SKU → qtd total contada */
     var contagemMap = {};
@@ -362,12 +387,22 @@ var Engine = (function(){
         if(sku && r.categoria) catMap[sku] = r.categoria;
       });
     }
+    /* r99: mapa de categoria já resolvida pela Crítica (Estoque → Contagem → Cadastro) —
+       cadeia bem mais completa que vendas+cadastro isolados. Usado como fallback extra
+       pra corrigir SKUs que ficavam "Sem categoria" só na Perda por não terem categoria
+       nem no arquivo de Vendas nem, coincidentemente, no Cadastro. */
+    var critCatMap = {};
+    if(criticaItems && criticaItems.length){
+      criticaItems.forEach(function(it){
+        if(it.sku && it.categoria) critCatMap[String(it.sku).trim()] = it.categoria;
+      });
+    }
     /* Agrupar vendas por SKU */
     var vendasMap = {};
     vendas90.forEach(function(r){
       var sku = String(r.sku||'').trim();
       if(!sku) return;
-      if(!vendasMap[sku]) vendasMap[sku] = {sku:sku, descricao:r.descricao||'', categoria:r.categoria||catMap[sku]||'',
+      if(!vendasMap[sku]) vendasMap[sku] = {sku:sku, descricao:r.descricao||'', categoria:r.categoria||critCatMap[sku]||catMap[sku]||'',
         qtdVendida:0, valorVendido:0, custoVendido:0, lucro:0};
       vendasMap[sku].qtdVendida += (Number(r.qtdVendida)||0);
       vendasMap[sku].valorVendido += (Number(r.valorVendido)||0);
@@ -388,7 +423,7 @@ var Engine = (function(){
       var vendaMediaDia = round2(v.qtdVendida / diasVenda);
       var fatMediaDia = round2(v.valorVendido / diasVenda);
       var lucroMediaDia = round2(v.lucro / diasVenda);
-      items.push({sku:sku, descricao:v.descricao, categoria:v.categoria || catMap[sku] || '',
+      items.push({sku:sku, descricao:v.descricao, categoria:v.categoria || critCatMap[sku] || catMap[sku] || '',
         abcFat:'C', abcLucro:'C',
         qtdVendida:v.qtdVendida, vendaMediaDia:vendaMediaDia,
         fatMediaDia:fatMediaDia, lucroMediaDia:lucroMediaDia,
