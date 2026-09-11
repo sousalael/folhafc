@@ -3371,6 +3371,23 @@
         return res.lista || [];
     }
 
+    // r104: versão "leve" que atualiza SÓ os 2 cards do topo da aba
+    // Despesas (Lançamentos no mês / Valor no mês) — sem tocar na tabela
+    // "Todas as Despesas", nos botões de editar/excluir ou nos 4 filtros
+    // em cascata. Usada apenas na carga automática ao abrir a aba; a
+    // exibição + edição completas só entram quando o usuário aperta 🔍
+    // (buscarDespesasGeral, inalterada).
+    async function atualizarCardsDespesasGeral(ini, fim) {
+        try {
+            const lista = await buscarDespesasPeriodo(ini, fim);
+            const total = lista.reduce((s, d) => s + Number(d.valor || 0), 0);
+            const cardQtd = document.getElementById('card-desp-qtd');
+            const cardValor = document.getElementById('card-desp-valor');
+            if (cardQtd) cardQtd.innerText = lista.length;
+            if (cardValor) cardValor.innerText = formatarReal(total);
+        } catch (e) { console.error('Cards Despesas: ' + e.message); }
+    }
+
     function atualizarAvisoEscopo() {
         const el = document.getElementById('aviso-escopo-despesas');
         if (!el) return;
@@ -4126,7 +4143,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-11-r103';
+    const VERSAO_ESPERADA = '2026-09-11-r104';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4253,7 +4270,12 @@
                 const paraISO = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
                 document.getElementById('desp-geral-ini').value = paraISO(iniMTD);
                 document.getElementById('desp-geral-fim').value = paraISO(hojeMTD);
-                buscarDespesasGeral();
+                // r104: antes chamava buscarDespesasGeral() aqui, que também
+                // renderizava a tabela inteira (com edição) e populava os 4
+                // filtros em cascata só para mostrar os 2 números dos
+                // cards. Agora só busca os dados e atualiza os cards; a
+                // lista + edição só carregam quando o usuário aperta 🔍.
+                atualizarCardsDespesasGeral(paraISO(iniMTD), paraISO(hojeMTD));
             }
 
             if (!pontoContadoresInicializado && getCpfLogado()) {
