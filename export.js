@@ -1,4 +1,4 @@
-/* export.js — r102 — mantém tudo do v3.9 + gráficos de barra (Chart.js) substituídos por mini-barras desenhadas nativamente (jsPDF/pptxgenjs) em Crítica/Ruptura/ABC/Perda, gráfico de Dias de Estoque removido (sem substituto), Resumo Executivo com análise textual de Ruptura/Dias + tabela de distribuição de Dias, PPTX com mini-barras em forma de shapes dentro dos limites do slide, e rótulo "Valor Quebra" no lugar de "Saldo Líquido" */
+/* export.js — r103 — mantém tudo do r102 + Comparativo (PDF/HTML): remove os cards de Sobreposição de SKUs, adiciona faixa de cards por unidade (Acuracidade/Valor Quebra/Cobertura de Estoque/SKUs em Ruptura/Venda perdida por dia) e usa o mesmo texto da Análise Comparativa exibido na tela */
 var Export=(function(){
 "use strict";
 var C={navy:'051323',green:'00B74A',red:'D32F2F',amb:'F57C00',blue:'1565C0',white:'FFFFFF',light:'F5F5F5',lightG:'F0F0F0',border:'D0D0D0',text:'333333',muted:'888888'};
@@ -334,8 +334,8 @@ function _generatePDFInternal(rt,data,pd,logo,info){
   doc.save('resumo_'+rt+'_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.unidade||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.pdf');
 }
 /* ========== PDF COMPARATIVO ========== */
-function generateComparativoPDF(comp, units, info, iaTextos, logo){
-  iaTextos=iaTextos||{};info=info||{};
+function generateComparativoPDF(comp, units, info, analiseTxt, logo){
+  info=info||{};
   var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   var W=210,H=297,M=15,y=0;
   var pd=new Date().toLocaleString('pt-BR');
@@ -347,22 +347,51 @@ function generateComparativoPDF(comp, units, info, iaTextos, logo){
   function sec(t){chk(10);doc.setFontSize(11);doc.setTextColor(5,19,35);doc.setFont(undefined,'bold');doc.text(t,M,y);y+=6;doc.setFont(undefined,'normal');}
   function bloco(txt){if(!txt)return;chk(16);doc.setFontSize(8);doc.setTextColor(80,80,80);doc.setFont(undefined,'normal');var lines=doc.splitTextToSize(txt,W-2*M);doc.text(lines,M,y);y+=lines.length*3.5+4;}
   function aT(h,b,o){chk(20);doc.autoTable({startY:y,head:[h],body:b,margin:{left:M,right:M},headStyles:{fillColor:[5,19,35],fontSize:7,fontStyle:'bold',halign:'left'},bodyStyles:{fontSize:7,halign:'left'},alternateRowStyles:{fillColor:[245,245,245]},styles:{cellPadding:1.5,lineColor:[220,220,220],lineWidth:0.2},columnStyles:o||{}});y=doc.lastAutoTable.finalY+6;}
-  function kpi(lb,vl,cl){chk(18);var cw=(W-2*M)/lb.length;doc.setFillColor(245,245,245);doc.roundedRect(M,y-2,W-2*M,16,2,2,'F');for(var i=0;i<lb.length;i++){var x=M+i*cw+4;doc.setFontSize(7);doc.setTextColor(150,150,150);doc.setFont(undefined,'bold');doc.text(lb[i],x,y+3);doc.setFontSize(11);doc.setFont(undefined,'bold');var cc=cl[i]||[51,51,51];doc.setTextColor(cc[0],cc[1],cc[2]);doc.text(String(vl[i]),x,y+10);}doc.setFont(undefined,'normal');y+=20;}
+  /* r103: faixa de cards por unidade — mesmas 5 métricas do Comparativo na tela (Acuracidade, Valor Quebra, Cobertura de Estoque, SKUs em Ruptura, Venda perdida/dia) */
+  function storeCards(){
+    var n=comp.unidades.length;if(!n)return;
+    var gap=4,cw2=(W-2*M-(n-1)*gap)/n;
+    var rowsDef=[
+      {label:'Acuracidade',get:function(u){return u.acuracidade!=null?PCT(u.acuracidade):'—';},cor:function(){return[0,183,74];}},
+      {label:'Valor Quebra',get:function(u){return u.saldoLiquido!=null?BRLi(u.saldoLiquido):'—';},cor:function(u){return u.saldoLiquido<0?[211,47,47]:(u.saldoLiquido>0?[0,183,74]:[51,51,51]);}},
+      {label:'Cobertura de Estoque',get:function(u){return u.coberturaGeral!=null?(u.coberturaGeral+' dias'):'—';},cor:function(){return[51,51,51];}},
+      {label:'SKUs em Ruptura',get:function(u){return u.totalRupturas!=null?NUM(u.totalRupturas):'—';},cor:function(u){return u.totalRupturas>0?[211,47,47]:[136,136,136];}},
+      {label:'Venda perdida / dia',get:function(u){return u.perdaFatDia!=null?BRLi(u.perdaFatDia):'—';},cor:function(){return[211,47,47];}}
+    ];
+    var lineH=6.2,headH=9,padTop=4,ch=headH+padTop+rowsDef.length*lineH+3;
+    chk(ch+8);
+    var cy=y;
+    comp.unidades.forEach(function(u,i){
+      var cx=M+i*(cw2+gap);
+      doc.setFillColor(250,250,250);doc.setDrawColor(224,224,224);doc.roundedRect(cx,cy,cw2,ch,2,2,'FD');
+      doc.setFillColor(0,183,74);doc.rect(cx,cy,cw2,1.2,'F');
+      doc.setFontSize(8.5);doc.setTextColor(5,19,35);doc.setFont(undefined,'bold');
+      doc.text(String(u.unidade),cx+3,cy+7,{maxWidth:cw2-6});
+      doc.setFont(undefined,'normal');
+      var ry=cy+headH+padTop;
+      rowsDef.forEach(function(r){
+        doc.setFontSize(6.3);doc.setTextColor(136,136,136);
+        doc.text(r.label,cx+3,ry);
+        ry+=3.2;
+        doc.setFontSize(8);var cc=r.cor(u);doc.setTextColor(cc[0],cc[1],cc[2]);doc.setFont(undefined,'bold');
+        doc.text(r.get(u),cx+3,ry);
+        doc.setFont(undefined,'normal');
+        ry+=lineH-3.2;
+      });
+    });
+    y=cy+ch+8;
+  }
 
   hdr();ftr(1);
   ttl('Comparativo entre unidades — '+comp.unidades.length+' unidades');
 
-  /* KPIs globais */
-  if(comp.skuOverlap){
-    sec('Sobreposição de SKUs');
-    kpi(['SKUS ÚNICOS (TOTAL)','EM COMUM','SOBREPOSIÇÃO'],
-      [NUM(comp.skuOverlap.totalUnique),NUM(comp.skuOverlap.emComum),PCT(comp.skuOverlap.pctComum)],
-      [[51,51,51],[0,183,74],[0,183,74]]);
-  }
+  /* r103: Análise Comparativa — mesmo texto exibido na tela (IA ou fallback local) */
+  sec('Análise Comparativa');
+  bloco(analiseTxt||'Análise comparativa entre '+comp.unidades.length+' unidades do cliente '+(info.cliente||'')+' referente ao inventário de '+(info.dataInventario||'')+'.');
 
-  /* IA resumo comparativo */
-  sec('Análise comparativa');
-  bloco(iaTextos.resumo_comparativo||'Análise comparativa entre '+comp.unidades.length+' unidades do cliente '+(info.cliente||'')+' referente ao inventário de '+(info.dataInventario||'')+'.');
+  /* r103: cards por unidade */
+  sec('Indicadores por unidade');
+  storeCards();
 
   /* Tabela de rankings */
   sec('Ranking por métrica');
@@ -382,18 +411,6 @@ function generateComparativoPDF(comp, units, info, iaTextos, logo){
   var colStyles={0:{fontStyle:'bold'}};
   for(var ci=1;ci<=comp.unidades.length;ci++)colStyles[ci]={halign:'right'};
   aT(tH,tB,colStyles);
-
-  /* IA por dimensão */
-  if(iaTextos.analise_critica){sec('Análise — Crítica do inventário');bloco(iaTextos.analise_critica);}
-  if(iaTextos.analise_ruptura){sec('Análise — Ruptura Loja x Depósito');bloco(iaTextos.analise_ruptura);}
-  if(iaTextos.analise_cobertura){sec('Análise — Cobertura de estoque');bloco(iaTextos.analise_cobertura);}
-  if(iaTextos.analise_perda){sec('Análise — Projeção de perda');bloco(iaTextos.analise_perda);}
-
-  /* Recomendações */
-  if(iaTextos.recomendacoes){
-    sec('Recomendações');
-    bloco(iaTextos.recomendacoes);
-  }
 
   /* Legenda */
   chk(12);doc.setFontSize(7);doc.setTextColor(150,150,150);
@@ -832,6 +849,8 @@ var _HTML_CSS=":root{--navy:#051323;--green:#00B74A;--red:#D32F2F;--amb:#F57C00;
 +".loss-main{font-size:20px;font-weight:700;margin-bottom:2px}.loss-sub{font-size:11px;color:var(--muted)}"
 +".chart-wrap img{max-width:100%;display:block;margin-bottom:16px}"
 +".note{font-size:11.5px;color:var(--muted);margin-top:10px}"
++".analysis-box{background:var(--light);border-left:3px solid var(--green);border-radius:6px;padding:14px 18px;margin-bottom:20px}"
++".analysis-box p{font-size:13px;line-height:1.6;color:#333;margin:0 0 10px}.analysis-box p:last-child{margin-bottom:0}"
 +".ftr{max-width:1100px;margin:0 auto;padding:16px 24px;font-size:11px;color:var(--muted);text-align:center}"
 +"h2{font-size:17px}"
 +"@media(max-width:768px){.minibar-row,.minibar-row.inv{grid-template-columns:1fr;gap:6px}.loss-cards{grid-template-columns:1fr}}";
@@ -1045,13 +1064,22 @@ function generateResumoHTML(results,recs,info,unidade,logo){
   _downloadHTML('relatorio_completo_'+(info.cliente||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(unidade||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(info.dataInventario||'').replace(/\//g,'-')+'.html',html);
 }
 
-function generateComparativoHTML(comp,units,info,logo){
+function generateComparativoHTML(comp,units,info,analiseTxt,logo){
   info=info||{};
   var pd=new Date().toLocaleString('pt-BR');
   var h='<div class="section-title" style="font-size:20px;margin-top:0">Comparativo entre unidades — '+comp.unidades.length+' unidades</div>';
-  if(comp.skuOverlap){
-    h+='<div class="metrics"><div class="metric"><div class="metric-label">SKUs únicos (total)</div><div class="metric-value">'+NUM(comp.skuOverlap.totalUnique)+'</div></div><div class="metric"><div class="metric-label">Em comum</div><div class="metric-value text-green">'+NUM(comp.skuOverlap.emComum)+'</div></div><div class="metric"><div class="metric-label">Sobreposição</div><div class="metric-value text-green">'+PCT(comp.skuOverlap.pctComum)+'</div></div></div>';
-  }
+  /* r103: Análise Comparativa — mesmo texto exibido na tela (IA ou fallback local); cards de Sobreposição de SKUs removidos */
+  var txt=analiseTxt||'Análise comparativa entre '+comp.unidades.length+' unidades do cliente '+(info.cliente||'')+' referente ao inventário de '+(info.dataInventario||'')+'.';
+  h+='<div class="section-title">Análise Comparativa</div>';
+  h+='<div class="analysis-box">'+String(txt).split('\n\n').map(function(par){return '<p>'+par+'</p>';}).join('')+'</div>';
+  h+='<div class="section-title">Indicadores por unidade</div>';
+  h+=_catCardsHtml(comp.unidades.map(function(u){return{nome:u.unidade,acuracidade:u.acuracidade,valorQuebra:u.saldoLiquido,coberturaGeral:u.coberturaGeral,totalRupturas:u.totalRupturas,perdaFatDia:u.perdaFatDia};}),[
+    {label:'Acuracidade',key:'acuracidade',fmt:function(v){return v!=null?PCT(v):'—';}},
+    {label:'Valor Quebra',key:'valorQuebra',fmt:function(v){return v!=null?BRLi(v):'—';}},
+    {label:'Cobertura de Estoque',key:'coberturaGeral',fmt:function(v){return v!=null?v+' dias':'—';}},
+    {label:'SKUs em Ruptura',key:'totalRupturas',fmt:function(v){return v!=null?NUM(v):'—';}},
+    {label:'Venda perdida / dia',key:'perdaFatDia',fmt:function(v){return v!=null?BRLi(v):'—';}}
+  ]);
   h+='<div class="section-title">Ranking por métrica</div>';
   h+='<div class="table-wrap"><table class="data-table"><thead><tr><th>Métrica</th>';
   comp.unidades.forEach(function(u){h+='<th class="text-right">'+u.unidade+'</th>';});

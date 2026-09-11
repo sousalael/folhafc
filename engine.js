@@ -1,4 +1,4 @@
-/* engine.js — r102 — Motor de cálculos: mantém tudo do v3.9 + valorSemGiro (R$) em Dias de Estoque, perdaEstoquePct/totalSobras/valorSemGiro plumbed no Comparativo, tabela do Comparativo reordenada/renomeada e função de análise textual do Comparativo (gerarAnaliseComparativo) */
+/* engine.js — r103 — Motor de cálculos: mantém tudo do r102 (sem mudanças funcionais nesta versão — bump de versão apenas) */
 var Engine = (function(){
   "use strict";
   function round2(n){ return Math.round((n||0)*100)/100; }

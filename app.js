@@ -1,4 +1,4 @@
-/* app.js — r102 — mantém tudo do v3.9 + mini-barras em Perda por categoria e Curva ABC (substituindo gráficos Chart.js), textos de análise e tabela de distribuição no Resumo Executivo (Ruptura/Dias), e Comparativo com análise textual (IA + fallback local) e cards por unidade */
+/* app.js — r103 — mantém tudo do r102 + Comparativo: remove os cards de Sobreposição de SKUs da tela, mantém apenas Análise Comparativa + cards por unidade + Ranking */
 (function(){
 "use strict";
 Chart.register(ChartDataLabels);
@@ -1126,18 +1126,7 @@ function renderComparativo(){
     {label:'SKUs em Ruptura',key:'totalRupturas',fmt:function(v){return v!=null?NUM(v):'—';},color:function(v){return v>0?'text-red':'text-muted';}},
     {label:'Venda perdida / dia',key:'perdaFatDia',fmt:function(v){return v!=null?BRLi(v):'—';},color:function(){return 'text-red';}}
   ]);
-  /* SKU Overlap */
-  if(c.skuOverlap){
-    html+='<div class="comp-section"><div class="section-title"><i class="ti ti-chart-dots"></i> Sobreposição de SKUs</div>';
-    html+='<div class="comp-overlap">';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(c.skuOverlap.totalUnique)+'</div><div class="comp-overlap-label">SKUs únicos (total)</div></div>';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(c.skuOverlap.emComum)+'</div><div class="comp-overlap-label">SKUs em comum</div></div>';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val" style="color:var(--fc-green)">'+PCT(c.skuOverlap.pctComum)+'</div><div class="comp-overlap-label">Sobreposição</div></div>';
-    c.skuOverlap.porUnidade.forEach(function(pu){
-      html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(pu.total)+'</div><div class="comp-overlap-label">'+pu.unidade+'</div></div>';
-    });
-    html+='</div></div>';
-  }
+  /* r103: cards de Sobreposição de SKUs removidos da tela (mantido apenas o cálculo em comp.skuOverlap, usado na string de métricas da IA) */
   /* Ranking table */
   html+='<div class="comp-section"><div class="section-title"><i class="ti ti-trophy"></i> Ranking por métrica</div>';
   html+='<div class="table-wrap"><table class="comp-table"><thead><tr><th>Métrica</th>';
@@ -1201,23 +1190,9 @@ window.App = {
     if(!Comparativo){alert('Gere o comparativo primeiro.');return;}
     _syncUnitFromState();
     var info={cliente:State.info.cliente,dataInventario:State.info.dataInventario,diasVenda:State.info.diasVenda};
-    /* r102: string de métricas para a IA — centralizada em _buildComparativoMetricasStr */
-    var metricas=_buildComparativoMetricasStr(Comparativo);
-    /* Tentar IA */
-    var iaTextos={};
-    var st=window.App?window.App.getState():null;
-    var apiUrl=st&&st.apiUrl?st.apiUrl:null;
-    var apiToken=st&&st.apiToken?st.apiToken:null;
-    if(apiUrl&&apiToken){
-      try{
-        var xhr=new XMLHttpRequest();
-        xhr.open('POST',apiUrl,false);
-        xhr.send(JSON.stringify({action:'gerarComparativoIA',token:apiToken,cliente:info.cliente,data:info.dataInventario,diasVenda:info.diasVenda,metricas:metricas}));
-        var resp=JSON.parse(xhr.responseText);
-        if(resp.ok&&resp.resumos)iaTextos=resp.resumos;
-      }catch(e){console.log('IA comparativo fallback:',e);}
-    }
-    Export.generateComparativoPDF(Comparativo, Units, info, iaTextos, LOGO_RELATORIO_DATA_URL);
+    /* r103: usa exatamente o mesmo texto da caixa "Análise Comparativa" exibida na tela (IA cacheada ou fallback local) — nada de refazer a chamada de IA aqui, para garantir texto idêntico ao da tela */
+    var analiseTxt=ComparativoAnaliseIA||Engine.gerarAnaliseComparativo(Comparativo,info);
+    Export.generateComparativoPDF(Comparativo, Units, info, analiseTxt, LOGO_RELATORIO_DATA_URL);
   },
   exportComparativoExcel:function(){
     if(!Comparativo){alert('Gere o comparativo primeiro.');return;}
@@ -1273,7 +1248,9 @@ window.App = {
   exportComparativoHTML:function(){
     if(!Comparativo){alert('Gere o comparativo primeiro.');return;}
     var info={cliente:State.info.cliente,dataInventario:State.info.dataInventario,diasVenda:State.info.diasVenda};
-    Export.generateComparativoHTML(Comparativo, Units, info, LOGO_RELATORIO_DATA_URL);
+    /* r103: mesmo texto da caixa "Análise Comparativa" exibida na tela */
+    var analiseTxt=ComparativoAnaliseIA||Engine.gerarAnaliseComparativo(Comparativo,info);
+    Export.generateComparativoHTML(Comparativo, Units, info, analiseTxt, LOGO_RELATORIO_DATA_URL);
   }
 };
 
