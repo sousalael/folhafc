@@ -260,26 +260,27 @@
     <div id="view-dashboard" class="hidden">
         
         <!-- ############ NOVO: SELEÇÃO DE PROJETO (saiu da tela de login) ############ -->
-        <div class="card mb-2 border-0 shadow-sm" style="background-color: #f4f4fb;">
+        <div class="card mb-4 border-0 shadow-sm" style="background-color: #f4f4fb;">
             <div class="card-body">
                 <label class="form-label fw-bold text-primary mb-1">Projeto Ativo de Hoje:</label>
                 <select id="sel-proj-ativos-sup" class="form-select mb-3" onchange="selecionarProjetoAtivoSup()">
                     <option value="">-- Carregando projetos de hoje... --</option>
                 </select>
 
-                <!-- r105: label + filtro Cliente na mesma linha -->
-                <div class="d-flex align-items-center flex-wrap gap-2 mb-2" id="barra-filtros-encerrados">
-                    <label class="form-label fw-bold text-primary mb-0">🗂️ Ou consulte um Projeto Encerrado:</label>
+                <label class="form-label fw-bold text-primary mb-1">🗂️ Ou consulte um Projeto Encerrado:</label>
+
+                <!-- Filtros no estilo da aba Despesas: Cliente em botao-dropdown -->
+                <div class="d-flex flex-wrap gap-2 mb-2" id="barra-filtros-encerrados">
                     <div class="dropdown">
                         <button class="btn btn-outline-secondary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="btn-filtro-cli-enc">🏢 Cliente</button>
                         <div class="dropdown-menu p-2" style="min-width: 220px; max-height: 260px; overflow-y: auto;" id="drop-filtro-cli-enc">
-                            <div class="text-muted small p-1">Carregando...</div>
+                            <div class="text-muted small p-1">Clique em 🔍 para carregar.</div>
                         </div>
                     </div>
                 </div>
 
-                <label class="form-label fw-bold text-primary mb-0 small">Período:</label>
-                <select id="enc-mes" class="form-select form-select-sm mb-2" onchange="carregarListaEncerradosSup()"></select>
+                <label class="form-label fw-bold text-primary mb-1 small">Período:</label>
+                <select id="enc-mes" class="form-select form-select-sm mb-2"></select>
                 <div class="row g-2 mb-2">
                     <div class="col-5"><input type="date" id="enc-ini" class="form-control form-control-sm"></div>
                     <div class="col-5"><input type="date" id="enc-fim" class="form-control form-control-sm"></div>
@@ -287,7 +288,7 @@
                 </div>
 
                 <select id="sel-proj-encerrados-sup" class="form-select" onchange="carregarProjetoEncerradoSup()">
-                    <option value="">-- Selecione o Projeto Encerrado --</option>
+                    <option value="">-- Selecione o período e clique em 🔍 --</option>
                 </select>
             </div>
         </div>
@@ -301,10 +302,9 @@
                 <button class="btn btn-sm btn-outline-secondary fw-bold" id="btn-recomecar" onclick="recomecarSessao()" title="Volta ao estado inicial sem sair da conta">🔄 Reiniciar Sessão</button>
             </div>
             <hr class="border-opacity-25">
-            <p class="mb-0"><strong>Gestor(a):</strong> <span id="span-nome-sup"></span></p>
-            <!-- span-projeto e badge-status movidos para hidden (mantidos no DOM para compatibilidade JS) -->
-            <span id="span-projeto" class="d-none"></span>
-            <span id="badge-status" class="d-none badge bg-success">Ativo</span>
+            <p class="mb-1"><strong>Gestor(a):</strong> <span id="span-nome-sup"></span></p>
+            <p class="mb-0"><strong>Projeto:</strong> <span id="span-projeto"></span></p>
+            <span id="badge-status" class="badge bg-success mt-2 px-3 py-2">Ativo</span>
         </div>
 
         <!-- ############ NOVO: ABAS ############ -->
@@ -1523,7 +1523,7 @@
                 document.getElementById('view-login').classList.add('hidden');
                 document.getElementById('view-dashboard').classList.remove('hidden');
                 document.getElementById('fc-header-barra').style.display = 'block';
-                document.getElementById('span-nome-sup').innerText = res.nome; document.getElementById('span-nome-sup').setAttribute('data-perfil', res.perfil);
+                document.getElementById('span-nome-sup').innerText = res.nome + ` (${res.perfil})`;
                 
                 if (projetoAtivo && projetoAtivo.data) atualizarCabecalhoProjeto();
 
@@ -1923,11 +1923,13 @@
         return el ? (el.value || '') : '';
     }
     function getSupervisorLogado() {
-        return (document.getElementById('span-nome-sup').innerText || '').trim();
+        const txt = document.getElementById('span-nome-sup').innerText || '';
+        return txt.replace(/\s*\([^)]*\)\s*$/, '').trim();
     }
     function getPerfilLogado() {
-        const el = document.getElementById('span-nome-sup');
-        return el ? (el.getAttribute('data-perfil') || '').trim().toUpperCase() : '';
+        const txt = document.getElementById('span-nome-sup').innerText || '';
+        const m = txt.match(/\(([^)]*)\)\s*$/);
+        return m ? m[1].trim().toUpperCase() : '';
     }
     function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
     function formatarReal(v) {
@@ -2857,8 +2859,6 @@
         const sel = document.getElementById('enc-mes');
         if (sel && sel.dataset.pronto !== '1') {
             popularSeletorMes('enc-mes', 'enc-ini', 'enc-fim', null);
-            // r105: auto-carregar projetos encerrados assim que os filtros inicializam
-            setTimeout(() => carregarListaEncerradosSup(), 200);
         }
     }
 
@@ -4143,7 +4143,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-14-r105';
+    const VERSAO_ESPERADA = '2026-09-14-r107';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
