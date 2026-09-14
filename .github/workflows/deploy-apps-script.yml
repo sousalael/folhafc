@@ -22,17 +22,27 @@ jobs:
       - name: Instalar clasp
         run: npm install -g @google/clasp
 
-      - name: Configurar credenciais do clasp (a partir do Secret)
+      - name: Configurar credenciais do clasp
         run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
-      - name: Gerar .clasp.json com o Script ID (a partir do Secret)
+      - name: Gerar .clasp.json
         run: |
           echo '{"scriptId":"${{ secrets.APPS_SCRIPT_ID }}","rootDir":"apps-script"}' > apps-script/.clasp.json
 
-      - name: Publicar código-fonte no Apps Script
+      - name: Enviar código ao Apps Script
         run: clasp push --force
         working-directory: apps-script
 
-      - name: Atualizar a implantação existente (Web App)
-        run: clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" --description "Auto-deploy $(date +'%Y-%m-%d %H:%M')"
+      - name: Criar versão e atualizar implantação
         working-directory: apps-script
+        run: |
+          # Criar nova versão imutável do código enviado
+          VERSION_OUTPUT=$(clasp version "Auto-deploy $(date +'%Y-%m-%d %H:%M')")
+          echo "$VERSION_OUTPUT"
+          
+          # Extrair o número da versão criada
+          VERSION_NUM=$(echo "$VERSION_OUTPUT" | grep -oP '(?<=~ )\d+')
+          echo "Versão criada: $VERSION_NUM"
+          
+          # Atualizar a implantação existente para apontar para essa versão
+          clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VERSION_NUM" --description "v$VERSION_NUM - $(date +'%Y-%m-%d %H:%M')"
