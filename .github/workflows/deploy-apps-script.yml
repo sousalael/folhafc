@@ -1,14 +1,11 @@
 name: Deploy Apps Script
 
-# Roda automaticamente sempre que arquivos dentro de apps-script/ mudarem
-# no branch principal. Alterações no site (HTML/JS do GitHub Pages) NÃO
-# disparam este workflow.
 on:
   push:
     branches: [main]
     paths:
       - "apps-script/**"
-  workflow_dispatch: {}  # permite disparar manualmente pela aba Actions, se precisar
+  workflow_dispatch: {}
 
 jobs:
   deploy:
@@ -36,6 +33,6 @@ jobs:
         run: clasp push --force
         working-directory: apps-script
 
-      - name: Atualizar a implantação (Web App) publicada
-        run: clasp deploy --description "Auto-deploy $(date +'%Y-%m-%d %H:%M')"
+      - name: Atualizar a implantação existente (Web App)
+        run: clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" --description "Auto-deploy $(date +'%Y-%m-%d %H:%M')"
         working-directory: apps-script
