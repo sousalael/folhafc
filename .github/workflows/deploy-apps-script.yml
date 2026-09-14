@@ -17,7 +17,7 @@ jobs:
       - name: Instalar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Instalar clasp
         run: npm install -g @google/clasp
@@ -33,16 +33,32 @@ jobs:
         run: clasp push --force
         working-directory: apps-script
 
-      - name: Criar versão e atualizar implantação
+      - name: Atualizar TODAS as implantações
         working-directory: apps-script
         run: |
-          # Criar nova versão imutável do código enviado
-          VERSION_OUTPUT=$(clasp version "Auto-deploy $(date +'%Y-%m-%d %H:%M')")
-          echo "$VERSION_OUTPUT"
+          set -e
           
-          # Extrair o número da versão criada
-          VERSION_NUM=$(echo "$VERSION_OUTPUT" | grep -oP '(?<=~ )\d+')
-          echo "Versão criada: $VERSION_NUM"
+          # Criar nova versão
+          echo "--- Criando versão ---"
+          clasp version "Auto $(date +'%Y-%m-%d %H:%M')" 2>&1 | tee /tmp/ver.txt
           
-          # Atualizar a implantação existente para apontar para essa versão
-          clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VERSION_NUM" --description "v$VERSION_NUM - $(date +'%Y-%m-%d %H:%M')"
+          # Extrair número da versão (aceita vários formatos de output)
+          VER=$(cat /tmp/ver.txt | grep -oE '[0-9]+' | tail -1)
+          echo "Versão detectada: $VER"
+          
+          if [ -z "$VER" ]; then
+            echo "ERRO: não conseguiu extrair número da versão"
+            exit 1
+          fi
+          
+          # Listar todas as implantações e atualizar CADA UMA
+          echo "--- Listando implantações ---"
+          clasp deployments 2>&1 | tee /tmp/deps.txt
+          
+          # Extrair todos os deployment IDs (formato: - AKfycb...)
+          grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
+            echo "Atualizando deployment: $DEP_ID -> versão $VER"
+            clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')" 2>&1 || echo "AVISO: falhou para $DEP_ID, continuando..."
+          done
+          
+          echo "--- Concluído ---"
