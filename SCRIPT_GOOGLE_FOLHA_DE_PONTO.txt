@@ -451,7 +451,7 @@ const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
-const VERSAO_SCRIPT = '2026-09-13-r106';
+const VERSAO_SCRIPT = '2026-09-14-r105';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -2852,12 +2852,9 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'16b. SUBSTITUIÇÕES OBRIGATÓRIAS DE TEXTO: NUNCA use a frase "compromete a velocidade de leitura dos coletores e aumenta o risco de recontagem" nem variações equivalentes sobre "velocidade de leitura" ou "risco de recontagem" como consequência de um ajuste pendente — troque sempre por "pode impactar na fluidez da operação e na assertividade da contagem". NUNCA use a frase "liberando espaço em prateleira para leitura clara e sem obstáculos" nem variações equivalentes sobre "leitura clara"/"sem obstáculos" como ganho operacional — troque sempre por "favorecendo uma melhor organização das mercadorias, evitando que aconteçam erros induzidos". Não mencione "recontagem" como risco ou consequência hipotética em nenhuma frase (reforço da regra 18, que já proíbe recomendar recontagem).\n'
     +'16c. PROIBIDO exigir ou sugerir "SKU único por pallet" (ou variações como "SKU único por unidade de armazenamento") como diretriz de organização, em qualquer seção. Na prática das lojas atendidas, o mix de produtos é sempre grande demais para isso ser viável — a recomendação correta é sempre em torno de organização por código de barras, nunca de unicidade de SKU por pallet.\n'
     +'17. CENÁRIOS ESPECÍFICOS — use estas orientações sempre que os dados/observações forem pertinentes: (a) excesso de mercadoria ou volume acima do ideal em qualquer setor → a ação recomendada é o cliente reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário; (b) risco de a equipe de pesagem do cliente deixar a loja antes do fim da operação → a ação recomendada é o cliente alinhar previamente, internamente, com sua própria equipe responsável pela pesagem, para que ela só deixe a loja após a confirmação de que todos os pesos foram devidamente lançados no sistema.\n'
-    +'18. FECHO DA SEÇÃO "sugestoes" — dois cenários possíveis, nunca misture os dois:\n'
-    +'18a. SE existir pelo menos uma oportunidade de melhoria real identificada nos dados (ou seja, a seção "oportunidades" não está vazia/genérica porque algum critério ficou abaixo do ideal): feche a seção "sugestoes" com uma orientação de prazo em tom leve e de parceria — sugerindo que as adequações sejam feitas com alguma antecedência à contagem oficial, de forma a favorecer a fluidez da operação. PROIBIDO qualquer formulação impositiva ou de alerta sobre prazo (ex: "devem ser concluídas antes de X para não comprometer o cronograma"); prefira sempre sugerir um benefício, nunca soar como uma ameaça ou cobrança. Nunca recomende recontagem nem ponha em xeque a qualidade da contagem da Formula Code (reforço das regras 13 e 14).\n'
-    +'18b. SE NÃO existir nenhuma oportunidade de melhoria (todos os critérios avaliados ficaram em faixa Bom/Excelente — preparação exemplar, nada a ajustar): a seção "sugestoes" deve conter APENAS uma recomendação, em 1-2 frases — que a preparação exemplar desta unidade seja usada como referência, um cenário de boas práticas a ser replicado nas demais unidades do cliente. NÃO invente nenhuma outra sugestão nesse cenário só para preencher espaço (reforço da regra 21).\n'
+    +'18. Ao final da seção "sugestoes", feche com uma orientação de prazo em tom leve e de parceria — sugerindo que as adequações sejam feitas com alguma antecedência à contagem oficial, de forma a favorecer a fluidez da operação. PROIBIDO qualquer formulação impositiva ou de alerta sobre prazo (ex: "devem ser concluídas antes de X para não comprometer o cronograma"); prefira sempre sugerir um benefício, nunca soar como uma ameaça ou cobrança. Nunca recomende recontagem nem ponha em xeque a qualidade da contagem da Formula Code (reforço das regras 13 e 14).\n'
     +'19. CRITÉRIOS N/A: os dados abaixo (seção "===...===") já foram filtrados para conter APENAS os critérios que o auditor efetivamente avaliou (nota numérica preenchida). Critérios marcados como N/A pelo auditor simplesmente não aparecem nos dados fornecidos. NUNCA mencione, elogie, cite como oportunidade ou de qualquer forma faça referência a um critério, setor ou quesito que não conste explicitamente nos dados abaixo — mesmo que seja um item comum em auditorias desse tipo. Não invente notas, fatos ou observações sobre nada que esteja fora dos dados desta auditoria específica.\n'
-    +'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.\n'
-    +'21. PROIBIDO, em qualquer seção, recomendar que o cliente comunique, informe, alinhe ou avise previamente — a quem quer que seja — sobre movimentações de mercadoria, espaço, volume ou layout que ocorram entre a data desta auditoria e a data da operação oficial. A loja não tem nenhuma obrigação de avisar sobre atividades operacionais inerentes ao próprio negócio (reabastecimento, reorganização, recebimento de mercadoria etc.) só porque uma auditoria de preparação foi realizada antes. PROIBIDAS formulações como "sugerimos que qualquer movimentação de espaço ou volume seja comunicada previamente" ou "de forma a preservar as condições aqui certificadas" — essa auditoria certifica a preparação NO MOMENTO em que foi feita, não cria nenhuma condição a ser preservada ou monitorada depois. Se o objetivo da frase for reduzir o risco de a preparação se deteriorar antes da contagem oficial, a única formulação aceitável é uma recomendação de AÇÃO do próprio cliente (ex: manter os cuidados já adotados, evitar reabastecimento excessivo perto da data — regra 17a), nunca um pedido de comunicação/aviso prévio.';
+    +'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.';
 
   var campoResumo = temEquipe
     ? '"resumo_executivo": "3-4 frases. Cenário geral, principal problema, principal destaque, equipe.",\n'
@@ -2880,7 +2877,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +campoEquipe
     +'"pontosPositivos": "3-4 frases citando destaques positivos SEM scores e SEM infraestrutura.",\n'
     +'"oportunidades": "3-4 frases sobre o que precisa melhorar'+(temEquipe?', incluindo equipe se < 6.':'.')+'",\n'
-    +'"sugestoes": "Siga a REGRA 18: se houver oportunidade de melhoria real, 3-4 frases com ações vinculadas aos problemas (linguagem de parceria) fechando com orientação leve de prazo (18a); se NÃO houver nenhuma oportunidade (preparação exemplar), 1-2 frases recomendando usar esta unidade como referência de boas práticas a ser replicada nas demais unidades — nada além disso (18b).",\n'
+    +'"sugestoes": "3-4 frases com ações vinculadas aos problemas. Linguagem de parceria.",\n'
     +'"texto_email": "2-3 frases elegantes para corpo do e-mail."\n'
     +'}\n\nDADOS DA AUDITORIA:\n\n'+dadosTexto;
   return {system:sys,user:usr};
@@ -2995,47 +2992,21 @@ function enviarRelatorioAuditoria(dados, cpf) {
     }
     if (linha === -1) return { ok: false, erro: 'Auditoria não encontrada' };
     var pdfFile = DriveApp.getFileById(relMeta.pdfId);
-    var anexos = [pdfFile.getBlob()];
-
-    // r105: se já existe uma Apresentação Executiva (PPTX+PDF) gerada para
-    // esta auditoria, anexa o PDF dela também, no mesmo e-mail do
-    // relatório. Isolado em try/catch: qualquer falha aqui (apresentação
-    // não gerada, PDF dela não convertido, arquivo removido do Drive etc.)
-    // apenas deixa de anexá-la — o envio do relatório sozinho, que já
-    // funcionava, continua funcionando normalmente.
-    var apresentacaoAnexada = false;
-    try {
-      var metaApres = PropertiesService.getScriptProperties().getProperty('apres_' + d.auditoriaId);
-      if (metaApres) {
-        var apres = JSON.parse(metaApres);
-        if (apres && apres.detalhada && apres.detalhada.pdfId) {
-          var pdfApresFile = DriveApp.getFileById(apres.detalhada.pdfId);
-          anexos.push(pdfApresFile.getBlob());
-          apresentacaoAnexada = true;
-        }
-      }
-    } catch (errApres) {
-      Logger.log('Falha ao anexar apresentação ao e-mail (' + d.auditoriaId + '): ' + (errApres.message || String(errApres)));
-    }
-
     var assunto = 'Relatório de Auditoria — ' + cliente + ' / ' + unidade;
-    var textoAnexos = apresentacaoAnexada
-      ? 'O relatório completo e a apresentação executiva estão em anexo (PDF).'
-      : 'O relatório completo está em anexo (PDF).';
     var corpoHTML = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
       + '<div style="background:#051323;padding:20px 24px;text-align:center"><span style="color:#61CF00;font-weight:700;font-size:18px">FORMULA CODE</span></div>'
       + '<div style="padding:32px 24px;background:#FFF"><p style="font-size:15px;line-height:1.8">' + (relMeta.textoEmail || 'Segue em anexo o relatório de auditoria de operação.') + '</p>'
       + '<div style="background:#F4F6F8;padding:16px;border-radius:10px;margin:20px 0"><p style="font-size:12px;color:#6B7B8D;margin-bottom:4px">DETALHES</p>'
       + '<p style="font-size:14px;margin:0"><strong>' + cliente + '</strong> — ' + unidade + '<br>' + dataAud + '</p></div>'
-      + '<p style="font-size:14px;line-height:1.7">' + textoAnexos + '</p>'
+      + '<p style="font-size:14px;line-height:1.7">O relatório completo está em anexo (PDF).</p>'
       + '<p style="text-align:center;margin:24px 0"><a href="' + relMeta.linkHTML + '" style="display:inline-block;padding:12px 28px;background:#002B50;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Ver Relatório Online</a></p>'
       + '</div><div style="background:#051323;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
       + '<strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
-    MailApp.sendEmail(d.email, assunto, '', { htmlBody:corpoHTML, attachments:anexos, name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' });
+    MailApp.sendEmail(d.email, assunto, '', { htmlBody:corpoHTML, attachments:[pdfFile.getBlob()], name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' });
     aba.getRange(linha, 15).setValue(d.email);
     aba.getRange(linha, 16).setValue(new Date());
     registrarClienteFC(cliente, unidade, d.email);
-    return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada };
+    return { ok: true, mensagem: 'Relatório enviado para ' + d.email };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
@@ -3416,18 +3387,12 @@ function salvarApresentacaoAuditoria(dados, cpf) {
 
       var linkPdf = '';
       var erroPdfMsg = '';
-      var pdfId = null;
       try {
         var pdfBlob = converterPptxParaPdfReal(pptxBlob, nomeArqPptx.replace('.pptx',''));
         pdfBlob.setName(nomeArqPdf);
         var arquivoPdf = pasta.createFile(pdfBlob);
         arquivoPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         linkPdf = 'https://drive.google.com/uc?id=' + arquivoPdf.getId() + '&export=download';
-        // r105: guarda também o fileId puro do PDF da apresentação (além do
-        // link de download) — é o que enviarRelatorioAuditoria usa pra
-        // anexar esse PDF no e-mail do relatório, sem precisar reextrair o
-        // ID a partir do link.
-        pdfId = arquivoPdf.getId();
       } catch (errPdf) {
         // r72: antes o erro só ia pro Logger.log (invisível pro usuário).
         // Agora ele volta no resultado pra aparecer na tela e permitir
@@ -3436,7 +3401,7 @@ function salvarApresentacaoAuditoria(dados, cpf) {
         Logger.log('Falha ao converter PDF da apresentação (' + v.chave + '): ' + erroPdfMsg);
       }
 
-      resultado[v.chave] = { linkPPTX: linkPptx, linkPDF: linkPdf, pdfId: pdfId, erroPDF: erroPdfMsg || null };
+      resultado[v.chave] = { linkPPTX: linkPptx, linkPDF: linkPdf, erroPDF: erroPdfMsg || null };
     });
 
     var detalhadaFinal = resultado.detalhada || null;
@@ -3801,7 +3766,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   if(skuRuinsAV.length)suParts.push('estender a organização por código aos setores de '+skuRuinsAV.join(', '));
   if(eqRuins.length)suParts.push('ampliar o dimensionamento da equipe de apoio nas áreas identificadas');
   if(volRuinsAV.length)suParts.push('reduzir o abastecimento de mercadoria nas gôndolas com pelo menos 5 dias de antecedência ao inventário');
-  su=suParts.length?('Sugerimos considerar antes da data do inventário: '+suParts.join('; ')+'. A conclusão dessas adequações previamente ao início da contagem oficial garante mais agilidade e precisão na operação.'):'A preparação desta unidade se destacou em todos os critérios avaliados. Recomendamos utilizá-la como referência, um cenário de boas práticas a ser replicado nas demais unidades.';
+  su=suParts.length?('Sugerimos considerar antes da data do inventário: '+suParts.join('; ')+'. A conclusão dessas adequações previamente ao início da contagem oficial garante mais agilidade e precisão na operação.'):'Sugerimos manter os padrões atuais de preparação.';
 
   return {
     resumo_executivo:resumo,analise_retaguarda:ret.trim(),analise_area_vendas:av.trim(),analise_equipe:analiseEquipe,
