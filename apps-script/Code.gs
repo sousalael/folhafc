@@ -1,9 +1,11 @@
 const SHEET_ID = '1vbm0Uh8Qp87svlcCKluYBV_m9euoZukB_FWltGlHnvs';
+
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     let result = {};
+
     // ############ TRAVA DE SESSAO (senha dinamica por e-mail) ############
     // Acoes publicas (colaborador batendo ponto e proprio login) passam direto.
     // As demais exigem token valido, emitido apos o codigo do e-mail. O servidor
@@ -19,6 +21,7 @@ function doPost(e) {
       }
       data.cpf = cpfDaSessao;
     }
+
     if (action === 'getProjetos') { result = getProjetos(); }
     else if (action === 'verificarSupervisor') { result = verificarSupervisor(data.cpf, data.projeto); }
     else if (action === 'getListaPresencas') { result = getListaPresencas(data.projeto); }
@@ -28,6 +31,7 @@ function doPost(e) {
     else if (action === 'getRelatorioMultiplo') { result = getRelatorioMultiplo(data.projetos); }
     else if (action === 'pesquisarColaboradores') { result = pesquisarColaboradores(data.filtros); }
     else if (action === 'getContadoresPonto') { result = getContadoresPonto(data.cpf, data.filtros); }
+
     // ############ ACOES NOVAS: DESPESAS E FINANCEIRO ############
     else if (action === 'getProjetosEncerrados') { result = getProjetosEncerrados(data.cpf, data.filtros); }
     else if (action === 'getConfigDespesas') { result = getConfigDespesas(data.cpf); }
@@ -64,6 +68,7 @@ function doPost(e) {
     else if (action === 'getLancamentosRevisao') { result = getLancamentosRevisao(data.cpf, data.filtros); }
     else if (action === 'marcarRevisado') { result = marcarRevisado(data.cpf, data.idDespesa); }
     else if (action === 'gravarRevisoes') { result = gravarRevisoes(data.cpf, data.lote); }
+
     // ── AUDITORIA DE OPERAÇÃO ──
     else if (action === 'listarRascunhosAuditoria') { result = listarRascunhosAuditoria(data.cpf); }
     else if (action === 'salvarAuditoria') { result = salvarAuditoria(data, data.cpf); }
@@ -83,6 +88,7 @@ function doPost(e) {
     else if (action === 'gerarComparativoIA') { result = gerarComparativoIA(data); }
     else if (action === 'buscarUnidadesCliente') { result = buscarUnidadesCliente(data); }
     else if (action === 'buscarAnalisesCliente') { result = buscarAnalisesCliente(data); }
+
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
     // desatualizado em relacao ao index.html.
@@ -91,23 +97,28 @@ function doPost(e) {
                         'O codigo publicado esta desatualizado. Versao do script: ' +
                         (typeof VERSAO_SCRIPT !== 'undefined' ? VERSAO_SCRIPT : '(anterior ao controle de versao)') };
     }
+
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
 }
+
 function getSheet(name) { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(name); }
+
 function normalizarCPF(cpf) {
   if (!cpf) return '';
   let limpo = String(cpf).replace(/\D/g, '');
   while (limpo.length > 0 && limpo.length < 11) { limpo = '0' + limpo; }
   return limpo;
 }
+
 function formatarCPF(cpf) {
   const n = normalizarCPF(cpf);
   if (n.length !== 11) return cpf;
   return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 }
+
 function getColabIndices() {
   const sheet = getSheet('Colaboradores');
   const headers = sheet.getDataRange().getValues()[0].map(h => String(h).trim().toLowerCase());
@@ -120,6 +131,7 @@ function getColabIndices() {
     length: headers.length > 5 ? headers.length : 5
   };
 }
+
 function isProjetoEncerrado(projeto) {
   if (!projeto || !projeto.data) return false;
   const sheet = getSheet('Projetos');
@@ -127,6 +139,7 @@ function isProjetoEncerrado(projeto) {
   const proj = dados.find(r => r[0] === projeto.data && r[1] === projeto.cliente && r[2] === projeto.unidade);
   return proj && proj[3] === 'Encerrado';
 }
+
 // Data de trabalho vigente, com corte as 3h30 da manha (fuso America/Fortaleza).
 // O projeto de uma data continua disponivel ate as 3h30 do dia seguinte:
 // antes das 3h30, o sistema ainda considera "ontem" para efeito de qual projeto
@@ -134,12 +147,14 @@ function isProjetoEncerrado(projeto) {
 // Retorna a data no formato dd/mm/aaaa (mesmo formato da coluna Projetos).
 const HORA_CORTE_DIA = 3;
 const MIN_CORTE_DIA = 30;
+
 function getDataTrabalhoVigente() {
   const TZ = 'America/Fortaleza';
   const agora = new Date();
   // Hora e minuto atuais no fuso de Fortaleza (independe do fuso do servidor).
   const hh = parseInt(Utilities.formatDate(agora, TZ, 'HH'), 10);
   const mm = parseInt(Utilities.formatDate(agora, TZ, 'mm'), 10);
+
   let referencia = agora;
   // Antes do corte (3h30): recua para o dia anterior.
   if (hh < HORA_CORTE_DIA || (hh === HORA_CORTE_DIA && mm < MIN_CORTE_DIA)) {
@@ -147,6 +162,7 @@ function getDataTrabalhoVigente() {
   }
   return Utilities.formatDate(referencia, TZ, 'dd/MM/yyyy');
 }
+
 function getProjetos() {
   const sheet = getSheet('Projetos');
   const dados = sheet.getDataRange().getDisplayValues();
@@ -155,6 +171,7 @@ function getProjetos() {
   const filtrados = dados.filter(r => r[0] === hoje && r[3] !== 'Encerrado');
   return { projetos: filtrados.map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]})) };
 }
+
 function verificarSupervisor(cpf, projeto) {
   const sheetColab = getSheet('Colaboradores');
   const dadosColab = sheetColab.getDataRange().getValues();
@@ -163,6 +180,7 @@ function verificarSupervisor(cpf, projeto) {
   const idx = getColabIndices();
   
   const user = dadosColab.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
+
   if (user) {
     const perfil = String(user[idx.perfil]).trim().toUpperCase();
     
@@ -182,7 +200,9 @@ function verificarSupervisor(cpf, projeto) {
            sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, perfil === 'DIRETOR' ? 'DIRETORIA' : 'SUPERVISÃO', '', new Date().toLocaleString('pt-BR'), nome]);
          }
       }
+
       let resposta = { encontrado: true, nome: nome, perfil: perfil };
+
       if (perfil === 'DIRETOR') {
          const sheetProj = getSheet('Projetos');
          const dadosProj = sheetProj.getDataRange().getDisplayValues();
@@ -191,11 +211,13 @@ function verificarSupervisor(cpf, projeto) {
          resposta.ativosHoje = dadosProj.filter(r => r[0] === hoje && r[3] !== 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
          resposta.encerrados = dadosProj.filter(r => r[3] === 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
       }
+
       return resposta;
     }
   }
   return { encontrado: false };
 }
+
 function registrarPonto(projeto, cpf, extras) {
   if (isProjetoEncerrado(projeto)) return { error: 'Este projeto já foi encerrado e não aceita novas presenças.' };
   
@@ -203,8 +225,10 @@ function registrarPonto(projeto, cpf, extras) {
   if (cpfLimpo.length !== 11) return { error: "CPF Inválido. Certifique-se de digitar os 11 dígitos." };
   const cpfFormatado = formatarCPF(cpfLimpo);
   const idx = getColabIndices();
+
   const sheetPresencas = getSheet('Presencas');
   const presencasData = sheetPresencas.getDataRange().getDisplayValues();
+
   for (let i = 1; i < presencasData.length; i++) {
     if (presencasData[i][0] === projeto.data && presencasData[i][1] === projeto.cliente && presencasData[i][2] === projeto.unidade && normalizarCPF(presencasData[i][3]) === cpfLimpo) {
       if (extras && extras.updatePix) {
@@ -220,10 +244,12 @@ function registrarPonto(projeto, cpf, extras) {
       return { error: 'Você já registrou presença neste projeto hoje. Não é permitido duplo registro.' };
     }
   }
+
   const sheetColab = getSheet('Colaboradores');
   const colabData = sheetColab.getDataRange().getValues();
   let userIndex = colabData.findIndex(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   let nome = '';
+
   if (userIndex > -1) {
     nome = colabData[userIndex][idx.nome]; 
     if (extras && extras.updatePix) {
@@ -247,9 +273,11 @@ function registrarPonto(projeto, cpf, extras) {
     
     sheetColab.appendRow(novaLinha);
   }
+
   sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, 'OPERAÇÃO', '', new Date().toLocaleString('pt-BR'), nome]);
   return { success: true };
 }
+
 function getListaPresencas(projeto) {
   if (!projeto || !projeto.data) return { lista: [] };
   const sheetPresencas = getSheet('Presencas');
@@ -266,6 +294,7 @@ function getListaPresencas(projeto) {
        nomeReduzido: String(colabDados[i][idx.reduzido] || String(colabDados[i][idx.nome]).split(' ')[0] || '')
      };
   }
+
   let lista = [];
   for(let i=1; i<dados.length; i++) {
     if(dados[i][0] === projeto.data && dados[i][1] === projeto.cliente && dados[i][2] === projeto.unidade) {
@@ -284,6 +313,7 @@ function getListaPresencas(projeto) {
   }
   return { lista: lista };
 }
+
 function salvarApenas(lista) {
   const sheetPresencas = getSheet('Presencas');
   lista.forEach(item => {
@@ -292,6 +322,7 @@ function salvarApenas(lista) {
   });
   return { success: true };
 }
+
 function encerrarProjeto(projeto) {
   const sheetProjetos = getSheet('Projetos');
   const dadosProj = sheetProjetos.getDataRange().getDisplayValues();
@@ -303,13 +334,16 @@ function encerrarProjeto(projeto) {
   }
   return { error: 'Projeto não encontrado.' };
 }
+
 // ================= NOVAS FUNÇÕES PARA O DIRETOR ================= //
+
 function getRelatorioMultiplo(projetosSelecionados) {
   if (!projetosSelecionados || !projetosSelecionados.length) return { lista: [] };
   const sheetPresencas = getSheet('Presencas');
   const dados = sheetPresencas.getDataRange().getDisplayValues();
   const colabDados = getSheet('Colaboradores').getDataRange().getValues();
   const idx = getColabIndices();
+
   let colabMap = {};
   for(let i=1; i<colabDados.length; i++) {
      let cpfLimpo = normalizarCPF(colabDados[i][idx.cpf]);
@@ -320,8 +354,10 @@ function getRelatorioMultiplo(projetosSelecionados) {
        nomeReduzido: String(colabDados[i][idx.reduzido] || String(colabDados[i][idx.nome]).split(' ')[0] || '')
      };
   }
+
   let projSet = new Set(projetosSelecionados.map(p => `${p.data}|${p.cliente}|${p.unidade}`));
   let lista = [];
+
   for(let i=1; i<dados.length; i++) {
     let key = `${dados[i][0]}|${dados[i][1]}|${dados[i][2]}`;
     if(projSet.has(key)) {
@@ -342,6 +378,7 @@ function getRelatorioMultiplo(projetosSelecionados) {
   }
   return { lista: lista };
 }
+
 // Conversores p/ inteiros blindados contra erro de fuso horário de servidores do Google
 function ddmmyyyyToInt(str) {
   if (!str) return 0;
@@ -355,21 +392,25 @@ function htmlDateToInt(str, isFim) {
   if (p.length === 3) return parseInt(p[0] + p[1] + p[2], 10);
   return isFim ? 99999999 : 0;
 }
+
 function pesquisarColaboradores(filtros) {
   const sheetPresencas = getSheet('Presencas');
   const dados = sheetPresencas.getDataRange().getDisplayValues();
   const sheetProjetos = getSheet('Projetos');
   const projDados = sheetProjetos.getDataRange().getDisplayValues();
+
   let encerradosSet = new Set();
   for(let i=1; i<projDados.length; i++) {
     if(projDados[i][3] === 'Encerrado') {
       encerradosSet.add(`${projDados[i][0]}|${projDados[i][1]}|${projDados[i][2]}`);
     }
   }
+
   let tIni = htmlDateToInt(filtros.dataIni, false);
   let tFim = htmlDateToInt(filtros.dataFim, true);
   let cpfFiltro = normalizarCPF(filtros.cpf);
   let nomeFiltro = (filtros.nome || '').toLowerCase();
+
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
     let pData = dados[i][0];
@@ -377,14 +418,18 @@ function pesquisarColaboradores(filtros) {
     let pUnidade = dados[i][2];
     let pCpf = normalizarCPF(dados[i][3]);
     let pNome = String(dados[i][7] || '').toLowerCase();
+
     // Filtro 1: Somente projetos encerrados
     if (!encerradosSet.has(`${pData}|${pCliente}|${pUnidade}`)) continue;
+
     // Filtro 2: Período
     let dataRow = ddmmyyyyToInt(pData);
     if (dataRow < tIni || dataRow > tFim) continue;
+
     // Filtro 3: Busca (precisa bater CPF exato ou conter trecho do nome)
     if (cpfFiltro && pCpf !== cpfFiltro) continue;
     if (nomeFiltro && pNome.indexOf(nomeFiltro) === -1) continue;
+
     lista.push({
       data: pData, cliente: pCliente, unidade: pUnidade,
       cpf: formatarCPF(dados[i][3]), nome: dados[i][7], funcao: dados[i][4]
@@ -392,19 +437,23 @@ function pesquisarColaboradores(filtros) {
   }
   return { resultados: lista };
 }
+
 // ============================================================================= //
 // ############ MODULO NOVO: DESPESAS, FINANCEIRO E RELATORIOS ################# //
 // ############ Nada acima desta linha foi alterado, exceto a linha do ######### //
 // ############ encerrarProjeto no doPost (correcao autorizada).      ########## //
 // ============================================================================= //
+
 const PASTA_COMPROVANTES_ID = '1FqykweyZxp7YqlsLh3fQzzq4cSPiGtBO';
 const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
+
 // ############ MARCADOR DE VERSAO ############
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
 const VERSAO_SCRIPT = '2026-09-14-r105';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
+
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
 // sem passar pelo index.html nem por nenhum cache do app. Prova definitiva
 // de qual codigo esta realmente publicado nesta URL.
@@ -432,7 +481,9 @@ function doGet(e) {
     mensagem: 'Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima.'
   })).setMimeType(ContentService.MimeType.JSON);
 }
+
 // ---------------- Identidade e permissao ----------------
+
 function getPerfilPorCPF(cpf) {
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return '';
@@ -441,6 +492,7 @@ function getPerfilPorCPF(cpf) {
   const user = dadosColab.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   return user ? String(user[idx.perfil]).trim().toUpperCase() : '';
 }
+
 function getNomePorCPF(cpf) {
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return '';
@@ -449,6 +501,7 @@ function getNomePorCPF(cpf) {
   const user = dadosColab.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   return user ? String(user[idx.nome]) : '';
 }
+
 // Contexto de quem esta chamando. Usado por toda funcao que aplica a regra de
 // visibilidade, para nunca haver duas implementacoes divergentes da mesma regra.
 function getContextoUsuario(cpf) {
@@ -458,6 +511,7 @@ function getContextoUsuario(cpf) {
   const nomeUser = ehDiretor ? '' : String(getNomePorCPF(cpf)).trim().toUpperCase();
   return { perfil: perfil, cpfLimpo: cpfLimpo, ehDiretor: ehDiretor, nomeUser: nomeUser };
 }
+
 // FONTE UNICA DA VERDADE: DIRETOR ve tudo. Qualquer outro perfil ve somente o
 // que e dele, por CPF; se a linha for antiga e nao tiver CPF, cai no nome.
 // Toda tela que precisa filtrar "quem pode ver o que" chama esta funcao.
@@ -467,6 +521,7 @@ function podeVerRegistroFinanceiro(ehDiretor, cpfLinhaBruto, nomeLinha, cpfLogad
   if (cpfLinhaLimpo) return cpfLinhaLimpo === cpfLogadoLimpo;
   return String(nomeLinha || '').trim().toUpperCase() === nomeUserLimpo;
 }
+
 // Resolve o CPF de uma linha antiga que pode nao ter a coluna de CPF
 // preenchida, caindo no nome como plano B. Usado onde a atribuicao a uma
 // pessoa especifica e essencial (Acerto de Contas, BI Financeiro), diferente
@@ -481,6 +536,7 @@ function resolverCpfPorNomeSeVazio(cpfBruto, nomeBruto) {
   const user = dadosColab.find(r => String(r[idx.nome]).trim().toUpperCase() === nome);
   return user ? normalizarCPF(user[idx.cpf]) : '';
 }
+
 // Ordena por Data desc e, no empate, pelo rowId desc (lancamento mais recente
 // primeiro). Usado por toda lista financeira exibida nas telas.
 function ordenarPorDataDesc(lista) {
@@ -490,7 +546,9 @@ function ordenarPorDataDesc(lista) {
     return (b.rowId || 0) - (a.rowId || 0);
   });
 }
+
 // ---------------- Historico de projetos encerrados ----------------
+
 // Mes vigente sempre; mes anterior somente ate o dia 5 do mes atual.
 function getLimiteHistoricoSupervisor() {
   const hoje = new Date();
@@ -502,12 +560,16 @@ function getLimiteHistoricoSupervisor() {
   }
   return ano * 10000 + (mes + 1) * 100 + 1;
 }
+
 function getProjetosEncerrados(cpf, filtros) {
   const perfil = getPerfilPorCPF(cpf);
   if (perfil !== 'DIRETOR' && perfil !== 'SUPERVISOR') return { projetos: [] };
+
   const dados = getSheet('Projetos').getDataRange().getDisplayValues();
   dados.shift();
+
   let filtrados = dados.filter(r => String(r[3]).trim() === 'Encerrado');
+
   // Filtro de periodo (opcional). Supervisor agora enxerga TODO o historico
   // de encerrados; a restricao por periodo passa a ser escolha dele na tela.
   if (filtros && (filtros.dataIni || filtros.dataFim)) {
@@ -518,9 +580,11 @@ function getProjetosEncerrados(cpf, filtros) {
       return d >= tIni && d <= tFim;
     });
   }
+
   filtrados.sort((a, b) => ddmmyyyyToInt(b[0]) - ddmmyyyyToInt(a[0]));
   return { projetos: filtrados.map(r => ({ data: r[0], cliente: r[1], unidade: r[2], status: r[3] })) };
 }
+
 // ---------------- Painel de contadores — aba Ponto ----------------
 // "Equipes" = Projetos distintos (data+cliente+unidade) no periodo pedido.
 // "Participantes" = total de presencas no periodo (conta a mesma pessoa 2x
@@ -534,6 +598,7 @@ function getProjetosEncerrados(cpf, filtros) {
 function getContadoresPonto(cpf, filtrosPedidos) {
   const ctx = getContextoUsuario(cpf);
   if (ctx.perfil !== 'DIRETOR' && ctx.perfil !== 'SUPERVISOR') return { error: 'Acesso negado.' };
+
   let tIni, tFim;
   if (filtrosPedidos && filtrosPedidos.dataIni && filtrosPedidos.dataFim) {
     tIni = htmlDateToInt(filtrosPedidos.dataIni, false);
@@ -544,10 +609,13 @@ function getContadoresPonto(cpf, filtrosPedidos) {
     tIni = parseInt(Utilities.formatDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1), tz, 'yyyyMMdd'), 10);
     tFim = parseInt(Utilities.formatDate(hoje, tz, 'yyyyMMdd'), 10);
   }
+
   const sheetPres = getSheet('Presencas');
   const dadosPres = sheetPres ? sheetPres.getDataRange().getDisplayValues() : [];
+
   let equipesDoEscopo = {};   // chave "data|cliente|unidade" -> true
   let participantes = 0;
+
   if (ctx.ehDiretor) {
     // Diretor: toda equipe com presenca no mes conta; participantes = todas as presencas do mes.
     for (let i = 1; i < dadosPres.length; i++) {
@@ -578,14 +646,17 @@ function getContadoresPonto(cpf, filtrosPedidos) {
       if (equipesDoEscopo[r[0] + '|' + r[1] + '|' + r[2]]) participantes++;
     }
   }
+
   return { equipes: Object.keys(equipesDoEscopo).length, participantes: participantes };
 }
+
 // Busca projetos (qualquer status) por cliente ou unidade. Usado na edicao de
 // despesa pela Diretoria, para trocar o projeto vinculado a um lancamento.
 function pesquisarProjetos(cpf, termo) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito a Diretoria.' };
   const busca = String(termo || '').trim().toLowerCase();
   if (busca.length < 2) return { projetos: [] };
+
   const dados = getSheet('Projetos').getDataRange().getDisplayValues();
   dados.shift();
   let lista = [];
@@ -598,7 +669,9 @@ function pesquisarProjetos(cpf, termo) {
   lista.sort((a, b) => ddmmyyyyToInt(b.data) - ddmmyyyyToInt(a.data));
   return { projetos: lista };
 }
+
 // ---------------- Abas de configuracao ----------------
+
 // Config_Despesas: Tipo Despesa | Grupo | Visibilidade
 function lerConfigDespesas() {
   const sheet = getSheet('Config_Despesas');
@@ -613,6 +686,7 @@ function lerConfigDespesas() {
       visibilidade: String(r[2] || 'TODOS').trim().toUpperCase() || 'TODOS'
     }));
 }
+
 // Tipos marcados como DIRETORIA nao aparecem no menu do supervisor.
 function getConfigDespesas(cpf) {
   const ehDiretor = (getPerfilPorCPF(cpf) === 'DIRETOR');
@@ -621,6 +695,7 @@ function getConfigDespesas(cpf) {
     .map(t => ({ tipo: t.tipo, grupo: t.grupo }));
   return { tipos: lista };
 }
+
 // Config_Pagamento: Forma Pagamento | Recurso Proprio (SIM/NAO)
 function getConfigPagamento() {
   const sheet = getSheet('Config_Pagamento');
@@ -632,6 +707,7 @@ function getConfigPagamento() {
     .map(r => ({ forma: String(r[0]).trim(), recursoProprio: String(r[1] || '').trim().toUpperCase() === 'SIM' }));
   return { formas: lista };
 }
+
 // Mapa: forma de pagamento -> paga com dinheiro do proprio supervisor?
 // REGRA: forma vazia (lancamentos antigos, antes da coluna K existir) e
 // Se Config_Pagamento nao existe ou esta vazia, TODA despesa e tratada como
@@ -643,18 +719,21 @@ function getMapaRecursoProprio() {
   formas.forEach(f => { mapa[f.forma.toUpperCase()] = f.recursoProprio; });
   return mapa;
 }
+
 function ehRecursoProprio(mapaProprio, forma) {
   if (mapaProprio === null) return true; // sem Config_Pagamento: tudo e recurso proprio
   const f = String(forma || '').trim().toUpperCase();
   if (!f) return true; // vazio = presuncao de recurso proprio (lancamentos antigos)
   return !!mapaProprio[f];
 }
+
 // Verifica se o CPF pertence a um SUPERVISOR na base de Colaboradores.
 // Usado nas analises Despesas x Provisionamento: somente despesas de
 // supervisores entram na conta (diretoria gasta dinheiro da empresa).
 function ehSupervisorPorCPF(cpfBruto) {
   return getPerfilPorCPF(cpfBruto) === 'SUPERVISOR';
 }
+
 // Config_Centros: Centro (para despesas sem projeto). Exclusivo da Diretoria.
 function getConfigCentros(cpf) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { centros: [] };
@@ -664,7 +743,9 @@ function getConfigCentros(cpf) {
   dados.shift();
   return { centros: dados.filter(r => String(r[0]).trim() !== '').map(r => String(r[0]).trim()) };
 }
+
 // ---------------- Comprovantes no Drive ----------------
+
 function salvarComprovanteDrive(comprovante, prefixo) {
   if (!comprovante || !comprovante.base64) return '';
   const pasta = DriveApp.getFolderById(PASTA_COMPROVANTES_ID);
@@ -673,6 +754,7 @@ function salvarComprovanteDrive(comprovante, prefixo) {
   const blob = Utilities.newBlob(Utilities.base64Decode(comprovante.base64), comprovante.mimeType || 'image/jpeg', nome);
   return pasta.createFile(blob).getUrl();
 }
+
 // Extrai o ID de um arquivo do Drive a partir de qualquer formato de URL.
 function extrairIdDrive(url) {
   if (!url) return '';
@@ -681,6 +763,7 @@ function extrairIdDrive(url) {
   let m = s.match(/[-\w]{25,}/);
   return m ? m[0] : '';
 }
+
 // Serve a imagem do comprovante em base64, protegida por sessao (nao e acao
 // publica, entao so responde a quem tem token valido). Mantem os arquivos do
 // Drive PRIVADOS: o script, que roda como o dono, le o arquivo e devolve os
@@ -692,6 +775,7 @@ function getComprovanteImagem(url, cpf) {
   }
   const id = extrairIdDrive(url);
   if (!id) return { error: 'Comprovante sem identificador valido.' };
+
   // SUPERVISOR so pode ver comprovantes das PROPRIAS despesas. Confere se a URL
   // pertence a uma despesa lancada por ele (CPF na coluna J da aba Despesas).
   if (perfil === 'SUPERVISOR') {
@@ -699,6 +783,7 @@ function getComprovanteImagem(url, cpf) {
       return { error: 'Acesso negado. Voce so pode ver os proprios comprovantes.' };
     }
   }
+
   try {
     const arquivo = DriveApp.getFileById(id);
     const blob = arquivo.getBlob();
@@ -709,6 +794,7 @@ function getComprovanteImagem(url, cpf) {
     return { error: 'Nao foi possivel abrir o comprovante: ' + e.toString() };
   }
 }
+
 // Confere se um comprovante (URL) pertence a uma despesa lancada pelo CPF dado.
 function comprovantePertenceAoCpf(url, cpf) {
   const cpfFmt = formatarCPF(normalizarCPF(cpf));
@@ -722,13 +808,16 @@ function comprovantePertenceAoCpf(url, cpf) {
   }
   return false;
 }
+
 // ---------------- Despesas ----------------
+
 function despesaValorParaNumero(v) {
   if (typeof v === 'number') return v;
   let s = String(v || '').replace(/[^\d,.-]/g, '');
   if (s.indexOf(',') > -1) { s = s.replace(/\./g, '').replace(',', '.'); }
   return parseFloat(s) || 0;
 }
+
 // Aba Despesas:
 // A Timestamp | B Data Projeto | C Cliente | D Unidade | E Tipo Despesa | F Valor
 // G Observacao | H Supervisor | I URL Comprovante | J CPF Supervisor | K Forma Pagamento
@@ -750,6 +839,7 @@ function encontrarDespesaDuplicata(data, valor, cliente, tipo, supervisor) {
   }
   return null;
 }
+
 // ============================================================================ //
 // ############ ANALISE DE COMPROVANTES (aba Analise_Despesas) ################ //
 // Estrutura compartilhada pelos 3 recursos: duplicidade, OCR e revisao.        //
@@ -763,6 +853,7 @@ const CABECALHO_ANALISE = ['Timestamp', 'ID_Despesa', 'Data', 'Cliente', 'Unidad
   'Tipo', 'Valor', 'Supervisor', 'URL_Comprovante', 'Valor_OCR',
   'Resultado', 'Motivo', 'Status_Revisao', 'Revisado_Por', 'Data_Revisao',
   'Hash_Comprovante', 'Texto_OCR'];
+
 function getSheetAnalise() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName(ABA_ANALISE);
@@ -781,6 +872,7 @@ function getSheetAnalise() {
   }
   return sheet;
 }
+
 // Registra (ou nao duplica) uma linha de analise para uma despesa.
 function registrarAnalise(a) {
   const sheet = getSheetAnalise();
@@ -801,9 +893,11 @@ function registrarAnalise(a) {
     a.hash || '', a.textoOcr || ''
   ]);
 }
+
 // ============================================================================ //
 // ############ BLOCO 2 — OCR + HASH + GATILHO AUTOMATICO ##################### //
 // ============================================================================ //
+
 // Extrai texto de uma imagem do Drive usando o OCR GRATUITO do Google (converte
 // a imagem para Google Docs, le o texto e apaga o arquivo temporario).
 function ocrImagemDrive(fileId) {
@@ -829,6 +923,7 @@ function ocrImagemDrive(fileId) {
     if (docTemp) { try { DriveApp.getFileById(docTemp).setTrashed(true); } catch (e2) {} }
   }
 }
+
 // Impressao digital (hash) dos bytes do arquivo — identifica arquivos identicos.
 function hashComprovante(fileId) {
   try {
@@ -837,6 +932,7 @@ function hashComprovante(fileId) {
     return digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
   } catch (e) { return ''; }
 }
+
 // Assinatura robusta do comprovante: hash dos bytes + tamanho + nome do arquivo.
 // Independe do OCR — funciona mesmo em prints ilegiveis. Retorna string unica.
 function assinaturaComprovante(fileId) {
@@ -849,6 +945,7 @@ function assinaturaComprovante(fileId) {
     return { hash: hash, tamanho: bytes.length, nome: arq.getName() };
   } catch (e) { return { hash: '', tamanho: 0, nome: '' }; }
 }
+
 // Extrai numeros monetarios de um texto (ex: "R$ 120,00", "120,00", "1.234,56").
 function extrairValoresTexto(texto) {
   if (!texto) return [];
@@ -863,11 +960,13 @@ function extrairValoresTexto(texto) {
   }
   return achados;
 }
+
 // Verifica se o valor lancado aparece exatamente entre os valores lidos.
 function valorConfere(valorLancado, valoresLidos) {
   const alvo = Number(valorLancado);
   return valoresLidos.some(function(v) { return Math.abs(v - alvo) < 0.005; });
 }
+
 // Busca, na aba de analise, uma despesa DIFERENTE com o mesmo comprovante.
 // Combina 3 sinais (qualquer um basta), do mais forte ao mais fraco:
 //   1. hash dos bytes identico  (arquivo exatamente igual)
@@ -899,6 +998,7 @@ function acharComprovanteDuplicado(idAtual, assinatura, textoOcr, dadosAnalise) 
   }
   return null;
 }
+
 // FUNCAO DO GATILHO (rode a cada 5 min): analisa despesas ainda nao processadas.
 function analisarDespesasPendentes() {
   const sheetDesp = getSheet('Despesas');
@@ -906,21 +1006,26 @@ function analisarDespesasPendentes() {
   const despesas = sheetDesp.getDataRange().getDisplayValues();
   const sheetAnalise = getSheetAnalise();
   let dadosAnalise = sheetAnalise.getDataRange().getDisplayValues();
+
   // Conjunto de IDs ja analisados (coluna B da analise).
   const jaAnalisados = {};
   for (let i = 1; i < dadosAnalise.length; i++) jaAnalisados[String(dadosAnalise[i][1]).trim()] = true;
+
   const MAX_POR_EXECUCAO = 20; // evita estourar o tempo do gatilho
   let processados = 0;
+
   for (let i = 1; i < despesas.length && processados < MAX_POR_EXECUCAO; i++) {
     const r = despesas[i];
     // Colunas Despesas: A=ts B=data C=cliente D=unidade E=tipo F=valor G=obs H=sup I=url J=cpf K=forma
     const id = String(r[0]).trim();
     if (!id || jaAnalisados[id]) continue; // ja analisada ou sem ID
+
     const url = String(r[8] || '').trim();
     const base = {
       timestamp: id, data: r[1], cliente: r[2], unidade: r[3],
       tipo: r[4], valor: despesaValorParaNumero(r[5]), supervisor: r[7], url: url
     };
+
     // 1) Sem comprovante = suspeito.
     if (!url) {
       registrarAnalise(Object.assign({}, base, {
@@ -931,12 +1036,14 @@ function analisarDespesasPendentes() {
       dadosAnalise = sheetAnalise.getDataRange().getDisplayValues();
       continue;
     }
+
     const fileId = extrairIdDrive(url);
     const assinatura = fileId ? assinaturaComprovante(fileId) : { hash: '', tamanho: 0, nome: '' };
     const texto = fileId ? ocrImagemDrive(fileId) : '';
     const valores = extrairValoresTexto(texto);
     // Assinatura gravada no formato "hash|tamanho|nome" (coluna P).
     const assinStr = assinatura.hash + '|' + assinatura.tamanho + '|' + assinatura.nome;
+
     // 2) Comprovante duplicado? (hash OU tamanho+nome OU texto) — checado ANTES
     //    de "ilegivel", para pegar prints iguais que o OCR nao le.
     const dupId = acharComprovanteDuplicado(id, assinatura, texto, dadosAnalise);
@@ -975,9 +1082,11 @@ function analisarDespesasPendentes() {
   }
   return { processados: processados };
 }
+
 // ============================================================================ //
 // ############ BLOCO 3 — TELA DE REVISAO (so DIRETOR) ######################## //
 // ============================================================================ //
+
 // Lista os lancamentos PENDENTES de revisao. Exclusivo da Diretoria.
 // Colunas Analise: A ts | B id | C data | D cliente | E unidade | F tipo
 //   G valor | H sup | I url | J valorOcr | K resultado | L motivo
@@ -992,6 +1101,7 @@ function getLancamentosRevisao(cpf, filtros) {
   const iniInt = filtros.dataIni ? htmlDateToInt(filtros.dataIni, false) : 0;
   const fimInt = filtros.dataFim ? htmlDateToInt(filtros.dataFim, true) : 99999999;
   const tipoAlerta = filtros.tipoAlerta || '';
+
   // Pre-carrega a aba Despesas para localizar rowId e campos completos por timestamp.
   const sheetDesp = getSheet('Despesas');
   const despRows = sheetDesp ? sheetDesp.getDataRange().getDisplayValues() : [];
@@ -1003,14 +1113,17 @@ function getLancamentosRevisao(cpf, filtros) {
       valor: despesaValorParaNumero(dr[5])
     };
   }
+
   const lista = [];
   const resumo = { COMPROVANTE_DUPLICADO: 0, DUPLICIDADE: 0, VALOR_NAO_CONFERE: 0, SEM_COMPROVANTE: 0, ILEGIVEL: 0 };
+
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
     const status = String(r[12] || '').trim().toUpperCase();
     if (status !== 'PENDENTE') continue;             // so pendentes
     const resultado = String(r[10] || '').trim().toUpperCase();
     if (resultado === 'OK') continue;                // OK nao e alerta
+
     // Filtro por data (usa a data da despesa, coluna C, formato dd/MM/yyyy).
     const dInt = ddmmyyyyToInt(r[2]);
     if (dInt) {
@@ -1018,7 +1131,9 @@ function getLancamentosRevisao(cpf, filtros) {
     }
     // Filtro por tipo de alerta.
     if (tipoAlerta && resultado !== tipoAlerta) continue;
+
     if (resumo.hasOwnProperty(resultado)) resumo[resultado]++;
+
     const idDesp = String(r[1]).trim();
     const info = mapaDesp[idDesp] || {};
     // Valor vem da despesa real (numero limpo). Se nao achar, cai no da analise.
@@ -1033,6 +1148,7 @@ function getLancamentosRevisao(cpf, filtros) {
   }
   return { success: true, lista: lista, resumo: resumo, total: lista.length };
 }
+
 // Marca um lancamento como REVISADO. Exclusivo da Diretoria.
 function marcarRevisado(cpf, idDespesa) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') {
@@ -1051,6 +1167,7 @@ function marcarRevisado(cpf, idDespesa) {
   }
   return { error: 'Lancamento nao encontrado.' };
 }
+
 // Aplica um LOTE de revisoes de uma vez (modo rascunho da tela). Recebe:
 //   lote.edicoes   = [{ rowId, timestamp, data, cliente, unidade, tipo, valor,
 //                       formaPagamento, obs, tipoOriginal, cpfSupervisorOriginal }]
@@ -1069,6 +1186,7 @@ function gravarRevisoes(cpf, lote) {
   const revisados = lote.revisados || [];
   const erros = [];
   let nEdit = 0, nExcl = 0, nRev = 0;
+
   // 1) EDICOES (reusa editarDespesa, que confere a linha antes de gravar).
   for (let i = 0; i < edicoes.length; i++) {
     const e = edicoes[i];
@@ -1076,6 +1194,7 @@ function gravarRevisoes(cpf, lote) {
     if (res && res.success) { nEdit++; marcarRevisadoInterno(e.idDespesa); }
     else { erros.push('Edicao (' + (e.tipo || '?') + '): ' + (res && res.error ? res.error : 'falhou')); }
   }
+
   // 2) EXCLUSOES — maior rowId primeiro (excluir muda a numeracao abaixo).
   const exOrd = exclusoes.slice().sort(function(a, b) { return Number(b.rowId) - Number(a.rowId); });
   for (let i = 0; i < exOrd.length; i++) {
@@ -1084,17 +1203,20 @@ function gravarRevisoes(cpf, lote) {
     if (res && res.success) { nExcl++; marcarRevisadoInterno(x.idDespesa); }
     else { erros.push('Exclusao (' + (x.tipo || '?') + '): ' + (res && res.error ? res.error : 'falhou')); }
   }
+
   // 3) REVISADOS (apenas marcar, sem alterar a despesa).
   for (let i = 0; i < revisados.length; i++) {
     const res = marcarRevisado(cpf, revisados[i]);
     if (res && res.success) nRev++;
   }
+
   return {
     success: erros.length === 0,
     aplicados: { edicoes: nEdit, exclusoes: nExcl, revisados: nRev },
     erros: erros
   };
 }
+
 // Marca revisado sem checar perfil (uso interno apos edicao/exclusao ja autorizada).
 function marcarRevisadoInterno(idDespesa) {
   try {
@@ -1109,6 +1231,7 @@ function marcarRevisadoInterno(idDespesa) {
     }
   } catch (e) {}
 }
+
 // Limpa a analise para forcar reprocessamento com a logica atual (robusta).
 // SEGURO PARA VOLUME GRANDE: apenas APAGA os registros (rapido) e deixa o
 // GATILHO de 5 min reprocessar aos poucos, sem estourar o tempo de execucao.
@@ -1129,6 +1252,7 @@ function limparAnaliseParaReprocessar() {
            'Se quiser adiantar, rode "analisarDespesasPendentes" algumas vezes (cada uma processa ate 20).'
   };
 }
+
 // Reprocessa UM lote agora (ate 20). Rode varias vezes para adiantar sem
 // esperar o gatilho. Retorna quantos processou nesta execucao.
 function reprocessarUmLote() {
@@ -1137,6 +1261,7 @@ function reprocessarUmLote() {
   return { success: true, processadosAgora: n,
            aviso: n >= 20 ? 'Havia mais para processar — rode de novo.' : 'Lote final (ou nada pendente).' };
 }
+
 // (Mantida por compatibilidade, mas EVITE em bases grandes: tenta tudo de uma
 // vez e pode estourar o tempo. Prefira limparAnaliseParaReprocessar + gatilho.)
 function reanalisarTudo() {
@@ -1151,18 +1276,23 @@ function reanalisarTudo() {
   } while (res && res.processados >= 20 && voltas < 12); // trava de seguranca
   return { success: true, reprocessados: total };
 }
+
 function lancarDespesa(d) {
   if (!d || !d.data || !d.cliente || !d.unidade) return { error: 'Projeto ou centro de custo nao identificado.' };
   if (!d.tipo) return { error: 'Selecione o Tipo de Despesa.' };
   if (!d.formaPagamento) return { error: 'Selecione a Forma de Pagamento.' };
+
   const valor = Number(d.valor);
   if (!valor || valor <= 0) return { error: 'Informe um valor maior que zero.' };
+
   const perfil = getPerfilPorCPF(d.cpf);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Apenas Supervisor ou Diretoria podem lancar despesas.' };
   if (d.semProjeto && perfil !== 'DIRETOR') return { error: 'Apenas a Diretoria pode lancar despesas sem projeto.' };
+
   if (!d.semProjeto && isSessaoEncerrada(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade })) {
     return { error: 'Seus lancamentos aqui estao encerrados. Reabra a sessao para lancar novamente.' };
   }
+
   // BLOCO 1 — DUPLICIDADE: bloqueia se ja existe despesa identica (mesma data +
   // valor + cliente + tipo + supervisor), a menos que o supervisor confirme que
   // e diferente (d.confirmarDuplicata === true). Nesse caso, grava e sinaliza.
@@ -1177,6 +1307,7 @@ function lancarDespesa(d) {
       };
     }
   }
+
   let url = '';
   if (d.comprovante && d.comprovante.base64) {
     try {
@@ -1185,6 +1316,7 @@ function lancarDespesa(d) {
       return { error: 'A despesa NAO foi gravada porque o comprovante falhou ao subir para o Drive: ' + e.toString() };
     }
   }
+
   const tsLancamento = new Date().toLocaleString('pt-BR');
   getSheet('Despesas').appendRow([
     tsLancamento,
@@ -1199,6 +1331,7 @@ function lancarDespesa(d) {
     formatarCPF(normalizarCPF(d.cpf)),
     d.formaPagamento
   ]);
+
   // BLOCO 1 — se o supervisor confirmou que e DIFERENTE de uma identica,
   // registra para a Diretoria revisar (marca de duplicidade).
   if (d.confirmarDuplicata) {
@@ -1211,8 +1344,10 @@ function lancarDespesa(d) {
       });
     } catch (e) { /* nao impede a gravacao da despesa */ }
   }
+
   return { success: true, url: url };
 }
+
 // Lista as despesas de um projeto. Supervisor enxerga somente o que ele lancou.
 function getDespesas(projeto, cpf) {
   if (!projeto || !projeto.data) return { lista: [], sessaoEncerrada: false };
@@ -1220,11 +1355,13 @@ function getDespesas(projeto, cpf) {
   if (!sheet) return { lista: [], sessaoEncerrada: false };
   const dados = sheet.getDataRange().getDisplayValues();
   const ctx = getContextoUsuario(cpf);
+
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
     if (r[1] !== projeto.data || r[2] !== projeto.cliente || r[3] !== projeto.unidade) continue;
     if (!podeVerRegistroFinanceiro(ctx.ehDiretor, r[9], r[7], ctx.cpfLimpo, ctx.nomeUser)) continue;
+
     lista.push({
       rowId: i + 1, timestamp: r[0], data: r[1], cliente: r[2], unidade: r[3],
       tipo: r[4], valor: despesaValorParaNumero(r[5]), obs: r[6],
@@ -1234,20 +1371,25 @@ function getDespesas(projeto, cpf) {
   lista.sort((a, b) => b.rowId - a.rowId);
   return { lista: lista, sessaoEncerrada: isSessaoEncerrada(cpf, projeto) };
 }
+
 // Exclui um lancamento. SOMENTE DIRETOR. Confere a linha antes de apagar.
 function excluirDespesa(cpf, despesa) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Somente a Diretoria pode excluir lancamentos de despesa.' };
   if (!despesa || !despesa.rowId) return { error: 'Lancamento nao identificado.' };
+
   const sheet = getSheet('Despesas');
   const rowId = Number(despesa.rowId);
   if (rowId < 2 || rowId > sheet.getLastRow()) return { error: 'Lancamento nao localizado. Recarregue a lista e tente de novo.' };
+
   const linha = sheet.getRange(rowId, 1, 1, 11).getDisplayValues()[0];
   if (String(linha[0]) !== String(despesa.timestamp) || String(linha[4]) !== String(despesa.tipo)) {
     return { error: 'A lista da tela esta desatualizada. Recarregue as despesas e tente novamente (nada foi excluido).' };
   }
+
   sheet.deleteRow(rowId);
   return { success: true };
 }
+
 // Edicao completa pela Diretoria: tipo, valor, forma de pagamento, observacao
 // e tambem o projeto/centro de custo vinculado. Nao altera quem lancou
 // (Supervisor/CPF Supervisor permanecem os originais). Confere a linha antes
@@ -1258,11 +1400,14 @@ function editarDespesa(cpf, d) {
   if (!d.tipo) return { error: 'Selecione o Tipo de Despesa.' };
   if (!d.formaPagamento) return { error: 'Selecione a Forma de Pagamento.' };
   if (!d.data || !d.cliente || !d.unidade) return { error: 'Projeto ou centro de custo nao identificado.' };
+
   const valor = Number(d.valor);
   if (!valor || valor <= 0) return { error: 'Informe um valor maior que zero.' };
+
   const sheet = getSheet('Despesas');
   const rowId = Number(d.rowId);
   if (rowId < 2 || rowId > sheet.getLastRow()) return { error: 'Lancamento nao localizado. Recarregue a lista e tente novamente.' };
+
   const linha = sheet.getRange(rowId, 1, 1, 11).getDisplayValues()[0];
   // Trava de seguranca: confere tipo original. Se o CPF do supervisor estiver
   // disponivel nos dois lados, confere tambem; caso contrario aceita pelo tipo + rowId.
@@ -1276,14 +1421,17 @@ function editarDespesa(cpf, d) {
   if (cpfOrigServer && cpfOrigClient && cpfOrigServer !== cpfOrigClient) {
     return { error: 'Linha ' + rowId + ': CPF do supervisor na planilha e "' + formatarCPF(cpfOrigServer) + '", tela enviou "' + formatarCPF(cpfOrigClient) + '". Recarregue a lista e tente novamente.' };
   }
+
   sheet.getRange(rowId, 2, 1, 4).setValues([[d.data, d.cliente, d.unidade, d.tipo]]); // B,C,D,E
   sheet.getRange(rowId, 6).setValue(valor);                                          // F
   sheet.getRange(rowId, 7).setValue(d.obs || '');                                    // G
   sheet.getRange(rowId, 11).setValue(d.formaPagamento);                              // K
   return { success: true };
 }
+
 // ---------------- Sessao de lancamentos (aba Despesas_Sessoes) ----------------
 // Colunas: Data Projeto | Cliente | Unidade | CPF | Nome | Status | Timestamp
+
 function acharLinhaSessao(dados, cpfLimpo, projeto) {
   for (let i = 1; i < dados.length; i++) {
     if (dados[i][0] === projeto.data && dados[i][1] === projeto.cliente &&
@@ -1293,6 +1441,7 @@ function acharLinhaSessao(dados, cpfLimpo, projeto) {
   }
   return 0;
 }
+
 function isSessaoEncerrada(cpf, projeto) {
   try {
     if (!projeto || !projeto.data) return false;
@@ -1308,56 +1457,73 @@ function isSessaoEncerrada(cpf, projeto) {
     return false;
   }
 }
+
 // Encerra ou reabre a sessao da pessoa. NAO afeta o projeto nem as outras pessoas.
 function setSessaoDespesas(cpf, projeto, status) {
   if (!projeto || !projeto.data) return { error: 'Projeto nao identificado.' };
+
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return { error: 'CPF do usuario nao identificado. Saia e entre novamente no painel.' };
+
   const novoStatus = String(status || '').trim().toUpperCase();
   if (novoStatus !== 'ENCERRADO' && novoStatus !== 'REABERTO') return { error: 'Status invalido.' };
+
   const sheet = getSheet('Despesas_Sessoes');
   if (!sheet) return { error: 'A aba "Despesas_Sessoes" nao foi encontrada na planilha. Crie a aba com as colunas: Data Projeto | Cliente | Unidade | CPF | Nome | Status | Timestamp.' };
+
   const perfil = getPerfilPorCPF(cpfLimpo);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Apenas Supervisor ou Diretoria podem encerrar ou reabrir lancamentos.' };
+
   const dados = sheet.getDataRange().getDisplayValues();
   const linha = acharLinhaSessao(dados, cpfLimpo, projeto);
   const agora = new Date().toLocaleString('pt-BR');
+
   if (linha) {
     sheet.getRange(linha, 6).setValue(novoStatus);
     sheet.getRange(linha, 7).setValue(agora);
   } else {
     sheet.appendRow([projeto.data, projeto.cliente, projeto.unidade, formatarCPF(cpfLimpo), getNomePorCPF(cpfLimpo), novoStatus, agora]);
   }
+
   return { success: true, sessaoEncerrada: (novoStatus === 'ENCERRADO') };
 }
+
 // ---------------- Relatorio e BI de despesas ----------------
 // DIRETOR enxerga tudo. SUPERVISOR enxerga somente o que ele lancou.
 // Sem filtro estrutural que exclua despesas sem projeto: elas entram igual a
 // qualquer outra, respeitando apenas o periodo selecionado.
+
 function getDespesasRelatorio(cpf, filtros) {
   const ctx = getContextoUsuario(cpf);
   if (ctx.perfil !== 'DIRETOR' && ctx.perfil !== 'SUPERVISOR') return { error: 'Acesso negado. Apenas Supervisor ou Diretoria.' };
+
   let mapaGrupo = {};
   lerConfigDespesas().forEach(t => { mapaGrupo[t.tipo.toUpperCase()] = t.grupo; });
   const mapaProprio = getMapaRecursoProprio();
+
   const sheet = getSheet('Despesas');
   if (!sheet) return { lista: [], perfil: ctx.perfil };
   const dados = sheet.getDataRange().getDisplayValues();
+
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
+
   let projSet = null;
   if (filtros && filtros.projetos && filtros.projetos.length) {
     projSet = {};
     filtros.projetos.forEach(p => { projSet[p.data + '|' + p.cliente + '|' + p.unidade] = true; });
   }
+
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
     if (!r[1]) continue;
+
     const dInt = ddmmyyyyToInt(r[1]);
     if (dInt < tIni || dInt > tFim) continue;
     if (projSet && !projSet[r[1] + '|' + r[2] + '|' + r[3]]) continue;
     if (!podeVerRegistroFinanceiro(ctx.ehDiretor, r[9], r[7], ctx.cpfLimpo, ctx.nomeUser)) continue;
+
     const tipo = String(r[4] || '').trim();
     const forma = String(r[10] || '').trim();
     lista.push({
@@ -1370,48 +1536,63 @@ function getDespesasRelatorio(cpf, filtros) {
   }
   return { lista: ordenarPorDataDesc(lista), perfil: ctx.perfil };
 }
+
 // ---------------- Financeiro: pessoas ----------------
+
 // Pesquisa colaborador por CPF, nome completo ou nome reduzido. Exclusivo da Diretoria.
 function pesquisarPessoaFinanceiro(cpf, termo, somenteGestores) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito a Diretoria.' };
+
   const busca = String(termo || '').trim().toLowerCase();
   if (busca.length < 2) return { pessoas: [] };
   const buscaCpf = normalizarCPF(busca);
+
   const dados = getSheet('Colaboradores').getDataRange().getValues();
   const idx = getColabIndices();
+
   let pessoas = [];
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
     const cpfLinha = normalizarCPF(r[idx.cpf]);
     if (!cpfLinha) continue;
+
     const perfilLinha = String(r[idx.perfil] || '').trim().toUpperCase();
     if (somenteGestores && perfilLinha !== 'SUPERVISOR' && perfilLinha !== 'DIRETOR') continue;
+
     const nome = String(r[idx.nome] || '');
     const reduzido = String(r[idx.reduzido] || '');
+
     const bate = (buscaCpf.length >= 3 && cpfLinha.indexOf(buscaCpf) > -1) ||
                  nome.toLowerCase().indexOf(busca) > -1 ||
                  reduzido.toLowerCase().indexOf(busca) > -1;
     if (!bate) continue;
+
     pessoas.push({ cpf: formatarCPF(cpfLinha), nome: nome, reduzido: reduzido, perfil: perfilLinha });
     if (pessoas.length >= 25) break;
   }
   return { pessoas: pessoas };
 }
+
 // ---------------- Provisionamento (ressarcimento ao supervisor) ----------------
 // Aba Provisionamentos:
 // A Timestamp | B Data | C CPF Supervisor | D Nome Supervisor | E Valor
 // F Forma Pagamento | G Observacao | H URL Comprovante | I Lancado Por
+
 function lancarProvisionamento(cpf, p) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Somente a Diretoria pode lancar provisionamento.' };
   if (!p || !p.cpfSupervisor) return { error: 'Selecione o supervisor.' };
   if (!p.data) return { error: 'Informe a data.' };
+
   const valor = Number(p.valor);
   if (!valor || valor <= 0) return { error: 'Informe um valor maior que zero.' };
+
   const sheet = getSheet('Provisionamentos');
   if (!sheet) return { error: 'A aba "Provisionamentos" nao foi encontrada na planilha.' };
+
   const cpfSup = normalizarCPF(p.cpfSupervisor);
   const nomeSup = getNomePorCPF(cpfSup);
   if (!nomeSup) return { error: 'Supervisor nao encontrado na base de colaboradores.' };
+
   let url = '';
   if (p.comprovante && p.comprovante.base64) {
     try {
@@ -1420,6 +1601,7 @@ function lancarProvisionamento(cpf, p) {
       return { error: 'O provisionamento NAO foi gravado porque o comprovante falhou ao subir para o Drive: ' + e.toString() };
     }
   }
+
   sheet.appendRow([
     new Date().toLocaleString('pt-BR'),
     p.data,
@@ -1433,14 +1615,18 @@ function lancarProvisionamento(cpf, p) {
   ]);
   return { success: true, url: url };
 }
+
 function getProvisionamentos(cpf, filtros) {
   const ctx = getContextoUsuario(cpf);
   if (ctx.perfil !== 'DIRETOR' && ctx.perfil !== 'SUPERVISOR') return { error: 'Acesso negado.' };
+
   const sheet = getSheet('Provisionamentos');
   if (!sheet) return { lista: [] };
   const dados = sheet.getDataRange().getDisplayValues();
+
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
+
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
@@ -1448,6 +1634,7 @@ function getProvisionamentos(cpf, filtros) {
     const dInt = ddmmyyyyToInt(r[1]);
     if (dInt < tIni || dInt > tFim) continue;
     if (!ctx.ehDiretor && normalizarCPF(r[2]) !== ctx.cpfLimpo) continue;
+
     lista.push({
       rowId: i + 1, timestamp: r[0], data: r[1], cpf: r[2], nome: r[3],
       valor: despesaValorParaNumero(r[4]), formaPagamento: r[5], obs: r[6],
@@ -1456,21 +1643,27 @@ function getProvisionamentos(cpf, filtros) {
   }
   return { lista: ordenarPorDataDesc(lista) };
 }
+
 // ---------------- Adiantamento (salario antecipado ao colaborador) ----------------
 // Aba Adiantamentos:
 // A Timestamp | B Data | C CPF | D Nome | E Valor | F Forma Pagamento | G Observacao
 // H URL Comprovante | I Lancado Por
+
 function lancarAdiantamento(cpf, a) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Somente a Diretoria pode lancar adiantamento.' };
   if (!a || !a.cpfColaborador) return { error: 'Selecione o colaborador.' };
   if (!a.data) return { error: 'Informe a data.' };
+
   const valor = Number(a.valor);
   if (!valor || valor <= 0) return { error: 'Informe um valor maior que zero.' };
+
   const sheet = getSheet('Adiantamentos');
   if (!sheet) return { error: 'A aba "Adiantamentos" nao foi encontrada na planilha.' };
+
   const cpfColab = normalizarCPF(a.cpfColaborador);
   const nomeColab = getNomePorCPF(cpfColab);
   if (!nomeColab) return { error: 'Colaborador nao encontrado na base.' };
+
   let url = '';
   if (a.comprovante && a.comprovante.base64) {
     try {
@@ -1479,6 +1672,7 @@ function lancarAdiantamento(cpf, a) {
       return { error: 'O adiantamento NAO foi gravado porque o comprovante falhou ao subir para o Drive: ' + e.toString() };
     }
   }
+
   sheet.appendRow([
     new Date().toLocaleString('pt-BR'),
     a.data,
@@ -1492,20 +1686,25 @@ function lancarAdiantamento(cpf, a) {
   ]);
   return { success: true, url: url };
 }
+
 // Adiantamentos sao visiveis SOMENTE pela Diretoria.
 function getAdiantamentos(cpf, filtros) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito a Diretoria.' };
+
   const sheet = getSheet('Adiantamentos');
   if (!sheet) return { lista: [] };
   const dados = sheet.getDataRange().getDisplayValues();
+
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
+
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
     if (!r[1]) continue;
     const dInt = ddmmyyyyToInt(r[1]);
     if (dInt < tIni || dInt > tFim) continue;
+
     lista.push({
       rowId: i + 1, timestamp: r[0], data: r[1], cpf: r[2], nome: r[3],
       valor: despesaValorParaNumero(r[4]), formaPagamento: r[5], obs: r[6], url: r[7], lancadoPor: r[8]
@@ -1513,6 +1712,7 @@ function getAdiantamentos(cpf, filtros) {
   }
   return { lista: ordenarPorDataDesc(lista) };
 }
+
 // ---------------- Painel de contadores — aba Financeiro ----------------
 // Reaproveita getProvisionamentos/getAdiantamentos (mesma fonte, mesmo
 // escopo de permissao). Se filtros.dataIni/dataFim vierem preenchidos, usa
@@ -1525,6 +1725,7 @@ function getAdiantamentos(cpf, filtros) {
 function getContadoresFinanceiro(cpf, filtrosPedidos) {
   const ctx = getContextoUsuario(cpf);
   if (ctx.perfil !== 'DIRETOR' && ctx.perfil !== 'SUPERVISOR') return { error: 'Acesso negado.' };
+
   let filtros;
   if (filtrosPedidos && filtrosPedidos.dataIni && filtrosPedidos.dataFim) {
     filtros = { dataIni: filtrosPedidos.dataIni, dataFim: filtrosPedidos.dataFim };
@@ -1536,10 +1737,12 @@ function getContadoresFinanceiro(cpf, filtrosPedidos) {
       dataFim: Utilities.formatDate(hoje, tz, 'yyyy-MM-dd')
     };
   }
+
   const prov = getProvisionamentos(cpf, filtros);
   const provLista = prov.lista || [];
   const provQtd = provLista.length;
   const provValor = provLista.reduce(function (s, p) { return s + Number(p.valor || 0); }, 0);
+
   let adtoQtd = 0, adtoValor = 0, adtoVisivel = false;
   if (ctx.ehDiretor) {
     const adto = getAdiantamentos(cpf, filtros);
@@ -1548,15 +1751,18 @@ function getContadoresFinanceiro(cpf, filtrosPedidos) {
     adtoValor = adtoLista.reduce(function (s, a) { return s + Number(a.valor || 0); }, 0);
     adtoVisivel = true;
   }
+
   return {
     provisionamentos: { qtd: provQtd, valor: provValor },
     adiantamentos: { qtd: adtoQtd, valor: adtoValor, visivel: adtoVisivel },
     totalLancamentos: provQtd + adtoQtd
   };
 }
+
 // ---------------- Mapa de perfis (otimizacao) ----------------
 // Le o Colaboradores UMA vez e monta { cpfLimpo: perfil } para evitar
 // reler a planilha inteira dentro de cada iteracao de loop.
+
 function montarMapaPerfis() {
   const dadosColab = getSheet('Colaboradores').getDataRange().getValues();
   const idx = getColabIndices();
@@ -1567,14 +1773,17 @@ function montarMapaPerfis() {
   }
   return mapa;
 }
+
 // ---------------- Despesas x Provisionamento ----------------
 // Gastou do bolso (Despesas com Recurso Proprio) x Recebeu (Provisionamentos).
 // Saldo negativo = a empresa deve ao supervisor.
 // SOMENTE despesas de SUPERVISORES entram na analise.
 // DIRETOR ve todos os supervisores. SUPERVISOR ve somente ele.
+
 function getAcertoContas(cpf, filtros) {
   const ctx = getContextoUsuario(cpf);
   if (ctx.perfil !== 'DIRETOR' && ctx.perfil !== 'SUPERVISOR') return { error: 'Acesso negado.' };
+
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
   const mapaProprio = getMapaRecursoProprio();
@@ -1582,10 +1791,12 @@ function getAcertoContas(cpf, filtros) {
   let pessoas = {};
   let diagnostico = { totalLidas: 0, noPerido: 0, comRecursoProprio: 0, comCpf: 0, saoSupervisor: 0,
                        formasEncontradas: [], formasConfiguradas: Object.keys(mapaProprio || {}), perfisEncontrados: [] };
+
   function garantir(cpfPessoa, nome) {
     if (!pessoas[cpfPessoa]) pessoas[cpfPessoa] = { cpf: formatarCPF(cpfPessoa), nome: nome || getNomePorCPF(cpfPessoa) || 'NAO IDENTIFICADO', gastou: 0, recebeu: 0 };
     return pessoas[cpfPessoa];
   }
+
   const sheetD = getSheet('Despesas');
   if (sheetD) {
     const dados = sheetD.getDataRange().getDisplayValues();
@@ -1593,25 +1804,32 @@ function getAcertoContas(cpf, filtros) {
       const r = dados[i];
       if (!r[1]) continue;
       diagnostico.totalLidas++;
+
       const dInt = ddmmyyyyToInt(r[1]);
       if (dInt < tIni || dInt > tFim) continue;
       diagnostico.noPerido++;
+
       const forma = String(r[10] || '').trim();
       if (forma && diagnostico.formasEncontradas.indexOf(forma) === -1) diagnostico.formasEncontradas.push(forma);
       if (!ehRecursoProprio(mapaProprio, forma)) continue;
       diagnostico.comRecursoProprio++;
+
       const cpfLinha = resolverCpfPorNomeSeVazio(r[9], r[7]);
       if (!cpfLinha) continue;
       diagnostico.comCpf++;
+
       const perfilDaLinha = mapaPerfis[cpfLinha] || '(nao encontrado na Colaboradores)';
       const amostra = r[7] + ' = ' + perfilDaLinha;
       if (diagnostico.perfisEncontrados.indexOf(amostra) === -1) diagnostico.perfisEncontrados.push(amostra);
       if (perfilDaLinha !== 'SUPERVISOR') continue;
       diagnostico.saoSupervisor++;
+
       if (!ctx.ehDiretor && cpfLinha !== ctx.cpfLimpo) continue;
+
       garantir(cpfLinha, r[7]).gastou += despesaValorParaNumero(r[5]);
     }
   }
+
   const sheetP = getSheet('Provisionamentos');
   if (sheetP) {
     const dados = sheetP.getDataRange().getDisplayValues();
@@ -1620,38 +1838,47 @@ function getAcertoContas(cpf, filtros) {
       if (!r[1]) continue;
       const dInt = ddmmyyyyToInt(r[1]);
       if (dInt < tIni || dInt > tFim) continue;
+
       const cpfLinha = normalizarCPF(r[2]);
       if (!cpfLinha) continue;
       if (!ctx.ehDiretor && cpfLinha !== ctx.cpfLimpo) continue;
+
       garantir(cpfLinha, r[3]).recebeu += despesaValorParaNumero(r[4]);
     }
   }
+
   let lista = Object.keys(pessoas).map(k => {
     const p = pessoas[k];
     p.saldo = p.recebeu - p.gastou;
     return p;
   });
   lista.sort((a, b) => a.saldo - b.saldo);
+
   return { lista: lista, perfil: ctx.perfil, diagnostico: diagnostico };
 }
+
 // BI Financeiro: para cada supervisor, quanto gastou com recurso proprio (com
 // detalhamento por Grupo) e quanto ja recebeu de provisionamento.
 // SOMENTE despesas de SUPERVISORES entram na analise. So Diretoria enxerga.
 function getBiFinanceiro(cpf, filtros) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito a Diretoria.' };
+
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
   const mapaProprio = getMapaRecursoProprio();
   const mapaPerfis = montarMapaPerfis();
   let mapaGrupo = {};
   lerConfigDespesas().forEach(t => { mapaGrupo[t.tipo.toUpperCase()] = t.grupo; });
+
   let diagnostico = { totalLidas: 0, noPerido: 0, comRecursoProprio: 0, comCpf: 0, saoSupervisor: 0,
                        formasEncontradas: [], formasConfiguradas: Object.keys(mapaProprio || {}) };
+
   let pessoas = {};
   function garantir(cpfPessoa, nome) {
     if (!pessoas[cpfPessoa]) pessoas[cpfPessoa] = { cpf: formatarCPF(cpfPessoa), nome: nome || getNomePorCPF(cpfPessoa) || 'NAO IDENTIFICADO', gastou: 0, recebeu: 0, porGrupo: {}, provisionamentos: [] };
     return pessoas[cpfPessoa];
   }
+
   const sheetD = getSheet('Despesas');
   if (sheetD) {
     const dados = sheetD.getDataRange().getDisplayValues();
@@ -1666,6 +1893,7 @@ function getBiFinanceiro(cpf, filtros) {
       if (forma && diagnostico.formasEncontradas.indexOf(forma) === -1) diagnostico.formasEncontradas.push(forma);
       if (!ehRecursoProprio(mapaProprio, forma)) continue;
       diagnostico.comRecursoProprio++;
+
       const cpfLinha = resolverCpfPorNomeSeVazio(r[9], r[7]);
       if (!cpfLinha) continue;
       diagnostico.comCpf++;
@@ -1677,6 +1905,7 @@ function getBiFinanceiro(cpf, filtros) {
       }
       if (perfilDaLinha !== 'SUPERVISOR') continue;
       diagnostico.saoSupervisor++;
+
       const p = garantir(cpfLinha, r[7]);
       const valor = despesaValorParaNumero(r[5]);
       p.gastou += valor;
@@ -1684,6 +1913,7 @@ function getBiFinanceiro(cpf, filtros) {
       p.porGrupo[grupo] = (p.porGrupo[grupo] || 0) + valor;
     }
   }
+
   const sheetP = getSheet('Provisionamentos');
   if (sheetP) {
     const dados = sheetP.getDataRange().getDisplayValues();
@@ -1694,12 +1924,14 @@ function getBiFinanceiro(cpf, filtros) {
       if (dInt < tIni || dInt > tFim) continue;
       const cpfLinha = normalizarCPF(r[2]);
       if (!cpfLinha) continue;
+
       const p = garantir(cpfLinha, r[3]);
       const valor = despesaValorParaNumero(r[4]);
       p.recebeu += valor;
       p.provisionamentos.push({ data: r[1], valor: valor, formaPagamento: r[5], obs: r[6], lancadoPor: r[8] });
     }
   }
+
   let lista = Object.keys(pessoas).map(k => {
     const p = pessoas[k];
     p.saldo = p.recebeu - p.gastou;
@@ -1708,18 +1940,22 @@ function getBiFinanceiro(cpf, filtros) {
     return p;
   });
   lista.sort((a, b) => b.gastou - a.gastou);
+
   return { lista: lista, diagnostico: diagnostico };
 }
+
 // ============================================================================= //
 // ############ SENHA DINAMICA POR E-MAIL (2 FATORES, r13) #################### //
 // O codigo NAO vai para a planilha: fica no CacheService do Apps Script, com   //
 // expiracao automatica. Requer a coluna "Email" na aba Colaboradores.          //
 // Sessao (token) dura 2 horas a partir da geracao.                             //
 // ============================================================================= //
+
 const OTP_VALIDADE_SEG = 600;        // codigo de 6 digitos vale 10 minutos
 const SESSAO_VALIDADE_SEG = 7200;    // sessao dura 2 horas
 const OTP_MAX_TENTATIVAS = 5;
 const JANELA_REUSO_SEG = 30;         // idempotencia: repetir a MESMA validacao por ate 30s (retry)
+
 // Acoes liberadas sem sessao autenticada. As 3 primeiras sao usadas pelo
 // COLABORADOR (bate ponto so com CPF) e as 3 ultimas sao o proprio fluxo de login.
 const ACOES_PUBLICAS = [
@@ -1734,14 +1970,17 @@ const ACOES_PUBLICAS = [
   'redefinirSenhaComCodigo',
   'getVersaoScript'
 ];
+
 // ============================================================================ //
 // ############ ANALISE DE INVENTARIOS (app de auditoria de estoque) ########## //
 // Salva cada analise numa subpasta do Drive (entradas + saidas + resultado) e  //
 // registra o historico numa aba. Acesso: SUPERVISOR e DIRETOR.                 //
 // ============================================================================ //
+
 const ABA_INVENTARIOS = 'Analise_Inventarios';
 const CABECALHO_INVENTARIOS = ['Timestamp', 'Cliente', 'Unidade', 'Data_Inventario',
   'Feito_Por', 'CPF', 'Link_Pasta', 'Qtd_Arquivos', 'Resumo_JSON'];
+
 function getSheetInventarios() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName(ABA_INVENTARIOS);
@@ -1752,6 +1991,7 @@ function getSheetInventarios() {
   }
   return sheet;
 }
+
 // Salva uma analise completa no Drive + registra no historico.
 // payload = { cpf, cliente, unidade, dataInventario, resumo (objeto),
 //   arquivos: [ { nome, mimeType, base64 }, ... ], modo: 'novo'|'substituir' }
@@ -1768,6 +2008,7 @@ function salvarAnaliseInventario(payload) {
     const raiz = DriveApp.getFolderById(PASTA_INVENTARIOS_ID);
     const limpar = function(s) { return String(s || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, ''); };
     const baseNome = limpar(payload.cliente) + '_' + limpar(payload.unidade) + '_' + limpar(payload.dataInventario);
+
     let sub;
     const modo = payload.modo || 'novo';
     if (modo === 'substituir') {
@@ -1787,6 +2028,7 @@ function salvarAnaliseInventario(payload) {
       // Cria sempre uma subpasta nova (timestamp garante unicidade).
       sub = raiz.createFolder(baseNome + '_' + new Date().getTime());
     }
+
     let salvos = 0;
     payload.arquivos.forEach(function(arq) {
       if (!arq || !arq.base64) return;
@@ -1795,6 +2037,7 @@ function salvarAnaliseInventario(payload) {
       sub.createFile(blob);
       salvos++;
     });
+
     const sheet = getSheetInventarios();
     sheet.appendRow([
       new Date().toLocaleString('pt-BR'),
@@ -1803,11 +2046,13 @@ function salvarAnaliseInventario(payload) {
       sub.getUrl(), salvos,
       JSON.stringify(payload.resumo || {})
     ]);
+
     return { success: true, linkPasta: sub.getUrl(), arquivosSalvos: salvos, modo: modo };
   } catch (e) {
     return { error: 'Falha ao salvar no Drive: ' + e.toString() };
   }
 }
+
 // Acha a subpasta de inventario cujo nome comeca com o prefixo (Cliente_Unidade_Data).
 function acharSubpastaInventario(raiz, baseNome) {
   const pastas = raiz.getFolders();
@@ -1823,6 +2068,7 @@ function acharSubpastaInventario(raiz, baseNome) {
   }
   return achada;
 }
+
 // Remove do historico o registro que aponta para uma pasta (por URL).
 function removerRegistroInventario(linkPasta) {
   const sheet = getSheetInventarios();
@@ -1833,6 +2079,7 @@ function removerRegistroInventario(linkPasta) {
     }
   }
 }
+
 // Verifica se ja existe uma analise salva para cliente/unidade/data (para o
 // app perguntar "substituir ou criar nova"). Nao altera nada.
 function checarInventarioExistente(payload) {
@@ -1851,6 +2098,7 @@ function checarInventarioExistente(payload) {
     return { success: true, existe: false }; // em duvida, deixa salvar como novo
   }
 }
+
 // Lista o historico de analises de inventario. Todos (sup/dir) veem todas.
 function getHistoricoInventarios(cpf) {
   const perfil = getPerfilPorCPF(cpf);
@@ -1873,6 +2121,7 @@ function getHistoricoInventarios(cpf) {
   lista.reverse(); // mais recentes primeiro
   return { success: true, lista: lista, total: lista.length };
 }
+
 // Extrai o ID de uma pasta a partir da URL do Drive (.../folders/ID).
 function extrairIdPastaDrive(url) {
   const s = String(url || '');
@@ -1882,6 +2131,7 @@ function extrairIdPastaDrive(url) {
   if (m) return m[1];
   return '';
 }
+
 // Le os arquivos-fonte (.xlsx) de uma subpasta e devolve cada um em base64,
 // com o "tipo de slot" identificado pelo prefixo do nome do arquivo.
 function getArquivosInventario(cpf, pastaId) {
@@ -1922,11 +2172,13 @@ function getArquivosInventario(cpf, pastaId) {
     return { error: 'Nao foi possivel ler os arquivos da pasta: ' + e.toString() };
   }
 }
+
 function getIndiceEmail() {
   const headers = getSheet('Colaboradores').getDataRange().getValues()[0]
     .map(h => String(h).trim().toLowerCase());
   return headers.findIndex(h => h.indexOf('mail') > -1);
 }
+
 function getEmailPorCPF(cpf) {
   const idxEmail = getIndiceEmail();
   if (idxEmail === -1) return '';
@@ -1937,6 +2189,7 @@ function getEmailPorCPF(cpf) {
   const user = dados.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   return user ? String(user[idxEmail] || '').trim() : '';
 }
+
 function mascararEmail(email) {
   const partes = String(email).split('@');
   if (partes.length !== 2) return '***';
@@ -1944,24 +2197,29 @@ function mascararEmail(email) {
   const visivel = nome.length <= 2 ? nome.charAt(0) : nome.substring(0, 2);
   return visivel + '***@' + partes[1];
 }
+
 // ============================================================================ //
 // ############ AUTENTICACAO POR SENHA (mantendo o codigo por e-mail) ######### //
 // A senha e guardada como HASH (SHA-256 + sal fixo do script). Nunca em texto.  //
 // O token de sessao emitido e IDENTICO ao do fluxo por e-mail — nada muda para  //
 // o resto do app. O codigo por e-mail continua existindo (recuperacao/reset).   //
 // ============================================================================ //
+
 const SENHA_SAL = 'FormulaCode-2026-sal-interno-v1'; // sal fixo do hash
+
 // Localiza (ou indica ausencia) da coluna SenhaHash na aba Colaboradores.
 function getIndiceSenha() {
   const headers = getSheet('Colaboradores').getDataRange().getValues()[0]
     .map(h => String(h).trim().toLowerCase());
   return headers.findIndex(h => h.indexOf('senha') > -1);
 }
+
 function hashSenha(senha) {
   const bytes = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256, SENHA_SAL + String(senha), Utilities.Charset.UTF_8);
   return bytes.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
 }
+
 // Regras de senha: minimo 8 caracteres, com ao menos uma letra e um numero.
 function senhaValida(senha) {
   const s = String(senha || '');
@@ -1970,6 +2228,7 @@ function senhaValida(senha) {
   if (!/[0-9]/.test(s)) return false;
   return true;
 }
+
 // Retorna se o CPF ja tem senha cadastrada (define o fluxo: login x 1o acesso).
 function temSenhaCadastrada(cpf) {
   const idxSenha = getIndiceSenha();
@@ -1980,6 +2239,7 @@ function temSenhaCadastrada(cpf) {
   const user = dados.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   return !!(user && String(user[idxSenha] || '').trim());
 }
+
 // Passo 1 do login: informa se o CPF existe e se ja tem senha (ou e 1o acesso).
 function verificarAcesso(cpf) {
   const cpfLimpo = normalizarCPF(cpf);
@@ -2001,6 +2261,7 @@ function verificarAcesso(cpf) {
     emailMascarado: email ? mascararEmail(email) : ''
   };
 }
+
 // Define a senha no PRIMEIRO acesso (confirma o e-mail ja cadastrado).
 function definirSenhaPrimeiroAcesso(cpf, senha) {
   const cpfLimpo = normalizarCPF(cpf);
@@ -2008,8 +2269,10 @@ function definirSenhaPrimeiroAcesso(cpf, senha) {
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Acesso restrito.' };
   if (temSenhaCadastrada(cpfLimpo)) return { error: 'Ja existe senha. Use "Entrar" ou recuperacao.' };
   if (!senhaValida(senha)) return { error: 'A senha deve ter no minimo 8 caracteres, com letra e numero.' };
+
   const idxSenha = getIndiceSenha();
   if (idxSenha === -1) return { error: 'Coluna "SenhaHash" nao encontrada na aba Colaboradores.' };
+
   const sheet = getSheet('Colaboradores');
   const dados = sheet.getDataRange().getValues();
   const idx = getColabIndices();
@@ -2024,6 +2287,7 @@ function definirSenhaPrimeiroAcesso(cpf, senha) {
   }
   return { error: 'CPF nao encontrado.' };
 }
+
 // Login com senha: valida e emite o token (identico ao fluxo por e-mail).
 function entrarComSenha(cpf, senha) {
   const cpfLimpo = normalizarCPF(cpf);
@@ -2031,22 +2295,27 @@ function entrarComSenha(cpf, senha) {
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Acesso restrito.' };
   const idxSenha = getIndiceSenha();
   if (idxSenha === -1) return { error: 'Coluna "SenhaHash" nao encontrada.' };
+
   const dados = getSheet('Colaboradores').getDataRange().getValues();
   const idx = getColabIndices();
   const user = dados.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
   if (!user) return { error: 'CPF nao encontrado.' };
+
   const hashArmazenado = String(user[idxSenha] || '').trim();
   if (!hashArmazenado) return { error: 'Senha nao cadastrada. Faca o primeiro acesso.' };
   if (hashSenha(senha) !== hashArmazenado) return { error: 'Senha incorreta.' };
+
   const token = Utilities.getUuid() + '-' + new Date().getTime();
   CacheService.getScriptCache().put('tok_' + token, cpfLimpo, SESSAO_VALIDADE_SEG);
   return { success: true, token: token, nome: getNomePorCPF(cpfLimpo), perfil: perfil };
 }
+
 // Redefine a senha APOS validar o codigo do e-mail (recuperacao). Reusa o OTP.
 function redefinirSenhaComCodigo(cpf, codigo, novaSenha) {
   const val = validarCodigoAcesso(cpf, codigo); // reusa a validacao existente
   if (!val || !val.success) return val || { error: 'Codigo invalido.' };
   if (!senhaValida(novaSenha)) return { error: 'A senha deve ter no minimo 8 caracteres, com letra e numero.' };
+
   const cpfLimpo = normalizarCPF(cpf);
   const idxSenha = getIndiceSenha();
   if (idxSenha === -1) return { error: 'Coluna "SenhaHash" nao encontrada.' };
@@ -2061,6 +2330,7 @@ function redefinirSenhaComCodigo(cpf, codigo, novaSenha) {
   }
   return { error: 'CPF nao encontrado.' };
 }
+
 // Diretor reseta a senha de alguem (volta ao estado "primeiro acesso").
 function resetarSenhaComoDir(cpfDiretor, cpfAlvo) {
   if (getPerfilPorCPF(cpfDiretor) !== 'DIRETOR') return { error: 'Apenas a Diretoria pode resetar senhas.' };
@@ -2078,20 +2348,25 @@ function resetarSenhaComoDir(cpfDiretor, cpfAlvo) {
   }
   return { error: 'CPF nao encontrado.' };
 }
+
 function solicitarCodigoAcesso(cpf) {
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return { error: 'CPF invalido. Digite os 11 digitos.' };
+
   const perfil = getPerfilPorCPF(cpfLimpo);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') {
     return { error: 'Acesso restrito a Supervisores e Diretoria.' };
   }
+
   const email = getEmailPorCPF(cpfLimpo);
   if (!email || email.indexOf('@') === -1) {
     return { error: 'Acesso bloqueado: nao ha e-mail valido cadastrado para este CPF na aba Colaboradores. Procure a Diretoria.' };
   }
+
   const codigo = String(Math.floor(100000 + Math.random() * 900000));
   const cache = CacheService.getScriptCache();
   cache.put('otp_' + cpfLimpo, JSON.stringify({ codigo: codigo, tentativas: 0 }), OTP_VALIDADE_SEG);
+
   const nome = getNomePorCPF(cpfLimpo);
   try {
     MailApp.sendEmail({
@@ -2108,13 +2383,17 @@ function solicitarCodigoAcesso(cpf) {
     return { error: 'Nao foi possivel enviar o e-mail: ' + e.toString() +
                     ' (pode ser a cota diaria de envios do Google).' };
   }
+
   return { success: true, emailMascarado: mascararEmail(email) };
 }
+
 function validarCodigoAcesso(cpf, codigo) {
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return { error: 'CPF invalido.' };
+
   const cache = CacheService.getScriptCache();
   const codigoLimpo = String(codigo).trim();
+
   // IDEMPOTENCIA: se este MESMO codigo ja foi validado com sucesso ha instantes,
   // devolve o MESMO token, em vez de erro "expirado". Isso permite que o retry
   // automatico (rede lenta) repita a chamada sem queimar o codigo. A chave
@@ -2126,38 +2405,49 @@ function validarCodigoAcesso(cpf, codigo) {
     const perfilR = getPerfilPorCPF(cpfLimpo);
     return { success: true, token: tokenAnterior, nome: getNomePorCPF(cpfLimpo), perfil: perfilR, reaproveitado: true };
   }
+
   const bruto = cache.get('otp_' + cpfLimpo);
   if (!bruto) return { error: 'Codigo expirado ou inexistente. Solicite um novo codigo.' };
+
   let dados;
   try { dados = JSON.parse(bruto); } catch (e) { return { error: 'Codigo invalido. Solicite um novo.' }; }
+
   if (dados.tentativas >= OTP_MAX_TENTATIVAS) {
     cache.remove('otp_' + cpfLimpo);
     return { error: 'Numero maximo de tentativas excedido. Solicite um novo codigo.' };
   }
+
   if (codigoLimpo !== dados.codigo) {
     dados.tentativas++;
     cache.put('otp_' + cpfLimpo, JSON.stringify(dados), OTP_VALIDADE_SEG);
     const restantes = OTP_MAX_TENTATIVAS - dados.tentativas;
     return { error: 'Codigo incorreto. Tentativas restantes: ' + restantes + '.' };
   }
+
   cache.remove('otp_' + cpfLimpo);
   const token = Utilities.getUuid() + '-' + new Date().getTime();
   cache.put('tok_' + token, cpfLimpo, SESSAO_VALIDADE_SEG);
   // Registra por poucos segundos que este codigo gerou este token (idempotencia).
   cache.put(chaveUsado, token, JANELA_REUSO_SEG);
+
   const perfil = getPerfilPorCPF(cpfLimpo);
   return { success: true, token: token, nome: getNomePorCPF(cpfLimpo), perfil: perfil };
 }
+
 function validarTokenSessao(token) {
   if (!token) return '';
   const cpf = CacheService.getScriptCache().get('tok_' + String(token));
   return cpf || '';
 }
+
+
 /* ═══════════════════════════════════════════════════════════════════
    MÓDULO: AUDITORIA DE OPERAÇÃO (r47)
    ═══════════════════════════════════════════════════════════════════ */
+
 var ABA_AUDITORIA = 'Auditoria_Operacao';
 var ABA_CLIENTES  = 'Clientes_FC';
+
 function getOuCriarAbaAuditoria() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var aba = ss.getSheetByName(ABA_AUDITORIA);
@@ -2175,6 +2465,7 @@ function getOuCriarAbaAuditoria() {
   }
   return aba;
 }
+
 function getOuCriarAbaClientes() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var aba = ss.getSheetByName(ABA_CLIENTES);
@@ -2186,6 +2477,7 @@ function getOuCriarAbaClientes() {
   }
   return aba;
 }
+
 function listarRascunhosAuditoria(cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2206,6 +2498,7 @@ function listarRascunhosAuditoria(cpf) {
     return { ok: true, rascunhos: rascunhos, perfil: perfil };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function salvarAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2239,6 +2532,7 @@ function salvarAuditoria(dados, cpf) {
     return { ok: true, id: d.id };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function carregarAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2267,6 +2561,7 @@ function carregarAuditoria(dados, cpf) {
     return { ok: false, erro: 'Auditoria não encontrada' };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function finalizarAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2301,6 +2596,7 @@ function finalizarAuditoria(dados, cpf) {
     return { ok: true, id: d.id, fotosIds: fotosIds, mensagem: 'Auditoria finalizada com sucesso' };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function salvarFotoAuditoriaNoDrive(base64Data, nomeArquivo, pastaId) {
   try {
     var cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
@@ -2311,6 +2607,7 @@ function salvarFotoAuditoriaNoDrive(base64Data, nomeArquivo, pastaId) {
     return arquivo.getId();
   } catch (e) { Logger.log('Erro foto: ' + e.message); return null; }
 }
+
 function getOuCriarPastaAuditoria(cliente, unidade, data) {
   var raiz;
   var pastasRaiz = DriveApp.getFoldersByName('Auditorias_FC');
@@ -2321,11 +2618,13 @@ function getOuCriarPastaAuditoria(cliente, unidade, data) {
   var pu = getOuCriarSubpastaAud(pc, nomeLimpo(unidade));
   return getOuCriarSubpastaAud(pu, nomeLimpo(data)).getId();
 }
+
 function getOuCriarSubpastaAud(pai, nome) {
   var subs = pai.getFoldersByName(nome);
   if (subs.hasNext()) return subs.next();
   return pai.createFolder(nome);
 }
+
 function uploadFotosAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2341,6 +2640,7 @@ function uploadFotosAuditoria(dados, cpf) {
     return { ok: true, fotosIds: ids };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function calcularScoresAuditoria(respostas) {
   var INFRA = {ef_iluminacao:1, ef_equipamentos:1};
   var todasNotas = [], notasEquipe = [];
@@ -2359,6 +2659,7 @@ function calcularScoresAuditoria(respostas) {
     equipe: notasEquipe.length ? (notasEquipe.reduce(function(a,b){return a+b;},0) / notasEquipe.length).toFixed(1) : ''
   };
 }
+
 function registrarClienteFC(cliente, unidade, email) {
   var aba = getOuCriarAbaClientes();
   var dados = aba.getDataRange().getValues();
@@ -2371,6 +2672,7 @@ function registrarClienteFC(cliente, unidade, email) {
   }
   aba.appendRow([cliente, unidade, email || '', new Date()]);
 }
+
 function listarClientesFC() {
   try {
     var aba = getOuCriarAbaClientes();
@@ -2386,6 +2688,7 @@ function listarClientesFC() {
     return { ok: true, clientes: lista, detalhes: clientes };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function listarHistoricoAuditorias(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2413,10 +2716,13 @@ function listarHistoricoAuditorias(dados, cpf) {
     return { ok: true, auditorias: resultado };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
+
 /* ═══════════════════════════════════════════════════════════════════
    MÓDULO: GERAÇÃO DE RELATÓRIO COM CLAUDE API (r47)
    Configuração: em Propriedades do Script, adicionar CLAUDE_API_KEY
    ═══════════════════════════════════════════════════════════════════ */
+
 function chamarClaudeAPI(prompt, systemPrompt) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
   if (!apiKey) throw new Error('Chave da API Claude não configurada. Vá em Propriedades do Script e adicione CLAUDE_API_KEY.');
@@ -2434,6 +2740,7 @@ function chamarClaudeAPI(prompt, systemPrompt) {
   if (json.error) throw new Error('Claude API: ' + json.error.message);
   return json.content[0].text;
 }
+
 var CRITERIOS_MAP = {
   ef_iluminacao:{label:'Iluminação',secao:'Estrutura Física',estrutura:'Retaguarda'},
   ef_equipamentos:{label:'Equipamentos de suporte aéreo',secao:'Estrutura Física',estrutura:'Retaguarda'},
@@ -2498,6 +2805,7 @@ var CRITERIOS_MAP = {
   av_pet_sku:{label:'Pet Shop — Organização por SKU',secao:'Mercearia',estrutura:'Área de Vendas'},av_pet_qtd:{label:'Pet Shop — Volume de mercadoria',secao:'Mercearia',estrutura:'Área de Vendas',invertida:true},
   av_salg_sku:{label:'Salgadinhos — Organização por SKU',secao:'Mercearia',estrutura:'Área de Vendas'},av_salg_qtd:{label:'Salgadinhos — Volume de mercadoria',secao:'Mercearia',estrutura:'Área de Vendas',invertida:true}
 };
+
 function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var INFRA={ef_iluminacao:1,ef_equipamentos:1};
   var secoes={};var notasEquipe=[];
@@ -2519,13 +2827,14 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     secoes[sec].forEach(function(item){dadosTexto+='  '+item.criterio+': '+item.nota+'/10'+(item.invertida?' (1=excesso,10=ideal)':' (1=inadequado,10=excelente)')+(item.equipe?' [EQUIPE]':'')+(item.infra?' [INFRAESTRUTURA]':'')+'\n';});dadosTexto+='\n';}
   dadosTexto+='=== OBSERVAÇÕES DO AUDITOR ===\n';
   for(var obsId in observacoes){if(observacoes[obsId])dadosTexto+=observacoes[obsId]+'\n\n';}
+
   var sys='Você é um consultor sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
     +'Gere relatórios de feedback para clientes com base nos dados da auditoria. '
     +'REGRAS OBRIGATÓRIAS:\n'
     +'1. Tom consultivo, respeitoso e de parceria. Use "sugerimos considerar", "uma oportunidade seria". Nunca "o cliente deve", "é necessário".\n'
     +'2. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
     +'3. INFRAESTRUTURA (iluminação, equipamentos): NÃO incluir como destaque positivo. É obrigação do cliente fornecer. Só mencionar se nota < 6 (insuficiente).\n'
-    +'4. NÃO colocar o tipo de avaliação (PRÉ-OPERAÇÃO/DURANTE) no corpo do texto.\n'
+    +'4. NÃO colocar rótulos como PRÉ-OPERAÇÃO/DURANTE/PÓS-OPERAÇÃO no corpo do texto. O tom é sempre de constatação do cenário verificado.\n'
     +'5. Agrupar setores por tema: "A organização por SKU está adequada nos setores de Biscoitos, Cereais e Limpeza" — não repetir a mesma observação para cada setor.\n'
     +'6. Para critérios de volume/quantidade (escala invertida): nota baixa = excesso (ruim), nota alta = ideal (bom).\n'
     +'7. Pallets full: nota < 7 significa pallet misto com produtos de diferentes categorias misturadas.\n'
@@ -2545,7 +2854,9 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'17. CENÁRIOS ESPECÍFICOS — use estas orientações sempre que os dados/observações forem pertinentes: (a) excesso de mercadoria ou volume acima do ideal em qualquer setor → a ação recomendada é o cliente reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário; (b) risco de a equipe de pesagem do cliente deixar a loja antes do fim da operação → a ação recomendada é o cliente alinhar previamente, internamente, com sua própria equipe responsável pela pesagem, para que ela só deixe a loja após a confirmação de que todos os pesos foram devidamente lançados no sistema.\n'
     +'18. Ao final da seção "sugestoes", feche com uma orientação de prazo em tom leve e de parceria — sugerindo que as adequações sejam feitas com alguma antecedência à contagem oficial, de forma a favorecer a fluidez da operação. PROIBIDO qualquer formulação impositiva ou de alerta sobre prazo (ex: "devem ser concluídas antes de X para não comprometer o cronograma"); prefira sempre sugerir um benefício, nunca soar como uma ameaça ou cobrança. Nunca recomende recontagem nem ponha em xeque a qualidade da contagem da Formula Code (reforço das regras 13 e 14).\n'
     +'19. CRITÉRIOS N/A: os dados abaixo (seção "===...===") já foram filtrados para conter APENAS os critérios que o auditor efetivamente avaliou (nota numérica preenchida). Critérios marcados como N/A pelo auditor simplesmente não aparecem nos dados fornecidos. NUNCA mencione, elogie, cite como oportunidade ou de qualquer forma faça referência a um critério, setor ou quesito que não conste explicitamente nos dados abaixo — mesmo que seja um item comum em auditorias desse tipo. Não invente notas, fatos ou observações sobre nada que esteja fora dos dados desta auditoria específica.\n'
-    +'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.';
+    +'21. TOM GERAL DE CONSTATAÇÃO: todo o relatório (incluindo texto_email) deve adotar tom de constatação — descreva as condições encontradas no momento da avaliação, nunca como preparação para algo futuro. Independentemente de a avaliação ter sido feita antes, durante ou após o inventário, o texto deve constatar o que foi verificado (ex: "a unidade apresentou organização exemplar" em vez de "a unidade está preparada para a operação"). O tom deve ser conciliador e de parceria, coerente com a análise realizada.\n'
++'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.';
+
   var campoResumo = temEquipe
     ? '"resumo_executivo": "3-4 frases. Cenário geral, principal problema, principal destaque, equipe.",\n'
     : '"resumo_executivo": "3-4 frases. Cenário geral, principal problema, principal destaque.",\n';
@@ -2558,6 +2869,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var campoEquipe = temEquipe
     ? '"analise_equipe": "2-3 frases. Visão consolidada comparando retaguarda e área de vendas.",\n'
     : '';
+
   var usr='Gere um relatório em JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n'
     +'{\n'
     +campoResumo
@@ -2567,10 +2879,11 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'"pontosPositivos": "3-4 frases citando destaques positivos SEM scores e SEM infraestrutura.",\n'
     +'"oportunidades": "3-4 frases sobre o que precisa melhorar'+(temEquipe?', incluindo equipe se < 6.':'.')+'",\n'
     +'"sugestoes": "3-4 frases com ações vinculadas aos problemas. Linguagem de parceria.",\n'
-    +'"texto_email": "2-3 frases elegantes para corpo do e-mail."\n'
+    +'"texto_email": "2-3 frases em tom de constatação, resumindo o cenário encontrado de forma conciliadora e coerente com a análise feita. NUNCA use linguagem de preparação futura (ex: prontos para prosseguir, preparado para a operação). Descreva o que foi verificado, não o que está por vir."\n'
     +'}\n\nDADOS DA AUDITORIA:\n\n'+dadosTexto;
   return {system:sys,user:usr};
 }
+
 function gerarRelatorioAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2636,6 +2949,7 @@ function gerarRelatorioAuditoria(dados, cpf) {
       htmlId:arquivo.getId(), textoEmail:relatorio.texto_email, scoreGeral:scores.geral, scoreEquipe:scores.equipe };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function obterRelatorio(dados, cpf) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
@@ -2644,6 +2958,7 @@ function obterRelatorio(dados, cpf) {
     return { ok: true, relatorio: JSON.parse(meta) };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function excluirAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2660,6 +2975,7 @@ function excluirAuditoria(dados, cpf) {
     return { ok: false, erro: 'Auditoria não encontrada' };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function enviarRelatorioAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2694,6 +3010,7 @@ function enviarRelatorioAuditoria(dados, cpf) {
     return { ok: true, mensagem: 'Relatório enviado para ' + d.email };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 /* ═══════════════════════════════════════════════════════════════════
    MÓDULO: APRESENTAÇÃO EXECUTIVA DA AUDITORIA (PPTX + PDF) — r69
    O PPTX é montado no navegador (PptxGenJS, já usado no Inventário) e
@@ -2701,6 +3018,7 @@ function enviarRelatorioAuditoria(dados, cpf) {
    verdade reaproveitando o Advanced Drive Service já habilitado no
    projeto (o mesmo usado hoje para OCR).
    ═══════════════════════════════════════════════════════════════════ */
+
 // Seções que têm fotos e/ou observação do auditor, isolado do
 // CRITERIOS_MAP para não arriscar quebrar o relatório de texto já
 // existente (montarHTMLRelatorio / montarPromptAuditoria).
@@ -2718,6 +3036,7 @@ var SECOES_META_APRESENTACAO = {
   finalizacao:        { titulo:'Observações Gerais — Área de Vendas', obsId:'obs_area_vendas' }
 };
 var OBS_IDS_APRESENTACAO = ['obs_estrutura_fisica', 'obs_deposito', 'obs_aereos_retaguarda', 'obs_camaras', 'obs_av_pereciveis', 'obs_av_mercearia', 'obs_area_vendas'];
+
 // Setores usados na tabela "Notas por Setor" da apresentação Detalhada
 // (r72). Agrupa os `secao` do CRITERIOS_MAP (mais granular, usado no
 // relatório em texto) nos mesmos 6 blocos da apresentação — Mercearia
@@ -2735,6 +3054,7 @@ var SECAO_LABEL_PARA_GRUPO_APRESENTACAO = {
 };
 var GRUPO_APRESENTACAO_ORDEM = ['estrutura_fisica', 'deposito', 'aereos_retaguarda', 'camaras', 'av_pereciveis', 'av_mercearia'];
 var GRUPO_APRESENTACAO_ESTRUTURA = { estrutura_fisica:'Retaguarda', deposito:'Retaguarda', aereos_retaguarda:'Retaguarda', camaras:'Retaguarda', av_pereciveis:'Área de Vendas', av_mercearia:'Área de Vendas' };
+
 // r103: helpers de data reutilizáveis. Aceitam um Date real, uma string
 // 'yyyy-MM-dd' já limpa, OU uma string ISO completa corrompida (resíduo de
 // um bug antigo em carregarAuditoria — ex. "2026-09-10T03:00:00.000Z") e
@@ -2753,6 +3073,7 @@ function formatarDataBR(valor) {
   var m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? (m[3] + '/' + m[2] + '/' + m[1]) : iso;
 }
+
 function prepararApresentacaoAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2764,17 +3085,21 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     var row = null;
     for (var i = 1; i < todas.length; i++) { if (todas[i][0] === auditoriaId) { row = todas[i]; break; } }
     if (!row) return { ok: false, erro: 'Auditoria não encontrada' };
+
     // r103: data_auditoria já sai daqui pronta em dd/MM/yyyy (formato
     // brasileiro), robusta a qualquer formato salvo anteriormente na
     // planilha — Date real, 'yyyy-MM-dd' ou até um ISO completo corrompido.
     var ident = { cliente:String(row[5]||''), unidade:String(row[6]||''), data_auditoria:formatarDataBR(row[7]),
       tipo_avaliacao:String(row[4]||''), auditor:String(row[2]||'') };
+
     var respostas={}, observacoes={}, fotosIds={};
     try { respostas = JSON.parse(row[11]||'{}'); } catch(e) {}
     try { observacoes = JSON.parse(row[12]||'{}'); } catch(e) {}
     try { fotosIds = JSON.parse(row[13]||'{}'); } catch(e) {}
+
     var scores = calcularScoresAuditoria(respostas);
     var estrutura = calcularEstruturaApresentacao(respostas);
+
     // r85: busca a Análise de Preparação (relatório completo) já publicada
     // para esta auditoria, se existir — é a referência obrigatória para
     // que o Resumo Executivo (esta apresentação) nunca gere pontuação,
@@ -2788,6 +3113,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
         if (relSalvo.analise) analisePreparacao = relSalvo.analise;
       }
     } catch (errRel) { Logger.log('Não foi possível carregar a Análise de Preparação de referência: ' + errRel.message); }
+
     var textos;
     try {
       var promptApres = montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao);
@@ -2797,6 +3123,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
       Logger.log('Claude API (apresentação) erro: ' + errIA.message + '. Usando fallback.');
       textos = gerarTextosApresentacaoFallback(ident, observacoes, scores, analisePreparacao);
     }
+
     // r100: rede de segurança — mesmo quando a Claude API responde com
     // sucesso (não cai no catch acima), o JSON devolvido pode vir sem
     // observacoes[obsId] para alguma seção que TEM observação original do
@@ -2811,6 +3138,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
         textos.observacoes[obsId] = { curta: observacoes[obsId], detalhada: observacoes[obsId] };
       }
     });
+
     // Fotos já enviadas ao Drive na finalização da auditoria — aqui só
     // buscamos os bytes para embutir no PPTX. Limite: 10/seção (máx 60) —
     // r100: aumentado (era 6/seção, máx 30) para exibir mais fotos por
@@ -2822,6 +3150,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     // OBSERVAÇÃO (antes, uma observação sem foto na mesma seção era
     // descartada junto — bug corrigido).
     var fotos = montarSecoesApresentacao(fotosIds, observacoes, 10, 60);
+
     // r73: diagnóstico de fotos — quantas existem no Drive pra esta
     // auditoria (fotosDisponiveis) vs quantas realmente entraram na
     // apresentação (fotosIncluidas). Se vier 0/0, a auditoria não tem
@@ -2830,15 +3159,18 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     var fotosDisponiveis = 0;
     for (var sid in fotosIds) { fotosDisponiveis += (fotosIds[sid] || []).length; }
     var fotosIncluidas = fotos.reduce(function (soma, s) { return soma + (s.fotos || []).length; }, 0);
+
     // r72: notas por setor — mesmo nível dos setores do relatório em
     // texto, exceto o detalhamento interno da Mercearia (que tem ~17
     // subseções), que fica só com a nota agregada.
     var notasPorSetor = calcularNotasPorSetor(respostas);
+
     return { ok:true, ident:ident, scores:scores, estrutura:estrutura, textos:textos,
       fotosDetalhada:fotos, notasPorSetor:notasPorSetor,
       fotosDisponiveis:fotosDisponiveis, fotosIncluidas:fotosIncluidas };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function calcularEstruturaApresentacao(respostas) {
   var INFRA_IDS = { ef_iluminacao:1, ef_equipamentos:1 };
   var por = {};
@@ -2859,6 +3191,7 @@ function calcularEstruturaApresentacao(respostas) {
   });
   return out;
 }
+
 // r72: substitui a antiga coletarFotosApresentacao. Antes, uma seção só
 // entrava na apresentação se tivesse FOTO — se o auditor escreveu uma
 // observação sobre o Depósito/Câmaras mas não tirou foto lá, a
@@ -2871,6 +3204,7 @@ function montarSecoesApresentacao(fotosIds, observacoes, porSecao, totalMax) {
   for (var secaoId in SECOES_META_APRESENTACAO) {
     var meta = SECOES_META_APRESENTACAO[secaoId];
     var temObs = !!(meta.obsId && observacoes[meta.obsId] && String(observacoes[meta.obsId]).trim());
+
     var fotos = [];
     if (!meta.semFotos) {
       var ids = fotosIds[secaoId] || [];
@@ -2882,12 +3216,14 @@ function montarSecoesApresentacao(fotosIds, observacoes, porSecao, totalMax) {
         } catch (e) { /* foto indisponível/removida — ignora e segue */ }
       }
     }
+
     if (fotos.length || temObs) {
       out.push({ secaoId: secaoId, titulo: meta.titulo, fotos: fotos });
     }
   }
   return out;
 }
+
 // r72: nota média por setor (mesma granularidade das tabelas do
 // relatório em texto), pra tabela "Notas por Setor" da apresentação
 // Detalhada. Critérios de equipe ficam de fora (já aparecem à parte,
@@ -2921,6 +3257,7 @@ function calcularNotasPorSetor(respostas) {
   });
   return out;
 }
+
 function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao) {
   var obsTexto = '';
   var obsPresentes = [];
@@ -2931,6 +3268,7 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
     }
   });
   var estruturaTexto = estrutura.map(function(e){ return e.estrutura + ': ' + e.media + '/10'; }).join(' | ') || 'sem dados suficientes';
+
   // r85: quando já existe uma Análise de Preparação (relatório completo)
   // publicada para esta auditoria, ela vira referência obrigatória — o
   // Resumo Executivo deixa de ser uma segunda análise independente dos
@@ -2944,10 +3282,12 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
       + (analisePreparacao.oportunidades ? 'Oportunidades de melhoria: ' + analisePreparacao.oportunidades + '\n\n' : '')
       + (analisePreparacao.sugestoes ? 'Sugestões: ' + analisePreparacao.sugestoes + '\n' : '');
   }
+
   var dadosTexto = 'CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+
     '\nSCORE GERAL: '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\nSCORES POR ÁREA: '+estruturaTexto+
     '\n\nOBSERVAÇÕES ORIGINAIS DO AUDITOR:\n'+(obsTexto || '(nenhuma observação registrada)')
     + analiseTexto;
+
   var sys = 'Você é um consultor sênior de operações de inventário da Formula Code. '
     + 'Sua tarefa é preparar textos para uma APRESENTAÇÃO EXECUTIVA (slides) resumindo uma auditoria de preparação para inventário. '
     + 'REGRAS OBRIGATÓRIAS:\n'
@@ -2964,6 +3304,7 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
     + '9c. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em "oportunidades" (ou qualquer outro campo) é SEMPRE uma ação do próprio CLIENTE, organizada e executada internamente por ele — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela Formula Code junto ao cliente, mesmo para mitigar uma ineficiência do cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente" ou qualquer formulação equivalente que atribua a ação à FC.\n'
     + '10. Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON.\n'
     + '11. REGRA DE CONSISTÊNCIA (quando a seção "ANÁLISE DE PREPARAÇÃO JÁ PUBLICADA" aparecer nos dados abaixo): essa análise já foi publicada para o cliente e é a referência obrigatória. "resumo_curto"/"resumo_detalhado", "pontos_fortes" e "oportunidades" devem refletir EXATAMENTE as mesmas pontuações, achados e recomendações dessa análise — apenas resumidos/condensados para o formato de slide. NUNCA gere uma conclusão, recomendação ou leitura dos dados que contradiga, mesmo sutilmente, o que já foi publicado (por exemplo: se a análise publicada já orienta que mercadoria contada não pode ser movimentada em hipótese alguma, o Resumo Executivo nunca pode sugerir uma condição ou exceção a essa orientação). Se a seção não aparecer nos dados, gere a análise normalmente a partir dos scores e observações, seguindo as demais regras.';
+
   var usr = 'Gere um JSON com esta estrutura EXATA (inclua em "observacoes" APENAS as chaves '+(obsPresentes.length?('"'+obsPresentes.join('", "')+'"'):'— nenhuma, use {}')+'):\n\n'
     + '{\n'
     + '"resumo_curto": "...",\n'
@@ -2972,8 +3313,10 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
     + '"oportunidades": "...",\n'
     + '"observacoes": { "chaveDaObservacao": {"curta":"...","detalhada":"..."} }\n'
     + '}\n\nDADOS DA AUDITORIA:\n\n' + dadosTexto;
+
   return { system: sys, user: usr };
 }
+
 function gerarTextosApresentacaoFallback(ident, observacoes, scores, analisePreparacao) {
   var textos = {
     resumo_curto: 'Avaliação realizada em ' + (ident.unidade||'') + ' com score geral de ' + (scores.geral||'—') + '/10.',
@@ -2997,6 +3340,7 @@ function gerarTextosApresentacaoFallback(ident, observacoes, scores, analisePrep
   });
   return textos;
 }
+
 function salvarApresentacaoAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -3008,12 +3352,14 @@ function salvarApresentacaoAuditoria(dados, cpf) {
     var row = null;
     for (var i = 1; i < todas.length; i++) { if (todas[i][0] === auditoriaId) { row = todas[i]; break; } }
     if (!row) return { ok: false, erro: 'Auditoria não encontrada' };
+
     var cliente = String(row[5]||''), unidade = String(row[6]||''), data = String(row[7]||'');
     if (row[7] instanceof Date) data = Utilities.formatDate(row[7], 'America/Fortaleza', 'yyyy-MM-dd');
     var pastaId = getOuCriarPastaAuditoria(cliente, unidade, data);
     var pasta = DriveApp.getFolderById(pastaId);
     var nomeLimpo = function(s){ return String(s||'').replace(/[\/\\:*?"<>|]/g,'_'); };
     var sufixo = nomeLimpo(cliente) + '_' + nomeLimpo(unidade) + '_' + nomeLimpo(data);
+
     // r73: versão Curta eliminada — só resta uma apresentação (guardada
     // internamente com a chave "detalhada", pra não mexer no que já
     // funciona: nome dos arquivos no Drive, formato salvo em
@@ -3022,20 +3368,24 @@ function salvarApresentacaoAuditoria(dados, cpf) {
     var variantes = [
       { chave:'detalhada',  base64: d.detalhadaPPTXBase64,  prefixo:'Apresentacao_' }
     ];
+
     variantes.forEach(function(v){
       if (!v.base64) return;
       var nomeArqPptx = v.prefixo + sufixo + '.pptx';
       var nomeArqPdf = v.prefixo + sufixo + '.pdf';
+
       // Substitui sempre — remove versão anterior desta auditoria/variante.
       [nomeArqPptx, nomeArqPdf].forEach(function(nomeArq){
         var existentes = pasta.getFilesByName(nomeArq);
         while (existentes.hasNext()) existentes.next().setTrashed(true);
       });
+
       var bytes = Utilities.base64Decode(v.base64);
       var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomeArqPptx);
       var arquivoPptx = pasta.createFile(pptxBlob);
       arquivoPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       var linkPptx = 'https://drive.google.com/uc?id=' + arquivoPptx.getId() + '&export=download';
+
       var linkPdf = '';
       var erroPdfMsg = '';
       try {
@@ -3051,15 +3401,20 @@ function salvarApresentacaoAuditoria(dados, cpf) {
         erroPdfMsg = errPdf.message || String(errPdf);
         Logger.log('Falha ao converter PDF da apresentação (' + v.chave + '): ' + erroPdfMsg);
       }
+
       resultado[v.chave] = { linkPPTX: linkPptx, linkPDF: linkPdf, erroPDF: erroPdfMsg || null };
     });
+
     var detalhadaFinal = resultado.detalhada || null;
+
     PropertiesService.getScriptProperties().setProperty('apres_' + auditoriaId, JSON.stringify({
       detalhada: detalhadaFinal, geradoEm: new Date().toISOString()
     }));
+
     return { ok: true, detalhada: detalhadaFinal };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 // Converte um PPTX em PDF de verdade: sobe como Google Slides e exporta com
 // getAs('application/pdf'). Descarta a cópia intermediária em Slides.
 // r72: corrigido pra API v3 do Advanced Drive Service (Drive.Files.create) —
@@ -3078,6 +3433,7 @@ function converterPptxParaPdfReal(pptxBlob, nomeBase) {
   }
   return pdfBlob;
 }
+
 function obterApresentacaoAuditoria(dados, cpf) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
@@ -3086,12 +3442,14 @@ function obterApresentacaoAuditoria(dados, cpf) {
     return { ok: true, apresentacao: JSON.parse(meta) };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
 function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   var logoPNG = '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';
   function corN(n){n=parseFloat(n)||0;if(n>=9)return'#2E7D32';if(n>=7.5)return'#61CF00';if(n>=6)return'#D4A017';if(n>=4)return'#E8872B';return'#E05252';}
   function txF(n){n=parseFloat(n)||0;if(n>=9)return'Excelente';if(n>=7.5)return'Bom';if(n>=6)return'Regular';if(n>=4)return'Insatisfatório';return'Crítico';}
   function bgF(n){n=parseFloat(n)||0;if(n>=9)return'#E8F5E9';if(n>=7.5)return'#EAF8E0';if(n>=6)return'#FFF8E1';if(n>=4)return'#FFF3E0';return'#FDEAEA';}
   function celCor(n){return'text-align:center;font-weight:700;color:'+corN(n)+';background:'+bgF(n);}
+
   var porEstrutura={};var INFRA_IDS={ef_iluminacao:1,ef_equipamentos:1};
   for(var id in respostas){var v=respostas[id];if(v==='NA'||!v)continue;var nota=parseFloat(v);if(isNaN(nota))continue;var m=CRITERIOS_MAP[id];if(!m)continue;
     var est=m.estrutura,sec=m.secao;
@@ -3106,10 +3464,12 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   var somaGeral=0,nGeral=0;
   for(var e in porEstrutura){somaGeral+=porEstrutura[e].soma;nGeral+=porEstrutura[e].n;}
   var scoreGeralRecalc=nGeral?(somaGeral/nGeral).toFixed(1):scores.geral;
+
   var dataF=String(ident.data_auditoria||'');
   try{var p=dataF.split('-');if(p.length===3){var ms=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];dataF=parseInt(p[2])+' de '+ms[parseInt(p[1])-1]+' de '+p[0];}}catch(e){}
   var tipoLabel=String(ident.tipo_avaliacao||'');var tipoCor=tipoLabel.indexOf('PR')!==-1?'#E8872B':'#61CF00';var tipoTxt=tipoLabel.indexOf('PR')!==-1?'#FFF':'#051323';
   var sg=parseFloat(scoreGeralRecalc)||0;
+
   // ── Tabelas ──
   function tabelaOrgVol(items){
     var porSub={};items.forEach(function(it){var sub=it.label.split(' — ')[0]||it.label;if(!porSub[sub])porSub[sub]={org:null,vol:null};if(it.id.indexOf('_sku')!==-1)porSub[sub].org=it.nota;else if(it.invertida)porSub[sub].vol=it.nota;else if(!porSub[sub].org)porSub[sub].org=it.nota;});
@@ -3151,6 +3511,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   function tabelaSimples(items){if(!items.length)return'';
     var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#002B50;color:#FFF"><td style="padding:6px 10px;font-weight:600">Critério</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>';}
+
   // r101: bloco de fotos de UMA seção específica, inserido logo após a
   // tabela daquela seção (mesmo agrupamento por secaoId usado na
   // Apresentação Executiva — SECAO_LABEL_PARA_GRUPO_APRESENTACAO). Grade
@@ -3178,6 +3539,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
     if(linha){var falt=3-(ids.length%3);for(var f=0;f<falt;f++)linha+='<td style="padding:4px;width:33.33%"></td>';linhas+='<tr style="page-break-inside:avoid">'+linha+'</tr>';}
     return '<div style="margin:12px 0 4px"><div style="font-size:11px;font-weight:700;color:#61CF00;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;page-break-after:avoid">📷 Registros Fotográficos — '+titulo+'</div><table style="width:100%">'+linhas+'</table></div>';
   }
+
   // ═══ HTML ═══
   var h='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Relatório de Auditoria — Formula Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}.page{box-shadow:none}}</style></head><body><div class="page">';
   h+='<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,'+logoPNG+'" style="height:48px" alt="FC"></td><td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Relatório de Auditoria<br>Operação de Inventário</td></tr></table>';
@@ -3225,6 +3587,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
 function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   function fx(n){n=parseFloat(n)||0;if(n>=9)return'excelente';if(n>=7.5)return'bom';if(n>=6)return'regular';if(n>=4)return'insatisfatório';return'crítico';}
   function R(id){var v=respostas[id];if(!v||v==='NA')return null;return parseFloat(v)||null;}
+
   var obs='';for(var k in observacoes){if(observacoes[k])obs+=observacoes[k]+' ';}obs=obs.trim();
   var INFRA_IDS={ef_iluminacao:1,ef_equipamentos:1};
   // Recalcular score sem infraestrutura
@@ -3233,6 +3596,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
     if(!INFRA_IDS[id]){somaG+=n;nG++;}if(m.equipe){somaEq+=n;nEq++;}}
   var sg=nG?(somaG/nG):0;var se=nEq?(somaEq/nEq):0;
   var scoreG=sg.toFixed(1);var scoreE=se.toFixed(1);
+
   // ═══ RESUMO EXECUTIVO ═══
   var resumo='A avaliação realizada na unidade '+(ident.unidade||'')+' do cliente '+(ident.cliente||'')+' revelou um cenário de preparação '+fx(sg)+', com score geral de '+scoreG+'/10.';
   // Retaguarda resumo
@@ -3249,10 +3613,12 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   var skuNomes=['Biscoitos','Cereais','Líquida','Limpeza','Laticínios','Matinais','Massas'];
   var skuBons=[];for(var i=0;i<skuIds.length;i++){var n=R(skuIds[i]);if(n!==null&&n>=7.5)skuBons.push(skuNomes[i]);}
   if(skuBons.length)avTexts.push('a organização por SKU nos setores de '+skuBons.join(', ')+' demonstrou boa preparação');
+
   if(retTexts.length)resumo+='\n\nAs principais deficiências concentram-se em '+retTexts.join(' e ')+'.';
   if(avTexts.length)resumo+='\n\nNa área de vendas, '+avTexts.join('. ')+', servindo de referência para os demais setores.';
   if(se>0)resumo+='\n\nA equipe de apoio do cliente obteve avaliação '+fx(se)+' ('+scoreE+'/10).';
   if(obs)resumo+='\n\nObservações do auditor: '+obs;
+
   // ═══ RETAGUARDA ═══
   var ret='';
   // Infraestrutura — só mencionar se insuficiente
@@ -3320,6 +3686,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
     if(eqHort!==null&&eqHort>=7.5)camEqParts.push('pesagem do hortifruti bem dimensionada');
     if(eqHort!==null&&eqHort<6)camEqParts.push('pesagem do hortifruti insuficiente');
     if(camEqParts.length)ret+='Nas câmaras, '+camEqParts.join(', ')+'. ';}
+
   // ═══ ÁREA DE VENDAS ═══
   var av='';
   // Perecíveis
@@ -3357,6 +3724,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
     else if(eqAVRuins.length&&!eqAVBons.length)av+='as equipes de pesagem foram insuficientes em '+eqAVRuins.join(', ')+'.';
     else if(eqAVBons.length&&eqAVRuins.length)av+='as equipes de pesagem atenderam bem em '+eqAVBons.join(', ')+', mas foram insuficientes em '+eqAVRuins.join(', ')+'.';
     else av+='desempenho regular.';}
+
   // ═══ EQUIPE CONSOLIDADA ═══
   var analiseEquipe='';
   var eqBoas=[],eqRuins=[];
@@ -3370,6 +3738,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   else if(eqBoas.length)analiseEquipe='A equipe de apoio atendeu às necessidades da operação em todas as áreas avaliadas.';
   else if(eqRuins.length)analiseEquipe='A equipe de apoio ficou aquém do necessário em '+eqRuins.join(', ')+'. O dimensionamento adequado é responsabilidade do cliente e deve ser priorizado.';
   else analiseEquipe='A equipe de apoio apresentou desempenho regular.';
+
   // ═══ CONCLUSÃO: 3 BLOCOS ═══
   var pp='',op='',su='';
   // Pontos positivos
@@ -3399,18 +3768,21 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   if(eqRuins.length)suParts.push('ampliar o dimensionamento da equipe de apoio nas áreas identificadas');
   if(volRuinsAV.length)suParts.push('reduzir o abastecimento de mercadoria nas gôndolas com pelo menos 5 dias de antecedência ao inventário');
   su=suParts.length?('Sugerimos considerar antes da data do inventário: '+suParts.join('; ')+'. A conclusão dessas adequações previamente ao início da contagem oficial garante mais agilidade e precisão na operação.'):'Sugerimos manter os padrões atuais de preparação.';
+
   return {
     resumo_executivo:resumo,analise_retaguarda:ret.trim(),analise_area_vendas:av.trim(),analise_equipe:analiseEquipe,
     pontosPositivos:pp,oportunidades:op,sugestoes:su,
-    texto_email:'Prezado(a), compartilhamos o relatório de auditoria da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
+    texto_email:'Prezado(a), compartilhamos o relatório da avaliação realizada na unidade '+(ident.unidade||'')+' em '+(ident.data_auditoria||'')+'. O cenário verificado resultou em score geral de '+scoreG+'/10. Agradecemos a parceria e permanecemos à disposição.'
   };
 }
+
 /* ═══════════════════════════════════════════════════════
    RESUMO EXECUTIVO DE INVENTÁRIO VIA CLAUDE API
    ═══════════════════════════════════════════════════════ */
 function gerarResumoInventarioIA(dados) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
+
     var sys = 'Você é um analista sênior de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas no Brasil. '
       + 'Gere resumos executivos profissionais e concisos para relatórios de análise de inventário. '
       + 'Tom consultivo e objetivo. Foque em insights acionáveis. Valores monetários em R$ (formato brasileiro). '
@@ -3419,6 +3791,7 @@ function gerarResumoInventarioIA(dados) {
       + 'Também é proibido recomendar "revisão e padronização dos procedimentos de contagem e lançamento no sistema" ou "checklist de dupla conferência antes da entrega de planilhas à Formula Code", ou qualquer variação sobre o processo interno de contagem/lançamento do cliente antes do envio à FC — isso não é o problema nem a solução. A recomendação é sempre sobre o processo físico de entrada, transformação e saída de mercadoria (recebimento, produção/transformação, venda, quebra, transferência), nunca sobre como o cliente conta ou lança dados antes de mandar a planilha. '
       + 'Jamais dê a entender que a qualidade da contagem física ou a confiabilidade do estoque contábil está comprometida — frases como "compromete a confiabilidade do estoque contábil" ou qualquer variação que ponha em dúvida a contagem em si são proibidas, em qualquer parágrafo. A divergência é sempre lida como reflexo dos processos de entrada, transformação e saída de mercadoria, nunca da qualidade ou confiabilidade da contagem. '
       + 'TERMOS PROIBIDOS em qualquer parágrafo: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado", e absolutismos como "impossível", "nunca" ou "totalmente" — use "exige adequação" ou "ponto de atenção" no lugar. REENQUADRAMENTO CONSTRUTIVO: ao apontar um achado que exige ação, nunca exponha como falha do cliente — encadeie condição observada, ação recomendada e o ganho operacional que ela traz, em tom de parceria.';
+
     var usr = 'Com base nos dados abaixo, gere resumos executivos em JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown):\n\n'
       + '{\n'
       + '"critica": "1-2 parágrafos sobre a análise crítica do inventário. Divergências entre estoque e contagem, impacto financeiro, itens mais críticos.",\n'
@@ -3433,6 +3806,7 @@ function gerarResumoInventarioIA(dados) {
       + 'Data: ' + (d.data || '') + '\n'
       + 'Dias de venda: ' + (d.diasVenda || 90) + '\n\n'
       + (d.metricas || '');
+
     var resposta = chamarClaudeAPI(usr, sys);
     var resumos = JSON.parse(resposta.replace(/```json|```/g, '').trim());
     return { ok: true, resumos: resumos };
@@ -3440,10 +3814,12 @@ function gerarResumoInventarioIA(dados) {
     return { ok: false, erro: e.message };
   }
 }
+
 // ── COMPARATIVO IA ──
 function gerarComparativoIA(dados) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
+
     var sys = 'Você é um analista sênior de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas no Brasil. '
       + 'Gere uma análise comparativa profissional entre unidades do mesmo cliente. '
       + 'Tom consultivo e objetivo. Foque em diferenças relevantes e recomendações acionáveis por unidade. '
@@ -3455,6 +3831,7 @@ function gerarComparativoIA(dados) {
       + 'Jamais dê a entender que a qualidade da contagem física ou a confiabilidade do estoque contábil de qualquer unidade está comprometida — frases como "compromete a confiabilidade do estoque contábil" ou qualquer variação que ponha em dúvida a contagem em si são proibidas, em qualquer parágrafo e para qualquer unidade comparada. A divergência é sempre lida como reflexo dos processos de entrada, transformação e saída de mercadoria, nunca da qualidade ou confiabilidade da contagem. '
       + 'TERMOS PROIBIDOS em qualquer parágrafo, para qualquer unidade: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado", e absolutismos como "impossível", "nunca" ou "totalmente" — use "exige adequação" ou "ponto de atenção" no lugar. REENQUADRAMENTO CONSTRUTIVO: ao apontar um achado que exige ação em alguma unidade, nunca exponha como falha — encadeie condição observada, ação recomendada e o ganho operacional que ela traz, em tom de parceria. '
       + 'Máximo 600 palavras no total.';
+
     var usr = 'Com base nos dados comparativos abaixo, gere uma análise em JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown):\n\n'
       + '{\n'
       + '"resumo_comparativo": "1 parágrafo de visão geral: quem vai melhor, onde estão as maiores diferenças, o que salta aos olhos.",\n'
@@ -3468,6 +3845,7 @@ function gerarComparativoIA(dados) {
       + 'Data: ' + (d.data || '') + '\n'
       + 'Dias de venda: ' + (d.diasVenda || 90) + '\n\n'
       + (d.metricas || '');
+
     var resposta = chamarClaudeAPI(usr, sys);
     var resumos = JSON.parse(resposta.replace(/```json|```/g, '').trim());
     return { ok: true, resumos: resumos };
@@ -3475,6 +3853,7 @@ function gerarComparativoIA(dados) {
     return { ok: false, erro: e.message };
   }
 }
+
 // ── BUSCAR UNIDADES JÁ USADAS POR CLIENTE (normalização) ──
 function buscarUnidadesCliente(dados) {
   var cpf = dados && dados.cpf;
@@ -3484,6 +3863,7 @@ function buscarUnidadesCliente(dados) {
   }
   var cliente = String(dados.cliente || '').trim().toLowerCase();
   if (!cliente) return { success: true, unidades: [] };
+
   var sheet = getSheetInventarios();
   var data = sheet.getDataRange().getDisplayValues();
   var unidades = {};
@@ -3496,6 +3876,7 @@ function buscarUnidadesCliente(dados) {
   }
   return { success: true, unidades: Object.keys(unidades).sort() };
 }
+
 // ── BUSCAR ANÁLISES POR CLIENTE/UNIDADE/PERÍODO (para histórico temporal) ──
 function buscarAnalisesCliente(dados) {
   var cpf = dados && dados.cpf;
@@ -3505,21 +3886,27 @@ function buscarAnalisesCliente(dados) {
   }
   var cliente = String(dados.cliente || '').trim().toLowerCase();
   if (!cliente) return { success: true, lista: [] };
+
   var unidade = dados.unidade ? String(dados.unidade).trim().toLowerCase() : null;
   var dataInicio = dados.dataInicio || null; // dd/mm/yyyy
   var dataFim = dados.dataFim || null;
+
   function dataParaNum(d) {
     var p = String(d).split('/');
     return p.length === 3 ? Number(p[2] + p[1] + p[0]) : 0;
   }
+
   var sheet = getSheetInventarios();
   var data = sheet.getDataRange().getDisplayValues();
   var lista = [];
+
   for (var i = 1; i < data.length; i++) {
     var cl = String(data[i][1] || '').trim().toLowerCase();
     if (cl !== cliente) continue;
+
     var un = String(data[i][2] || '').trim();
     if (unidade && un.toLowerCase() !== unidade) continue;
+
     var dt = String(data[i][3] || '').trim();
     if (dataInicio) {
       var nDt = dataParaNum(dt), nIni = dataParaNum(dataInicio);
@@ -3529,8 +3916,10 @@ function buscarAnalisesCliente(dados) {
       var nDt2 = dataParaNum(dt), nFim = dataParaNum(dataFim);
       if (nDt2 > nFim) continue;
     }
+
     var resumo = {};
     try { resumo = JSON.parse(data[i][8] || '{}'); } catch (e) {}
+
     lista.push({
       timestamp: data[i][0], cliente: data[i][1], unidade: un,
       dataInventario: dt, feitoPor: data[i][4],
@@ -3538,8 +3927,10 @@ function buscarAnalisesCliente(dados) {
       qtdArquivos: data[i][7], resumo: resumo
     });
   }
+
   lista.sort(function(a, b) {
     return dataParaNum(b.dataInventario) - dataParaNum(a.dataInventario);
   });
+
   return { success: true, lista: lista, total: lista.length };
 }
