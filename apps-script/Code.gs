@@ -3934,3 +3934,4 @@ function buscarAnalisesCliente(dados) {
 
   return { success: true, lista: lista, total: lista.length };
 }
+// deploy-test 2026-09-14 10:11:26
