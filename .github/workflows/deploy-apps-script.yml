@@ -1,0 +1,41 @@
+name: Deploy Apps Script
+
+# Roda automaticamente sempre que arquivos dentro de apps-script/ mudarem
+# no branch principal. Alterações no site (HTML/JS do GitHub Pages) NÃO
+# disparam este workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps-script/**"
+  workflow_dispatch: {}  # permite disparar manualmente pela aba Actions, se precisar
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar clasp
+        run: npm install -g @google/clasp
+
+      - name: Configurar credenciais do clasp (a partir do Secret)
+        run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
+
+      - name: Gerar .clasp.json com o Script ID (a partir do Secret)
+        run: |
+          echo '{"scriptId":"${{ secrets.APPS_SCRIPT_ID }}","rootDir":"apps-script"}' > apps-script/.clasp.json
+
+      - name: Publicar código-fonte no Apps Script
+        run: clasp push --force
+        working-directory: apps-script
+
+      - name: Atualizar a implantação (Web App) publicada
+        run: clasp deploy --description "Auto-deploy $(date +'%Y-%m-%d %H:%M')"
+        working-directory: apps-script
