@@ -13,7 +13,7 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 
 /* HEADER */
-.app-header{background:var(--dark);padding:24px 16px;text-align:center}
+.app-header{background:var(--dark);padding:24px 16px;text-align:center;width:calc(100% - 32px);max-width:560px;margin:20px auto;border-radius:12px;box-shadow:0 6px 20px rgba(5,19,35,.3)}
 .app-header img{height:52px;margin-bottom:10px;}
 .app-header .header-bar{display:flex;align-items:center;justify-content:space-between;max-width:560px;margin:0 auto}
 .app-header .badge-mod{background:var(--green);color:var(--dark);font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;letter-spacing:.5px}
@@ -158,7 +158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r107';
+const VERSAO = 'r108';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).

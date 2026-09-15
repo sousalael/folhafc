@@ -688,7 +688,7 @@
         <div class="small text-muted mb-3" id="fin-escopo">Compara o que foi gasto com recurso próprio por supervisores contra o que já foi ressarcido.</div>
 
         <div id="fin-lista" class="border rounded p-2 mb-3" style="max-height: 340px; overflow-y: auto;">
-            <div class="text-center text-muted py-3">Carregando...</div>
+            <div class="text-center text-muted py-3">Escolha o período e clique em 🔍 Atualizar.</div>
         </div>
 
         <div class="alert alert-success d-flex align-items-center mb-3 hidden" id="fin-rodape">
@@ -2236,7 +2236,11 @@
             if (m) { iniEl.value = m.iniISO; fimEl.value = m.fimISO; }
             iniEl.disabled = true; fimEl.disabled = true;
         }
-        if (onChange) onChange();
+        // r108: NAO busca mais automaticamente aqui (nem ao abrir a tela/modal,
+        // nem ao trocar o mes no seletor). O parametro onChange fica sem uso
+        // proposital — cada tela ja tem seu proprio botao 🔍, que chama a
+        // funcao de busca diretamente. Buscar so deve acontecer quando o
+        // usuario aperta esse botao.
     }
 
     // ============================================================
@@ -4143,7 +4147,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-14-r107';
+    const VERSAO_ESPERADA = '2026-09-15-r108';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4244,10 +4248,14 @@
 
             if (!financeiroInicializado && getCpfLogado()) {
                 financeiroInicializado = true;
-                // popularSeletorMes ja dispara carregarDespXProv() no final,
-                // que agora tambem atualiza os cards com o mesmo periodo —
-                // nao precisa chamar carregarContadoresFinanceiro() a parte.
-                popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', carregarDespXProv);
+                // r108: popularSeletorMes nao busca mais sozinho. Os 3 cards
+                // do topo (Adiantamentos/Provisionamentos/Total) continuam
+                // atualizando automaticamente com o periodo padrao (MTD),
+                // igual ja acontece em Despesas Geral e no Painel de
+                // Contadores — mas a lista "Despesas x Provisionamento"
+                // (fin-lista) só carrega quando o usuário aperta 🔍 Atualizar.
+                popularSeletorMes('fin-mes', 'fin-ini', 'fin-fim', null);
+                carregarContadoresFinanceiro(document.getElementById('fin-ini').value, document.getElementById('fin-fim').value);
             }
 
             if (!despGeralInicializado && getCpfLogado()) {
@@ -4280,9 +4288,12 @@
 
             if (!pontoContadoresInicializado && getCpfLogado()) {
                 pontoContadoresInicializado = true;
-                // popularSeletorMes ja preenche ponto-cont-ini/fim com o mes
-                // atual (MTD) e dispara carregarContadoresPonto() no final.
-                popularSeletorMes('ponto-cont-mes', 'ponto-cont-ini', 'ponto-cont-fim', carregarContadoresPonto);
+                // r108: popularSeletorMes nao busca mais sozinho. Os 2 cards
+                // do Painel de Contadores continuam atualizando automaticamente
+                // com o periodo padrao (MTD) — são só números-resumo, sem
+                // lista de registros por trás, então não conta como "busca".
+                popularSeletorMes('ponto-cont-mes', 'ponto-cont-ini', 'ponto-cont-fim', null);
+                carregarContadoresPonto();
             }
 
             const chave = chaveProjeto(projetoAtivo);

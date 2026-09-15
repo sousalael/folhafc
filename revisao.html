@@ -11,7 +11,7 @@
     <style>
         :root { --fc-primaria:#002B50; --fc-primaria-clara:#0a3a68; --fc-acao:#61CF00; --fc-fundo:#f4f6f9; }
         body { background: var(--fc-fundo); color:#1f2b38; font-family: system-ui, -apple-system, sans-serif; padding-bottom:90px; }
-        .rel-topo { background:#051323; color:#fff; padding:16px 0; box-shadow:0 3px 12px rgba(0,20,40,0.3); }
+        .rel-topo { background:#051323; color:#fff; padding:16px 0; width:calc(100% - 32px); max-width:1000px; margin:20px auto; border-radius:12px; box-shadow:0 6px 20px rgba(0,20,40,0.3); }
         .rel-topo img { height:40px; }
         .rel-wrap { max-width:1000px; margin:0 auto; padding:0 16px; }
         .filtros-barra { background:#fff; border:1px solid #e6eaf0; border-radius:12px; padding:16px; margin:18px 0; box-shadow:0 4px 16px rgba(0,43,80,0.06); }
@@ -493,7 +493,14 @@
     if (!tokenSessao) {
         document.getElementById('estado').innerHTML = '⚠️ Sessão não informada. Abra pelo botão no app.';
     } else {
-        carregar();
+        // r108: preenche o período padrão (mês atual) nos filtros, mas só
+        // busca os lançamentos quando o usuário clicar em 🔍 Filtrar.
+        const hoje = new Date();
+        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        const paraISO = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        document.getElementById('f-ini').value = paraISO(inicioMes);
+        document.getElementById('f-fim').value = paraISO(hoje);
+        document.getElementById('estado').innerHTML = 'Selecione o período e clique em 🔍 Filtrar para carregar os lançamentos.';
     }
 </script>
 </body>
