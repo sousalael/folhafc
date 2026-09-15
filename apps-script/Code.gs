@@ -451,7 +451,7 @@ const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
-const VERSAO_SCRIPT = '2026-09-14-r107';
+const VERSAO_SCRIPT = '2026-09-15-r108';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3968,5 +3968,3 @@ function buscarAnalisesCliente(dados) {
 
   return { success: true, lista: lista, total: lista.length };
 }
-// r107 deploy 1789383747
-// r107-final 1789384216
