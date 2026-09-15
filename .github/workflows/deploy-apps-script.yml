@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps-script/**"
+      - "SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt"
   workflow_dispatch: {}
 
 jobs:
@@ -25,6 +26,14 @@ jobs:
       - name: Configurar credenciais do clasp
         run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
+      # r108: fonte única da verdade passa a ser o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt
+      # da raiz (o mesmo arquivo entregue em cada zip de versão). Antes de
+      # publicar, este passo sempre sobrescreve apps-script/Code.gs com o
+      # conteúdo atual desse arquivo — as duas cópias nunca mais ficam
+      # dessincronizadas, mesmo que só a raiz tenha sido atualizada.
+      - name: Sincronizar Code.gs com o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt da raiz
+        run: cp SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt apps-script/Code.gs
+
       - name: Gerar .clasp.json
         run: |
           echo '{"scriptId":"${{ secrets.APPS_SCRIPT_ID }}","rootDir":"apps-script"}' > apps-script/.clasp.json
@@ -36,29 +45,44 @@ jobs:
       - name: Atualizar TODAS as implantações
         working-directory: apps-script
         run: |
-          set -e
-          
+          set -e -o pipefail
+
           # Criar nova versão
           echo "--- Criando versão ---"
           clasp version "Auto $(date +'%Y-%m-%d %H:%M')" 2>&1 | tee /tmp/ver.txt
-          
-          # Extrair número da versão (aceita vários formatos de output)
-          VER=$(cat /tmp/ver.txt | grep -oE '[0-9]+' | tail -1)
+
+          # r108: extrai o numero SOMENTE da linha "Created version N" (formato
+          # fixo do clasp), em vez de pegar "o ultimo numero encontrado em toda
+          # a saida" — a versao antiga podia acertar o numero errado sem avisar.
+          VER=$(grep -oE 'Created version [0-9]+' /tmp/ver.txt | grep -oE '[0-9]+' | tail -1)
           echo "Versão detectada: $VER"
-          
+
           if [ -z "$VER" ]; then
-            echo "ERRO: não conseguiu extrair número da versão"
+            echo "ERRO: não conseguiu extrair número da versão. Saída completa do 'clasp version':"
+            cat /tmp/ver.txt
             exit 1
           fi
-          
+
           # Listar todas as implantações e atualizar CADA UMA
           echo "--- Listando implantações ---"
           clasp deployments 2>&1 | tee /tmp/deps.txt
-          
-          # Extrair todos os deployment IDs (formato: - AKfycb...)
+
+          # r108: qualquer falha ao atualizar uma implantação agora é
+          # registrada num arquivo (evita o problema de variável perdida
+          # dentro do loop) e derruba o job no final — antes, uma falha aqui
+          # só virava um aviso e o job continuava marcado como sucesso.
+          rm -f /tmp/deploy_failed
           grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
             echo "Atualizando deployment: $DEP_ID -> versão $VER"
-            clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')" 2>&1 || echo "AVISO: falhou para $DEP_ID, continuando..."
+            if ! clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')"; then
+              echo "ERRO: falhou para $DEP_ID"
+              touch /tmp/deploy_failed
+            fi
           done
-          
+
+          if [ -f /tmp/deploy_failed ]; then
+            echo "ERRO: uma ou mais implantações falharam ao atualizar. Veja os erros acima."
+            exit 1
+          fi
+
           echo "--- Concluído ---"
