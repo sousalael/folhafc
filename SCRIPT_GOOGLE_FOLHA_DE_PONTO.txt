@@ -462,7 +462,7 @@ const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
-const VERSAO_SCRIPT = '2026-09-18-r110';
+const VERSAO_SCRIPT = '2026-09-18-r113';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -2528,6 +2528,9 @@ function salvarAuditoria(dados, cpf) {
       if (todas[i][0] === d.id) { linhaExistente = i + 1; break; }
     }
     var ident = d.identificacao || {};
+    // r111: cliente e unidade sempre gravados sem espaços sobrando (evita "Rede Farma " x "Rede Farma")
+    ident.cliente = fcLimparNome(ident.cliente);
+    ident.unidade = fcLimparNome(ident.unidade);
     var agora = new Date();
     var scores = calcularScoresAuditoria(d.respostas || {});
     var rowData = [
@@ -2676,10 +2679,12 @@ function calcularScoresAuditoria(respostas) {
 }
 
 function registrarClienteFC(cliente, unidade, email) {
+  cliente = fcLimparNome(cliente); unidade = fcLimparNome(unidade);
+  var ck = fcChave(cliente), uk = fcChave(unidade);
   var aba = getOuCriarAbaClientes();
   var dados = aba.getDataRange().getValues();
   for (var i = 1; i < dados.length; i++) {
-    if (dados[i][0] === cliente && dados[i][1] === unidade) {
+    if (fcChave(dados[i][0]) === ck && fcChave(dados[i][1]) === uk) {
       aba.getRange(i + 1, 4).setValue(new Date());
       if (email) aba.getRange(i + 1, 3).setValue(email);
       return;
@@ -2688,19 +2693,30 @@ function registrarClienteFC(cliente, unidade, email) {
   aba.appendRow([cliente, unidade, email || '', new Date()]);
 }
 
+// r111: a lista vem das próprias análises (não excluídas) — os nomes antigos/corrigidos que só
+// existem na aba Clientes_FC deixam de aparecer. Formato de resposta igual ao anterior.
 function listarClientesFC() {
   try {
-    var aba = getOuCriarAbaClientes();
-    var dados = aba.getDataRange().getValues();
-    var clientes = {}, lista = [];
-    for (var i = 1; i < dados.length; i++) {
-      var c = dados[i][0], u = dados[i][1], e = dados[i][2];
-      if (!c) continue;
-      if (!clientes[c]) { clientes[c] = { unidades: [], emails: {} }; lista.push(c); }
-      if (u && clientes[c].unidades.indexOf(u) === -1) clientes[c].unidades.push(u);
-      if (e && u) clientes[c].emails[u] = e;
-    }
-    return { ok: true, clientes: lista, detalhes: clientes };
+    var cat = fcCatalogo();
+    var emails = fcEmailsPorChave();
+    var lista = cat.ordem.map(function (ck) { return cat.clientes[ck]; });
+    lista.sort(function (a, b) { return a.chave < b.chave ? -1 : (a.chave > b.chave ? 1 : 0); });
+    var nomes = [], detalhes = {};
+    lista.forEach(function (cl) {
+      var us = cl.uordem.map(function (uk) { return cl.unidades[uk]; });
+      us.sort(function (a, b) { return a.chave < b.chave ? -1 : (a.chave > b.chave ? 1 : 0); });
+      // concluidas / unidadesConcluidas: usados pelos filtros (NPS e Performance) para só oferecer quem tem análise concluída
+      var det = { unidades: [], emails: {}, concluidas: cl.concluidas, unidadesConcluidas: [] };
+      us.forEach(function (un) {
+        det.unidades.push(un.nome);
+        if (un.concluidas > 0) det.unidadesConcluidas.push(un.nome);
+        var e = emails[cl.chave + '|' + un.chave];
+        if (e) det.emails[un.nome] = e;
+      });
+      nomes.push(cl.nome);
+      detalhes[cl.nome] = det;
+    });
+    return { ok: true, clientes: nomes, detalhes: detalhes };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
@@ -4041,10 +4057,42 @@ function buscarAnalisesCliente(dados) {
 var ABA_NPS_ENVIOS = 'NPS_Envios';
 var ABA_NPS_RESPOSTAS = 'NPS_Respostas';
 var NPS_COLS_ENVIOS = ['Token','AuditoriaId','Cliente','Unidade','DataAuditoria','EmailDestino','DataEnvio','Respondida','DataResposta'];
-var NPS_COLS_RESPOSTAS = ['RespostaId','Token','AuditoriaId','Cliente','Unidade','DataAuditoria','DataResposta','Nota','Categoria','Apresentacao','PosturaRegras','Supervisor','Mapeamento','Horario','Comentario'];
+var NPS_COLS_RESPOSTAS = ['RespostaId','Token','AuditoriaId','Cliente','Unidade','DataAuditoria','DataResposta','Nota','Categoria','Apresentacao','PosturaRegras','Supervisor','Mapeamento','Horario','Comentario','Satisfacao','Destaques','Diagnostico'];
 // colunas (base 1) que precisam ficar como TEXTO puro (evita o Sheets converter datas/tokens/fórmulas)
 var NPS_TEXTO_ENVIOS = [1, 2, 3, 4, 5, 6, 8];
-var NPS_TEXTO_RESPOSTAS = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15];
+var NPS_TEXTO_RESPOSTAS = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 17, 18];
+/* ── r113: NOVO MODELO — CSAT (satisfação com a noite) + NPS (recomendação) no mesmo disparo ── */
+var NPS_EMAIL_AVISO = 'lael@formulacode.tec.br';   // recebe um e-mail a cada pesquisa respondida
+var NPS_DESTAQUES = {
+  pontualidade: 'Pontualidade no início/fim da contagem',
+  supervisor: 'Liderança e comunicação do supervisor',
+  postura: 'Postura e respeito do time às regras da loja',
+  mapeamento: 'Organização e mapeamento das áreas',
+  outro: 'Outro / Teve algum ponto negativo?'
+};
+var NPS_DESTAQUES_ORDEM = ['pontualidade', 'supervisor', 'postura', 'mapeamento', 'outro'];
+
+// Diagnóstico = cruzamento CSAT (a noite) x NPS (a relação). Do mais grave ao melhor.
+var NPS_DIAG = {
+  baixo_detr:   { titulo: 'Alerta vermelho', nivel: 'critico', ordem: 1, acao: 'Falha grave de execução em um cliente já insatisfeito. Exige ligação imediata da coordenação ou diretoria para alinhamento.' },
+  baixo_prom:   { titulo: 'Falha pontual da noite', nivel: 'falha', ordem: 2, acao: 'O cliente gosta da empresa, mas a equipe ou o supervisor desta noite cometeu falhas pontuais. Exige correção de processo interna, sem risco imediato de perda do contrato.' },
+  baixo_neutro: { titulo: 'Falha da noite, relação sem proteção', nivel: 'falha', ordem: 3, acao: 'A noite falhou e a relação não tem a proteção de um NPS alto: é o caminho mais curto para o alerta vermelho. Correção de processo e contato da coordenação.' },
+  medio_detr:   { titulo: 'Aviso antecipado', nivel: 'atencao', ordem: 4, acao: 'Noite mediana e cliente que não recomenda: aviso antes de virar alerta vermelho. Ligar para entender o motivo.' },
+  alto_detr:    { titulo: 'Noite boa, relação em risco', nivel: 'atencao', ordem: 5, acao: 'A noite foi boa, mas o cliente não recomenda: o problema está fora da noite (comercial, preço, histórico, relacionamento). Contato do comercial, não correção de processo.' },
+  medio_neutro: { titulo: 'Atenção leve', nivel: 'neutro', ordem: 6, acao: 'Sem risco e sem destaque. Atenção leve: ler o comentário.' },
+  medio_prom:   { titulo: 'Estável', nivel: 'bom', ordem: 7, acao: 'Noite razoável e relação forte. Manter e ler o comentário para ajustes pequenos.' },
+  alto_neutro:  { titulo: 'Ótima noite, cliente ainda não promotor', nivel: 'bom', ordem: 8, acao: 'A noite foi ótima, mas o cliente ainda não é promotor. Sem falha operacional: acompanhar, sem urgência.' },
+  alto_prom:    { titulo: 'Operação perfeita', nivel: 'otimo', ordem: 9, acao: 'Operação perfeita e cliente promovendo a marca. Ponto ideal para solicitar indicações comerciais.' }
+};
+function npsDiagnostico(csat, nota) {
+  if (csat === null || csat === undefined || isNaN(csat) || nota === null || nota === undefined || isNaN(nota)) return null;
+  var f1 = csat >= 9 ? 'alto' : (csat >= 7 ? 'medio' : 'baixo');
+  var f2 = nota >= 9 ? 'prom' : (nota >= 7 ? 'neutro' : 'detr');
+  var chave = f1 + '_' + f2, d = NPS_DIAG[chave];
+  return { chave: chave, titulo: d.titulo, nivel: d.nivel, acao: d.acao };
+}
+
+// (modelo anterior, mantido só para ler respostas antigas)
 var NPS_QUESITOS = ['apresentacao', 'postura', 'supervisor', 'mapeamento', 'horario'];
 var NPS_OPCOES = {
   apresentacao: ['Excelente', 'Satisfatório', 'Inadequado'],
@@ -4064,6 +4112,15 @@ function npsAba(nome, colunas, colunasTexto) {
     aba.setFrozenRows(1);
     var linhasFmt = Math.max(aba.getMaxRows() - 1, 1);
     colunasTexto.forEach(function (c) { aba.getRange(2, c, linhasFmt, 1).setNumberFormat('@'); });
+  } else {
+    // r113: aba criada por versão anterior — acrescenta só os cabeçalhos que faltam (não mexe nos dados)
+    var ultima = aba.getLastColumn();
+    if (ultima < colunas.length) {
+      var faltam = colunas.slice(ultima);
+      aba.getRange(1, ultima + 1, 1, faltam.length).setValues([faltam]).setFontWeight('bold').setBackground('#002B50').setFontColor('#FFFFFF');
+      var linhasFmt2 = Math.max(aba.getMaxRows() - 1, 1);
+      colunasTexto.forEach(function (c) { if (c > ultima) aba.getRange(2, c, linhasFmt2, 1).setNumberFormat('@'); });
+    }
   }
   return aba;
 }
@@ -4093,6 +4150,21 @@ function npsCategoria(nota) {
   return 'Detrator';
 }
 
+// r111: cliente/unidade/data do NPS são as ATUAIS da análise (se o nome foi corrigido depois do envio, vale o corrigido)
+function npsAtualizarNomes(lista) {
+  var cat;
+  try { cat = fcCatalogo(); } catch (e) { return lista; }
+  lista.forEach(function (it) {
+    var a = cat.porAud[it.auditoriaId];
+    if (!a) return;
+    var cl = cat.clientes[a.ck];
+    it.cliente = cl.nome;
+    it.unidade = cl.unidades[a.uk].nome;
+    if (a.data) it.dataAuditoria = a.data;
+  });
+  return lista;
+}
+
 function npsLerEnvios() {
   var v = npsAbaEnvios().getDataRange().getValues();
   var out = [];
@@ -4105,7 +4177,7 @@ function npsLerEnvios() {
       respondida: String(r[7]).toUpperCase() === 'SIM', dataResposta: npsDataHoraISO(r[8])
     });
   }
-  return out;
+  return npsAtualizarNomes(out);
 }
 
 function npsLerRespostas() {
@@ -4116,14 +4188,17 @@ function npsLerRespostas() {
     if (!r[0]) continue;
     var nota = parseInt(r[7], 10);
     if (isNaN(nota)) continue;
+    var csat = parseInt(r[15], 10);
+    var dest = String(r[16] || '').split(';').filter(function (k) { return NPS_DESTAQUES[k]; });
     out.push({
       id: String(r[0]), token: String(r[1]), auditoriaId: String(r[2]), cliente: String(r[3]), unidade: String(r[4]),
       dataAuditoria: extrairDataISO(r[5]), dataResposta: npsDataHoraISO(r[6]), nota: nota,
+      csat: (isNaN(csat) || csat < 1 || csat > 10) ? null : csat, destaques: dest,
       apresentacao: String(r[9] || ''), postura: String(r[10] || ''), supervisor: String(r[11] || ''),
       mapeamento: String(r[12] || ''), horario: String(r[13] || ''), comentario: String(r[14] || '')
     });
   }
-  return out;
+  return npsAtualizarNomes(out);
 }
 
 function npsBuscarEnvio(token) {
@@ -4177,18 +4252,40 @@ function npsObterPesquisa(dados) {
 
 /* ── PÚBLICO: registra a resposta (uma por link) ── */
 function npsResponder(dados) {
+  var r = npsGravarResposta(dados);
+  var aviso = r.aviso;
+  delete r.aviso;
+  if (aviso) {
+    try { npsEnviarAviso(aviso); } catch (e) { Logger.log('NPS: falha ao enviar o aviso por e-mail: ' + (e.message || e)); }
+  }
+  return r;
+}
+
+function npsGravarResposta(dados) {
   var lock = LockService.getScriptLock();
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     var t = npsLimparToken(d.t);
     if (!t) return { ok: false, erro: 'Link inválido.' };
     var nota = parseInt(d.nota, 10);
-    if (isNaN(nota) || nota < 0 || nota > 10) return { ok: false, erro: 'Escolha uma nota de 0 a 10.' };
+    if (isNaN(nota) || nota < 0 || nota > 10) return { ok: false, erro: 'Escolha uma nota de 0 a 10 para a recomendação.' };
+    // satisfação (1 a 10): obrigatória; só uma página ANTIGA em cache (modelo anterior, sem essa pergunta) pode enviar sem ela
+    var csat = null;
+    var semCsat = d.csat === undefined || d.csat === null || d.csat === '';
+    if (!semCsat) {
+      csat = parseInt(d.csat, 10);
+      if (isNaN(csat) || csat < 1 || csat > 10) return { ok: false, erro: 'Escolha uma nota de satisfação de 1 a 10.' };
+    } else if (!NPS_QUESITOS.some(function (k) { return d[k] !== undefined && d[k] !== ''; })) {
+      return { ok: false, erro: 'Escolha uma nota de satisfação de 1 a 10.' };
+    }
     var q = {};
     NPS_QUESITOS.forEach(function (k) {
       var v = String(d[k] || '').trim();
       q[k] = NPS_OPCOES[k].indexOf(v) !== -1 ? v : '';
     });
+    var lista = Array.isArray(d.destaques) ? d.destaques : [];
+    var destaques = [];
+    NPS_DESTAQUES_ORDEM.forEach(function (k) { if (lista.indexOf(k) !== -1) destaques.push(k); });
     var comentario = String(d.comentario || '').trim().substring(0, 2000);
 
     lock.waitLock(15000);
@@ -4197,13 +4294,18 @@ function npsResponder(dados) {
     if (env.respondida) return { ok: false, jaRespondida: true, erro: 'Esta pesquisa já foi respondida.' };
 
     var agora = new Date();
+    var diag = npsDiagnostico(csat, nota);
     npsAbaRespostas().appendRow([
       'nps_' + Utilities.getUuid().replace(/-/g, '').substring(0, 12), t, env.auditoriaId, env.cliente, env.unidade,
       env.dataAuditoria, agora, nota, npsCategoria(nota),
-      q.apresentacao, q.postura, q.supervisor, q.mapeamento, q.horario, comentario
+      q.apresentacao, q.postura, q.supervisor, q.mapeamento, q.horario, comentario,
+      csat === null ? '' : csat, destaques.join(';'), diag ? diag.chave : ''
     ]);
     npsAbaEnvios().getRange(env.linha, 8, 1, 2).setValues([['SIM', agora]]);
-    return { ok: true };
+    return {
+      ok: true,
+      aviso: { cliente: env.cliente, unidade: env.unidade, dataAuditoria: env.dataAuditoria, dataResposta: agora, csat: csat, nota: nota, diag: diag, destaques: destaques, comentario: comentario }
+    };
   } catch (e) {
     Logger.log('npsResponder: ' + e.message);
     return { ok: false, erro: 'Não foi possível registrar sua resposta agora. Tente novamente em instantes.' };
@@ -4212,10 +4314,42 @@ function npsResponder(dados) {
   }
 }
 
+// E-mail para a Formula Code a CADA pesquisa respondida, com a leitura do cruzamento CSAT x NPS.
+function npsEnviarAviso(a) {
+  var EMOJI = { critico: '🔴', falha: '🟠', atencao: '🟡', neutro: '⚪', bom: '🟢', otimo: '🟢' };
+  var COR = { critico: '#C0392B', falha: '#E8872B', atencao: '#D4A017', neutro: '#6B7B8D', bom: '#2E7D32', otimo: '#2E7D32' };
+  var d = a.diag;
+  var titulo = d ? d.titulo : 'Resposta sem nota de satisfação (modelo anterior)';
+  var nivel = d ? d.nivel : 'neutro';
+  var assunto = EMOJI[nivel] + ' Pesquisa NPS — ' + titulo + ' — ' + a.cliente + ' / ' + a.unidade;
+  var exige = d && (d.nivel === 'critico' || d.nivel === 'falha');
+  var nomes = a.destaques.map(function (k) { return NPS_DESTAQUES[k]; });
+  var linha = function (rot, val) { return '<tr><td style="padding:6px 10px;color:#6B7B8D;font-size:12px;width:38%">' + rot + '</td><td style="padding:6px 10px;font-size:13px;font-weight:600;color:#1A2A3A">' + val + '</td></tr>'; };
+  var nota = function (rot, v, fx) { return '<td style="width:50%;padding:6px"><div style="background:#F4F6F8;border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D">' + rot + '</div><div style="font-size:30px;font-weight:700;color:' + fx + '">' + (v === null ? '—' : v) + '</div></div></td>'; };
+  var corCsat = a.csat === null ? '#9AA7B4' : (a.csat >= 9 ? '#2E7D32' : (a.csat >= 7 ? '#D4A017' : '#C0392B'));
+  var corNps = a.nota >= 9 ? '#2E7D32' : (a.nota >= 7 ? '#D4A017' : '#C0392B');
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
+    + '<div style="background:#051323;padding:18px 24px;color:#FFF"><span style="color:#61CF00;font-weight:700">Formula Code</span> — Pesquisa de satisfação respondida</div>'
+    + '<div style="border-left:6px solid ' + COR[nivel] + ';background:#F8FAFB;padding:16px 20px;margin:16px 0">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:' + COR[nivel] + '">' + EMOJI[nivel] + ' ' + perfEsc(titulo) + '</div>'
+    + (d ? '<div style="font-size:14px;line-height:1.6;margin-top:6px;' + (exige ? 'font-weight:700;' : '') + '">' + (exige ? 'AÇÃO: ' : 'Leitura: ') + perfEsc(d.acao) + '</div>' : '')
+    + '</div>'
+    + '<table style="width:100%;border-collapse:collapse"><tr>' + nota('Satisfação com a noite (1–10)', a.csat, corCsat) + nota('Recomendação (NPS 0–10)', a.nota, corNps) + '</tr></table>'
+    + '<table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #E2E8F0">'
+    + linha('Cliente', perfEsc(a.cliente)) + linha('Unidade', perfEsc(a.unidade))
+    + linha('Data da análise', perfEsc(perfDataBR(a.dataAuditoria)))
+    + linha('Pontos que se destacaram', nomes.length ? nomes.map(perfEsc).join('<br>') : '<span style="color:#9AA7B4;font-weight:400">nenhum marcado</span>')
+    + '</table>'
+    + '<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D;margin-bottom:6px">O que podemos fazer para melhorar</div>'
+    + '<div style="background:#F4F6F8;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap">' + (a.comentario ? perfEsc(a.comentario) : '<span style="color:#9AA7B4">Sem comentário.</span>') + '</div></div>'
+    + '<div style="font-size:11px;color:#9AA7B4;margin-top:16px">Aviso automático do Sistema de Gestão FC. O acompanhamento completo está na tela inicial da Análise de Preparação.</div></div>';
+  MailApp.sendEmail(NPS_EMAIL_AVISO, assunto, '', { htmlBody: html, name: 'Formula Code — Pesquisa NPS' });
+}
+
 /* ── Cálculo puro (sem planilha) — testável isoladamente ── */
 function npsPassaFiltro(item, f) {
-  if (f.cliente && item.cliente !== f.cliente) return false;
-  if (f.unidade && item.unidade !== f.unidade) return false;
+  if (f.cliente && fcChave(item.cliente) !== fcChave(f.cliente)) return false;
+  if (f.unidade && fcChave(item.unidade) !== fcChave(f.unidade)) return false;
   var d = item.dataAuditoria || '';
   if (f.de && (!d || d < f.de)) return false;
   if (f.ate && (!d || d > f.ate)) return false;
@@ -4232,7 +4366,9 @@ function npsCalcular(envios, respostas, f) {
   var env = envios.filter(function (e) { return npsPassaFiltro(e, f); });
   var res = respostas.filter(function (r) { return npsPassaFiltro(r, f); });
   var P = 0, N = 0, D = 0, soma = 0;
+  var csatN = 0, csatSoma = 0, csatSat = 0;
   var dist = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  var distCsat = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];   // posição 1..10 (0 não usada)
   var quesitos = {};
   NPS_QUESITOS.forEach(function (k) {
     var c = {};
@@ -4240,10 +4376,14 @@ function npsCalcular(envios, respostas, f) {
     quesitos[k] = { opcoes: NPS_OPCOES[k].slice(), contagens: c, total: 0 };
   });
   var meses = {}, unidades = {};
+  var diagCont = {}, diagItens = {};
+  Object.keys(NPS_DIAG).forEach(function (k) { diagCont[k] = 0; diagItens[k] = []; });
+  var destCont = {}, destBase = 0;
+  NPS_DESTAQUES_ORDEM.forEach(function (k) { destCont[k] = 0; });
 
   function unidadeDe(cliente, unidade) {
     var chave = cliente + '|' + unidade;
-    if (!unidades[chave]) unidades[chave] = { cliente: cliente, unidade: unidade, enviados: 0, respostas: 0, promotores: 0, neutros: 0, detratores: 0, ultimaAnalise: '' };
+    if (!unidades[chave]) unidades[chave] = { cliente: cliente, unidade: unidade, enviados: 0, respostas: 0, promotores: 0, neutros: 0, detratores: 0, csatN: 0, csatSoma: 0, criticos: 0, falhas: 0, ultimaAnalise: '' };
     return unidades[chave];
   }
   env.forEach(function (e) {
@@ -4260,7 +4400,7 @@ function npsCalcular(envios, respostas, f) {
     u.respostas++;
     if (r.dataAuditoria > u.ultimaAnalise) u.ultimaAnalise = r.dataAuditoria;
     var mes = (r.dataAuditoria || '').substring(0, 7) || 'sem-data';
-    if (!meses[mes]) meses[mes] = { mes: mes, respostas: 0, promotores: 0, neutros: 0, detratores: 0 };
+    if (!meses[mes]) meses[mes] = { mes: mes, respostas: 0, promotores: 0, neutros: 0, detratores: 0, csatN: 0, csatSoma: 0 };
     meses[mes].respostas++;
     if (cat === 'Promotor') { P++; u.promotores++; meses[mes].promotores++; }
     else if (cat === 'Neutro') { N++; u.neutros++; meses[mes].neutros++; }
@@ -4269,17 +4409,37 @@ function npsCalcular(envios, respostas, f) {
       var v = r[k];
       if (v && quesitos[k].contagens.hasOwnProperty(v)) { quesitos[k].contagens[v]++; quesitos[k].total++; }
     });
+    if (r.csat !== null && r.csat !== undefined) {
+      csatN++; csatSoma += r.csat; distCsat[r.csat]++;
+      if (r.csat >= 9) csatSat++;
+      u.csatN++; u.csatSoma += r.csat; meses[mes].csatN++; meses[mes].csatSoma += r.csat;
+      destBase++;
+      (r.destaques || []).forEach(function (k) { if (destCont.hasOwnProperty(k)) destCont[k]++; });
+    }
+    var dg = npsDiagnostico(r.csat, r.nota);
+    if (dg) {
+      diagCont[dg.chave]++;
+      if (dg.nivel === 'critico') u.criticos++;
+      if (dg.nivel === 'falha') u.falhas++;
+      if (diagItens[dg.chave].length < 100) {
+        diagItens[dg.chave].push({ cliente: r.cliente, unidade: r.unidade, dataAuditoria: r.dataAuditoria, dataResposta: r.dataResposta, csat: r.csat, nps: r.nota, comentario: r.comentario });
+      }
+    }
   });
 
   var total = res.length;
   var porMes = Object.keys(meses).sort().map(function (k) {
     var m = meses[k];
     m.nps = npsIndice(m.promotores, m.neutros, m.detratores);
+    m.csat = m.csatN ? Math.round(m.csatSoma * 10 / m.csatN) / 10 : null;
+    delete m.csatN; delete m.csatSoma;
     return m;
   });
   var porUnidade = Object.keys(unidades).map(function (k) {
     var u = unidades[k];
     u.nps = npsIndice(u.promotores, u.neutros, u.detratores);
+    u.csat = u.csatN ? Math.round(u.csatSoma * 10 / u.csatN) / 10 : null;
+    delete u.csatN; delete u.csatSoma;
     return u;
   }).sort(function (a, b) {
     // pior NPS primeiro; unidades sem resposta por último
@@ -4290,12 +4450,21 @@ function npsCalcular(envios, respostas, f) {
   });
   var lista = res.slice().sort(function (a, b) { return String(b.dataResposta).localeCompare(String(a.dataResposta)); })
     .slice(0, 500).map(function (r) {
+      var dg = npsDiagnostico(r.csat, r.nota);
       return {
         dataResposta: r.dataResposta, dataAuditoria: r.dataAuditoria, cliente: r.cliente, unidade: r.unidade,
-        nota: r.nota, categoria: npsCategoria(r.nota), apresentacao: r.apresentacao, postura: r.postura,
+        nota: r.nota, categoria: npsCategoria(r.nota), csat: r.csat, destaques: r.destaques || [],
+        diagnostico: dg ? { chave: dg.chave, titulo: dg.titulo, nivel: dg.nivel } : null,
+        apresentacao: r.apresentacao, postura: r.postura,
         supervisor: r.supervisor, mapeamento: r.mapeamento, horario: r.horario, comentario: r.comentario
       };
     });
+  var diagnosticos = Object.keys(NPS_DIAG).sort(function (a, b) { return NPS_DIAG[a].ordem - NPS_DIAG[b].ordem; }).map(function (k) {
+    return { chave: k, titulo: NPS_DIAG[k].titulo, nivel: NPS_DIAG[k].nivel, acao: NPS_DIAG[k].acao, quantidade: diagCont[k], itens: diagItens[k] };
+  });
+  var destaques = { base: destBase, itens: NPS_DESTAQUES_ORDEM.map(function (k) {
+    return { chave: k, rotulo: NPS_DESTAQUES[k], quantidade: destCont[k], pct: destBase ? Math.round(destCont[k] * 100 / destBase) : null };
+  }) };
 
   return {
     resumo: {
@@ -4305,9 +4474,14 @@ function npsCalcular(envios, respostas, f) {
       pctPromotores: total ? Math.round(P * 100 / total) : null,
       pctNeutros: total ? Math.round(N * 100 / total) : null,
       pctDetratores: total ? Math.round(D * 100 / total) : null,
-      mediaNota: total ? Math.round(soma * 10 / total) / 10 : null
+      mediaNota: total ? Math.round(soma * 10 / total) / 10 : null,
+      csatRespondidas: csatN,
+      csatMedio: csatN ? Math.round(csatSoma * 10 / csatN) / 10 : null,
+      pctSatisfeitos: csatN ? Math.round(csatSat * 100 / csatN) : null,
+      alertas: { criticos: diagCont.baixo_detr, falhas: diagCont.baixo_prom + diagCont.baixo_neutro, perfeitas: diagCont.alto_prom }
     },
-    distribuicao: dist, quesitos: quesitos, porMes: porMes, porUnidade: porUnidade, respostas: lista
+    distribuicao: dist, distribuicaoCsat: distCsat, quesitos: quesitos, diagnosticos: diagnosticos, destaques: destaques,
+    porMes: porMes, porUnidade: porUnidade, respostas: lista
   };
 }
 
@@ -4328,12 +4502,17 @@ function npsAnalise(dados, cpf) {
 function npsMapaPorAuditoria() {
   var mapa = {};
   npsLerEnvios().forEach(function (e) {
-    if (!mapa[e.auditoriaId]) mapa[e.auditoriaId] = { enviados: 0, respondidas: 0, notas: [] };
+    if (!mapa[e.auditoriaId]) mapa[e.auditoriaId] = { enviados: 0, respondidas: 0, notas: [], respostas: [] };
     mapa[e.auditoriaId].enviados++;
   });
   npsLerRespostas().forEach(function (r) {
     var m = mapa[r.auditoriaId];
-    if (m) { m.respondidas++; m.notas.push(r.nota); }
+    if (m) {
+      var dg = npsDiagnostico(r.csat, r.nota);
+      m.respondidas++;
+      m.notas.push(r.nota);
+      m.respostas.push({ nps: r.nota, csat: r.csat, nivel: dg ? dg.nivel : null, titulo: dg ? dg.titulo : null });
+    }
   });
   return mapa;
 }
@@ -4408,13 +4587,14 @@ function perfMetricasDaAnalise(respostas) {
 }
 
 function perfLerAnalises() {
+  var cat = fcCatalogo();   // r111: nomes canônicos (mesma lista dos filtros)
   var aba = getOuCriarAbaAuditoria();
   var todas = aba.getDataRange().getValues();
   var out = [];
   for (var i = 1; i < todas.length; i++) {
     var row = todas[i];
     if (String(row[9]) !== 'CONCLUIDO') continue;
-    var cliente = String(row[5] || '').trim(), unidade = String(row[6] || '').trim();
+    var cliente = fcNomeCliente(cat, row[5]), unidade = fcNomeUnidade(cat, row[5], row[6]);
     if (!cliente || !unidade) continue;
     var resp = {};
     try { resp = JSON.parse(row[11] || '{}'); } catch (e) {}
@@ -4441,7 +4621,7 @@ function perfPeriodoAnterior(de, ate, hoje) {
 }
 
 function perfPassa(a, f) {
-  if (f.cliente && a.cliente !== f.cliente) return false;
+  if (f.cliente && fcChave(a.cliente) !== fcChave(f.cliente)) return false;
   if (f.tipo && a.tipo !== f.tipo) return false;
   var d = a.dataAuditoria || '';
   if (f.de && (!d || d < f.de)) return false;
@@ -4557,7 +4737,7 @@ function perfHoje() { return Utilities.formatDate(new Date(), 'America/Fortaleza
 
 function perfFiltroDe(d) {
   var tipo = String(d.tipo || '');
-  return { cliente: String(d.cliente || ''), tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate) };
+  return { cliente: fcLimparNome(d.cliente), tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate) };
 }
 
 /* ── DIRETOR: cards por cliente e por unidade ── */
@@ -4714,7 +4894,7 @@ function perfPrepararCliente(d) {
   if (!f.cliente) return { erro: 'Selecione um cliente para gerar a análise.' };
   var calc = perfCalcular(perfLerAnalises(), f, perfHoje());
   var cli = null;
-  calc.clientes.forEach(function (c) { if (c.cliente === f.cliente) cli = c; });
+  calc.clientes.forEach(function (c) { if (fcChave(c.cliente) === fcChave(f.cliente)) cli = c; });
   if (!cli) return { erro: 'Nenhuma análise concluída para este cliente no período selecionado.' };
   return { calc: calc, cli: cli, filtro: calc.filtro, anterior: calc.periodoAnterior };
 }
@@ -4866,8 +5046,8 @@ function perfPastaCliente(cliente) {
   if (it.hasNext()) raiz = it.next(); else raiz = DriveApp.createFolder('Performance_FC');
   return getOuCriarSubpastaAud(raiz, perfNomeLimpo(cliente));
 }
-function perfNomeBase(filtro) {
-  return 'Performance_' + perfNomeLimpo(filtro.cliente) + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
+function perfNomeBase(filtro, cliente) {
+  return 'Performance_' + perfNomeLimpo(cliente || filtro.cliente) + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
 }
 
 /* ── DIRETOR: exporta a análise em PDF (HTML + PDF no Drive) ── */
@@ -4880,8 +5060,8 @@ function performanceExportarPDF(dados, cpf) {
     var fb = perfTextoFallback(p.cli, p.filtro, p.anterior);
     var textos = perfGarantirTextos(d.textos || null, fb, p.cli);
     var html = perfMontarHTML(p.cli, p.filtro, p.anterior, textos);
-    var pasta = perfPastaCliente(p.filtro.cliente);
-    var base = perfNomeBase(p.filtro);
+    var pasta = perfPastaCliente(p.cli.cliente);
+    var base = perfNomeBase(p.filtro, p.cli.cliente);
     [base + '.html', base + '.pdf'].forEach(function (n) {
       var ex = pasta.getFilesByName(n);
       while (ex.hasNext()) ex.next().setTrashed(true);
@@ -4908,8 +5088,9 @@ function performanceSalvarApresentacao(dados, cpf) {
     var f = perfFiltroDe(d);
     if (!f.cliente) return { ok: false, erro: 'Selecione um cliente para gerar a apresentação.' };
     if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
-    var pasta = perfPastaCliente(f.cliente);
-    var base = 'Apresentacao_' + perfNomeBase(f).replace(/^Performance_/, 'Performance_');
+    var nomeCli = fcNomeCliente(fcCatalogo(), f.cliente);
+    var pasta = perfPastaCliente(nomeCli);
+    var base = 'Apresentacao_' + perfNomeBase(f, nomeCli);
     var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
     [nomePptx, nomePdf].forEach(function (n) {
       var ex = pasta.getFilesByName(n);
@@ -4932,4 +5113,67 @@ function performanceSalvarApresentacao(dados, cpf) {
     }
     return out;
   } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CATÁLOGO DE CLIENTES E UNIDADES — r111
+   Fonte única e LIMPA dos nomes de clientes/unidades: vem das próprias
+   análises (não excluídas), não da aba Clientes_FC (que só acumula nomes
+   digitados, inclusive os já corrigidos). Espaços, maiúsculas e acentos
+   NÃO diferenciam ("REDE FARMA" = "Rede Farma" = "Rede Farmá"). O nome
+   exibido é o da análise MAIS RECENTE do grupo. Nada é apagado da planilha.
+   ═══════════════════════════════════════════════════════════════════ */
+function fcLimparNome(s) {
+  return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').trim();
+}
+function fcChave(s) {
+  var t = fcLimparNome(s).toLowerCase();
+  try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+  return t;
+}
+
+function fcCatalogo() {
+  var todas = getOuCriarAbaAuditoria().getDataRange().getValues();
+  var clientes = {}, ordem = [], porAud = {};
+  for (var i = 1; i < todas.length; i++) {
+    var row = todas[i];
+    if (String(row[9]) === 'EXCLUIDO') continue;
+    var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
+    if (!c || !u) continue;
+    var data = extrairDataISO(row[7]);
+    var ck = fcChave(c), uk = fcChave(u);
+    var cl = clientes[ck];
+    if (!cl) { cl = clientes[ck] = { chave: ck, nome: c, dataNome: data, concluidas: 0, unidades: {}, uordem: [] }; ordem.push(ck); }
+    if (data >= cl.dataNome) { cl.nome = c; cl.dataNome = data; }      // variante da análise mais recente
+    var un = cl.unidades[uk];
+    if (!un) { un = cl.unidades[uk] = { chave: uk, nome: u, dataNome: data, concluidas: 0 }; cl.uordem.push(uk); }
+    if (data >= un.dataNome) { un.nome = u; un.dataNome = data; }
+    if (String(row[9]) === 'CONCLUIDO') { cl.concluidas++; un.concluidas++; }
+    porAud[String(row[0])] = { ck: ck, uk: uk, data: data };
+  }
+  return { clientes: clientes, ordem: ordem, porAud: porAud };
+}
+
+function fcNomeCliente(cat, nome) {
+  var cl = cat.clientes[fcChave(nome)];
+  return cl ? cl.nome : fcLimparNome(nome);
+}
+function fcNomeUnidade(cat, cliente, unidade) {
+  var cl = cat.clientes[fcChave(cliente)];
+  var un = cl ? cl.unidades[fcChave(unidade)] : null;
+  return un ? un.nome : fcLimparNome(unidade);
+}
+
+// e-mail mais recente salvo por unidade na aba Clientes_FC (a aba continua sendo usada só para isso)
+function fcEmailsPorChave() {
+  var dados = getOuCriarAbaClientes().getDataRange().getValues();
+  var out = {}, quando = {};
+  for (var i = 1; i < dados.length; i++) {
+    var c = dados[i][0], u = dados[i][1], e = String(dados[i][2] || '').trim();
+    if (!c || !u || !e) continue;
+    var k = fcChave(c) + '|' + fcChave(u);
+    var t = dados[i][3] instanceof Date ? dados[i][3].getTime() : 0;
+    if (out[k] === undefined || t >= quando[k]) { out[k] = e; quando[k] = t; }
+  }
+  return out;
 }

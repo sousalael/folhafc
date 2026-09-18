@@ -298,6 +298,34 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
 @media(max-width:420px){.pf-grid{grid-template-columns:1fr}.pf-met{grid-template-columns:86px 1fr 28px}.aba-home{font-size:11px;padding:10px 4px;gap:4px}.aba-home .bi{display:none}}
 @media(prefers-reduced-motion:reduce){button.pf-card{transition:none}}
 
+/* NPS r113: CSAT + NPS + diagnóstico */
+.nps-card.nps-quatro{grid-column:span 4}
+.nps-tres{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:2px}
+.nps-tres span{display:flex;flex-direction:column;line-height:1.25}
+.nps-tres b{font-size:22px;font-weight:800}
+.nps-tres i{font-style:normal;font-size:10px;color:var(--text-light)}
+.nps-tres .nps-p b{color:#2E7D32}.nps-tres .nps-n b{color:var(--amber)}.nps-tres .nps-d b{color:var(--red)}
+.nps-card.nps-acao{border-left:4px solid var(--border)}
+.nps-card.nps-acao.critico{border-left-color:#C0392B}
+.nps-card.nps-acao.falha{border-left-color:#E8872B}
+.nps-card.nps-acao.otimo{border-left-color:#2E7D32}
+.nps-card.nps-acao.critico.ativo{background:#FDEAEA}
+.nps-card.nps-acao.falha.ativo{background:#FFF3E0}
+.nps-notas-duplas{display:flex;gap:6px;flex-shrink:0}
+.nps-rolagem{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.nps-matriz{width:100%;border-collapse:separate;border-spacing:5px;table-layout:fixed}
+.nps-matriz th{font-size:10px;font-weight:700;color:var(--text-light);text-align:center;padding:2px 0}
+.nps-matriz .nps-mlin{text-align:right;padding-right:4px;white-space:nowrap;width:64px}
+.nps-cel{width:100%;border:2px solid transparent;border-radius:12px;padding:10px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;min-height:78px}
+.nps-cel b{font-size:22px;line-height:1}
+.nps-cel span{font-size:10px;font-weight:600;color:var(--text);line-height:1.25;text-align:center}
+.nps-cel.zero{opacity:.55}
+.nps-cel:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.nps-acao-txt{font-size:13px;line-height:1.55;margin-bottom:12px;color:var(--text)}
+.nps-prio{display:block;width:100%;text-align:left;border:none;border-left:5px solid var(--border);background:var(--bg);border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-family:inherit}
+.nps-prio b{display:block;font-size:13px;color:var(--navy);margin-bottom:2px}
+.nps-prio span{font-size:12px;color:var(--text-light);line-height:1.45}
+
 @media(max-width:380px){.rating-btn{font-size:11px;height:32px}}
 </style>
 </head>
@@ -333,7 +361,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r110';
+const VERSAO = 'r113';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -600,6 +628,19 @@ let state = {
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 
+// r111: mesma regra do servidor — espaços, maiúsculas e acentos não diferenciam nomes
+function fcChave(s) {
+  let t = String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase();
+  try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+  return t;
+}
+function unidadesDoCliente(nome) {
+  const k = fcChave(nome);
+  if (!k) return [];
+  const alvo = Object.keys(state.unidades || {}).find(c => fcChave(c) === k);
+  return alvo ? (state.unidades[alvo] || []) : [];
+}
+
 function toast(msg, ms=2500) {
   const t = $('#toast');
   t.textContent = msg;
@@ -737,6 +778,11 @@ async function renderTelaInicial(aba) {
     state.clientes = rc.clientes || [];
     state.unidades = {};
     const det = rc.detalhes || {};
+    // r111: os filtros (NPS e Performance) só oferecem clientes/unidades com análise CONCLUÍDA
+    state.clientesConcluidos = []; state.unidadesConcluidas = {};
+    for (const c in det) {
+      if (det[c].concluidas === undefined || det[c].concluidas > 0) { state.clientesConcluidos.push(c); state.unidadesConcluidas[c] = det[c].unidadesConcluidas || det[c].unidades || []; }
+    }
     for (const c in det) { state.unidades[c] = det[c].unidades || []; state.emailsCliente = state.emailsCliente || {}; for (const u in det[c].emails) state.emailsCliente[c+'|'+u] = det[c].emails[u]; }
   }
   state.rascunhos = rascunhos;
@@ -934,7 +980,7 @@ function renderIdentificacao(secao) {
         <input type="text" list="listaUnidades" value="${v.unidade||''}" placeholder="Digite ou selecione a unidade"
                oninput="setIdent('unidade',this.value)" onchange="setIdent('unidade',this.value)">
         <datalist id="listaUnidades">
-          ${(state.unidades[v.cliente]||[]).map(u => `<option value="${u}">`).join('')}
+          ${unidadesDoCliente(v.cliente).map(u => `<option value="${u}">`).join('')}
         </datalist>
       </div>
 
@@ -1471,7 +1517,9 @@ async function carregarHistoricoAba() {
     // r109: selo da pesquisa NPS desta análise (só o Diretor vê a nota)
     let seloNps = '';
     if (isDiretor && a.nps) {
-      if (a.nps.respondidas && a.nps.notas && a.nps.notas.length) {
+      if (a.nps.respondidas && a.nps.respostas && a.nps.respostas.length) {
+        seloNps = a.nps.respostas.map(x => `<span class="chip-nps" style="background:${x.nivel ? NPS_NIVEL_COR[x.nivel] : npsCorNota(x.nps)}" title="${esc(x.titulo || '')}">${(x.csat !== null && x.csat !== undefined) ? 'CSAT ' + x.csat + ' · ' : ''}NPS ${x.nps}</span>`).join('');
+      } else if (a.nps.respondidas && a.nps.notas && a.nps.notas.length) {
         seloNps = a.nps.notas.map(n => `<span class="chip-nps ${n >= 9 ? 'p' : (n >= 7 ? 'n' : 'd')}">NPS ${n}</span>`).join('');
       } else {
         seloNps = '<span class="chip-nps aguarda">NPS: aguardando resposta</span>';
@@ -1574,14 +1622,14 @@ function npsCorNota(n) { return n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05
 function htmlPainelNps() {
   if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
   const f = state.npsFiltro;
-  const clientes = state.clientes || [];
+  const clientes = state.clientesConcluidos || state.clientes || [];
   const optsCli = '<option value="">Todos os clientes</option>' +
     clientes.map(c => `<option value="${esc(c)}"${c === f.cliente ? ' selected' : ''}>${esc(c)}</option>`).join('');
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   return `
     <div class="nps-painel" id="npsPainel">
       <div class="nps-topo">
-        <div class="nps-titulo"><i class="bi bi-emoji-smile"></i> Satisfação do cliente <small>NPS</small></div>
+        <div class="nps-titulo"><i class="bi bi-emoji-smile"></i> Satisfação do cliente <small>CSAT + NPS</small></div>
         <button type="button" class="nps-btn-detalhe" onclick="npsAbrirDetalhe('resumo')">Ver detalhes</button>
       </div>
       <div class="nps-filtros">
@@ -1599,7 +1647,7 @@ function htmlPainelNps() {
 
 function npsOpcoesUnidade() {
   const f = state.npsFiltro || npsFiltroInicial();
-  const unids = f.cliente ? ((state.unidades || {})[f.cliente] || []) : [];
+  const unids = f.cliente ? ((state.unidadesConcluidas || state.unidades || {})[f.cliente] || []) : [];
   return '<option value="">Todas as unidades</option>' +
     unids.map(u => `<option value="${esc(u)}"${u === f.unidade ? ' selected' : ''}>${esc(u)}</option>`).join('');
 }
@@ -1661,46 +1709,70 @@ async function npsCarregarCards() {
   boxAtual.innerHTML = htmlCardsNps(r);
 }
 
+const NPS_NIVEL_COR = { critico: '#C0392B', falha: '#E8872B', atencao: '#D4A017', neutro: '#8899AA', bom: '#61CF00', otimo: '#2E7D32' };
+const NPS_NIVEL_BG = { critico: '#FDEAEA', falha: '#FFF3E0', atencao: '#FFF8E1', neutro: '#F4F6F8', bom: '#EAF8E0', otimo: '#E8F5E9' };
+const NPS_NIVEL_ICONE = { critico: '🔴', falha: '🟠', atencao: '🟡', neutro: '⚪', bom: '🟢', otimo: '🟢' };
+// cruzamento CSAT (linhas) x NPS (colunas) — mesma classificação do servidor
+const NPS_LINHAS = [['alto', 'CSAT 9–10'], ['medio', 'CSAT 7–8'], ['baixo', 'CSAT 1–6']];
+const NPS_COLUNAS = [['prom', 'NPS 9–10'], ['neutro', 'NPS 7–8'], ['detr', 'NPS 0–6']];
+function npsCorCsat(n) { return n === null || n === undefined ? '#9AA7B4' : (n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252')); }
+
 function htmlCardsNps(r) {
   const s = r ? r.resumo : null;
   const zona = npsZona(s ? s.nps : null);
   const pct = v => (v === null || v === undefined) ? '—' : v + '%';
   const nps = s && s.nps !== null ? s.nps : '—';
+  const csat = s && s.csatMedio !== null && s.csatMedio !== undefined ? String(s.csatMedio).replace('.', ',') : '—';
+  const csatSub = !s ? 'carregando…' : (s.csatRespondidas ? pct(s.pctSatisfeitos) + ' satisfeitos (9–10) · ' + s.csatRespondidas + ' resp.' : 'sem respostas do novo modelo');
   const resp = s ? s.respondidas : '—';
   const env = s ? s.enviados : '—';
   const taxa = s && s.taxaResposta !== null ? s.taxaResposta + '% de retorno' : (s ? 'nenhuma pesquisa enviada' : 'carregando…');
+  const al = s ? s.alertas : null;
   return `
       <button type="button" class="nps-card nps-principal" onclick="npsAbrirDetalhe('resumo')">
-        <span class="nps-rot">NPS</span>
+        <span class="nps-rot">NPS · recomendação</span>
         <span class="nps-num" style="color:${zona.c}">${nps}</span>
         <span class="nps-sub">${zona.t}</span>
       </button>
-      <button type="button" class="nps-card nps-larga" onclick="npsAbrirDetalhe('respostas','todas')">
+      <button type="button" class="nps-card nps-larga" onclick="npsAbrirDetalhe('resumo')">
+        <span class="nps-rot">CSAT · satisfação com a noite</span>
+        <span class="nps-num" style="color:${s && s.csatMedio !== null && s.csatMedio !== undefined ? npsCorCsat(s.csatMedio) : '#8899AA'}">${csat}</span>
+        <span class="nps-sub">${csatSub}</span>
+      </button>
+      <button type="button" class="nps-card" onclick="npsAbrirDetalhe('respostas','todas')">
         <span class="nps-rot">Respostas</span>
-        <span class="nps-num-s">${resp}<small> de ${env} enviadas</small></span>
+        <span class="nps-num-s">${resp}<small> / ${env}</small></span>
         <span class="nps-sub">${taxa}</span>
       </button>
-      <button type="button" class="nps-card nps-p" onclick="npsAbrirDetalhe('respostas','Promotor')">
-        <span class="nps-rot">Promotores</span>
-        <span class="nps-num-s">${s ? pct(s.pctPromotores) : '—'}</span>
-        <span class="nps-sub">notas 9–10${s ? ' · ' + s.promotores : ''}</span>
+      <button type="button" class="nps-card nps-quatro" onclick="npsAbrirDetalhe('respostas','todas')">
+        <span class="nps-rot">Recomendação</span>
+        <span class="nps-tres">
+          <span class="nps-p"><b>${s ? pct(s.pctPromotores) : '—'}</b><i>Promotores 9–10${s ? ' · ' + s.promotores : ''}</i></span>
+          <span class="nps-n"><b>${s ? pct(s.pctNeutros) : '—'}</b><i>Neutros 7–8${s ? ' · ' + s.neutros : ''}</i></span>
+          <span class="nps-d"><b>${s ? pct(s.pctDetratores) : '—'}</b><i>Detratores 0–6${s ? ' · ' + s.detratores : ''}</i></span>
+        </span>
       </button>
-      <button type="button" class="nps-card nps-n" onclick="npsAbrirDetalhe('respostas','Neutro')">
-        <span class="nps-rot">Neutros</span>
-        <span class="nps-num-s">${s ? pct(s.pctNeutros) : '—'}</span>
-        <span class="nps-sub">notas 7–8${s ? ' · ' + s.neutros : ''}</span>
+      <button type="button" class="nps-card nps-acao critico${al && al.criticos ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_detr')">
+        <span class="nps-rot">🔴 Alerta vermelho</span>
+        <span class="nps-num-s">${al ? al.criticos : '—'}</span>
+        <span class="nps-sub">ligação imediata</span>
       </button>
-      <button type="button" class="nps-card nps-d" onclick="npsAbrirDetalhe('respostas','Detrator')">
-        <span class="nps-rot">Detratores</span>
-        <span class="nps-num-s">${s ? pct(s.pctDetratores) : '—'}</span>
-        <span class="nps-sub">notas 0–6${s ? ' · ' + s.detratores : ''}</span>
+      <button type="button" class="nps-card nps-acao falha${al && al.falhas ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_prom')">
+        <span class="nps-rot">🟠 Falha da noite</span>
+        <span class="nps-num-s">${al ? al.falhas : '—'}</span>
+        <span class="nps-sub">correção de processo</span>
+      </button>
+      <button type="button" class="nps-card nps-acao otimo" onclick="npsAbrirDetalhe('diagnostico','alto_prom')">
+        <span class="nps-rot">🟢 Operação perfeita</span>
+        <span class="nps-num-s">${al ? al.perfeitas : '—'}</span>
+        <span class="nps-sub">pedir indicações</span>
       </button>`;
 }
 
 /* ── DETALHE (folha sobreposta) ── */
-function npsAbrirDetalhe(aba, cat) {
+function npsAbrirDetalhe(aba, chave) {
   if (!state.npsDados) { toast('Aguarde o carregamento do NPS'); return; }
-  state.npsModal = { aba: aba || 'resumo', cat: cat || 'todas', soComentario: false };
+  state.npsModal = { aba: aba || 'resumo', cat: (aba === 'respostas' && chave) ? chave : 'todas', diag: aba === 'diagnostico' ? (chave || '') : '', soComentario: false };
   let m = document.getElementById('npsModal');
   if (!m) {
     m = document.createElement('div');
@@ -1726,16 +1798,18 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') npsFecharDet
 function npsTrocarAba(aba) { state.npsModal.aba = aba; npsRenderModal(); }
 function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderModal(); }
 function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderModal(); }
+function npsSelecionarDiag(chave) { state.npsModal.diag = (state.npsModal.diag === chave ? '' : chave); npsRenderModal(); }
 
 function npsRenderModal() {
   const m = document.getElementById('npsModal');
   const r = state.npsDados;
   if (!m || !r) return;
   const st = state.npsModal;
-  const abas = [['resumo', 'Resumo'], ['quesitos', 'Quesitos'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
+  const abas = [['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
   let corpo = '';
   if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
-  else if (st.aba === 'quesitos') corpo = npsHtmlQuesitos(r);
+  else if (st.aba === 'diagnostico') corpo = npsHtmlDiagnostico(r, st);
+  else if (st.aba === 'destaques') corpo = npsHtmlDestaques(r);
   else if (st.aba === 'unidades') corpo = npsHtmlUnidades(r);
   else corpo = npsHtmlRespostas(r, st);
   m.innerHTML = `
@@ -1743,7 +1817,7 @@ function npsRenderModal() {
       <div class="nps-modal-topo">
         <div class="nps-modal-linha">
           <div>
-            <div class="nps-modal-titulo">Satisfação do cliente (NPS)</div>
+            <div class="nps-modal-titulo">Satisfação do cliente (CSAT + NPS)</div>
             <div class="nps-modal-ctx">${esc(npsRotuloFiltro())}<br>Período pela data da análise</div>
           </div>
           <button type="button" class="nps-modal-x" onclick="npsFecharDetalhe()" aria-label="Fechar">✕</button>
@@ -1769,18 +1843,21 @@ function npsDataBR(iso) {
   return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '—';
 }
 
+function npsBarrasDist(dist, de, corFn) {
+  const max = Math.max.apply(null, dist.concat([1]));
+  return dist.map((n, i) => i < de ? '' : `
+    <div class="nps-dcol">
+      <div class="nps-dn">${n || ''}</div>
+      <div class="nps-dbar" style="height:${Math.round(n * 80 / max)}%;background:${corFn(i)}"></div>
+      <div class="nps-dl">${i}</div>
+    </div>`).join('');
+}
+
 function npsHtmlResumo(r) {
   const s = r.resumo;
   if (!s.respondidas) {
     return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}</div>`;
   }
-  const max = Math.max.apply(null, r.distribuicao.concat([1]));
-  const dist = r.distribuicao.map((n, i) => `
-    <div class="nps-dcol">
-      <div class="nps-dn">${n || ''}</div>
-      <div class="nps-dbar" style="height:${Math.round(n * 80 / max)}%;background:${npsCorNota(i)}"></div>
-      <div class="nps-dl">${i}</div>
-    </div>`).join('');
   const meses = r.porMes.map(m => {
     const v = m.nps;
     const larg = v === null ? 0 : Math.abs(v) / 2;         // -100..100 -> 0..50% do trilho
@@ -1789,43 +1866,112 @@ function npsHtmlResumo(r) {
     <div class="nps-linha-mes">
       <span>${npsMesRotulo(m.mes)}</span>
       <div class="nps-trilho"><span class="nps-preench" style="${pos};width:${larg}%;background:${npsCorValor(v)}"></span></div>
-      <span class="nps-val" style="color:${npsCorValor(v)}">${v === null ? '—' : v} <small style="font-weight:400;color:var(--text-light)">(${m.respostas})</small></span>
+      <span class="nps-val" style="color:${npsCorValor(v)}">${v === null ? '—' : v} <small style="font-weight:400;color:var(--text-light)">${m.csat !== null && m.csat !== undefined ? 'CSAT ' + String(m.csat).replace('.', ',') + ' ' : ''}(${m.respostas})</small></span>
     </div>`;
   }).join('');
+  const temLegado = NPS_QUESITOS_ORDEM.some(k => r.quesitos[k] && r.quesitos[k].total > 0);
+  let legado = '';
+  if (temLegado) {
+    legado = '<div class="nps-bloco"><h4>Quesitos do modelo anterior</h4>' + NPS_QUESITOS_ORDEM.map(k => {
+      const q = r.quesitos[k]; const tot = q.total;
+      if (!tot) return '';
+      const seg = q.opcoes.map(o => { const n = q.contagens[o] || 0; return n ? `<span style="width:${n * 100 / tot}%;background:${NPS_COR_OPCAO[o] || '#999'}" title="${esc(o)}: ${n}"></span>` : ''; }).join('');
+      const leg = q.opcoes.map(o => { const n = q.contagens[o] || 0; return `<span><i style="background:${NPS_COR_OPCAO[o] || '#999'}"></i>${esc(o)}: <b>${n}</b></span>`; }).join('');
+      return `<div class="nps-quesito"><div class="nps-quesito-t">${esc(NPS_QUESITOS_TXT[k])}</div><div class="nps-pilha">${seg}</div><div class="nps-quesito-leg">${leg}</div></div>`;
+    }).join('') + '<div class="nps-legenda-faixas" style="margin-top:8px">Respostas dadas antes da mudança do modelo de pesquisa.</div></div>';
+  }
   return `
     <div class="nps-bloco">
-      <h4>Distribuição das notas</h4>
-      <div class="nps-dist">${dist}</div>
+      <h4>1 · Satisfação com a noite (CSAT, 1 a 10)</h4>
+      ${s.csatRespondidas ? `<div class="nps-dist">${npsBarrasDist(r.distribuicaoCsat, 1, npsCorCsat)}</div>
       <div class="nps-legenda-faixas">
-        <span><i style="background:#E05252"></i>0–6 detratores</span>
-        <span><i style="background:#D4A017"></i>7–8 neutros</span>
-        <span><i style="background:#2E7D32"></i>9–10 promotores</span>
+        <span><i style="background:#E05252"></i>1–6 baixo</span><span><i style="background:#D4A017"></i>7–8 médio</span><span><i style="background:#2E7D32"></i>9–10 alto</span>
+        <span>Média: <b>${String(s.csatMedio).replace('.', ',')}</b> · satisfeitos (9–10): <b>${s.pctSatisfeitos}%</b></span>
+      </div>` : '<div class="nps-vazio" style="padding:12px">Nenhuma resposta do novo modelo neste filtro.</div>'}
+    </div>
+    <div class="nps-bloco">
+      <h4>2 · Recomendação (NPS, 0 a 10)</h4>
+      <div class="nps-dist">${npsBarrasDist(r.distribuicao, 0, npsCorNota)}</div>
+      <div class="nps-legenda-faixas">
+        <span><i style="background:#E05252"></i>0–6 detratores</span><span><i style="background:#D4A017"></i>7–8 neutros</span><span><i style="background:#2E7D32"></i>9–10 promotores</span>
         <span>Nota média: <b>${s.mediaNota === null ? '—' : String(s.mediaNota).replace('.', ',')}</b></span>
       </div>
     </div>
     <div class="nps-bloco">
       <h4>Evolução por mês da análise</h4>
       ${meses}
-      <div class="nps-legenda-faixas" style="margin-top:8px">NPS do mês e, entre parênteses, o número de respostas.</div>
-    </div>`;
+      <div class="nps-legenda-faixas" style="margin-top:8px">NPS do mês, CSAT médio (quando há) e, entre parênteses, o número de respostas.</div>
+    </div>
+    ${legado}`;
 }
 
-function npsHtmlQuesitos(r) {
-  if (!r.resumo.respondidas) return '<div class="nps-vazio">Nenhuma resposta neste filtro.</div>';
-  return '<div class="nps-bloco">' + NPS_QUESITOS_ORDEM.map(k => {
-    const q = r.quesitos[k];
-    const tot = q.total;
-    if (!tot) return `<div class="nps-quesito"><div class="nps-quesito-t">${esc(NPS_QUESITOS_TXT[k])}</div><div class="nps-quesito-leg">Sem respostas neste quesito.</div></div>`;
-    const seg = q.opcoes.map(o => {
-      const n = q.contagens[o] || 0;
-      return n ? `<span style="width:${n * 100 / tot}%;background:${NPS_COR_OPCAO[o] || '#999'}" title="${esc(o)}: ${n}"></span>` : '';
-    }).join('');
-    const leg = q.opcoes.map(o => {
-      const n = q.contagens[o] || 0;
-      return `<span><i style="background:${NPS_COR_OPCAO[o] || '#999'}"></i>${esc(o)}: <b>${n}</b> (${Math.round(n * 100 / tot)}%)</span>`;
-    }).join('');
-    return `<div class="nps-quesito"><div class="nps-quesito-t">${esc(NPS_QUESITOS_TXT[k])}</div><div class="nps-pilha">${seg}</div><div class="nps-quesito-leg">${leg}</div></div>`;
-  }).join('') + '</div>';
+function npsHtmlDiagnostico(r, st) {
+  const dg = {};
+  r.diagnosticos.forEach(d => { dg[d.chave] = d; });
+  if (!r.resumo.csatRespondidas) {
+    return '<div class="nps-vazio">O diagnóstico cruza a satisfação com a noite (CSAT) e a recomendação (NPS).<br>Ainda não há respostas do novo modelo neste filtro.</div>';
+  }
+  const celulas = NPS_LINHAS.map(l => `<tr><th class="nps-mlin">${l[1]}</th>${NPS_COLUNAS.map(c => {
+    const d = dg[l[0] + '_' + c[0]];
+    const sel = st.diag === d.chave;
+    return `<td><button type="button" class="nps-cel${sel ? ' sel' : ''}${d.quantidade ? '' : ' zero'}" style="background:${NPS_NIVEL_BG[d.nivel]};border-color:${sel ? NPS_NIVEL_COR[d.nivel] : 'transparent'}" onclick="npsSelecionarDiag('${d.chave}')" aria-pressed="${sel}"><b style="color:${NPS_NIVEL_COR[d.nivel]}">${d.quantidade}</b><span>${esc(d.titulo)}</span></button></td>`;
+  }).join('')}</tr>`).join('');
+  const cab = `<tr><th></th>${NPS_COLUNAS.map(c => `<th>${c[1]}</th>`).join('')}</tr>`;
+  let detalhe = '';
+  if (st.diag && dg[st.diag]) {
+    const d = dg[st.diag];
+    detalhe = `
+      <div class="nps-bloco" style="border-left:5px solid ${NPS_NIVEL_COR[d.nivel]}">
+        <h4>${NPS_NIVEL_ICONE[d.nivel]} ${esc(d.titulo)} · ${d.quantidade} resposta(s)</h4>
+        <div class="nps-acao-txt">${esc(d.acao)}</div>
+        ${d.itens.length ? d.itens.map(x => `
+          <div class="nps-resp ${x.nps >= 9 ? 'p' : (x.nps >= 7 ? 'n' : 'd')}">
+            <div class="nps-resp-topo">
+              <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)} · respondida em ${npsDataBR(x.dataResposta)}</small></div>
+              <div class="nps-notas-duplas"><div class="nps-nota" style="background:${npsCorCsat(x.csat)}" title="Satisfação">${x.csat}</div><div class="nps-nota" style="background:${npsCorNota(x.nps)}" title="Recomendação">${x.nps}</div></div>
+            </div>
+            ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}
+          </div>`).join('') : '<div class="nps-vazio" style="padding:12px">Nenhuma resposta neste cruzamento.</div>'}
+      </div>`;
+  } else {
+    const prioritarios = r.diagnosticos.filter(d => d.quantidade && (d.nivel === 'critico' || d.nivel === 'falha' || d.nivel === 'atencao'));
+    detalhe = `<div class="nps-bloco"><h4>Exigem ação</h4>${prioritarios.length ? prioritarios.map(d => `
+      <button type="button" class="nps-prio" style="border-left-color:${NPS_NIVEL_COR[d.nivel]}" onclick="npsSelecionarDiag('${d.chave}')">
+        <b>${NPS_NIVEL_ICONE[d.nivel]} ${esc(d.titulo)} · ${d.quantidade}</b><span>${esc(d.acao)}</span>
+      </button>`).join('') : '<div class="nps-vazio" style="padding:12px">Nenhuma resposta exige ação neste filtro. 🎉</div>'}
+      <div class="nps-legenda-faixas" style="margin-top:8px">Toque num quadro da tabela para ver as respostas e a ação sugerida.</div></div>`;
+  }
+  return `
+    <div class="nps-bloco">
+      <h4>Satisfação com a noite (linhas) x Recomendação (colunas)</h4>
+      <table class="nps-matriz"><thead>${cab}</thead><tbody>${celulas}</tbody></table>
+    </div>
+    ${detalhe}`;
+}
+
+function npsHtmlDestaques(r) {
+  const d = r.destaques;
+  if (!d.base) return '<div class="nps-vazio">Nenhuma resposta do novo modelo neste filtro.</div>';
+  const barras = d.itens.map(x => {
+    const cor = x.chave === 'outro' ? '#E8872B' : '#61CF00';
+    return `
+    <div class="nps-quesito">
+      <div class="nps-quesito-t">${esc(x.rotulo)}</div>
+      <div class="nps-pilha"><span style="width:${x.pct || 0}%;background:${cor}"></span></div>
+      <div class="nps-quesito-leg"><span><b>${x.quantidade}</b> de ${d.base} (${x.pct}%)</span></div>
+    </div>`;
+  }).join('');
+  const outros = r.respostas.filter(x => (x.destaques || []).indexOf('outro') !== -1);
+  const lista = outros.length ? `
+    <div class="nps-bloco"><h4>Marcaram "Outro / ponto negativo"</h4>${outros.map(x => `
+      <div class="nps-resp ${x.categoria === 'Promotor' ? 'p' : (x.categoria === 'Neutro' ? 'n' : 'd')}">
+        <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)}</small></div>
+        ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}
+      </div>`).join('')}</div>` : '';
+  return `
+    <div class="nps-bloco"><h4>Pontos que se destacaram na operação</h4>${barras}
+      <div class="nps-legenda-faixas" style="margin-top:8px">Cada cliente pode marcar vários pontos. Base: ${d.base} resposta(s) do novo modelo.</div></div>
+    ${lista}`;
 }
 
 function npsHtmlUnidades(r) {
@@ -1835,43 +1981,50 @@ function npsHtmlUnidades(r) {
       <td class="nps-un">${esc(u.unidade)}<small>${esc(u.cliente)}${u.ultimaAnalise ? ' · última análise ' + npsDataBR(u.ultimaAnalise) : ''}</small></td>
       <td>${u.respostas}<small style="color:var(--text-light)">/${u.enviados}</small></td>
       <td>${u.nps === null ? '<span style="color:var(--text-light)">—</span>' : `<span class="nps-pilula" style="background:${npsCorValor(u.nps)}">${u.nps}</span>`}</td>
-      <td style="color:#2E7D32;font-weight:700">${u.promotores}</td>
-      <td style="color:var(--amber);font-weight:700">${u.neutros}</td>
-      <td style="color:var(--red);font-weight:700">${u.detratores}</td>
+      <td>${u.csat === null || u.csat === undefined ? '<span style="color:var(--text-light)">—</span>' : `<span class="nps-pilula" style="background:${npsCorCsat(u.csat)}">${String(u.csat).replace('.', ',')}</span>`}</td>
+      <td style="color:${NPS_NIVEL_COR.critico};font-weight:700">${u.criticos || 0}</td>
+      <td style="color:${NPS_NIVEL_COR.falha};font-weight:700">${u.falhas || 0}</td>
     </tr>`).join('');
   return `
     <div class="nps-bloco">
       <h4>Do menor para o maior NPS</h4>
-      <table class="nps-tabela">
-        <thead><tr><th>Unidade</th><th>Resp./env.</th><th>NPS</th><th title="Promotores">P</th><th title="Neutros">N</th><th title="Detratores">D</th></tr></thead>
+      <div class="nps-rolagem"><table class="nps-tabela">
+        <thead><tr><th>Unidade</th><th>Resp./env.</th><th>NPS</th><th title="Satisfação média com a noite (1 a 10)">CSAT</th><th title="Alertas vermelhos">🔴</th><th title="Falhas da noite">🟠</th></tr></thead>
         <tbody>${linhas}</tbody>
-      </table>
-      <div class="nps-legenda-faixas" style="margin-top:8px">P = promotores · N = neutros · D = detratores. Unidades sem resposta aparecem por último.</div>
+      </table></div>
+      <div class="nps-legenda-faixas" style="margin-top:8px">🔴 alerta vermelho (CSAT 1–6 e NPS 0–6) · 🟠 falha da noite (CSAT 1–6 e NPS 7–10). Unidades sem resposta aparecem por último.</div>
     </div>`;
 }
 
 function npsHtmlRespostas(r, st) {
-  const cats = [['todas', 'Todas'], ['Promotor', 'Promotores'], ['Neutro', 'Neutros'], ['Detrator', 'Detratores']];
+  const cats = [['todas', 'Todas'], ['acao', 'Exigem ação'], ['Promotor', 'Promotores'], ['Neutro', 'Neutros'], ['Detrator', 'Detratores']];
   const chips = cats.map(c => `<button type="button" class="nps-chip-filtro${st.cat === c[0] ? ' ativo' : ''}" onclick="npsTrocarCat('${c[0]}')">${c[1]}</button>`).join('') +
     `<button type="button" class="nps-chip-filtro${st.soComentario ? ' ativo' : ''}" onclick="npsToggleComentario()">Só com comentário</button>`;
-  let lista = r.respostas.filter(x => (st.cat === 'todas' || x.categoria === st.cat) && (!st.soComentario || x.comentario));
+  const exigeAcao = x => x.diagnostico && (x.diagnostico.nivel === 'critico' || x.diagnostico.nivel === 'falha');
+  const lista = r.respostas.filter(x => (st.cat === 'todas' || (st.cat === 'acao' ? exigeAcao(x) : x.categoria === st.cat)) && (!st.soComentario || x.comentario));
   const total = r.respostas.length;
   const cortado = r.resumo.respondidas > total ? `<div class="nps-legenda-faixas">Mostrando as ${total} respostas mais recentes.</div>` : '';
   const itens = lista.map(x => {
     const cls = x.categoria === 'Promotor' ? 'p' : (x.categoria === 'Neutro' ? 'n' : 'd');
-    const tags = NPS_QUESITOS_ORDEM.filter(k => x[k]).map(k => {
+    const dgTag = x.diagnostico ? `<span class="nps-tag" style="background:${NPS_NIVEL_BG[x.diagnostico.nivel]};color:${NPS_NIVEL_COR[x.diagnostico.nivel]}">${NPS_NIVEL_ICONE[x.diagnostico.nivel]} ${esc(x.diagnostico.titulo)}</span>` : '';
+    const dest = (x.destaques || []).map(k => { const it = r.destaques.itens.find(i => i.chave === k); return `<span class="nps-tag${k === 'outro' ? ' medio' : ''}">${esc(it ? it.rotulo : k)}</span>`; }).join('');
+    const legado = NPS_QUESITOS_ORDEM.filter(k => x[k]).map(k => {
       const t = NPS_OPCAO_RUIM.indexOf(x[k]) !== -1 ? ' ruim' : (NPS_OPCAO_MEDIA.indexOf(x[k]) !== -1 ? ' medio' : '');
       const nome = { apresentacao: 'Apresentação', postura: 'Postura', supervisor: 'Supervisor', mapeamento: 'Mapeamento', horario: 'Horário' }[k];
       return `<span class="nps-tag${t}">${nome}: ${esc(x[k])}</span>`;
     }).join('');
+    const notas = (x.csat !== null && x.csat !== undefined)
+      ? `<div class="nps-notas-duplas"><div class="nps-nota" style="background:${npsCorCsat(x.csat)}" title="Satisfação com a noite">${x.csat}</div><div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="Recomendação">${x.nota}</div></div>`
+      : `<div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="${esc(x.categoria)}">${x.nota}</div>`;
     return `
     <div class="nps-resp ${cls}">
       <div class="nps-resp-topo">
         <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)} · respondida em ${npsDataBR(x.dataResposta)}</small></div>
-        <div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="${esc(x.categoria)}">${x.nota}</div>
+        ${notas}
       </div>
+      ${dgTag ? `<div class="nps-tags">${dgTag}</div>` : ''}
       ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}
-      ${tags ? `<div class="nps-tags">${tags}</div>` : ''}
+      ${(dest || legado) ? `<div class="nps-tags">${dest}${legado}</div>` : ''}
     </div>`;
   }).join('');
   return `
@@ -1950,7 +2103,7 @@ function carregarPerformanceAba() {
   if (!c) return;
   const p = pfEstado();
   const f = p.filtro;
-  const optsCli = '<option value="">Todos os clientes</option>' + (state.clientes || []).map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const optsCli = '<option value="">Todos os clientes</option>' + (state.clientesConcluidos || state.clientes || []).map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
   const optsPer = NPS_PERIODOS.map(x => `<option value="${x.v}"${x.v === f.periodo ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsTipo = PF_TIPOS.map(x => `<option value="${esc(x.v)}"${x.v === f.tipo ? ' selected' : ''}>${x.t}</option>`).join('');
   c.innerHTML = `
@@ -2017,7 +2170,10 @@ function pfRender() {
   if (!box || !p.dados) return;
   const d = p.dados;
   if (!d.clientes.length) {
-    box.innerHTML = '<div class="pf-vazio">Nenhuma análise concluída neste filtro.<br>Ajuste o cliente, o período ou o tipo de avaliação e toque em Buscar.</div>';
+    const f = p.aplicado;
+    box.innerHTML = '<div class="pf-vazio">Nenhuma análise concluída ' + (f.cliente ? 'de <b>' + esc(f.cliente) + '</b> ' : '') +
+      'em <b>' + esc(pfPeriodoRotulo(f)) + '</b>' + (f.tipo ? ' (' + esc(pfTipoRotulo(f)) + ')' : '') + '.<br>Ajuste o cliente, o período ou o tipo de avaliação e toque em Buscar.' +
+      (f.periodo !== 'tudo' ? '<br><button type="button" class="pf-acao txt" style="display:inline-flex;margin-top:12px" onclick="pfBuscarTodoPeriodo()">Buscar em todo o período</button>' : '') + '</div>';
     return;
   }
   const cli = p.foco ? d.clientes.find(c => c.cliente === p.foco) : null;
@@ -2101,6 +2257,12 @@ function pfVoltarMacro() {
   const sel = $('#pfCliente'); if (sel) sel.value = '';
   pfMarcarPendente();
   pfRender();
+}
+function pfBuscarTodoPeriodo() {
+  const p = pfEstado();
+  p.filtro.periodo = 'tudo';
+  pfSincronizarCampos();
+  pfBuscar();
 }
 function pfSincronizarCampos() {
   const f = pfEstado().filtro;
@@ -2571,8 +2733,9 @@ function montarPptxApresentacao(prep, variante) {
       const textos = prep.textos || {};
       const fotosSet = prep.fotosDetalhada || [];
 
+      // r112: margens seguras (0,5 pol no painel e na base) — ver "LAYOUT DE SLIDES — MARGENS"
       function addLogo(s) {
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:7.05, y:4.55, w:2.7, h:0.7 }); } catch(e) {} }
+        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:PPT_PAINEL_X, y:4.5, w:PPT_PAINEL_W, h:0.635 }); } catch(e) {} }
       }
       function splitBg(s) {
         s.background = { fill:'FFFFFF' };
@@ -2587,8 +2750,28 @@ function montarPptxApresentacao(prep, variante) {
         return 'E05252';
       }
       function painelInfo(s) {
-        s.addText((ident.cliente||'') + '\n' + (ident.unidade||''), { x:7.05, y:0.8, w:2.7, h:0.5, fontSize:12, fontFace:'Arial', bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
-        s.addText((ident.data_auditoria||'') + '\n' + (ident.tipo_avaliacao||''), { x:7.05, y:1.5, w:2.7, h:0.5, fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, lineSpacingMultiple:1.4 });
+        const nome = (ident.cliente||'') + '\n' + (ident.unidade||'');
+        const hNome = Math.min(1.1, pptMedirAltura(nome, PPT_PAINEL_W, 12, 1.1));
+        s.addText(nome, { x:PPT_PAINEL_X, y:0.8, w:PPT_PAINEL_W, h:hNome, fontSize:12, fontFace:'Arial', bold:true, color:'FFFFFF', isTextBox:true, margin:0, valign:'top' });
+        const info = (ident.data_auditoria||'') + '\n' + (ident.tipo_avaliacao||'');
+        s.addText(info, { x:PPT_PAINEL_X, y:0.8 + hNome + 0.12, w:PPT_PAINEL_W, h:Math.min(1.2, pptMedirAltura(info, PPT_PAINEL_W, 10, 1.4)), fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+      }
+
+      // r112: slide(s) de texto corrido — reduz a fonte e, se preciso, continua no slide seguinte
+      function slideTexto(rot, a, b, texto, italico) {
+        texto = String(texto || '').trim();
+        if (!texto) return;
+        const hMax = PPT_Y_MAX - 1.7;
+        let fs = pptFonteQueCabe(texto, PPT_W_ESQ, hMax, 12, 10.5, 1.4);
+        const partes = fs ? [texto] : pptDividirTexto(texto, PPT_W_ESQ, hMax, (fs = 11), 1.4);
+        partes.forEach(function(p, i) {
+          const sx = pres.addSlide();
+          splitBg(sx);
+          rotulo(sx, rot + (i > 0 ? ' (CONT.)' : ''));
+          sx.addText([{ text:a, options:{ color: DARK } }, { text:b + (i > 0 ? ' (cont.)' : ''), options:{ color: GREEN } }], { x:0.8, y:0.9, w:5.7, h:0.6, fontSize:pptTituloFs(a + b + (i > 0 ? ' (cont.)' : ''), 5.7, 26, 16), fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+          sx.addText(p, { x:0.8, y:1.7, w:5.7, h:Math.min(hMax, pptMedirAltura(p, 5.7, fs, 1.4)), fontSize:fs, fontFace:'Arial', color: BODY, italic: !!italico, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+          painelInfo(sx);
+        });
       }
 
       // r100: estima a altura (em polegadas) que um bloco de texto vai
@@ -2649,8 +2832,8 @@ function montarPptxApresentacao(prep, variante) {
       ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
       s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
       const sub = (ident.cliente||'') + ' — ' + (ident.unidade||'') + '  ·  ' + (ident.data_auditoria||'');
-      s1.addText(sub, { x:0.8, y:2.45, w:8, h:0.4, fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.35, w:3.6, h:0.94 }); } catch(e) {} }
+      s1.addText(sub, { x:0.8, y:2.45, w:8.4, h:Math.min(1.2, pptMedirAltura(sub, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
+      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
 
       /* Slide 2 — Indicadores */
       const s2 = pres.addSlide();
@@ -2679,36 +2862,29 @@ function montarPptxApresentacao(prep, variante) {
       /* Slide 2b — Notas por Setor (só na Detalhada) — r72 */
       const notasPorSetor = prep.notasPorSetor || [];
       if (isDetalhada && notasPorSetor.length) {
-        const sN = pres.addSlide();
-        splitBg(sN);
-        rotulo(sN, 'NOTAS POR SETOR');
-        sN.addText([
-          { text:'Notas ', options:{ color: DARK } },
-          { text:'por Setor', options:{ color: GREEN } }
-        ], { x:0.8, y:0.9, w:5.7, h:0.6, fontSize:26, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
-        notasPorSetor.forEach(function(n, i) {
-          const ky = 1.75 + i * 0.5;
-          sN.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.34, fill:{ color: corScore(n.media) } });
-          sN.addText(n.media + '/10', { x:1.05, y:ky-0.03, w:1.15, h:0.32, fontSize:16, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
-          sN.addText(n.setor, { x:2.3, y:ky+0.02, w:3.7, h:0.3, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0 });
-        });
-        painelInfo(sN);
+        const POR_SLIDE_SETOR = 6;   // 1,75 + 6 x 0,5 = 4,75 pol: dentro da margem inferior
+        for (let ini = 0; ini < notasPorSetor.length; ini += POR_SLIDE_SETOR) {
+          const sN = pres.addSlide();
+          splitBg(sN);
+          rotulo(sN, 'NOTAS POR SETOR');
+          sN.addText([
+            { text:'Notas ', options:{ color: DARK } },
+            { text:'por Setor' + (ini > 0 ? ' (cont.)' : ''), options:{ color: GREEN } }
+          ], { x:0.8, y:0.9, w:5.7, h:0.6, fontSize:26, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+          notasPorSetor.slice(ini, ini + POR_SLIDE_SETOR).forEach(function(n, i) {
+            const ky = 1.75 + i * 0.5;
+            sN.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.34, fill:{ color: corScore(n.media) } });
+            sN.addText(n.media + '/10', { x:1.05, y:ky-0.03, w:1.15, h:0.32, fontSize:16, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+            sN.addText(pptTruncar(n.setor, 46), { x:2.3, y:ky+0.02, w:4.0, h:0.3, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0 });
+          });
+          painelInfo(sN);
+        }
       }
 
       /* Slide 3 — Resumo (cenário geral) */
-      const s3 = pres.addSlide();
-      splitBg(s3);
-      rotulo(s3, 'RESUMO');
-      s3.addText([
-        { text:'Cenário ', options:{ color: DARK } },
-        { text:'Geral', options:{ color: GREEN } }
-      ], { x:0.8, y:0.9, w:5.6, h:0.6, fontSize:26, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
       const resumoTxt = isDetalhada ? (textos.resumo_detalhado || textos.resumo_curto || '') : (textos.resumo_curto || '');
-      // r100: altura calculada a partir do texto (em vez de fixa em 2.4in)
-      // para não cortar/sobrepor quando a IA gera um resumo mais longo.
-      const resumoH = Math.min(2.9, estimarAlturaTexto(resumoTxt, 5.7, 13, 1.4));
-      s3.addText(resumoTxt, { x:0.8, y:1.7, w:5.7, h:resumoH, fontSize:13, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4 });
-      painelInfo(s3);
+      // r112: fonte reduzida e, se ainda não couber, continua no slide seguinte (nada invade a margem)
+      slideTexto('RESUMO', 'Cenário ', 'Geral', resumoTxt);
 
       /* Slides seguintes — um por seção com foto e/ou observação
          disponível (r72: não depende mais só de ter foto), com a
@@ -2728,7 +2904,18 @@ function montarPptxApresentacao(prep, variante) {
 
         // r100: seções com mais de MAX_FOTOS_POR_SLIDE fotos ganham
         // slides extras de continuação, em vez de espremer tudo num só.
+        // r112: se a observação não couber (nem com fonte 9) acima das fotos, ela vai para slide(s)
+        // próprio(s) de observações — nada é cortado e nada invade a margem.
+        let obsFs = 11, obsNoSlideProprio = false;
+        if (obsTxt) {
+          const f = pptFonteQueCabe(obsTxt, 5.7, 1.5, 11, 9, 1.3);
+          if (f) obsFs = f; else obsNoSlideProprio = true;
+        }
+        if (obsTxt && obsNoSlideProprio) {
+          slideTexto('OBSERVAÇÕES', (secao.titulo || meta.titulo || '') + ' — ', 'Observações', obsTxt, true);
+        }
         const totalPaginas = Math.max(1, Math.ceil(fotos.length / MAX_FOTOS_POR_SLIDE));
+        if (!fotos.length && obsNoSlideProprio) return;   // só tinha observação e ela já foi colocada
         for (let pagina = 0; pagina < totalPaginas; pagina++) {
           const s = pres.addSlide();
           splitBg(s);
@@ -2736,23 +2923,26 @@ function montarPptxApresentacao(prep, variante) {
           const temFotos = fotosDaPagina.length > 0;
           rotulo(s, temFotos ? 'REGISTROS FOTOGRÁFICOS' : 'OBSERVAÇÕES');
           const tituloTxt = (secao.titulo || meta.titulo || '') + (pagina > 0 ? ' (continuação)' : '');
-          s.addText(tituloTxt, { x:0.8, y:0.9, w:5.7, h:0.55, fontSize:22, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+          s.addText(tituloTxt, { x:0.8, y:0.9, w:5.7, h:0.55, fontSize:pptTituloFs(tituloTxt, 5.7, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
 
           let yFotos = 1.55;
-          if (obsTxt && pagina === 0) {
+          if (obsTxt && !obsNoSlideProprio && pagina === 0) {
             // r100: altura calculada a partir do texto real, em vez de
             // fixa em 0.85in, para não sobrepor a grade de fotos abaixo.
-            const obsH = Math.min(1.5, estimarAlturaTexto(obsTxt, 5.7, 11, 1.3));
-            s.addText(obsTxt, { x:0.8, y:1.5, w:5.7, h:obsH, fontSize:11, fontFace:'Arial', color: BODY, italic:true, isTextBox:true, margin:0, lineSpacingMultiple:1.3 });
+            const obsH = Math.min(1.5, pptMedirAltura(obsTxt, 5.7, obsFs, 1.3));
+            s.addText(obsTxt, { x:0.8, y:1.5, w:5.7, h:obsH, fontSize:obsFs, fontFace:'Arial', color: BODY, italic:true, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
             yFotos = 1.5 + obsH + 0.15;
           }
-          montarGradeFotos(s, fotosDaPagina, 0.8, yFotos, 5.7, Math.max(0.8, 5.35 - yFotos));
+          montarGradeFotos(s, fotosDaPagina, 0.8, yFotos, 5.7, Math.max(0.8, PPT_Y_MAX - yFotos));
           painelInfo(s);
         }
       });
 
-      /* Slide final — Pontos fortes e oportunidades */
-      if (textos.pontos_fortes || textos.oportunidades) {
+      /* Slide final — Pontos fortes e oportunidades (r112: blocos que não cabem passam ao slide seguinte) */
+      const itensFinal = [];
+      if (textos.pontos_fortes) itensFinal.push({ cor: GREEN, marca: '✓', texto: textos.pontos_fortes });
+      if (textos.oportunidades) itensFinal.push({ cor: ORANGE, marca: '!', texto: textos.oportunidades });
+      while (itensFinal.length) {
         const sF = pres.addSlide();
         splitBg(sF);
         rotulo(sF, 'CONCLUSÃO');
@@ -2760,23 +2950,25 @@ function montarPptxApresentacao(prep, variante) {
           { text:'Pontos-Chave ', options:{ color: DARK } },
           { text:'e Oportunidades', options:{ color: GREEN } }
         ], { x:0.8, y:0.9, w:5.7, h:0.6, fontSize:24, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
-
-        // r100: altura de cada bloco calculada a partir do texto real
-        // (em vez de fixa em 0.9in) — é exatamente essa sobreposição
-        // entre "Pontos-Chave" e "Oportunidades" que corrigimos aqui.
         let cy = 1.8;
-        if (textos.pontos_fortes) {
-          const blocoH = Math.min(1.8, estimarAlturaTexto(textos.pontos_fortes, 5.3, 11, 1.3));
-          sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: GREEN } });
-          sF.addText('✓', { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
-          sF.addText(textos.pontos_fortes, { x:1.15, y:cy-0.05, w:5.3, h:blocoH, fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3 });
-          cy += blocoH + 0.25;
-        }
-        if (textos.oportunidades) {
-          const blocoH = Math.min(1.8, estimarAlturaTexto(textos.oportunidades, 5.3, 11, 1.3));
-          sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: ORANGE } });
-          sF.addText('!', { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
-          sF.addText(textos.oportunidades, { x:1.15, y:cy-0.05, w:5.3, h:blocoH, fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3 });
+        while (itensFinal.length) {
+          const it = itensFinal[0];
+          const disp = PPT_Y_MAX - cy;
+          const fs = pptFonteQueCabe(it.texto, 5.3, disp, 11, 9.5, 1.3);
+          if (fs) {
+            const h = pptMedirAltura(it.texto, 5.3, fs, 1.3);
+            sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: it.cor } });
+            sF.addText(it.marca, { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
+            sF.addText(it.texto, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+            cy += h + 0.25;
+            itensFinal.shift();
+          } else if (cy > 1.85) {
+            break;
+          } else {
+            const pedacos = pptDividirTexto(it.texto, 5.3, disp, 10, 1.3);
+            itensFinal.shift();
+            for (let k = pedacos.length - 1; k >= 0; k--) itensFinal.unshift({ cor: it.cor, marca: it.marca, texto: pedacos[k] });
+          }
         }
         painelInfo(sF);
       }
@@ -2789,9 +2981,100 @@ function montarPptxApresentacao(prep, variante) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   APRESENTAÇÃO DE PERFORMANCE (PPTX) — r110
+   LAYOUT DE SLIDES — MARGENS (r112)
+   Regras comuns às apresentações (Análise e Performance):
+   - conteúdo nunca passa de PPT_Y_MAX (margem inferior de 0,525 pol);
+   - texto que não cabe reduz a fonte e, se ainda não couber, CONTINUA no
+     slide seguinte (nada é cortado nem invade a margem);
+   - painel escuro: texto com 0,5 pol de margem à direita.
+   ═══════════════════════════════════════════════════════ */
+const PPT_H = 5.625;
+const PPT_Y_MAX = 5.1;          // limite inferior do conteúdo
+const PPT_X_ESQ = 0.8;          // início da coluna de conteúdo
+const PPT_W_ESQ = 5.7;          // largura da coluna (termina em 6,5; o painel escuro começa em 6,8)
+const PPT_PAINEL_X = 7.05;      // texto do painel escuro
+const PPT_PAINEL_W = 2.45;      // termina em 9,5 (margem direita de 0,5)
+
+// Quantas linhas um parágrafo ocupa (quebra por palavras, como o PowerPoint/Google Slides).
+function pptContarLinhas(par, cpl) {
+  const palavras = String(par).split(/\s+/).filter(Boolean);
+  if (!palavras.length) return 1;
+  let linhas = 1, atual = 0;
+  palavras.forEach(function(p) {
+    const len = p.length;
+    if (len > cpl) {
+      if (atual > 0) { linhas++; atual = 0; }
+      linhas += Math.floor(len / cpl);
+      atual = len % cpl;
+      return;
+    }
+    if (atual === 0) atual = len;
+    else if (atual + 1 + len <= cpl) atual += 1 + len;
+    else { linhas++; atual = len; }
+  });
+  return linhas;
+}
+// Altura (pol) de um texto: estimativa CONSERVADORA (largura média do caractere = 0,56 x fonte).
+function pptMedirAltura(texto, larguraPol, fontSize, lsm) {
+  texto = String(texto || '');
+  if (!texto) return 0.3;
+  lsm = lsm || 1.2;
+  const cpl = Math.max(6, Math.floor((larguraPol * 72) / (fontSize * 0.56)));
+  let linhas = 0;
+  texto.split('\n').forEach(function(par) { linhas += pptContarLinhas(par, cpl); });
+  return linhas * (fontSize * 1.2 * lsm) / 72 + 0.1;
+}
+// Maior fonte (entre max e min) em que o texto cabe na altura disponível; 0 = não cabe nem na mínima.
+function pptFonteQueCabe(texto, larguraPol, hMax, fsMax, fsMin, lsm) {
+  for (let fs = fsMax; fs >= fsMin - 0.001; fs -= 0.5) {
+    if (pptMedirAltura(texto, larguraPol, fs, lsm) <= hMax) return fs;
+  }
+  return 0;
+}
+// Divide um texto longo em partes que cabem na altura (por frases; se uma frase sozinha não cabe, por palavras).
+function pptDividirTexto(texto, larguraPol, hMax, fontSize, lsm) {
+  texto = String(texto || '').trim();
+  if (!texto) return [''];
+  const unidades = [];
+  texto.split(/\n+/).forEach(function(par, ip) {
+    (par.match(/[^.!?…]+[.!?…]*\s*/g) || [par]).forEach(function(f, i) {
+      const t = f.trim();
+      if (t) unidades.push({ t: t, novoPar: ip > 0 && i === 0 });
+    });
+  });
+  const cabe = function(t) { return pptMedirAltura(t, larguraPol, fontSize, lsm) <= hMax; };
+  const partes = [];
+  let atual = '';
+  unidades.forEach(function(u) {
+    const sep = atual ? (u.novoPar ? '\n\n' : ' ') : '';
+    const tent = atual + sep + u.t;
+    if (cabe(tent)) { atual = tent; return; }
+    if (atual) { partes.push(atual); atual = ''; }
+    if (cabe(u.t)) { atual = u.t; return; }
+    let acum = '';
+    u.t.split(/\s+/).forEach(function(p) {
+      const t2 = acum ? acum + ' ' + p : p;
+      if (cabe(t2)) acum = t2;
+      else { if (acum) partes.push(acum); acum = p; }
+    });
+    atual = acum;
+  });
+  if (atual) partes.push(atual);
+  return partes.length ? partes : [texto];
+}
+// Tamanho de fonte de um título de uma linha para caber na largura.
+function pptTituloFs(txt, larguraPol, fsMax, fsMin) {
+  const fs = Math.floor((larguraPol * 72) / (Math.max(1, String(txt).length) * 0.56));
+  return Math.max(fsMin, Math.min(fsMax, fs));
+}
+function pptTruncar(t, n) { t = String(t || ''); return t.length > n ? t.substring(0, n - 1) + '…' : t; }
+
+/* ═══════════════════════════════════════════════════════
+   APRESENTAÇÃO DE PERFORMANCE (PPTX) — r110 · margens e gráfico r112
    Mesmo estilo visual da Apresentação Executiva da análise
    (capa escura, painel lateral escuro, verde da marca).
+   O gráfico de barras é desenhado com formas (nome da unidade sempre
+   aparece, em qualquer leitor: PowerPoint, Google Slides, PDF).
    ═══════════════════════════════════════════════════════ */
 function montarPptxPerformance(prep) {
   return new Promise(function(resolve, reject) {
@@ -2822,50 +3105,67 @@ function montarPptxPerformance(prep) {
       const deltaTxt = function(v) { return (v === null || v === undefined) ? '—' : (v === 0 ? '= 0,0' : (v > 0 ? '▲ +' : '▼ ') + fmt(v)); };
       const deltaCor = function(v) { return (v === null || v === undefined || v === 0) ? '6B7B8D' : (v > 0 ? '2E7D32' : 'C0392B'); };
 
-      function estimarAlturaTexto(texto, larguraPol, fontSize, lineSpacingMultiple) {
-        texto = String(texto || '');
-        if (!texto) return 0.3;
-        lineSpacingMultiple = lineSpacingMultiple || 1.2;
-        const charsPorLinha = Math.max(10, Math.floor((larguraPol * 72) / (fontSize * 0.52)));
-        let linhas = 0;
-        texto.split('\n').forEach(function(par) { linhas += Math.max(1, Math.ceil(par.length / charsPorLinha)); });
-        const alturaLinha = (fontSize * 1.22 * lineSpacingMultiple) / 72;
-        return Math.max(0.3, linhas * alturaLinha + 0.12);
-      }
       function addLogo(s) {
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:7.05, y:4.55, w:2.7, h:0.7 }); } catch(e) {} }
+        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:PPT_PAINEL_X, y:4.5, w:PPT_PAINEL_W, h:0.635 }); } catch(e) {} }
       }
       function splitBg(s) {
         s.background = { fill:'FFFFFF' };
-        s.addShape(pres.ShapeType.rect, { x:6.8, y:0, w:3.2, h:5.625, fill:{ color: DARK } });
+        s.addShape(pres.ShapeType.rect, { x:6.8, y:0, w:3.2, h:PPT_H, fill:{ color: DARK } });
         addLogo(s);
       }
       function painelInfo(s, linha3) {
-        s.addText(String(cli.cliente || ''), { x:7.05, y:0.8, w:2.7, h:0.6, fontSize:12, fontFace:'Arial', bold:true, color:'FFFFFF', isTextBox:true, margin:0, valign:'top' });
-        s.addText(periodoTxt + (linha3 ? '\n' + linha3 : ''), { x:7.05, y:1.5, w:2.7, h:0.9, fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+        const nome = String(cli.cliente || '');
+        const hNome = Math.min(0.9, pptMedirAltura(nome, PPT_PAINEL_W, 12, 1.1));
+        s.addText(nome, { x:PPT_PAINEL_X, y:0.8, w:PPT_PAINEL_W, h:hNome, fontSize:12, fontFace:'Arial', bold:true, color:'FFFFFF', isTextBox:true, margin:0, valign:'top' });
+        const info = periodoTxt + (linha3 ? '\n' + linha3 : '');
+        s.addText(info, { x:PPT_PAINEL_X, y:0.8 + hNome + 0.12, w:PPT_PAINEL_W, h:Math.min(1.5, pptMedirAltura(info, PPT_PAINEL_W, 10, 1.4)), fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
       }
       let numSecao = 0;
       function rotulo(s, texto) {
         numSecao++;
         const n = numSecao < 10 ? '0' + numSecao : String(numSecao);
-        s.addText(n + ' / ' + texto, { x:0.8, y:0.45, w:5.5, h:0.25, fontSize:9, fontFace:'Arial', bold:true, color: GREEN, isTextBox:true, margin:0, charSpacing:3 });
+        s.addText(n + ' / ' + texto, { x:PPT_X_ESQ, y:0.45, w:PPT_W_ESQ, h:0.25, fontSize:9, fontFace:'Arial', bold:true, color: GREEN, isTextBox:true, margin:0, charSpacing:3 });
       }
       function titulo2(s, a, b, w) {
-        s.addText([{ text:a, options:{ color: DARK } }, { text:b, options:{ color: GREEN } }], { x:0.8, y:0.9, w:(w || 5.7), h:0.6, fontSize:24, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+        w = w || PPT_W_ESQ;
+        const fs = pptTituloFs(a + b, w, 24, 16);
+        s.addText([{ text:a, options:{ color: DARK } }, { text:b, options:{ color: GREEN } }], { x:PPT_X_ESQ, y:0.9, w:w, h:0.6, fontSize:fs, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
       }
-      // slide de largura total (tabelas): fundo branco + faixa fina superior + logo pequeno no canto
+      // slide de largura total (tabelas): faixa fina superior + logo pequeno no canto
       function fullBg(s) {
         s.background = { fill:'FFFFFF' };
         s.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.5, fill:{ color: DARK } });
         s.addShape(pres.ShapeType.rect, { x:0, y:0.5, w:10, h:0.04, fill:{ color: GREEN } });
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:7.6, y:0.07, w:2.1, h:0.36 }); } catch(e) {} }
+        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:7.4, y:0.07, w:2.1, h:0.36 }); } catch(e) {} }
       }
       function rotuloFull(s, texto) {
         numSecao++;
         const n = numSecao < 10 ? '0' + numSecao : String(numSecao);
         s.addText(n + ' / ' + texto, { x:0.5, y:0.1, w:6.5, h:0.3, fontSize:9, fontFace:'Arial', bold:true, color: GREEN, isTextBox:true, margin:0, charSpacing:3 });
       }
-      function truncar(t, n) { t = String(t || ''); return t.length > n ? t.substring(0, n - 1) + '…' : t; }
+      function tituloFull(s, a, b) {
+        s.addText([{ text:a, options:{ color: DARK } }, { text:b, options:{ color: GREEN } }], { x:0.5, y:0.7, w:9, h:0.5, fontSize:pptTituloFs(a + b, 9, 22, 16), fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+      }
+      function notaRodape(s, txt) {
+        s.addText(txt, { x:0.5, y:4.98, w:9, h:0.3, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
+      }
+
+      // Slide(s) de texto corrido: reduz a fonte e, se necessário, continua em outro slide.
+      function slideTexto(rot, a, b, texto) {
+        texto = String(texto || '').trim();
+        if (!texto) return;
+        const hMax = PPT_Y_MAX - 1.7;
+        let fs = pptFonteQueCabe(texto, PPT_W_ESQ, hMax, 12, 10.5, 1.4);
+        const partes = fs ? [texto] : pptDividirTexto(texto, PPT_W_ESQ, hMax, (fs = 11), 1.4);
+        partes.forEach(function(p, i) {
+          const s = pres.addSlide();
+          splitBg(s);
+          rotulo(s, rot + (i > 0 ? ' (CONT.)' : ''));
+          titulo2(s, a, b + (i > 0 ? ' (cont.)' : ''));
+          s.addText(p, { x:PPT_X_ESQ, y:1.7, w:PPT_W_ESQ, h:Math.min(hMax, pptMedirAltura(p, PPT_W_ESQ, fs, 1.4)), fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+          painelInfo(s);
+        });
+      }
 
       /* 1 — Capa */
       const s1 = pres.addSlide();
@@ -2876,9 +3176,10 @@ function montarPptxPerformance(prep) {
         { text:'Performance das Unidades', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
       ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
       s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
-      s1.addText(String(cli.cliente || '') + '  ·  ' + periodoTxt, { x:0.8, y:2.45, w:8.4, h:0.4, fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-      if (prep.tipoTxt) s1.addText(prep.tipoTxt, { x:0.8, y:2.85, w:8.4, h:0.3, fontSize:11, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.35, w:3.6, h:0.94 }); } catch(e) {} }
+      const subCapa = String(cli.cliente || '') + '  ·  ' + periodoTxt;
+      s1.addText(subCapa, { x:0.8, y:2.45, w:8.4, h:Math.min(0.9, pptMedirAltura(subCapa, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
+      if (prep.tipoTxt) s1.addText(prep.tipoTxt, { x:0.8, y:3.4, w:8.4, h:0.3, fontSize:11, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
+      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
 
       /* 2 — Indicadores-chave */
       const s2 = pres.addSlide();
@@ -2894,23 +3195,17 @@ function montarPptxPerformance(prep) {
       if (cli.organizacao !== null && cli.organizacao !== undefined) kpis.push({ label:'ORGANIZAÇÃO (MÉDIA)', valor: fmt(cli.organizacao) + '/10', cor: corHex(cli.organizacao) });
       if (cli.volume !== null && cli.volume !== undefined) kpis.push({ label:'VOLUME (MÉDIA · 10 = IDEAL)', valor: fmt(cli.volume) + '/10', cor: corHex(cli.volume) });
       kpis.forEach(function(k, i) {
-        const ky = 1.7 + i * 0.6;
+        const ky = 1.7 + i * 0.58;
         s2.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.4, fill:{ color: k.cor } });
         s2.addText(k.valor, { x:1.05, y:ky, w:1.8, h:0.32, fontSize:19, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
-        s2.addText(k.label, { x:2.95, y:ky+0.04, w:3.6, h:0.3, fontSize:9, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, charSpacing:1 });
+        s2.addText(k.label, { x:2.95, y:ky+0.04, w:3.5, h:0.3, fontSize:9, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, charSpacing:1 });
       });
       painelInfo(s2, cli.unidades + ' unidade(s)');
 
       /* 3 — Resumo executivo */
-      const s3 = pres.addSlide();
-      splitBg(s3);
-      rotulo(s3, 'RESUMO EXECUTIVO');
-      titulo2(s3, 'Resumo ', 'Executivo');
-      const resumoTxt = [textos.resumo_executivo, textos.evolucao].filter(Boolean).join('\n\n');
-      s3.addText(resumoTxt, { x:0.8, y:1.7, w:5.7, h:Math.min(3.5, estimarAlturaTexto(resumoTxt, 5.7, 12, 1.4)), fontSize:12, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
-      painelInfo(s3);
+      slideTexto('RESUMO EXECUTIVO', 'Resumo ', 'Executivo', [textos.resumo_executivo, textos.evolucao].filter(Boolean).join('\n\n'));
 
-      /* 4 — Comparativo (gráfico de barras; 8 unidades por slide) */
+      /* 4 — Comparativo: gráfico de barras desenhado com formas (8 unidades por slide) */
       const comNota = cli.lista.filter(function(u) { return u.geral !== null && u.geral !== undefined; });
       const POR_GRAFICO = 8;
       for (let ini = 0; ini < comNota.length; ini += POR_GRAFICO) {
@@ -2918,18 +3213,19 @@ function montarPptxPerformance(prep) {
         const sG = pres.addSlide();
         splitBg(sG);
         rotulo(sG, 'COMPARATIVO ENTRE UNIDADES');
-        titulo2(sG, 'Nota por ', 'Unidade' + (ini > 0 ? ' (continuação)' : ''));
-        // barras horizontais: a primeira categoria fica embaixo no PowerPoint, então invertemos
-        const ordem = lote.slice().reverse();
-        try {
-          sG.addChart(pres.charts.BAR, [{ name:'Nota geral', labels: ordem.map(function(u) { return truncar(u.unidade, 26); }), values: ordem.map(function(u) { return u.geral; }) }], {
-            x:0.6, y:1.55, w:6.0, h:Math.max(1.8, Math.min(3.7, 0.5 * lote.length + 0.7)), barDir:'bar', barGapWidthPct:45,
-            chartColors: ordem.map(function(u) { return corHex(u.geral); }),
-            valAxisMinVal:0, valAxisMaxVal:10, valAxisMajorUnit:2, valAxisLabelFontSize:9, valAxisLabelColor: LABEL, valGridLine:{ color:'E2E8F0', size:0.5 },
-            catAxisLabelFontSize:9, catAxisLabelColor: BODY, catAxisLabelFontFace:'Arial',
-            showValue:true, dataLabelFontSize:10, dataLabelFontBold:true, dataLabelColor: DARK, dataLabelFormatCode:'0.0', showLegend:false
-          });
-        } catch(eChart) {}
+        titulo2(sG, 'Nota por ', 'Unidade' + (ini > 0 ? ' (cont.)' : ''));
+        const xNome = PPT_X_ESQ, wNome = 2.15, xTrilho = 3.05, wTrilho = 2.85, yIni = 1.7, passo = 0.4;
+        lote.forEach(function(u, i) {
+          const y = yIni + i * passo;
+          sG.addText(pptTruncar(u.unidade, 60), { x:xNome, y:y, w:wNome, h:0.34, fontSize:8.5, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, valign:'middle', align:'right' });
+          sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:wTrilho, h:0.2, fill:{ color:'EEF1F4' }, line:{ color:'EEF1F4', width:0 } });
+          sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:Math.max(0.04, wTrilho * u.geral / 10), h:0.2, fill:{ color: corHex(u.geral) }, line:{ color: corHex(u.geral), width:0 } });
+          sG.addText(fmt(u.geral), { x:xTrilho + wTrilho + 0.08, y:y, w:0.55, h:0.34, fontSize:10, fontFace:'Arial', bold:true, color: DARK, isTextBox:true, margin:0, valign:'middle' });
+        });
+        const yEixo = yIni + lote.length * passo + 0.02;
+        [0, 5, 10].forEach(function(v) {
+          sG.addText(String(v), { x:xTrilho + wTrilho * v / 10 - 0.2, y:yEixo, w:0.4, h:0.2, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, align:'center' });
+        });
         painelInfo(sG, 'Nota média por unidade (0 a 10)');
       }
 
@@ -2940,14 +3236,14 @@ function montarPptxPerformance(prep) {
         const sT = pres.addSlide();
         fullBg(sT);
         rotuloFull(sT, 'TABELA COMPARATIVA');
-        sT.addText([{ text:'Comparativo ', options:{ color: DARK } }, { text:'entre Unidades' + (ini > 0 ? ' (continuação)' : ''), options:{ color: GREEN } }], { x:0.5, y:0.7, w:9, h:0.5, fontSize:22, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+        tituloFull(sT, 'Comparativo ', 'entre Unidades' + (ini > 0 ? ' (cont.)' : ''));
         const cab = ['Unidade', 'Geral', 'Equipe', 'Retaguarda', 'Área de Vendas', 'Variação vs anterior'].map(function(t, i) {
           return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
         });
         const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
         const linhas = lote.map(function(u) {
           return [
-            { text: truncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
+            { text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
             cel(u.geral), cel(u.equipe), cel(u.retaguarda), cel(u.areaVendas),
             { text: deltaTxt(u.variacao.geral), options:{ bold:true, color: deltaCor(u.variacao.geral), fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
           ];
@@ -2955,61 +3251,44 @@ function montarPptxPerformance(prep) {
         if (ini + POR_TABELA >= cli.lista.length) {
           linhas.push([
             { text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
-            Object.assign(cel(cli.geral), {}), cel(cli.equipe), cel(cli.retaguarda), cel(cli.areaVendas),
+            cel(cli.geral), cel(cli.equipe), cel(cli.retaguarda), cel(cli.areaVendas),
             { text: deltaTxt(cli.variacao.geral), options:{ bold:true, color: deltaCor(cli.variacao.geral), fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
           ]);
         }
-        sT.addTable([cab].concat(linhas), { x:0.5, y:1.4, w:9, colW:[3.0, 1.0, 1.0, 1.3, 1.5, 1.2], rowH:0.42, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-        sT.addText('Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.', { x:0.5, y:5.2, w:9, h:0.25, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
+        sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.0, 1.0, 1.0, 1.3, 1.5, 1.2], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+        notaRodape(sT, 'Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.');
       }
 
       /* 6 — Leitura comparativa (texto) */
-      if (textos.comparativo) {
-        const sL = pres.addSlide();
-        splitBg(sL);
-        rotulo(sL, 'LEITURA COMPARATIVA');
-        titulo2(sL, 'Leitura ', 'Comparativa');
-        sL.addText(textos.comparativo, { x:0.8, y:1.7, w:5.7, h:Math.min(3.5, estimarAlturaTexto(textos.comparativo, 5.7, 12, 1.4)), fontSize:12, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
-        painelInfo(sL);
-      }
+      slideTexto('LEITURA COMPARATIVA', 'Leitura ', 'Comparativa', textos.comparativo);
 
-      /* 7 — Organização x Volume */
-      const temOV = cli.lista.some(function(u) { return u.organizacao !== null && u.organizacao !== undefined || u.volume !== null && u.volume !== undefined; });
+      /* 7 — Organização x Volume: texto + tabelas (7 unidades por slide) */
+      const temOV = cli.lista.some(function(u) { return (u.organizacao !== null && u.organizacao !== undefined) || (u.volume !== null && u.volume !== undefined); });
       if (temOV) {
-        // 1º slide: 5 unidades + o texto; os seguintes: 7 por slide (a última leva a linha de média)
-        const lotesOV = [cli.lista.slice(0, 5)];
-        for (let pos = 5; pos < cli.lista.length; pos += 7) lotesOV.push(cli.lista.slice(pos, pos + 7));
-        lotesOV.forEach(function(lote, idxLote) {
-          const ini = idxLote === 0 ? 0 : 5 + (idxLote - 1) * 7;
+        slideTexto('ORGANIZAÇÃO X VOLUME', 'Organização ', 'x Volume', textos.volume_organizacao);
+        const POR_OV = 7;
+        for (let ini = 0; ini < cli.lista.length; ini += POR_OV) {
+          const lote = cli.lista.slice(ini, ini + POR_OV);
           const sO = pres.addSlide();
           fullBg(sO);
           rotuloFull(sO, 'ORGANIZAÇÃO X VOLUME');
-          sO.addText([{ text:'Organização ', options:{ color: DARK } }, { text:'x Volume' + (idxLote > 0 ? ' (continuação)' : ''), options:{ color: GREEN } }], { x:0.5, y:0.7, w:9, h:0.5, fontSize:22, fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
+          tituloFull(sO, 'Organização ', 'x Volume' + (ini > 0 ? ' (cont.)' : ''));
           const cab = ['Unidade', 'Organização', 'Volume (10 = ideal)', 'Média dos dois'].map(function(t, i) {
             return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
           });
           const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
           const linhas = lote.map(function(u) {
-            return [{ text: truncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(u.organizacao), cel(u.volume), cel(u.orgVol)];
+            return [{ text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(u.organizacao), cel(u.volume), cel(u.orgVol)];
           });
-          if (idxLote === lotesOV.length - 1) linhas.push([{ text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(cli.organizacao), cel(cli.volume), cel(cli.orgVol)]);
-          sO.addTable([cab].concat(linhas), { x:0.5, y:1.4, w:9, colW:[3.6, 1.7, 2.0, 1.7], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-          const yTxt = 1.4 + 0.38 * (linhas.length + 1) + 0.2;
-          if (idxLote === 0 && textos.volume_organizacao) {
-            sO.addText(textos.volume_organizacao, { x:0.5, y:yTxt, w:9, h:Math.min(5.15 - yTxt, estimarAlturaTexto(textos.volume_organizacao, 9, 11, 1.3)), fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
-          }
-          sO.addText('Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).', { x:0.5, y:5.2, w:9, h:0.25, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-        });
+          if (ini + POR_OV >= cli.lista.length) linhas.push([{ text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(cli.organizacao), cel(cli.volume), cel(cli.orgVol)]);
+          sO.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.6, 1.7, 2.0, 1.7], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+          notaRodape(sO, 'Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).');
+        }
       }
 
-      /* 8 — Um slide por unidade */
+      /* 8 — Um slide por unidade (o texto que não couber continua no slide seguinte) */
       cli.lista.forEach(function(u) {
-        const sU = pres.addSlide();
-        splitBg(sU);
-        rotulo(sU, 'UNIDADE');
-        sU.addText(truncar(u.unidade, 40), { x:0.8, y:0.85, w:5.7, h:0.5, fontSize:22, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0, fit:'shrink' });
-        sU.addText(fmt(u.geral), { x:0.8, y:1.4, w:1.7, h:0.7, fontSize:36, fontFace:'Calibri', bold:true, color: corHex(u.geral), isTextBox:true, margin:0 });
-        sU.addText((u.faixa ? String(u.faixa).toUpperCase() : '') + '\n' + u.analises + ' análise(s) no período', { x:2.5, y:1.48, w:4.0, h:0.6, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
+        const txtU = String((textos.unidades && textos.unidades[u.unidade]) || '').trim();
         const mets = [];
         if (u.retaguarda !== null && u.retaguarda !== undefined) mets.push(['Retaguarda', u.retaguarda]);
         if (u.areaVendas !== null && u.areaVendas !== undefined) mets.push(['Área de Vendas', u.areaVendas]);
@@ -3017,6 +3296,17 @@ function montarPptxPerformance(prep) {
         if (u.organizacao !== null && u.organizacao !== undefined) mets.push(['Organização', u.organizacao]);
         if (u.volume !== null && u.volume !== undefined) mets.push(['Volume (10 = ideal)', u.volume]);
         mets.push(['Variação vs anterior', null]);
+        const yTxt = 2.3 + Math.ceil(mets.length / 2) * 0.42 + 0.1;
+        const hDisp = PPT_Y_MAX - yTxt;
+        let fs = pptFonteQueCabe(txtU, PPT_W_ESQ, hDisp, 10, 8.5, 1.3);
+        const partes = (!txtU || fs) ? [txtU] : pptDividirTexto(txtU, PPT_W_ESQ, hDisp, (fs = 9), 1.3);
+
+        const sU = pres.addSlide();
+        splitBg(sU);
+        rotulo(sU, 'UNIDADE');
+        sU.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+        sU.addText(fmt(u.geral), { x:PPT_X_ESQ, y:1.4, w:1.7, h:0.7, fontSize:36, fontFace:'Calibri', bold:true, color: corHex(u.geral), isTextBox:true, margin:0 });
+        sU.addText((u.faixa ? String(u.faixa).toUpperCase() : '') + '\n' + u.analises + ' análise(s) no período', { x:2.5, y:1.48, w:4.0, h:0.6, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
         mets.forEach(function(m, i) {
           const col = i % 2, row = Math.floor(i / 2);
           const mx = 0.8 + col * 2.9, my = 2.3 + row * 0.42;
@@ -3026,42 +3316,54 @@ function montarPptxPerformance(prep) {
           sU.addText(isDelta ? deltaTxt(u.variacao.geral) : fmt(m[1]), { x:mx+0.14, y:my, w:0.85, h:0.34, fontSize:14, fontFace:'Calibri', bold:true, color: isDelta ? cor : DARK, isTextBox:true, margin:0, valign:'middle' });
           sU.addText(m[0], { x:mx+1.0, y:my, w:1.75, h:0.34, fontSize:8, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, valign:'middle' });
         });
-        const yTxt = 2.3 + Math.ceil(mets.length / 2) * 0.42 + 0.1;
-        const txtU = (textos.unidades && textos.unidades[u.unidade]) || '';
-        if (txtU) sU.addText(txtU, { x:0.8, y:yTxt, w:5.7, h:Math.max(0.5, Math.min(5.4 - yTxt, estimarAlturaTexto(txtU, 5.7, 10, 1.3))), fontSize:10, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+        if (partes[0]) sU.addText(partes[0], { x:PPT_X_ESQ, y:yTxt, w:PPT_W_ESQ, h:Math.min(hDisp, pptMedirAltura(partes[0], PPT_W_ESQ, fs, 1.3)), fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
         painelInfo(sU);
+        for (let k = 1; k < partes.length; k++) {
+          const sC = pres.addSlide();
+          splitBg(sC);
+          rotulo(sC, 'UNIDADE (CONT.)');
+          sC.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+          const hC = PPT_Y_MAX - 1.6;
+          const partesC = pptDividirTexto(partes[k], PPT_W_ESQ, hC, 11, 1.4);
+          sC.addText(partesC[0], { x:PPT_X_ESQ, y:1.6, w:PPT_W_ESQ, h:Math.min(hC, pptMedirAltura(partesC[0], PPT_W_ESQ, 11, 1.4)), fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+          painelInfo(sC);
+        }
       });
 
-      /* 9 — Pontos-chave e oportunidades / Sugestões */
-      if (textos.pontos_positivos || textos.oportunidades) {
+      /* 9 — Conclusão: pontos positivos e oportunidades (blocos que não cabem passam ao slide seguinte) */
+      const itens = [];
+      if (textos.pontos_positivos) itens.push({ cor: GREEN, marca: '✓', texto: textos.pontos_positivos });
+      if (textos.oportunidades) itens.push({ cor: ORANGE, marca: '!', texto: textos.oportunidades });
+      let primeiro = true;
+      while (itens.length) {
         const sF = pres.addSlide();
         splitBg(sF);
         rotulo(sF, 'CONCLUSÃO');
         titulo2(sF, 'Pontos-Chave ', 'e Oportunidades');
         let cy = 1.75;
-        if (textos.pontos_positivos) {
-          const h = Math.min(1.7, estimarAlturaTexto(textos.pontos_positivos, 5.3, 10.5, 1.3));
-          sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: GREEN } });
-          sF.addText('✓', { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
-          sF.addText(textos.pontos_positivos, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:10.5, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
-          cy += h + 0.25;
-        }
-        if (textos.oportunidades) {
-          const h = Math.min(1.7, estimarAlturaTexto(textos.oportunidades, 5.3, 10.5, 1.3));
-          sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: ORANGE } });
-          sF.addText('!', { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
-          sF.addText(textos.oportunidades, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:10.5, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+        while (itens.length) {
+          const it = itens[0];
+          const disp = PPT_Y_MAX - cy;
+          const fs = pptFonteQueCabe(it.texto, 5.3, disp, 10.5, 9.5, 1.3);
+          if (fs) {
+            const h = pptMedirAltura(it.texto, 5.3, fs, 1.3);
+            sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: it.cor } });
+            sF.addText(it.marca, { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
+            sF.addText(it.texto, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+            cy += h + 0.25;
+            itens.shift();
+          } else if (cy > 1.8) {
+            break;                                   // não cabe aqui: vai para o próximo slide
+          } else {
+            const pedacos = pptDividirTexto(it.texto, 5.3, disp, 10, 1.3);
+            itens.shift();
+            for (let k = pedacos.length - 1; k >= 0; k--) itens.unshift({ cor: it.cor, marca: it.marca, texto: pedacos[k] });
+          }
         }
         painelInfo(sF);
+        primeiro = false;
       }
-      if (textos.sugestoes) {
-        const sS = pres.addSlide();
-        splitBg(sS);
-        rotulo(sS, 'SUGESTÕES');
-        titulo2(sS, 'Sugestões de ', 'Evolução');
-        sS.addText(textos.sugestoes, { x:0.8, y:1.7, w:5.7, h:Math.min(3.5, estimarAlturaTexto(textos.sugestoes, 5.7, 12, 1.4)), fontSize:12, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
-        painelInfo(sS);
-      }
+      slideTexto('SUGESTÕES', 'Sugestões de ', 'Evolução', textos.sugestoes);
 
       pres.write('base64').then(resolve).catch(reject);
     } catch (e) {

@@ -28,8 +28,10 @@ h1{font-size:22px;line-height:1.25;color:var(--navy);margin-bottom:10px}
 .obrig{color:var(--red);font-weight:700}
 .opcional{font-size:11px;font-weight:600;color:var(--text-light);background:var(--bg);padding:1px 8px;border-radius:8px;margin-left:6px;vertical-align:middle}
 
-/* escala 0-10 */
-.escala{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+/* escalas: 1-10 (satisfação) e 0-10 (recomendação) */
+.escala{display:grid;gap:6px}
+.escala.e10{grid-template-columns:repeat(5,1fr)}
+.escala.e11{grid-template-columns:repeat(6,1fr)}
 .escala label{position:relative;cursor:pointer}
 .escala input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer;margin:0}
 .escala span{display:flex;align-items:center;justify-content:center;height:50px;border:2px solid var(--border);border-radius:10px;font-size:17px;font-weight:700;color:var(--text-light);background:var(--white);transition:background .15s,border-color .15s,color .15s}
@@ -39,16 +41,21 @@ h1{font-size:22px;line-height:1.25;color:var(--navy);margin-bottom:10px}
 .escala .n-n input:checked + span{background:var(--amber)}
 .escala .n-p input:checked + span{background:#2E7D32}
 .escala input:focus-visible + span{outline:3px solid var(--green);outline-offset:2px}
-.pontas{display:flex;justify-content:space-between;font-size:11px;color:var(--text-light);margin-top:8px}
+.pontas{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--text-light);margin-top:8px;line-height:1.4}
+.card.faltou{box-shadow:0 0 0 3px var(--red),0 2px 12px rgba(0,0,0,.06)}
+.msg-faltou{display:none;color:#9B2C2C;font-size:12px;font-weight:600;margin-top:10px}
+.card.faltou .msg-faltou{display:block}
 
-/* opções em pílula */
-.opcoes{display:flex;flex-wrap:wrap;gap:8px}
-.opcoes label{position:relative;cursor:pointer;flex:1 1 auto}
-.opcoes input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer;margin:0}
-.opcoes span{display:flex;align-items:center;justify-content:center;text-align:center;min-height:44px;padding:8px 12px;border:2px solid var(--border);border-radius:12px;font-size:13px;font-weight:600;color:var(--text);background:var(--white);transition:background .15s,border-color .15s,color .15s}
-.opcoes label:hover span{border-color:var(--navy)}
-.opcoes input:checked + span{background:var(--navy);border-color:var(--navy);color:#fff}
-.opcoes input:focus-visible + span{outline:3px solid var(--green);outline-offset:2px}
+/* caixas de marcar (pontos que se destacaram) */
+.marcas{display:grid;gap:8px}
+.marcas label{position:relative;cursor:pointer;display:block}
+.marcas input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer;margin:0}
+.marcas span{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 14px;border:2px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;color:var(--text);background:var(--white);transition:background .15s,border-color .15s}
+.marcas span::before{content:'';flex:0 0 22px;height:22px;border:2px solid #B8C4D0;border-radius:6px;background:#fff;transition:all .15s}
+.marcas label:hover span{border-color:var(--navy)}
+.marcas input:checked + span{background:#EAF8E0;border-color:var(--green)}
+.marcas input:checked + span::before{background:var(--green);border-color:var(--green);content:'✓';color:var(--dark);font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}
+.marcas input:focus-visible + span{outline:3px solid var(--green);outline-offset:2px}
 
 textarea{width:100%;min-height:120px;border:2px solid var(--border);border-radius:12px;padding:12px 14px;font-size:14px;font-family:inherit;line-height:1.5;resize:vertical;color:var(--text)}
 textarea:focus{outline:none;border-color:var(--navy)}
@@ -71,7 +78,8 @@ textarea:focus{outline:none;border-color:var(--navy)}
 .rodape strong{color:var(--navy)}
 
 @media(min-width:480px){
-  .escala{grid-template-columns:repeat(11,1fr);gap:4px}
+  .escala.e10{grid-template-columns:repeat(10,1fr);gap:4px}
+  .escala.e11{grid-template-columns:repeat(11,1fr);gap:4px}
   .escala span{height:46px;font-size:15px;border-radius:8px}
   .card{padding:26px 24px}
 }
@@ -111,19 +119,24 @@ function telaEstado(icone, titulo, texto) {
     '<div class="rodape"><strong>Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div>';
 }
 
-function grupoOpcoes(nome, opcoes) {
-  return '<div class="opcoes" role="radiogroup">' + opcoes.map(function (o, i) {
-    return '<label><input type="radio" name="' + nome + '" value="' + esc(o) + '"><span>' + esc(o) + '</span></label>';
-  }).join('') + '</div>';
+const DESTAQUES = [
+  ['pontualidade', 'Pontualidade no início/fim da contagem'],
+  ['supervisor', 'Liderança e comunicação do supervisor'],
+  ['postura', 'Postura e respeito do time às regras da loja'],
+  ['mapeamento', 'Organização e mapeamento das áreas'],
+  ['outro', 'Outro / Teve algum ponto negativo?']
+];
+
+function escalaHtml(nome, de, ate) {
+  const itens = [];
+  for (let i = de; i <= ate; i++) {
+    const cls = i >= 9 ? 'n-p' : (i >= 7 ? 'n-n' : 'n-d');
+    itens.push('<label class="' + cls + '"><input type="radio" name="' + nome + '" value="' + i + '" aria-label="Nota ' + i + '"><span>' + i + '</span></label>');
+  }
+  return '<div class="escala ' + (ate - de === 9 ? 'e10' : 'e11') + '" role="radiogroup">' + itens.join('') + '</div>';
 }
 
 function telaFormulario(p) {
-  const escala = [];
-  for (let i = 0; i <= 10; i++) {
-    const cls = i >= 9 ? 'n-p' : (i >= 7 ? 'n-n' : 'n-d');
-    escala.push('<label class="' + cls + '"><input type="radio" name="nota" value="' + i + '" aria-label="Nota ' + i + '"><span>' + i + '</span></label>');
-  }
-  const tres = ['Excelente', 'Satisfatório', 'Inadequado'];
   document.getElementById('raiz').innerHTML = `
     <div class="card">
       <div class="eyebrow">Pesquisa de satisfação</div>
@@ -131,51 +144,34 @@ function telaFormulario(p) {
       <div class="contexto">
         <span>${esc(p.cliente)}</span><span>${esc(p.unidade)}</span>${p.dataAuditoria ? '<span>' + esc(p.dataAuditoria) + '</span>' : ''}
       </div>
-      <p class="intro">Leva menos de 1 minuto. Só a nota de 0 a 10 é obrigatória.</p>
+      <p class="intro">Leva menos de 1 minuto. As duas primeiras perguntas são obrigatórias.</p>
     </div>
 
     <div class="erro" id="erro" role="alert"></div>
 
-    <div class="card">
-      <div class="pergunta">Considerando a execução e a entrega do inventário realizado nesta última noite, em uma escala de 0 a 10, o quanto você recomendaria a Formula Code para outra empresa? <span class="obrig" aria-hidden="true">*</span></div>
-      <div class="escala" role="radiogroup" aria-label="Nota de 0 a 10">${escala.join('')}</div>
-      <div class="pontas"><span>0 · Não recomendaria</span><span>10 · Recomendaria com certeza</span></div>
+    <div class="card" id="cartaoCsat">
+      <div class="pergunta">1. Pensando exclusivamente no inventário realizado na última noite, qual o seu nível de satisfação com a execução do serviço, organização e postura da equipe? <span class="obrig" aria-hidden="true">*</span></div>
+      <div role="radiogroup" aria-label="Satisfação de 1 a 10">${escalaHtml('csat', 1, 10)}</div>
+      <div class="pontas"><span>1 · Totalmente Insatisfeito</span><span>10 · Totalmente Satisfeito</span></div>
+      <div class="msg-faltou">Escolha uma nota de 1 a 10.</div>
+    </div>
+
+    <div class="card" id="cartaoNps">
+      <div class="pergunta">2. Considerando sua experiência geral com os nossos serviços, em uma escala de 0 a 10, o quanto você recomendaria nossa empresa para outro gerente de loja ou parceiro? <span class="obrig" aria-hidden="true">*</span></div>
+      <div role="radiogroup" aria-label="Recomendação de 0 a 10">${escalaHtml('nota', 0, 10)}</div>
+      <div class="pontas"><span>0 · Não Recomendaria</span><span>10 · Recomendaria Com Certeza</span></div>
+      <div class="msg-faltou">Escolha uma nota de 0 a 10.</div>
     </div>
 
     <div class="card">
-      <div class="pergunta">Como você avalia a postura profissional e o comportamento da nossa equipe (supervisor e auditores) durante o turno? <span class="opcional">opcional</span></div>
-      <div class="sub">
-        <div class="sub-t">Apresentação e Identificação</div>
-        <div class="sub-d">Uso de uniforme e apresentação pessoal</div>
-        ${grupoOpcoes('apresentacao', tres)}
-      </div>
-      <div class="sub">
-        <div class="sub-t">Postura e Respeito às Regras da Loja</div>
-        <div class="sub-d">Manuseio das mercadorias, disciplina, silêncio e cumprimento do regulamento interno</div>
-        ${grupoOpcoes('postura', tres)}
-      </div>
-      <div class="sub">
-        <div class="sub-t">Atitude e Comunicação do Supervisor</div>
-        <div class="sub-d">Liderança da equipe, cordialidade e clareza no repasse de informações</div>
-        ${grupoOpcoes('supervisor', tres)}
+      <div class="pergunta">3. Marque os pontos que se destacaram na operação desta noite: <span class="opcional">opcional</span></div>
+      <div class="marcas">
+        ${DESTAQUES.map(function (d) { return '<label><input type="checkbox" name="destaque" value="' + d[0] + '"><span>' + esc(d[1]) + '</span></label>'; }).join('')}
       </div>
     </div>
 
     <div class="card">
-      <div class="pergunta">Demais pilares operacionais <span class="opcional">opcional</span></div>
-      <div class="sub">
-        <div class="sub-t" style="margin-bottom:10px">Organização e assertividade no Mapeamento dos endereços a serem contados</div>
-        ${grupoOpcoes('mapeamento', ['Excelente', 'Bom', 'Regular', 'Ruim'])}
-      </div>
-      <div class="sub">
-        <div class="sub-t">Cumprimento do Horário</div>
-        <div class="sub-d">Pontualidade no início às 18h e encerramento dentro de um prazo razoável</div>
-        ${grupoOpcoes('horario', ['No prazo', 'Com pequeno atraso', 'Com grande atraso'])}
-      </div>
-    </div>
-
-    <div class="card">
-      <label class="pergunta" for="comentario" style="display:block">Qual foi o principal motivo da sua nota? Caso tenha tido qualquer ponto de atenção com a postura da equipe ou execução, por favor, detalhe aqui para podermos evoluir. <span class="opcional">opcional</span></label>
+      <label class="pergunta" for="comentario" style="display:block">4. O que podemos fazer para melhorar a experiência no próximo inventário? <span class="opcional">opcional</span></label>
       <textarea id="comentario" maxlength="${MAX_COMENTARIO}" placeholder="Escreva aqui, se quiser"></textarea>
       <div class="contador"><span id="contagem">0</span>/${MAX_COMENTARIO}</div>
     </div>
@@ -186,6 +182,8 @@ function telaFormulario(p) {
   document.getElementById('comentario').addEventListener('input', function () {
     document.getElementById('contagem').textContent = this.value.length;
   });
+  document.querySelectorAll('input[name="csat"]').forEach(function (i) { i.addEventListener('change', function () { document.getElementById('cartaoCsat').classList.remove('faltou'); }); });
+  document.querySelectorAll('input[name="nota"]').forEach(function (i) { i.addEventListener('change', function () { document.getElementById('cartaoNps').classList.remove('faltou'); }); });
   document.getElementById('btnEnviar').addEventListener('click', enviar);
 }
 
@@ -199,19 +197,26 @@ function mostrarErro(msg) {
   if (!e) return;
   e.textContent = msg;
   e.classList.add('visivel');
-  e.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function enviar() {
+  const csat = valorDe('csat');
   const nota = valorDe('nota');
-  if (nota === '') { mostrarErro('Escolha uma nota de 0 a 10 para enviar a avaliação.'); return; }
+  document.getElementById('cartaoCsat').classList.toggle('faltou', csat === '');
+  document.getElementById('cartaoNps').classList.toggle('faltou', nota === '');
+  if (csat === '' || nota === '') {
+    mostrarErro(csat === '' && nota === '' ? 'Responda as perguntas 1 e 2 para enviar a avaliação.' : (csat === '' ? 'Responda a pergunta 1 (satisfação) para enviar a avaliação.' : 'Responda a pergunta 2 (recomendação) para enviar a avaliação.'));
+    const alvo = document.querySelector('.card.faltou');
+    if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  document.getElementById('erro').classList.remove('visivel');
   const btn = document.getElementById('btnEnviar');
   btn.disabled = true;
   btn.textContent = 'Enviando...';
+  const destaques = Array.prototype.map.call(document.querySelectorAll('input[name="destaque"]:checked'), function (i) { return i.value; });
   const r = await api('npsResponder', {
-    t: TOKEN, nota: parseInt(nota, 10),
-    apresentacao: valorDe('apresentacao'), postura: valorDe('postura'), supervisor: valorDe('supervisor'),
-    mapeamento: valorDe('mapeamento'), horario: valorDe('horario'),
+    t: TOKEN, csat: parseInt(csat, 10), nota: parseInt(nota, 10), destaques: destaques,
     comentario: document.getElementById('comentario').value
   });
   if (r && r.ok) {
@@ -227,6 +232,7 @@ async function enviar() {
   btn.disabled = false;
   btn.textContent = 'Enviar avaliação';
   mostrarErro((r && r.erro) || 'Não foi possível enviar agora. Tente novamente.');
+  const e = document.getElementById('erro'); if (e) e.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function iniciar() {
