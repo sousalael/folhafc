@@ -89,6 +89,11 @@ function doPost(e) {
     else if (action === 'buscarUnidadesCliente') { result = buscarUnidadesCliente(data); }
     else if (action === 'buscarAnalisesCliente') { result = buscarAnalisesCliente(data); }
 
+    // ── PESQUISA DE SATISFAÇÃO (NPS) — r109 ──
+    else if (action === 'npsObterPesquisa') { result = npsObterPesquisa(data); }
+    else if (action === 'npsResponder') { result = npsResponder(data); }
+    else if (action === 'npsAnalise') { result = npsAnalise(data, data.cpf); }
+
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
     // desatualizado em relacao ao index.html.
@@ -451,7 +456,7 @@ const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
-const VERSAO_SCRIPT = '2026-09-15-r108';
+const VERSAO_SCRIPT = '2026-09-18-r109';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -472,7 +477,8 @@ function doGet(e) {
     'verificarAcesso', 'definirSenhaPrimeiroAcesso', 'entrarComSenha',
     'redefinirSenhaComCodigo', 'resetarSenhaComoDir',
     'salvarAnaliseInventario', 'getHistoricoInventarios', 'checarInventarioExistente',
-    'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente'
+    'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente',
+    'npsObterPesquisa', 'npsResponder', 'npsAnalise'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -1968,7 +1974,9 @@ const ACOES_PUBLICAS = [
   'definirSenhaPrimeiroAcesso',
   'entrarComSenha',
   'redefinirSenhaComCodigo',
-  'getVersaoScript'
+  'getVersaoScript',
+  'npsObterPesquisa',
+  'npsResponder'
 ];
 
 // ============================================================================ //
@@ -2698,6 +2706,8 @@ function listarHistoricoAuditorias(dados, cpf) {
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
     var resultado = [];
+    var mapaNps = {};
+    try { mapaNps = npsMapaPorAuditoria(); } catch (eNps) { Logger.log('NPS no histórico: ' + eNps.message); }
     for (var i = 1; i < todas.length; i++) {
       var row = todas[i], status = row[9];
       if (d.status && status !== d.status) continue;
@@ -2707,7 +2717,7 @@ function listarHistoricoAuditorias(dados, cpf) {
       if (d.cliente && row[5] !== d.cliente) continue;
       if (d.unidade && row[6] !== d.unidade) continue;
       resultado.push({
-        id: row[0], dataRegistro: row[1], auditor: row[2], tipoAvaliacao: row[4],
+        id: row[0], dataRegistro: row[1], auditor: row[2], tipoAvaliacao: row[4], nps: (perfil === 'DIRETOR' ? (mapaNps[row[0]] || null) : null),
         cliente: row[5], unidade: row[6], dataAuditoria: row[7], status: status,
         scoreGeral: (row[16] instanceof Date) ? '' : (parseFloat(row[16])||''), scoreEquipe: (row[17] instanceof Date) ? '' : (parseFloat(row[17])||''), emailCliente: String(row[14]||''), dataEnvio: row[15] ? String(row[15]) : ''
       });
@@ -2751,21 +2761,21 @@ var CRITERIOS_MAP = {
   dls_organizacao:{label:'Organização dos produtos',secao:'Depósito Linha Seca',estrutura:'Retaguarda'},
   ret_aer_pallets:{label:'Aéreos com pallets full',secao:'Aéreos (Retaguarda)',estrutura:'Retaguarda'},
   ret_aer_org:{label:'Organização dos produtos nos aéreos',secao:'Aéreos (Retaguarda)',estrutura:'Retaguarda'},
-  ret_aer_qtd:{label:'Quantidade nos aéreos',secao:'Aéreos (Retaguarda)',estrutura:'Retaguarda',invertida:true},
-  ret_sub_qtd:{label:'Quantidade nos sub-aéreos',secao:'Sub-aéreos (Retaguarda)',estrutura:'Retaguarda',invertida:true},
+  ret_aer_qtd:{label:'Volume de mercadoria nos aéreos',secao:'Aéreos (Retaguarda)',estrutura:'Retaguarda',invertida:true},
+  ret_sub_qtd:{label:'Volume de mercadoria nos sub-aéreos',secao:'Sub-aéreos (Retaguarda)',estrutura:'Retaguarda',invertida:true},
   ret_sub_org:{label:'Organização dos produtos nos sub-aéreos',secao:'Sub-aéreos (Retaguarda)',estrutura:'Retaguarda'},
   eq_ret_qtd:{label:'Equipe suporte — quantidade',secao:'Equipe do Cliente',estrutura:'Retaguarda',equipe:true},
   eq_ret_prest:{label:'Equipe suporte — prestatividade',secao:'Equipe do Cliente',estrutura:'Retaguarda',equipe:true},
   cam_cong_org:{label:'Organização — Congelados',secao:'Câmaras',estrutura:'Retaguarda'},
-  cam_cong_vol:{label:'Volume — Congelados',secao:'Câmaras',estrutura:'Retaguarda'},
+  cam_cong_vol:{label:'Volume de mercadoria — Congelados',secao:'Câmaras',estrutura:'Retaguarda',invertida:true},
   cam_cong_eq_qtd:{label:'Equipe — Congelados (qtd)',secao:'Câmaras',estrutura:'Retaguarda',equipe:true},
   cam_cong_eq_prest:{label:'Equipe — Congelados (prest.)',secao:'Câmaras',estrutura:'Retaguarda',equipe:true},
   cam_resf_org:{label:'Organização — Resfriados',secao:'Câmaras',estrutura:'Retaguarda'},
-  cam_resf_vol:{label:'Volume — Resfriados',secao:'Câmaras',estrutura:'Retaguarda'},
+  cam_resf_vol:{label:'Volume de mercadoria — Resfriados',secao:'Câmaras',estrutura:'Retaguarda',invertida:true},
   cam_resf_eq_qtd:{label:'Equipe — Resfriados (qtd)',secao:'Câmaras',estrutura:'Retaguarda',equipe:true},
   cam_resf_eq_prest:{label:'Equipe — Resfriados (prest.)',secao:'Câmaras',estrutura:'Retaguarda',equipe:true},
   cam_emb_org:{label:'Organização — Embutidos',secao:'Câmaras',estrutura:'Retaguarda'},
-  cam_emb_vol:{label:'Volume — Embutidos',secao:'Câmaras',estrutura:'Retaguarda'},
+  cam_emb_vol:{label:'Volume de mercadoria — Embutidos',secao:'Câmaras',estrutura:'Retaguarda',invertida:true},
   cam_hort_pesagem:{label:'Pesagem — Hortifruti',secao:'Câmaras',estrutura:'Retaguarda',equipe:true},
   av_ic_sku:{label:'Ilhas Congelados — Organização por SKU',secao:'Perecíveis',estrutura:'Área de Vendas'},
   av_ic_qtd:{label:'Ilhas Congelados — Volume de mercadoria',secao:'Perecíveis',estrutura:'Área de Vendas',invertida:true},
@@ -2786,8 +2796,8 @@ var CRITERIOS_MAP = {
   av_pes_hort:{label:'Pesagem Hortifruti',secao:'Equipe de Pesagem',estrutura:'Área de Vendas',equipe:true},
   av_aer_pallets:{label:'Aéreos com pallets full',secao:'Aéreos',estrutura:'Área de Vendas'},
   av_aer_org:{label:'Produtos organizados aéreos',secao:'Aéreos',estrutura:'Área de Vendas'},
-  av_aer_qtd:{label:'Quantidade aéreos',secao:'Aéreos',estrutura:'Área de Vendas',invertida:true},
-  av_sub_qtd:{label:'Quantidade sub-aéreos',secao:'Sub-aéreos',estrutura:'Área de Vendas',invertida:true},
+  av_aer_qtd:{label:'Volume de mercadoria nos aéreos',secao:'Aéreos',estrutura:'Área de Vendas',invertida:true},
+  av_sub_qtd:{label:'Volume de mercadoria nos sub-aéreos',secao:'Sub-aéreos',estrutura:'Área de Vendas',invertida:true},
   av_sub_org:{label:'Produtos organizados sub-aéreos',secao:'Sub-aéreos',estrutura:'Área de Vendas'},
   av_pe_sku:{label:'Pontos-extra — amarrações',secao:'Mercearia',estrutura:'Área de Vendas'},
   av_baz_sku:{label:'Bazar — Organização por SKU',secao:'Mercearia',estrutura:'Área de Vendas'},av_baz_qtd:{label:'Bazar — Volume de mercadoria',secao:'Mercearia',estrutura:'Área de Vendas',invertida:true},
@@ -2824,7 +2834,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var temEquipe = notasEquipe.length > 0;
   var dadosTexto='CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+'\nAUDITOR: '+(ident.auditor||'')+'\nSCORE GERAL (sem infraestrutura): '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\n\n';
   for(var sec in secoes){dadosTexto+='=== '+sec+' ===\n';
-    secoes[sec].forEach(function(item){dadosTexto+='  '+item.criterio+': '+item.nota+'/10'+(item.invertida?' (1=excesso,10=ideal)':' (1=inadequado,10=excelente)')+(item.equipe?' [EQUIPE]':'')+(item.infra?' [INFRAESTRUTURA]':'')+'\n';});dadosTexto+='\n';}
+    secoes[sec].forEach(function(item){dadosTexto+='  '+item.criterio+': '+item.nota+'/10'+(item.invertida?' (ESCALA DE VOLUME: 1=volume excessivo, 10=volume ideal; nota BAIXA significa MUITA mercadoria, o que é ruim para o inventário)':' (1=inadequado,10=excelente)')+(item.equipe?' [EQUIPE]':'')+(item.infra?' [INFRAESTRUTURA]':'')+'\n';});dadosTexto+='\n';}
   dadosTexto+='=== OBSERVAÇÕES DO AUDITOR ===\n';
   for(var obsId in observacoes){if(observacoes[obsId])dadosTexto+=observacoes[obsId]+'\n\n';}
 
@@ -2836,7 +2846,8 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'3. INFRAESTRUTURA (iluminação, equipamentos): NÃO incluir como destaque positivo. É obrigação do cliente fornecer. Só mencionar se nota < 6 (insuficiente).\n'
     +'4. NÃO colocar o tipo de avaliação (PRÉ-OPERAÇÃO/DURANTE) no corpo do texto.\n'
     +'5. Agrupar setores por tema: "A organização por SKU está adequada nos setores de Biscoitos, Cereais e Limpeza" — não repetir a mesma observação para cada setor.\n'
-    +'6. Para critérios de volume/quantidade (escala invertida): nota baixa = excesso (ruim), nota alta = ideal (bom).\n'
+    +'6. Para critérios de volume/quantidade (escala invertida): nota baixa = excesso de mercadoria (ruim), nota alta = volume ideal (bom). Nunca leia uma nota de volume como "quanto mais mercadoria, melhor".\n'
+    +'6b. VOLUME x ORGANIZAÇÃO — leitura sem ambiguidade: quanto MAIOR o volume de mercadoria, PIOR para a operação de inventário (mais itens a contar, menos espaço e acesso, maior chance de erro induzido e de lentidão). Por isso: (i) volume acima do ideal (nota < 6) é SEMPRE ponto de atenção e deve constar em "oportunidades", mesmo quando a organização daquele mesmo setor estiver excelente — boa organização NÃO compensa nem neutraliza volume excessivo; (ii) nesses casos escreva de forma explícita e conciliadora, por exemplo "embora organizado, o volume de mercadoria acima do ideal em X torna a operação mais complexa"; (iii) só descreva um setor como "em boas condições" quando organização E volume estiverem ambos na faixa Bom/Excelente (>= 7.5); (iv) nunca apresente volume alto como algo positivo, nunca use adjetivo positivo para "quantidade" ou "volume" sem conferir a nota, e não use no texto expressões como "nota de volume alta/baixa" — diga "volume acima do ideal" ou "volume adequado".\n'
     +'7. Pallets full: nota < 7 significa pallet misto com produtos de diferentes categorias misturadas.\n'
     +'8. '+(temEquipe
       ? 'EQUIPE DO CLIENTE: analisar dentro de cada área (retaguarda/área de vendas) mas SEMPRE em parágrafo separado dos setores, iniciando com "Quanto ao apoio da equipe do cliente nesta área:". Distinguir entre quantidade e prestatividade. Ex: "prestativa mas insuficiente em quantidade".'
@@ -2857,7 +2868,8 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'18b. SE NÃO existir nenhuma oportunidade de melhoria (todos os critérios avaliados ficaram em faixa Bom/Excelente — preparação exemplar, nada a ajustar): a seção "sugestoes" deve conter APENAS uma recomendação, em 1-2 frases — que a preparação exemplar desta unidade seja usada como referência, um cenário de boas práticas a ser replicado nas demais unidades do cliente. NÃO invente nenhuma outra sugestão nesse cenário só para preencher espaço (reforço da regra 21).\n'
     +'19. CRITÉRIOS N/A: os dados abaixo (seção "===...===") já foram filtrados para conter APENAS os critérios que o auditor efetivamente avaliou (nota numérica preenchida). Critérios marcados como N/A pelo auditor simplesmente não aparecem nos dados fornecidos. NUNCA mencione, elogie, cite como oportunidade ou de qualquer forma faça referência a um critério, setor ou quesito que não conste explicitamente nos dados abaixo — mesmo que seja um item comum em auditorias desse tipo. Não invente notas, fatos ou observações sobre nada que esteja fora dos dados desta auditoria específica.\n'
     +'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.\n'
-    +'21. PROIBIDO, em qualquer seção, recomendar que o cliente comunique, informe, alinhe ou avise previamente — a quem quer que seja — sobre movimentações de mercadoria, espaço, volume ou layout que ocorram entre a data desta auditoria e a data da operação oficial. A loja não tem nenhuma obrigação de avisar sobre atividades operacionais inerentes ao próprio negócio (reabastecimento, reorganização, recebimento de mercadoria etc.) só porque uma auditoria de preparação foi realizada antes. PROIBIDAS formulações como "sugerimos que qualquer movimentação de espaço ou volume seja comunicada previamente" ou "de forma a preservar as condições aqui certificadas" — essa auditoria certifica a preparação NO MOMENTO em que foi feita, não cria nenhuma condição a ser preservada ou monitorada depois. Se o objetivo da frase for reduzir o risco de a preparação se deteriorar antes da contagem oficial, a única formulação aceitável é uma recomendação de AÇÃO do próprio cliente (ex: manter os cuidados já adotados, evitar reabastecimento excessivo perto da data — regra 17a), nunca um pedido de comunicação/aviso prévio.';
+    +'21. PROIBIDO, em qualquer seção, recomendar que o cliente comunique, informe, alinhe ou avise previamente — a quem quer que seja — sobre movimentações de mercadoria, espaço, volume ou layout que ocorram entre a data desta auditoria e a data da operação oficial. A loja não tem nenhuma obrigação de avisar sobre atividades operacionais inerentes ao próprio negócio (reabastecimento, reorganização, recebimento de mercadoria etc.) só porque uma auditoria de preparação foi realizada antes. PROIBIDAS formulações como "sugerimos que qualquer movimentação de espaço ou volume seja comunicada previamente" ou "de forma a preservar as condições aqui certificadas" — essa auditoria certifica a preparação NO MOMENTO em que foi feita, não cria nenhuma condição a ser preservada ou monitorada depois. Se o objetivo da frase for reduzir o risco de a preparação se deteriorar antes da contagem oficial, a única formulação aceitável é uma recomendação de AÇÃO do próprio cliente (ex: manter os cuidados já adotados, evitar reabastecimento excessivo perto da data — regra 17a), nunca um pedido de comunicação/aviso prévio.\n'
+    +'22. NOME DO DOCUMENTO: este material se chama "Análise de Preparação para Inventário". Ao se referir a ele (inclusive no campo texto_email), use sempre esse nome — nunca "relatório de auditoria" nem "auditoria de inventário".';
 
   var campoResumo = temEquipe
     ? '"resumo_executivo": "3-4 frases. Cenário geral, principal problema, principal destaque, equipe.",\n'
@@ -2920,9 +2932,18 @@ function gerarRelatorioAuditoria(dados, cpf) {
     var html = montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds);
     var pastaId = getOuCriarPastaAuditoria(ident.cliente, ident.unidade, ident.data_auditoria);
     var pasta = DriveApp.getFolderById(pastaId);
-    var nomeArq = 'Relatorio_' + ident.cliente + '_' + ident.unidade + '_' + ident.data_auditoria + '.html';
+    var nomeArq = 'Analise_Preparacao_' + ident.cliente + '_' + ident.unidade + '_' + ident.data_auditoria + '.html';
     var existentes = pasta.getFilesByName(nomeArq);
     while (existentes.hasNext()) existentes.next().setTrashed(true);
+    // r109: arquivos gerados antes da renomeação (prefixo "Relatorio_") são
+    // enviados para a lixeira ao regerar, para não ficarem duplicados na pasta.
+    try {
+      var nomeAntigo = 'Relatorio_' + ident.cliente + '_' + ident.unidade + '_' + ident.data_auditoria + '.html';
+      [nomeAntigo, nomeAntigo.replace('.html', '.pdf')].forEach(function (n) {
+        var it = pasta.getFilesByName(n);
+        while (it.hasNext()) it.next().setTrashed(true);
+      });
+    } catch (eAntigo) { Logger.log('Limpeza de arquivos antigos: ' + eAntigo.message); }
     var arquivo = pasta.createFile(nomeArq, html, 'text/html');
     arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var linkHTML = 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download';
@@ -2989,9 +3010,9 @@ function enviarRelatorioAuditoria(dados, cpf) {
     var relMeta = JSON.parse(meta);
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
-    var linha = -1, cliente='', unidade='', dataAud='';
+    var linha = -1, cliente='', unidade='', dataAud='', tipoAv='';
     for (var i = 1; i < todas.length; i++) {
-      if (todas[i][0] === d.auditoriaId) { linha=i+1; cliente=todas[i][5]; unidade=todas[i][6]; dataAud=todas[i][7]; break; }
+      if (todas[i][0] === d.auditoriaId) { linha=i+1; cliente=todas[i][5]; unidade=todas[i][6]; dataAud=todas[i][7]; tipoAv=todas[i][4]; break; }
     }
     if (linha === -1) return { ok: false, erro: 'Auditoria não encontrada' };
     var pdfFile = DriveApp.getFileById(relMeta.pdfId);
@@ -3018,24 +3039,46 @@ function enviarRelatorioAuditoria(dados, cpf) {
       Logger.log('Falha ao anexar apresentação ao e-mail (' + d.auditoriaId + '): ' + (errApres.message || String(errApres)));
     }
 
-    var assunto = 'Relatório de Auditoria — ' + cliente + ' / ' + unidade;
+    // r109: pesquisa NPS — só em análises DURANTE A OPERAÇÃO. Isolado em
+    // try/catch: qualquer falha apenas deixa o link de fora, e o envio da
+    // análise (que já funcionava) segue normalmente.
+    var npsLink = '';
+    var npsIncluido = false;
+    try {
+      if (npsTipoPermiteEnvio(tipoAv)) {
+        npsLink = npsGerarLinkEnvio(d.auditoriaId, cliente, unidade, dataAud, d.email, d.urlBaseApp);
+        npsIncluido = !!npsLink;
+      }
+    } catch (errNps) {
+      Logger.log('Falha ao gerar link NPS (' + d.auditoriaId + '): ' + (errNps.message || String(errNps)));
+      npsLink = '';
+      npsIncluido = false;
+    }
+    var blocoNps = npsLink
+      ? ('<div style="border:2px solid #61CF00;border-radius:12px;padding:18px;margin:24px 0;text-align:center;background:#F7FDF0">'
+        + '<p style="font-size:15px;font-weight:700;color:#002B50;margin:0 0 6px">Sua opinião é muito importante para nós</p>'
+        + '<p style="font-size:13px;line-height:1.6;color:#1A2A3A;margin:0 0 14px">Leva menos de 1 minuto: conte como foi o inventário e como avalia a atuação da nossa equipe.</p>'
+        + '<a href="' + npsLink + '" style="display:inline-block;padding:12px 28px;background:#61CF00;color:#051323;text-decoration:none;border-radius:8px;font-weight:700">Avaliar o serviço</a></div>')
+      : '';
+    var assunto = 'Análise de Preparação para Inventário — ' + cliente + ' / ' + unidade;
     var textoAnexos = apresentacaoAnexada
-      ? 'O relatório completo e a apresentação executiva estão em anexo (PDF).'
-      : 'O relatório completo está em anexo (PDF).';
+      ? 'A análise completa e a apresentação executiva estão em anexo (PDF).'
+      : 'A análise completa está em anexo (PDF).';
     var corpoHTML = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
       + '<div style="background:#051323;padding:20px 24px;text-align:center"><span style="color:#61CF00;font-weight:700;font-size:18px">FORMULA CODE</span></div>'
-      + '<div style="padding:32px 24px;background:#FFF"><p style="font-size:15px;line-height:1.8">' + (relMeta.textoEmail || 'Segue em anexo o relatório de auditoria de operação.') + '</p>'
+      + '<div style="padding:32px 24px;background:#FFF"><p style="font-size:15px;line-height:1.8">' + (relMeta.textoEmail || 'Segue em anexo a Análise de Preparação para Inventário.') + '</p>'
       + '<div style="background:#F4F6F8;padding:16px;border-radius:10px;margin:20px 0"><p style="font-size:12px;color:#6B7B8D;margin-bottom:4px">DETALHES</p>'
       + '<p style="font-size:14px;margin:0"><strong>' + cliente + '</strong> — ' + unidade + '<br>' + dataAud + '</p></div>'
       + '<p style="font-size:14px;line-height:1.7">' + textoAnexos + '</p>'
-      + '<p style="text-align:center;margin:24px 0"><a href="' + relMeta.linkHTML + '" style="display:inline-block;padding:12px 28px;background:#002B50;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Ver Relatório Online</a></p>'
+      + '<p style="text-align:center;margin:24px 0"><a href="' + relMeta.linkHTML + '" style="display:inline-block;padding:12px 28px;background:#002B50;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Ver Análise Online</a></p>'
+      + blocoNps
       + '</div><div style="background:#051323;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
       + '<strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
     MailApp.sendEmail(d.email, assunto, '', { htmlBody:corpoHTML, attachments:anexos, name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' });
     aba.getRange(linha, 15).setValue(d.email);
     aba.getRange(linha, 16).setValue(new Date());
     registrarClienteFC(cliente, unidade, d.email);
-    return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada };
+    return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada, npsIncluido: npsIncluido };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
@@ -3330,6 +3373,7 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
     + '9. REENQUADRAMENTO CONSTRUTIVO: em "oportunidades", mesmo em frases curtas de slide, encadeie condição observada + ação recomendada + ganho operacional, nunca como falha. Se os dados indicarem excesso de mercadoria/volume acima do ideal, a ação recomendada é o cliente reduzir o abastecimento/recebimento com pelo menos 5 dias de antecedência ao inventário; se indicarem risco de a equipe de pesagem sair antes do fim da operação, a ação recomendada é o cliente alinhar previamente, internamente, com sua própria equipe de pesagem, para que ela só saia após confirmação de que todos os pesos foram lançados.\n'
     + '9b. SUBSTITUIÇÕES OBRIGATÓRIAS DE TEXTO: NUNCA use "compromete a velocidade de leitura dos coletores e aumenta o risco de recontagem" nem variações sobre "velocidade de leitura"/"risco de recontagem" — troque sempre por "pode impactar na fluidez da operação e na assertividade da contagem". NUNCA use "liberando espaço em prateleira para leitura clara e sem obstáculos" nem variações sobre "leitura clara"/"sem obstáculos" — troque sempre por "favorecendo uma melhor organização das mercadorias, evitando que aconteçam erros induzidos". Não mencione "recontagem" como risco em nenhuma frase.\n'
     + '9c. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em "oportunidades" (ou qualquer outro campo) é SEMPRE uma ação do próprio CLIENTE, organizada e executada internamente por ele — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela Formula Code junto ao cliente, mesmo para mitigar uma ineficiência do cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente" ou qualquer formulação equivalente que atribua a ação à FC.\n'
+    + '9d. VOLUME x ORGANIZAÇÃO: quanto MAIOR o volume de mercadoria, PIOR para a operação de inventário. Nos dados, critérios de volume usam escala invertida (1=volume excessivo, 10=volume ideal). Volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo quando a organização do mesmo setor for excelente — boa organização não compensa volume excessivo. Nunca descreva volume alto como algo positivo nem um setor com volume acima do ideal como "em boas condições".\n'
     + '10. Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON.\n'
     + '11. REGRA DE CONSISTÊNCIA (quando a seção "ANÁLISE DE PREPARAÇÃO JÁ PUBLICADA" aparecer nos dados abaixo): essa análise já foi publicada para o cliente e é a referência obrigatória. "resumo_curto"/"resumo_detalhado", "pontos_fortes" e "oportunidades" devem refletir EXATAMENTE as mesmas pontuações, achados e recomendações dessa análise — apenas resumidos/condensados para o formato de slide. NUNCA gere uma conclusão, recomendação ou leitura dos dados que contradiga, mesmo sutilmente, o que já foi publicado (por exemplo: se a análise publicada já orienta que mercadoria contada não pode ser movimentada em hipótese alguma, o Resumo Executivo nunca pode sugerir uma condição ou exceção a essa orientação). Se a seção não aparecer nos dados, gere a análise normalmente a partir dos scores e observações, seguindo as demais regras.';
 
@@ -3482,6 +3526,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   function corN(n){n=parseFloat(n)||0;if(n>=9)return'#2E7D32';if(n>=7.5)return'#61CF00';if(n>=6)return'#D4A017';if(n>=4)return'#E8872B';return'#E05252';}
   function txF(n){n=parseFloat(n)||0;if(n>=9)return'Excelente';if(n>=7.5)return'Bom';if(n>=6)return'Regular';if(n>=4)return'Insatisfatório';return'Crítico';}
   function bgF(n){n=parseFloat(n)||0;if(n>=9)return'#E8F5E9';if(n>=7.5)return'#EAF8E0';if(n>=6)return'#FFF8E1';if(n>=4)return'#FFF3E0';return'#FDEAEA';}
+  var LEGENDA_VOLUME='<div style="font-size:10px;color:#6B7B8D;margin:-10px 0 14px;line-height:1.5">Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).</div>';
   function celCor(n){return'text-align:center;font-weight:700;color:'+corN(n)+';background:'+bgF(n);}
 
   var porEstrutura={};var INFRA_IDS={ef_iluminacao:1,ef_equipamentos:1};
@@ -3508,22 +3553,22 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   function tabelaOrgVol(items){
     var porSub={};items.forEach(function(it){var sub=it.label.split(' — ')[0]||it.label;if(!porSub[sub])porSub[sub]={org:null,vol:null};if(it.id.indexOf('_sku')!==-1)porSub[sub].org=it.nota;else if(it.invertida)porSub[sub].vol=it.nota;else if(!porSub[sub].org)porSub[sub].org=it.nota;});
     var subs=Object.keys(porSub);if(!subs.length)return'';var sO=0,nO=0,sV=0,nV=0;
-    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Setor</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
+    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Setor</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     subs.forEach(function(sub){var o=porSub[sub].org,v=porSub[sub].vol;var med=0,nn=0;if(o!==null){med+=o;nn++;sO+=o;nO++;}if(v!==null){med+=v;nn++;sV+=v;nV++;}med=nn?med/nn:0;
       h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+sub+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(o!==null?celCor(o):'text-align:center;color:#CCC')+'">'+(o!==null?o:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(v!==null?celCor(v):'text-align:center;color:#CCC')+'">'+(v!==null?v:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(med)+'">'+med.toFixed(1)+'</td></tr>';});
     var mO=nO?sO/nO:0;var mV=nV?sV/nV:0;var mT=(nO&&nV)?(mO+mV)/2:mO||mV;
-    h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Resultado</td><td style="padding:7px 8px;'+celCor(mO)+'">'+mO.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mV)+'">'+mV.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>';return h;}
+    h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Resultado</td><td style="padding:7px 8px;'+celCor(mO)+'">'+mO.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mV)+'">'+mV.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>'+LEGENDA_VOLUME;return h;}
   function tabelaCamaras(items){
     var CAM_MAP={cam_cong_org:'Congelados',cam_cong_vol:'Congelados',cam_resf_org:'Resfriados',cam_resf_vol:'Resfriados',cam_emb_org:'Embutidos',cam_emb_vol:'Embutidos'};
     var naoEq=items.filter(function(i){return!i.equipe;});var porCam={};
     naoEq.forEach(function(it){var cam=CAM_MAP[it.id]||it.label.split(' — ')[1]||it.label;if(!porCam[cam])porCam[cam]={org:null,vol:null};
       if(it.id.indexOf('_org')!==-1)porCam[cam].org=it.nota;else if(it.invertida||it.id.indexOf('_vol')!==-1)porCam[cam].vol=it.nota;});
     var cams=Object.keys(porCam);if(!cams.length)return'';var sO=0,nO=0,sV=0,nV=0;
-    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 12px"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Câmara</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
+    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 12px"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Câmara</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     cams.forEach(function(cam){var c=porCam[cam];var vals=[];if(c.org!==null){vals.push(c.org);sO+=c.org;nO++;}if(c.vol!==null){vals.push(c.vol);sV+=c.vol;nV++;}var med=vals.length?vals.reduce(function(a,b){return a+b;},0)/vals.length:0;
       h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+cam+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(c.org!==null?celCor(c.org):'text-align:center;color:#CCC')+'">'+(c.org!==null?c.org:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(c.vol!==null?celCor(c.vol):'text-align:center;color:#CCC')+'">'+(c.vol!==null?c.vol:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(med)+'">'+med.toFixed(1)+'</td></tr>';});
     var mO=nO?sO/nO:0;var mV=nV?sV/nV:0;var mT=(nO&&nV)?(mO+mV)/2:mO||mV;
-    h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Resultado</td><td style="padding:7px 8px;'+celCor(mO)+'">'+mO.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mV)+'">'+mV.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>';return h;}
+    h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Resultado</td><td style="padding:7px 8px;'+celCor(mO)+'">'+mO.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mV)+'">'+mV.toFixed(1)+'</td><td style="padding:7px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>'+LEGENDA_VOLUME;return h;}
   function tabelaEquipe(items){
     var eqs=items.filter(function(i){return i.equipe;});if(!eqs.length)return'';
     var EQ_MAP={eq_ret_qtd:['Depósito','qtd'],eq_ret_prest:['Depósito','prest'],
@@ -3544,7 +3589,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
     h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:6px 10px">Resultado</td><td style="padding:6px 8px;'+celCor(mQ)+'">'+mQ.toFixed(1)+'</td><td style="padding:6px 8px;'+(nP?celCor(mP):'text-align:center;color:#CCC')+'">'+(nP?mP.toFixed(1):'—')+'</td><td style="padding:6px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>';return h;}
   function tabelaSimples(items){if(!items.length)return'';
     var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#002B50;color:#FFF"><td style="padding:6px 10px;font-weight:600">Critério</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
-    items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>';}
+    items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+(it.invertida?' <span style="font-size:10px;color:#6B7B8D">(10 = volume ideal)</span>':'')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>'+(items.some(function(i){return i.invertida;})?LEGENDA_VOLUME:'');}
 
   // r101: bloco de fotos de UMA seção específica, inserido logo após a
   // tabela daquela seção (mesmo agrupamento por secaoId usado na
@@ -3575,8 +3620,8 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   }
 
   // ═══ HTML ═══
-  var h='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Relatório de Auditoria — Formula Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}.page{box-shadow:none}}</style></head><body><div class="page">';
-  h+='<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,'+logoPNG+'" style="height:48px" alt="FC"></td><td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Relatório de Auditoria<br>Operação de Inventário</td></tr></table>';
+  var h='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Análise de Preparação para Inventário — Formula Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}.page{box-shadow:none}}</style></head><body><div class="page">';
+  h+='<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,'+logoPNG+'" style="height:48px" alt="FC"></td><td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise de Preparação<br>para Inventário</td></tr></table>';
   h+='<table><tr><td style="padding:14px 32px;background:#002B50;color:#FFF;width:33%"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Cliente</div><div style="font-size:14px;font-weight:700">'+(ident.cliente||'')+'</div></td><td style="padding:14px 20px;background:#002B50;color:#FFF;width:33%"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Unidade</div><div style="font-size:14px;font-weight:700">'+(ident.unidade||'')+'</div></td><td style="padding:14px 20px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Tipo</div><div><span style="padding:2px 10px;border-radius:12px;font-size:10px;font-weight:700;background:'+tipoCor+';color:'+tipoTxt+'">'+tipoLabel+'</span></div></td></tr>';
   h+='<tr><td style="padding:14px 32px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Auditor</div><div style="font-size:14px;font-weight:700">'+(ident.auditor||'')+'</div></td><td style="padding:14px 20px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Data</div><div style="font-size:14px;font-weight:700">'+dataF+'</div></td><td style="padding:14px 20px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Responsável</div><div style="font-size:14px;font-weight:700">'+(ident.responsavel_cliente||'')+'</div></td></tr></table>';
   h+='<div style="padding:32px;text-align:center;border-bottom:1px solid #E2E8F0"><div style="font-size:52px;font-weight:700;color:'+corN(sg)+'">'+(scoreGeralRecalc||'—')+'</div><div style="display:inline-block;padding:4px 16px;border-radius:12px;font-size:12px;font-weight:700;color:'+corN(sg)+';background:'+bgF(sg)+'">'+txF(sg)+'</div><table style="width:300px;margin:20px auto"><tr><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px"><div style="font-size:24px;font-weight:700;color:#002B50">'+(scoreGeralRecalc||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Ambiente</div></td><td style="width:12px"></td><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px;border:2px solid #E8872B"><div style="font-size:24px;font-weight:700;color:#E8872B">'+(scores.equipe||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Equipe</div></td></tr></table><div style="margin-top:12px;font-size:10px;color:#6B7B8D"><span style="padding:2px 6px;border-radius:6px;background:#E8F5E9;color:#2E7D32;margin:0 2px">9-10 Excelente</span><span style="padding:2px 6px;border-radius:6px;background:#EAF8E0;color:#3a8000;margin:0 2px">7.5-8.9 Bom</span><span style="padding:2px 6px;border-radius:6px;background:#FFF8E1;color:#856404;margin:0 2px">6-7.4 Regular</span><span style="padding:2px 6px;border-radius:6px;background:#FFF3E0;color:#E8872B;margin:0 2px">4-5.9 Insatisf.</span><span style="padding:2px 6px;border-radius:6px;background:#FDEAEA;color:#E05252;margin:0 2px">1-3.9 Crítico</span></div></div>';
@@ -3615,7 +3660,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   if(relatorio.oportunidades)h+='<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ OPORTUNIDADES DE MELHORIA</div><p style="font-size:13px;line-height:1.7">'+relatorio.oportunidades+'</p></div>';
   if(relatorio.sugestoes)h+='<div style="background:#E3F2FD;border-left:4px solid #002B50;padding:14px 16px;border-radius:0 8px 8px 0"><div style="font-size:12px;font-weight:700;color:#002B50;margin-bottom:6px">→ SUGESTÕES</div><p style="font-size:13px;line-height:1.7">'+relatorio.sugestoes+'</p></div>';
   h+='</div>';
-  h+='<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#051323"><strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Relatório gerado automaticamente pelo Sistema de Gestão FC</td></tr></table></div></body></html>';
+  h+='<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#051323"><strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Análise gerada automaticamente pelo Sistema de Gestão FC</td></tr></table></div></body></html>';
   return h;
 }
 function gerarTextoTemplate(ident, respostas, observacoes, scores) {
@@ -3649,7 +3694,11 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   if(skuBons.length)avTexts.push('a organização por SKU nos setores de '+skuBons.join(', ')+' demonstrou boa preparação');
 
   if(retTexts.length)resumo+='\n\nAs principais deficiências concentram-se em '+retTexts.join(' e ')+'.';
-  if(avTexts.length)resumo+='\n\nNa área de vendas, '+avTexts.join('. ')+', servindo de referência para os demais setores.';
+  // r109: volume x organização — setores da área de vendas com volume acima do ideal (nota < 6)
+  var volRiscoAV=[];var NOMES_VOL_AV={av_aer_qtd:'aéreos',av_sub_qtd:'sub-aéreos'};
+  for(var idVol in respostas){if(/^av_.+_qtd$/.test(idVol)){var nVol=R(idVol);if(nVol!==null&&nVol<6){var mVol=CRITERIOS_MAP[idVol];volRiscoAV.push(NOMES_VOL_AV[idVol]||(mVol?String(mVol.label).split(' — ')[0]:idVol));}}}
+  if(avTexts.length)resumo+='\n\nNa área de vendas, '+avTexts.join('. ')+(volRiscoAV.length?'':', servindo de referência para os demais setores')+'.';
+  if(volRiscoAV.length)resumo+='\n\nQuanto ao volume de mercadoria, há pontos de atenção na área de vendas ('+volRiscoAV.join(', ')+'): quanto maior o volume, mais complexa é a operação do inventário, independentemente do nível de organização do setor.';
   if(se>0)resumo+='\n\nA equipe de apoio do cliente obteve avaliação '+fx(se)+' ('+scoreE+'/10).';
   if(obs)resumo+='\n\nObservações do auditor: '+obs;
 
@@ -3694,7 +3743,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   var camBoas=[],camRuins=[];
   for(var c=0;c<cams.length;c++){var org=R(camIds[c][0]);var vol=R(camIds[c][1]);
     if(org!==null&&org>=7.5&&vol!==null&&vol>=7.5)camBoas.push(cams[c]);
-    else{if(vol!==null&&vol<6)camRuins.push(cams[c]+' (volume excessivo)');else if(org!==null&&org<6)camRuins.push(cams[c]+' (organização insuficiente)');}}
+    else{if(vol!==null&&vol<6)camRuins.push(cams[c]+(org!==null&&org>=7.5?' (volume acima do ideal, embora organizada)':' (volume excessivo)'));else if(org!==null&&org<6)camRuins.push(cams[c]+' (organização insuficiente)');}}
   if(camRuins.length)ret+='Nas câmaras frigoríficas, '+camRuins.join(' e ')+' — cenário frequentemente associado a recebimentos nos dias que antecedem o inventário. ';
   if(camBoas.length&&!camRuins.length)ret+='As câmaras frigoríficas estão em boas condições. ';
   if(camBoas.length&&camRuins.length)ret+='A câmara de '+camBoas.join(' e ')+' está em condições adequadas. ';
@@ -3726,11 +3775,13 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   // Perecíveis
   var perIds=[['av_ic_sku','av_ic_qtd','Ilhas de Congelados'],['av_iog_sku','av_iog_qtd','Iogurtes'],['av_marg_sku','av_marg_qtd','Margarinas'],['av_pad_sku','av_pad_qtd','Padaria'],['av_beb_sku','av_beb_qtd','Bebidas'],['av_pol_sku','av_pol_qtd','Polpas de Frutas'],['av_sorv_sku','av_sorv_qtd','Sorvetes']];
   var merIds=[['av_pe_sku',null,'Pontos-Extra'],['av_baz_sku','av_baz_qtd','Bazar'],['av_liq_sku','av_liq_qtd','Líquida'],['av_bis_sku','av_bis_qtd','Biscoitos'],['av_cer_sku','av_cer_qtd','Cereais'],['av_con_sku','av_con_qtd','Condimentos'],['av_diet_sku','av_diet_qtd','Diet/Light'],['av_doc_sku','av_doc_qtd','Doces'],['av_lat_sku','av_lat_qtd','Laticínios'],['av_lim_sku','av_lim_qtd','Limpeza'],['av_mas_sku','av_mas_qtd','Massas'],['av_mat_sku','av_mat_qtd','Matinais'],['av_perf_sku','av_perf_qtd','Perfumaria'],['av_pet_sku','av_pet_qtd','Pet Shop'],['av_salg_sku','av_salg_qtd','Salgadinhos']];
+  var cruzAV=[]; // r109: setores com organização boa (>=7.5) E volume acima do ideal (<6)
   function analisarGrupo(ids,nomeGrupo){
     var skuBons=[],skuRuins=[],volBons=[],volRuins=[];
     ids.forEach(function(g){var sku=R(g[0]);var vol=g[1]?R(g[1]):null;
       if(sku!==null&&sku>=7.5)skuBons.push(g[2]);if(sku!==null&&sku<6)skuRuins.push(g[2]);
-      if(vol!==null&&vol>=7.5)volBons.push(g[2]);if(vol!==null&&vol<6)volRuins.push(g[2]);});
+      if(vol!==null&&vol>=7.5)volBons.push(g[2]);if(vol!==null&&vol<6)volRuins.push(g[2]);
+      if(sku!==null&&sku>=7.5&&vol!==null&&vol<6)cruzAV.push(g[2]);});
     var txt='';
     if(skuBons.length)txt+='A organização dos produtos por SKU está adequada nos setores de '+skuBons.join(', ')+'. ';
     if(skuRuins.length)txt+='A organização por SKU precisa melhorar nos setores de '+skuRuins.join(', ')+'. ';
@@ -3738,6 +3789,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
     if(volBons.length&&!volRuins.length)txt+='O volume de mercadoria está adequado nos setores avaliados. ';
     return txt;}
   av+=analisarGrupo(perIds,'Perecíveis');av+=analisarGrupo(merIds,'Mercearia');
+  if(cruzAV.length)av+='Em '+cruzAV.join(', ')+', a boa organização não elimina o impacto do volume: quanto maior o volume de mercadoria, mais complexa é a operação do inventário. ';
   // Aéreos AV
   var avAerOrg=R('av_aer_org');var avAerQtd=R('av_aer_qtd');var avAerPal=R('av_aer_pallets');
   if(avAerOrg!==null||avAerQtd!==null){
@@ -3806,7 +3858,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   return {
     resumo_executivo:resumo,analise_retaguarda:ret.trim(),analise_area_vendas:av.trim(),analise_equipe:analiseEquipe,
     pontosPositivos:pp,oportunidades:op,sugestoes:su,
-    texto_email:'Prezado(a), compartilhamos o relatório de auditoria da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
+    texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
   };
 }
 
@@ -3967,4 +4019,314 @@ function buscarAnalisesCliente(dados) {
   });
 
   return { success: true, lista: lista, total: lista.length };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MÓDULO: PESQUISA DE SATISFAÇÃO (NPS) — r109
+   O e-mail da Análise de Preparação (somente em avaliações DURANTE A
+   OPERAÇÃO) leva um link único para a página pública nps.html. As
+   respostas ficam em abas NOVAS da planilha (NPS_Envios e
+   NPS_Respostas) — nenhuma aba existente é alterada.
+   - npsObterPesquisa / npsResponder: PÚBLICAS (sem login; quem responde
+     é o cliente). A única "chave" é o token único do link.
+   - npsAnalise: restrita ao DIRETOR (sessão + perfil).
+   ═══════════════════════════════════════════════════════════════════ */
+var ABA_NPS_ENVIOS = 'NPS_Envios';
+var ABA_NPS_RESPOSTAS = 'NPS_Respostas';
+var NPS_COLS_ENVIOS = ['Token','AuditoriaId','Cliente','Unidade','DataAuditoria','EmailDestino','DataEnvio','Respondida','DataResposta'];
+var NPS_COLS_RESPOSTAS = ['RespostaId','Token','AuditoriaId','Cliente','Unidade','DataAuditoria','DataResposta','Nota','Categoria','Apresentacao','PosturaRegras','Supervisor','Mapeamento','Horario','Comentario'];
+// colunas (base 1) que precisam ficar como TEXTO puro (evita o Sheets converter datas/tokens/fórmulas)
+var NPS_TEXTO_ENVIOS = [1, 2, 3, 4, 5, 6, 8];
+var NPS_TEXTO_RESPOSTAS = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15];
+var NPS_QUESITOS = ['apresentacao', 'postura', 'supervisor', 'mapeamento', 'horario'];
+var NPS_OPCOES = {
+  apresentacao: ['Excelente', 'Satisfatório', 'Inadequado'],
+  postura:      ['Excelente', 'Satisfatório', 'Inadequado'],
+  supervisor:   ['Excelente', 'Satisfatório', 'Inadequado'],
+  mapeamento:   ['Excelente', 'Bom', 'Regular', 'Ruim'],
+  horario:      ['No prazo', 'Com pequeno atraso', 'Com grande atraso']
+};
+
+function npsAba(nome, colunas, colunasTexto) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var aba = ss.getSheetByName(nome);
+  if (!aba) {
+    aba = ss.insertSheet(nome);
+    aba.appendRow(colunas);
+    aba.getRange(1, 1, 1, colunas.length).setFontWeight('bold').setBackground('#002B50').setFontColor('#FFFFFF');
+    aba.setFrozenRows(1);
+    var linhasFmt = Math.max(aba.getMaxRows() - 1, 1);
+    colunasTexto.forEach(function (c) { aba.getRange(2, c, linhasFmt, 1).setNumberFormat('@'); });
+  }
+  return aba;
+}
+function npsAbaEnvios() { return npsAba(ABA_NPS_ENVIOS, NPS_COLS_ENVIOS, NPS_TEXTO_ENVIOS); }
+function npsAbaRespostas() { return npsAba(ABA_NPS_RESPOSTAS, NPS_COLS_RESPOSTAS, NPS_TEXTO_RESPOSTAS); }
+
+function npsDataHoraISO(v) {
+  if (!v) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, 'America/Fortaleza', "yyyy-MM-dd'T'HH:mm");
+  return String(v);
+}
+
+function npsLimparToken(t) {
+  var s = String(t || '').trim();
+  return /^[A-Za-z0-9]{16,64}$/.test(s) ? s : '';
+}
+
+// Só as avaliações DURANTE A OPERAÇÃO levam o link (a pergunta fala do
+// inventário realizado na noite anterior — não faz sentido antes dele).
+function npsTipoPermiteEnvio(tipoAvaliacao) {
+  return String(tipoAvaliacao || '').toUpperCase().indexOf('DURANTE') !== -1;
+}
+
+function npsCategoria(nota) {
+  if (nota >= 9) return 'Promotor';
+  if (nota >= 7) return 'Neutro';
+  return 'Detrator';
+}
+
+function npsLerEnvios() {
+  var v = npsAbaEnvios().getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i];
+    if (!r[0]) continue;
+    out.push({
+      linha: i + 1, token: String(r[0]), auditoriaId: String(r[1]), cliente: String(r[2]), unidade: String(r[3]),
+      dataAuditoria: extrairDataISO(r[4]), email: String(r[5]), dataEnvio: npsDataHoraISO(r[6]),
+      respondida: String(r[7]).toUpperCase() === 'SIM', dataResposta: npsDataHoraISO(r[8])
+    });
+  }
+  return out;
+}
+
+function npsLerRespostas() {
+  var v = npsAbaRespostas().getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i];
+    if (!r[0]) continue;
+    var nota = parseInt(r[7], 10);
+    if (isNaN(nota)) continue;
+    out.push({
+      id: String(r[0]), token: String(r[1]), auditoriaId: String(r[2]), cliente: String(r[3]), unidade: String(r[4]),
+      dataAuditoria: extrairDataISO(r[5]), dataResposta: npsDataHoraISO(r[6]), nota: nota,
+      apresentacao: String(r[9] || ''), postura: String(r[10] || ''), supervisor: String(r[11] || ''),
+      mapeamento: String(r[12] || ''), horario: String(r[13] || ''), comentario: String(r[14] || '')
+    });
+  }
+  return out;
+}
+
+function npsBuscarEnvio(token) {
+  var envios = npsLerEnvios();
+  for (var i = 0; i < envios.length; i++) { if (envios[i].token === token) return envios[i]; }
+  return null;
+}
+
+// Gera (ou reaproveita) o link único deste envio. Reenvio da mesma análise
+// para o MESMO e-mail reaproveita o token; outro e-mail recebe token novo.
+function npsGerarLinkEnvio(auditoriaId, cliente, unidade, dataAud, email, urlBase) {
+  if (!/^https:\/\/[A-Za-z0-9._~\-\/]+\/$/.test(String(urlBase || ''))) return '';
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var aba = npsAbaEnvios();
+    var envios = npsLerEnvios();
+    var emailN = String(email || '').trim().toLowerCase();
+    var token = '';
+    for (var i = 0; i < envios.length; i++) {
+      if (envios[i].auditoriaId === String(auditoriaId) && envios[i].email.toLowerCase() === emailN) {
+        token = envios[i].token;
+        aba.getRange(envios[i].linha, 7).setValue(new Date());
+        break;
+      }
+    }
+    if (!token) {
+      token = Utilities.getUuid().replace(/-/g, '');
+      aba.appendRow([token, String(auditoriaId), String(cliente), String(unidade), extrairDataISO(dataAud), String(email || ''), new Date(), 'NAO', '']);
+    }
+    return urlBase + 'nps.html?t=' + token;
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+/* ── PÚBLICO: dados da pesquisa a partir do token ── */
+function npsObterPesquisa(dados) {
+  try {
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var t = npsLimparToken(d.t);
+    if (!t) return { ok: false, erro: 'Link inválido.' };
+    var env = npsBuscarEnvio(t);
+    if (!env) return { ok: false, erro: 'Link inválido ou expirado.' };
+    return { ok: true, cliente: env.cliente, unidade: env.unidade, dataAuditoria: formatarDataBR(env.dataAuditoria), respondida: env.respondida };
+  } catch (e) {
+    Logger.log('npsObterPesquisa: ' + e.message);
+    return { ok: false, erro: 'Não foi possível carregar a pesquisa. Tente novamente em instantes.' };
+  }
+}
+
+/* ── PÚBLICO: registra a resposta (uma por link) ── */
+function npsResponder(dados) {
+  var lock = LockService.getScriptLock();
+  try {
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var t = npsLimparToken(d.t);
+    if (!t) return { ok: false, erro: 'Link inválido.' };
+    var nota = parseInt(d.nota, 10);
+    if (isNaN(nota) || nota < 0 || nota > 10) return { ok: false, erro: 'Escolha uma nota de 0 a 10.' };
+    var q = {};
+    NPS_QUESITOS.forEach(function (k) {
+      var v = String(d[k] || '').trim();
+      q[k] = NPS_OPCOES[k].indexOf(v) !== -1 ? v : '';
+    });
+    var comentario = String(d.comentario || '').trim().substring(0, 2000);
+
+    lock.waitLock(15000);
+    var env = npsBuscarEnvio(t);
+    if (!env) return { ok: false, erro: 'Link inválido ou expirado.' };
+    if (env.respondida) return { ok: false, jaRespondida: true, erro: 'Esta pesquisa já foi respondida.' };
+
+    var agora = new Date();
+    npsAbaRespostas().appendRow([
+      'nps_' + Utilities.getUuid().replace(/-/g, '').substring(0, 12), t, env.auditoriaId, env.cliente, env.unidade,
+      env.dataAuditoria, agora, nota, npsCategoria(nota),
+      q.apresentacao, q.postura, q.supervisor, q.mapeamento, q.horario, comentario
+    ]);
+    npsAbaEnvios().getRange(env.linha, 8, 1, 2).setValues([['SIM', agora]]);
+    return { ok: true };
+  } catch (e) {
+    Logger.log('npsResponder: ' + e.message);
+    return { ok: false, erro: 'Não foi possível registrar sua resposta agora. Tente novamente em instantes.' };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+/* ── Cálculo puro (sem planilha) — testável isoladamente ── */
+function npsPassaFiltro(item, f) {
+  if (f.cliente && item.cliente !== f.cliente) return false;
+  if (f.unidade && item.unidade !== f.unidade) return false;
+  var d = item.dataAuditoria || '';
+  if (f.de && (!d || d < f.de)) return false;
+  if (f.ate && (!d || d > f.ate)) return false;
+  return true;
+}
+
+function npsIndice(p, n, d) {
+  var total = p + n + d;
+  return total ? Math.round((p - d) * 100 / total) : null;
+}
+
+function npsCalcular(envios, respostas, f) {
+  f = f || {};
+  var env = envios.filter(function (e) { return npsPassaFiltro(e, f); });
+  var res = respostas.filter(function (r) { return npsPassaFiltro(r, f); });
+  var P = 0, N = 0, D = 0, soma = 0;
+  var dist = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  var quesitos = {};
+  NPS_QUESITOS.forEach(function (k) {
+    var c = {};
+    NPS_OPCOES[k].forEach(function (o) { c[o] = 0; });
+    quesitos[k] = { opcoes: NPS_OPCOES[k].slice(), contagens: c, total: 0 };
+  });
+  var meses = {}, unidades = {};
+
+  function unidadeDe(cliente, unidade) {
+    var chave = cliente + '|' + unidade;
+    if (!unidades[chave]) unidades[chave] = { cliente: cliente, unidade: unidade, enviados: 0, respostas: 0, promotores: 0, neutros: 0, detratores: 0, ultimaAnalise: '' };
+    return unidades[chave];
+  }
+  env.forEach(function (e) {
+    var u = unidadeDe(e.cliente, e.unidade);
+    u.enviados++;
+    if (e.dataAuditoria > u.ultimaAnalise) u.ultimaAnalise = e.dataAuditoria;
+  });
+
+  res.forEach(function (r) {
+    soma += r.nota;
+    dist[r.nota]++;
+    var cat = npsCategoria(r.nota);
+    var u = unidadeDe(r.cliente, r.unidade);
+    u.respostas++;
+    if (r.dataAuditoria > u.ultimaAnalise) u.ultimaAnalise = r.dataAuditoria;
+    var mes = (r.dataAuditoria || '').substring(0, 7) || 'sem-data';
+    if (!meses[mes]) meses[mes] = { mes: mes, respostas: 0, promotores: 0, neutros: 0, detratores: 0 };
+    meses[mes].respostas++;
+    if (cat === 'Promotor') { P++; u.promotores++; meses[mes].promotores++; }
+    else if (cat === 'Neutro') { N++; u.neutros++; meses[mes].neutros++; }
+    else { D++; u.detratores++; meses[mes].detratores++; }
+    NPS_QUESITOS.forEach(function (k) {
+      var v = r[k];
+      if (v && quesitos[k].contagens.hasOwnProperty(v)) { quesitos[k].contagens[v]++; quesitos[k].total++; }
+    });
+  });
+
+  var total = res.length;
+  var porMes = Object.keys(meses).sort().map(function (k) {
+    var m = meses[k];
+    m.nps = npsIndice(m.promotores, m.neutros, m.detratores);
+    return m;
+  });
+  var porUnidade = Object.keys(unidades).map(function (k) {
+    var u = unidades[k];
+    u.nps = npsIndice(u.promotores, u.neutros, u.detratores);
+    return u;
+  }).sort(function (a, b) {
+    // pior NPS primeiro; unidades sem resposta por último
+    if (a.nps === null && b.nps === null) return (a.cliente + a.unidade).localeCompare(b.cliente + b.unidade);
+    if (a.nps === null) return 1;
+    if (b.nps === null) return -1;
+    return a.nps - b.nps;
+  });
+  var lista = res.slice().sort(function (a, b) { return String(b.dataResposta).localeCompare(String(a.dataResposta)); })
+    .slice(0, 500).map(function (r) {
+      return {
+        dataResposta: r.dataResposta, dataAuditoria: r.dataAuditoria, cliente: r.cliente, unidade: r.unidade,
+        nota: r.nota, categoria: npsCategoria(r.nota), apresentacao: r.apresentacao, postura: r.postura,
+        supervisor: r.supervisor, mapeamento: r.mapeamento, horario: r.horario, comentario: r.comentario
+      };
+    });
+
+  return {
+    resumo: {
+      enviados: env.length, respondidas: total,
+      taxaResposta: env.length ? Math.round(total * 100 / env.length) : null,
+      nps: npsIndice(P, N, D), promotores: P, neutros: N, detratores: D,
+      pctPromotores: total ? Math.round(P * 100 / total) : null,
+      pctNeutros: total ? Math.round(N * 100 / total) : null,
+      pctDetratores: total ? Math.round(D * 100 / total) : null,
+      mediaNota: total ? Math.round(soma * 10 / total) / 10 : null
+    },
+    distribuicao: dist, quesitos: quesitos, porMes: porMes, porUnidade: porUnidade, respostas: lista
+  };
+}
+
+/* ── DIRETOR: análise por cliente, unidade e período (data da análise) ── */
+function npsAnalise(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var f = { cliente: String(d.cliente || ''), unidade: String(d.unidade || ''), de: extrairDataISO(d.de), ate: extrairDataISO(d.ate) };
+    var out = npsCalcular(npsLerEnvios(), npsLerRespostas(), f);
+    out.ok = true;
+    out.filtro = f;
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// Resumo por análise (usado como selo no Histórico). Sempre isolado por try/catch no chamador.
+function npsMapaPorAuditoria() {
+  var mapa = {};
+  npsLerEnvios().forEach(function (e) {
+    if (!mapa[e.auditoriaId]) mapa[e.auditoriaId] = { enviados: 0, respondidas: 0, notas: [] };
+    mapa[e.auditoriaId].enviados++;
+  });
+  npsLerRespostas().forEach(function (r) {
+    var m = mapa[r.auditoriaId];
+    if (m) { m.respondidas++; m.notas.push(r.nota); }
+  });
+  return mapa;
 }

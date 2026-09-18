@@ -123,6 +123,109 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .score-preview .sp-valor{font-size:22px;font-weight:700;color:var(--navy)}
 .score-preview .sp-label{font-size:11px;color:var(--text-light)}
 
+/* ABAS DA TELA INICIAL (r109) */
+.tela-inicial.tela-home{max-width:560px;margin:20px auto 40px}
+.abas-home{display:flex;gap:6px;background:var(--white);padding:5px;border-radius:14px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.aba-home{flex:1;border:none;background:transparent;border-radius:10px;padding:11px 8px;font-size:13px;font-weight:700;color:var(--text-light);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .2s,color .2s}
+.aba-home:hover{color:var(--navy)}
+.aba-home.ativa{background:var(--navy);color:var(--white)}
+.aba-home:focus-visible,.nps-card:focus-visible,.nps-chip-filtro:focus-visible,.nps-modal-x:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+
+/* PAINEL NPS (r109) */
+.nps-painel{background:var(--white);border-radius:16px;padding:18px 16px 16px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);border-top:4px solid var(--green)}
+.nps-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.nps-titulo{font-size:15px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:8px}
+.nps-titulo small{font-size:10px;font-weight:700;background:var(--dark);color:var(--green);padding:2px 8px;border-radius:8px;letter-spacing:.5px}
+.nps-btn-detalhe{border:2px solid var(--border);background:transparent;color:var(--navy);font-size:11px;font-weight:700;padding:6px 12px;border-radius:10px;cursor:pointer}
+.nps-btn-detalhe:hover{border-color:var(--navy)}
+.nps-filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.nps-filtros select,.nps-filtros input{width:100%;border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;background:var(--white);color:var(--text);min-width:0}
+.nps-filtros select:focus,.nps-filtros input:focus{outline:none;border-color:var(--navy)}
+.nps-filtros select:disabled{background:var(--bg);color:var(--text-light)}
+.nps-datas{grid-column:1/-1;display:none;grid-template-columns:1fr 1fr;gap:8px}
+.nps-datas.aberto{display:grid}
+.nps-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;transition:opacity .2s}
+.nps-grid.carregando{opacity:.45}
+.nps-card{border:none;background:var(--bg);border-radius:12px;padding:12px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;grid-column:span 2;font-family:inherit;transition:transform .15s,box-shadow .15s}
+.nps-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,43,80,.12)}
+.nps-card.nps-principal{grid-column:span 3;background:var(--dark);color:var(--white)}
+.nps-card.nps-larga{grid-column:span 3}
+.nps-rot{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-light)}
+.nps-principal .nps-rot{color:rgba(255,255,255,.55)}
+.nps-num{font-size:40px;font-weight:800;line-height:1.05}
+.nps-num-s{font-size:24px;font-weight:800;line-height:1.1;color:var(--navy)}
+.nps-num-s small{font-size:13px;font-weight:600;color:var(--text-light)}
+.nps-sub{font-size:11px;color:var(--text-light);line-height:1.35}
+.nps-principal .nps-sub{color:rgba(255,255,255,.7);font-weight:600}
+.nps-card.nps-p .nps-num-s{color:#2E7D32}
+.nps-card.nps-n .nps-num-s{color:var(--amber)}
+.nps-card.nps-d .nps-num-s{color:var(--red)}
+.nps-erro{background:#FDEAEA;color:#9B2C2C;font-size:12px;border-radius:10px;padding:12px 14px;line-height:1.5}
+.nps-vazio-msg{font-size:11px;color:var(--text-light);margin-top:8px}
+
+/* MODAL DE DETALHE DO NPS (r109) */
+.nps-modal{position:fixed;inset:0;background:rgba(5,19,35,.72);z-index:250;display:flex;align-items:flex-end;justify-content:center}
+.nps-folha{background:var(--bg);width:100%;max-width:640px;max-height:92vh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.nps-modal-topo{background:var(--white);padding:16px 18px 10px;border-bottom:1px solid var(--border)}
+.nps-modal-linha{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.nps-modal-titulo{font-size:16px;font-weight:700;color:var(--navy)}
+.nps-modal-ctx{font-size:11px;color:var(--text-light);margin-top:2px;line-height:1.4}
+.nps-modal-x{border:none;background:var(--bg);width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;color:var(--text);flex-shrink:0}
+.nps-modal-abas{display:flex;gap:4px;margin-top:12px;overflow-x:auto}
+.nps-modal-aba{border:none;background:transparent;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;white-space:nowrap}
+.nps-modal-aba.ativa{background:var(--navy);color:var(--white)}
+.nps-modal-corpo{padding:16px 18px 28px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.nps-bloco{background:var(--white);border-radius:14px;padding:14px 14px 12px;margin-bottom:12px}
+.nps-bloco h4{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin:0 0 10px}
+.nps-dist{display:flex;align-items:flex-end;gap:4px;height:110px}
+.nps-dcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.nps-dbar{width:100%;border-radius:4px 4px 0 0;min-height:2px}
+.nps-dn{font-size:10px;color:var(--text-light);height:14px}
+.nps-dl{font-size:10px;font-weight:700;color:var(--text);margin-top:3px}
+.nps-legenda-faixas{display:flex;gap:12px;font-size:10px;color:var(--text-light);margin-top:8px;flex-wrap:wrap}
+.nps-legenda-faixas i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.nps-linha-mes{display:grid;grid-template-columns:70px 1fr 78px;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--bg)}
+.nps-linha-mes:last-child{border-bottom:none}
+.nps-trilho{height:10px;background:var(--bg);border-radius:6px;position:relative;overflow:hidden}
+.nps-trilho::after{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:#B8C4D0}
+.nps-preench{position:absolute;top:0;bottom:0;border-radius:6px}
+.nps-val{font-weight:800;text-align:right}
+.nps-quesito{margin-bottom:14px}
+.nps-quesito:last-child{margin-bottom:0}
+.nps-quesito-t{font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.35}
+.nps-pilha{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--bg)}
+.nps-pilha span{display:block;height:100%}
+.nps-quesito-leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--text-light);margin-top:5px}
+.nps-quesito-leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.nps-tabela{width:100%;border-collapse:collapse;font-size:12px}
+.nps-tabela th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);text-align:center;padding:4px 4px 8px;font-weight:700}
+.nps-tabela th:first-child,.nps-tabela td:first-child{text-align:left}
+.nps-tabela td{padding:8px 4px;border-top:1px solid var(--bg);text-align:center;vertical-align:middle}
+.nps-tabela .nps-un{font-weight:600;color:var(--navy);line-height:1.3}
+.nps-tabela .nps-un small{display:block;font-weight:400;color:var(--text-light);font-size:10px}
+.nps-pilula{display:inline-block;min-width:34px;padding:2px 8px;border-radius:10px;font-weight:800;font-size:12px;color:#fff}
+.nps-filtros-resp{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.nps-chip-filtro{border:2px solid var(--border);background:var(--white);color:var(--text);font-size:11px;font-weight:700;padding:6px 12px;border-radius:16px;cursor:pointer}
+.nps-chip-filtro.ativo{background:var(--navy);border-color:var(--navy);color:#fff}
+.nps-resp{background:var(--white);border-radius:14px;padding:12px 14px;margin-bottom:10px;border-left:5px solid var(--border)}
+.nps-resp.p{border-left-color:#2E7D32}.nps-resp.n{border-left-color:var(--amber)}.nps-resp.d{border-left-color:var(--red)}
+.nps-resp-topo{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.nps-resp-un{font-size:13px;font-weight:700;color:var(--navy);line-height:1.3}
+.nps-resp-un small{display:block;font-size:11px;font-weight:400;color:var(--text-light)}
+.nps-nota{min-width:36px;height:36px;border-radius:50%;color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nps-resp-txt{font-size:13px;line-height:1.55;margin-top:8px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.nps-resp-sem{font-size:12px;color:var(--text-light);font-style:italic;margin-top:8px}
+.nps-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.nps-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:var(--bg);color:var(--text-light)}
+.nps-tag.ruim{background:#FDEAEA;color:#9B2C2C}
+.nps-tag.medio{background:#FFF3E0;color:#9A5B12}
+.nps-vazio{text-align:center;color:var(--text-light);font-size:13px;padding:24px 8px;line-height:1.5}
+.chip-nps{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;color:#fff}
+.chip-nps.p{background:#2E7D32}.chip-nps.n{background:var(--amber)}.chip-nps.d{background:var(--red)}
+.chip-nps.aguarda{background:var(--bg);color:var(--text-light)}
+@media(min-width:640px){.nps-modal{align-items:center}.nps-folha{border-radius:20px;max-height:88vh}}
+@media(prefers-reduced-motion:reduce){.nps-card,.nps-grid{transition:none}}
+
 @media(max-width:380px){.rating-btn{font-size:11px;height:32px}}
 </style>
 </head>
@@ -158,7 +261,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r108';
+const VERSAO = 'r109';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -245,19 +348,19 @@ const SECOES = [
     subsecoes:[
       {id:'sub_congelados',titulo:'Congelados',criterios:[
         {id:'cam_cong_org',label:'Organização da Câmara'},
-        {id:'cam_cong_vol',label:'Volume de mercadoria'},
+        {id:'cam_cong_vol',label:'Volume de mercadoria',tipo:'escala_volume'},
         {id:'cam_cong_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
         {id:'cam_cong_eq_prest',label:'Equipe de suporte — prestatividade'}
       ]},
       {id:'sub_resfriados',titulo:'Resfriados',criterios:[
         {id:'cam_resf_org',label:'Organização da Câmara'},
-        {id:'cam_resf_vol',label:'Volume de mercadoria'},
+        {id:'cam_resf_vol',label:'Volume de mercadoria',tipo:'escala_volume'},
         {id:'cam_resf_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
         {id:'cam_resf_eq_prest',label:'Equipe de suporte — prestatividade'}
       ]},
       {id:'sub_embutidos',titulo:'Embutidos',criterios:[
         {id:'cam_emb_org',label:'Organização da Câmara'},
-        {id:'cam_emb_vol',label:'Volume de mercadoria'}
+        {id:'cam_emb_vol',label:'Volume de mercadoria',tipo:'escala_volume'}
       ]},
       {id:'sub_hortifruti_ret',titulo:'Hortifruti',criterios:[
         {id:'cam_hort_pesagem',label:'Equipe de pesagem — quantidade suficiente'}
@@ -412,7 +515,10 @@ let state = {
   unidades: {},        // { cliente: [unidades] }
   rascunhos: [],       // lista de rascunhos do usuário
   status: 'NOVO',      // NOVO | RASCUNHO | CONCLUIDO
-  editando: false      // true quando editando auditoria existente
+  editando: false,     // true quando editando auditoria existente
+  abaHome: 'preench',  // r109: aba da tela inicial (preench | hist)
+  npsFiltro: null,     // r109: filtros do painel NPS (intenção do usuário)
+  npsDados: null       // r109: última análise NPS carregada (resultado calculado)
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -527,7 +633,7 @@ async function salvarRascunho(silencioso) {
 /* ═══════════════════════════════════════════════════════
    RENDERIZAÇÃO — TELA INICIAL
    ═══════════════════════════════════════════════════════ */
-async function renderTelaInicial() {
+async function renderTelaInicial(aba) {
   showLoading('Carregando...');
   // Buscar rascunhos do servidor
   let rascunhos = [];
@@ -563,6 +669,31 @@ async function renderTelaInicial() {
   state.rascunhos = rascunhos;
   hideLoading();
 
+  // r109: tela inicial em duas abas (Preenchimento | Histórico) e, para o
+  // Diretor, o painel de satisfação (NPS) fixo no topo, visível nas duas abas.
+  state.abaHome = aba || state.abaHome || 'preench';
+  const ehDiretor = state.perfil === 'DIRETOR';
+
+  $('#app').innerHTML = `
+    <div class="tela-inicial tela-home">
+      <div class="card-inicio" style="text-align:center;padding:28px 24px">
+        <h2 style="font-size:20px">Análise de Preparação para Inventário</h2>
+        <p style="margin-bottom:0">Avaliação das condições do ambiente para a operação de inventário</p>
+      </div>
+      ${ehDiretor ? htmlPainelNps() : ''}
+      <div class="abas-home" role="tablist">
+        <button type="button" id="abaBtn-preench" class="aba-home" role="tab" onclick="mostrarAbaHome('preench')"><i class="bi bi-pencil-square"></i> Preenchimento</button>
+        <button type="button" id="abaBtn-hist" class="aba-home" role="tab" onclick="mostrarAbaHome('hist')"><i class="bi bi-clock-history"></i> Histórico</button>
+      </div>
+      <div id="abaConteudo"></div>
+    </div>`;
+  mostrarAbaHome(state.abaHome);
+  if (ehDiretor) npsCarregarCards();
+}
+
+// Aba "Preenchimento": os mesmos cards que já existiam (Nova Avaliação + rascunhos).
+function htmlAbaPreenchimento() {
+  const rascunhos = state.rascunhos || [];
   let rascunhosHtml = '';
   if (rascunhos.length) {
     rascunhosHtml = `
@@ -578,13 +709,7 @@ async function renderTelaInicial() {
         `).join('')}
       </div>`;
   }
-
-  $('#app').innerHTML = `
-    <div class="tela-inicial">
-      <div class="card-inicio" style="text-align:center;padding:36px 28px">
-        <h2 style="font-size:20px">Análise de Preparação para Inventário</h2>
-        <p style="margin-bottom:0">Avaliação das condições do ambiente para a operação de inventário</p>
-      </div>
+  return `
       <div class="card-inicio">
         <h2><i class="bi bi-plus-circle"></i> Nova Avaliação</h2>
         <p>Iniciar uma nova auditoria de operação</p>
@@ -592,15 +717,19 @@ async function renderTelaInicial() {
           <i class="bi bi-play-fill"></i> Iniciar Nova Avaliação
         </button>
       </div>
-      ${rascunhosHtml}
-      <div class="card-inicio">
-        <h2><i class="bi bi-clock-history"></i> Histórico</h2>
-        <p>Auditorias concluídas — ver relatórios e enviar por e-mail</p>
-        <button class="btn-fc btn-fc-outline" onclick="verHistorico()">
-          <i class="bi bi-list-ul"></i> Ver Histórico
-        </button>
-      </div>
-    </div>`;
+      ${rascunhosHtml}`;
+}
+
+function mostrarAbaHome(aba) {
+  state.abaHome = aba;
+  ['preench', 'hist'].forEach(a => {
+    const b = $('#abaBtn-' + a);
+    if (b) { b.classList.toggle('ativa', a === aba); b.setAttribute('aria-selected', a === aba ? 'true' : 'false'); }
+  });
+  const c = $('#abaConteudo');
+  if (!c) return;
+  if (aba === 'hist') carregarHistoricoAba();
+  else c.innerHTML = htmlAbaPreenchimento();
 }
 
 function novaAvaliacao() {
@@ -823,7 +952,7 @@ function renderCriterio(crit) {
 
   let hints = '';
   if (tipo === 'escala_sku') hints = '<div class="escala-hints"><span>Até 10%</span><span>Acima de 90%</span></div>';
-  else if (tipo === 'escala_volume') hints = '<div class="escala-hints"><span>Excessiva</span><span>Ideal</span></div>';
+  else if (tipo === 'escala_volume') hints = '<div class="escala-hints"><span>1 · Volume excessivo</span><span>10 · Volume ideal</span></div>';
 
   let botoes = '';
   for (let i = 1; i <= 10; i++) {
@@ -1210,15 +1339,26 @@ async function finalizarAvaliacao() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   HISTÓRICO
+   HISTÓRICO (r109: agora é a aba "Histórico" da tela inicial)
    ═══════════════════════════════════════════════════════ */
-async function verHistorico() {
-  showLoading('Carregando histórico...');
-  const r = await apiCall('listarHistoricoAuditorias', {});
-  hideLoading();
+function verHistorico() {
+  if ($('#abaConteudo')) mostrarAbaHome('hist');
+  else renderTelaInicial('hist');
+}
 
-  if (!r.ok || !r.auditorias || !r.auditorias.length) {
-    toast('Nenhuma auditoria concluída encontrada');
+async function carregarHistoricoAba() {
+  const c = $('#abaConteudo');
+  if (!c) return;
+  c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
+  const r = await apiCall('listarHistoricoAuditorias', {});
+  if (state.abaHome !== 'hist' || !$('#abaConteudo')) return;
+
+  if (!r.ok) {
+    c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
+    return;
+  }
+  if (!r.auditorias || !r.auditorias.length) {
+    c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Nenhuma auditoria concluída encontrada.</div>';
     return;
   }
 
@@ -1252,30 +1392,416 @@ async function verHistorico() {
           <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 Ver Relatório</button>
         </div>`;
     }
+    // r109: selo da pesquisa NPS desta análise (só o Diretor vê a nota)
+    let seloNps = '';
+    if (isDiretor && a.nps) {
+      if (a.nps.respondidas && a.nps.notas && a.nps.notas.length) {
+        seloNps = a.nps.notas.map(n => `<span class="chip-nps ${n >= 9 ? 'p' : (n >= 7 ? 'n' : 'd')}">NPS ${n}</span>`).join('');
+      } else {
+        seloNps = '<span class="chip-nps aguarda">NPS: aguardando resposta</span>';
+      }
+    }
     return `
     <div class="rascunho-item" style="cursor:default">
       <div class="ri-titulo">${a.cliente} — ${a.unidade}</div>
       <div class="ri-sub">${a.dataAuditoria} • ${a.auditor} • ${a.tipoAvaliacao}</div>
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700;color:var(--navy)">Score: ${a.scoreGeral || '—'}</span>
         <span style="font-size:12px;color:var(--orange)">Equipe: ${a.scoreEquipe || '—'}</span>
         ${a.dataEnvio ? '<span style="font-size:11px;color:var(--green)">✓ Enviado</span>' : '<span style="font-size:11px;color:var(--text-light)">Não enviado</span>'}
+        ${seloNps}
       </div>
       ${botoes}
     </div>`;
   }).join('');
 
-  $('#app').innerHTML = `
-    <div class="tela-inicial">
+  c.innerHTML = `
       <div class="secao-card">
         <div class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico de Auditorias</div>
         <div class="secao-subtitulo">Auditorias concluídas</div>
       </div>
-      ${itens}
-      <button class="btn-fc btn-fc-outline" onclick="renderTelaInicial()" style="margin-top:10px">
-        <i class="bi bi-arrow-left"></i> Voltar
-      </button>
+      ${itens}`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAINEL DE SATISFAÇÃO (NPS) — r109 — somente Diretor
+   Cards fixos no topo da tela inicial + detalhe em folha
+   sobreposta. Filtros: cliente, unidade e período (data da
+   análise). Os cards atualizam sozinhos; o detalhe só abre
+   quando o usuário clica.
+   ═══════════════════════════════════════════════════════ */
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+const NPS_PERIODOS = [
+  { v: 'mes',    t: 'Este mês' },
+  { v: '30',     t: 'Últimos 30 dias' },
+  { v: '90',     t: 'Últimos 90 dias' },
+  { v: 'ano',    t: 'Este ano' },
+  { v: 'tudo',   t: 'Todo o período' },
+  { v: 'custom', t: 'Personalizado' }
+];
+
+const NPS_QUESITOS_TXT = {
+  apresentacao: 'Apresentação e identificação (uniforme e apresentação pessoal)',
+  postura:      'Postura e respeito às regras da loja',
+  supervisor:   'Atitude e comunicação do supervisor',
+  mapeamento:   'Organização e assertividade no mapeamento dos endereços',
+  horario:      'Cumprimento do horário'
+};
+const NPS_QUESITOS_ORDEM = ['apresentacao', 'postura', 'supervisor', 'mapeamento', 'horario'];
+const NPS_COR_OPCAO = {
+  'Excelente': '#2E7D32', 'Bom': '#61CF00', 'Satisfatório': '#D4A017', 'Regular': '#D4A017', 'Ruim': '#E05252',
+  'Inadequado': '#E05252', 'No prazo': '#2E7D32', 'Com pequeno atraso': '#D4A017', 'Com grande atraso': '#E05252'
+};
+const NPS_OPCAO_RUIM = ['Inadequado', 'Ruim', 'Com grande atraso'];
+const NPS_OPCAO_MEDIA = ['Regular', 'Com pequeno atraso'];
+
+function npsFiltroInicial() { return { cliente: '', unidade: '', periodo: '90', de: '', ate: '' }; }
+
+function npsIsoLocal(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+// Período -> {de, ate} (yyyy-MM-dd). Presets só têm limite inferior; "Personalizado" usa os dois.
+function npsIntervalo(f) {
+  const hoje = new Date();
+  if (f.periodo === 'tudo') return { de: '', ate: '' };
+  if (f.periodo === 'mes') return { de: npsIsoLocal(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), ate: '' };
+  if (f.periodo === 'ano') return { de: hoje.getFullYear() + '-01-01', ate: '' };
+  if (f.periodo === '30' || f.periodo === '90') {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() - parseInt(f.periodo, 10));
+    return { de: npsIsoLocal(d), ate: '' };
+  }
+  return { de: f.de || '', ate: f.ate || '' };
+}
+
+function npsZona(n) {
+  if (n === null || n === undefined) return { t: 'Sem respostas no período', c: '#8899AA' };
+  if (n >= 75) return { t: 'Zona de excelência', c: '#61CF00' };
+  if (n >= 50) return { t: 'Zona de qualidade', c: '#61CF00' };
+  if (n >= 1)  return { t: 'Zona de aperfeiçoamento', c: '#F2C14E' };
+  return { t: 'Zona crítica', c: '#FF7A7A' };
+}
+function npsCorValor(n) {
+  if (n === null || n === undefined) return '#8899AA';
+  if (n >= 50) return '#2E7D32';
+  if (n >= 1) return '#D4A017';
+  return '#E05252';
+}
+function npsCorNota(n) { return n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252'); }
+
+function htmlPainelNps() {
+  if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
+  const f = state.npsFiltro;
+  const clientes = state.clientes || [];
+  const optsCli = '<option value="">Todos os clientes</option>' +
+    clientes.map(c => `<option value="${esc(c)}"${c === f.cliente ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
+  return `
+    <div class="nps-painel" id="npsPainel">
+      <div class="nps-topo">
+        <div class="nps-titulo"><i class="bi bi-emoji-smile"></i> Satisfação do cliente <small>NPS</small></div>
+        <button type="button" class="nps-btn-detalhe" onclick="npsAbrirDetalhe('resumo')">Ver detalhes</button>
+      </div>
+      <div class="nps-filtros">
+        <select id="npsCliente" aria-label="Cliente" onchange="npsMudouCliente(this.value)">${optsCli}</select>
+        <select id="npsUnidade" aria-label="Unidade" onchange="npsMudouUnidade(this.value)">${npsOpcoesUnidade()}</select>
+        <select id="npsPeriodo" aria-label="Período (data da análise)" onchange="npsMudouPeriodo(this.value)" style="grid-column:1/-1">${optsPer}</select>
+        <div class="nps-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="npsDatas">
+          <input type="date" id="npsDe" aria-label="Data inicial" value="${esc(f.de)}" onchange="npsMudouDatas()">
+          <input type="date" id="npsAte" aria-label="Data final" value="${esc(f.ate)}" onchange="npsMudouDatas()">
+        </div>
+      </div>
+      <div class="nps-grid carregando" id="npsCards">${htmlCardsNps(null)}</div>
     </div>`;
+}
+
+function npsOpcoesUnidade() {
+  const f = state.npsFiltro || npsFiltroInicial();
+  const unids = f.cliente ? ((state.unidades || {})[f.cliente] || []) : [];
+  return '<option value="">Todas as unidades</option>' +
+    unids.map(u => `<option value="${esc(u)}"${u === f.unidade ? ' selected' : ''}>${esc(u)}</option>`).join('');
+}
+
+function npsMudouCliente(v) {
+  state.npsFiltro.cliente = v;
+  state.npsFiltro.unidade = '';   // a unidade escolhida antes não vale mais para o novo cliente
+  const sel = $('#npsUnidade');
+  if (sel) sel.innerHTML = npsOpcoesUnidade();
+  npsCarregarCards();
+}
+function npsMudouUnidade(v) { state.npsFiltro.unidade = v; npsCarregarCards(); }
+function npsMudouPeriodo(v) {
+  state.npsFiltro.periodo = v;
+  const d = $('#npsDatas');
+  if (d) d.classList.toggle('aberto', v === 'custom');
+  if (v !== 'custom') npsCarregarCards();
+  else if (state.npsFiltro.de || state.npsFiltro.ate) npsCarregarCards();
+}
+function npsMudouDatas() {
+  state.npsFiltro.de = ($('#npsDe') || {}).value || '';
+  state.npsFiltro.ate = ($('#npsAte') || {}).value || '';
+  npsCarregarCards();
+}
+
+function npsRotuloFiltro() {
+  const f = state.npsFiltro || npsFiltroInicial();
+  const per = NPS_PERIODOS.find(p => p.v === f.periodo);
+  let per_t = per ? per.t : '';
+  if (f.periodo === 'custom') {
+    const br = s => s ? s.split('-').reverse().join('/') : '…';
+    per_t = br(f.de) + ' a ' + br(f.ate);
+  }
+  return (f.cliente || 'Todos os clientes') + ' · ' + (f.unidade || 'Todas as unidades') + ' · ' + per_t;
+}
+
+async function npsCarregarCards() {
+  const box = $('#npsCards');
+  if (!box) return;
+  const f = state.npsFiltro;
+  const iv = npsIntervalo(f);
+  const req = state.npsReq = (state.npsReq || 0) + 1;
+  box.classList.add('carregando');
+  const r = await apiCall('npsAnalise', { cliente: f.cliente, unidade: f.unidade, de: iv.de, ate: iv.ate });
+  const boxAtual = $('#npsCards');
+  if (req !== state.npsReq || !boxAtual) return;   // resposta antiga ou tela já trocada
+  boxAtual.classList.remove('carregando');
+  if (!r.ok) {
+    state.npsDados = null;
+    const naoPublicado = /nao reconhecida|não reconhecida/i.test(String(r.erro || ''));
+    boxAtual.style.display = 'block';
+    boxAtual.innerHTML = '<div class="nps-erro">' + (naoPublicado
+      ? 'O script do servidor ainda não tem o módulo NPS. Publique a nova versão no Apps Script (Implantar → Gerenciar implantações → Nova versão).'
+      : 'Não foi possível carregar o NPS: ' + esc(r.erro || 'falha de conexão')) + '</div>';
+    return;
+  }
+  boxAtual.style.display = '';
+  state.npsDados = r;
+  boxAtual.innerHTML = htmlCardsNps(r);
+}
+
+function htmlCardsNps(r) {
+  const s = r ? r.resumo : null;
+  const zona = npsZona(s ? s.nps : null);
+  const pct = v => (v === null || v === undefined) ? '—' : v + '%';
+  const nps = s && s.nps !== null ? s.nps : '—';
+  const resp = s ? s.respondidas : '—';
+  const env = s ? s.enviados : '—';
+  const taxa = s && s.taxaResposta !== null ? s.taxaResposta + '% de retorno' : (s ? 'nenhuma pesquisa enviada' : 'carregando…');
+  return `
+      <button type="button" class="nps-card nps-principal" onclick="npsAbrirDetalhe('resumo')">
+        <span class="nps-rot">NPS</span>
+        <span class="nps-num" style="color:${zona.c}">${nps}</span>
+        <span class="nps-sub">${zona.t}</span>
+      </button>
+      <button type="button" class="nps-card nps-larga" onclick="npsAbrirDetalhe('respostas','todas')">
+        <span class="nps-rot">Respostas</span>
+        <span class="nps-num-s">${resp}<small> de ${env} enviadas</small></span>
+        <span class="nps-sub">${taxa}</span>
+      </button>
+      <button type="button" class="nps-card nps-p" onclick="npsAbrirDetalhe('respostas','Promotor')">
+        <span class="nps-rot">Promotores</span>
+        <span class="nps-num-s">${s ? pct(s.pctPromotores) : '—'}</span>
+        <span class="nps-sub">notas 9–10${s ? ' · ' + s.promotores : ''}</span>
+      </button>
+      <button type="button" class="nps-card nps-n" onclick="npsAbrirDetalhe('respostas','Neutro')">
+        <span class="nps-rot">Neutros</span>
+        <span class="nps-num-s">${s ? pct(s.pctNeutros) : '—'}</span>
+        <span class="nps-sub">notas 7–8${s ? ' · ' + s.neutros : ''}</span>
+      </button>
+      <button type="button" class="nps-card nps-d" onclick="npsAbrirDetalhe('respostas','Detrator')">
+        <span class="nps-rot">Detratores</span>
+        <span class="nps-num-s">${s ? pct(s.pctDetratores) : '—'}</span>
+        <span class="nps-sub">notas 0–6${s ? ' · ' + s.detratores : ''}</span>
+      </button>`;
+}
+
+/* ── DETALHE (folha sobreposta) ── */
+function npsAbrirDetalhe(aba, cat) {
+  if (!state.npsDados) { toast('Aguarde o carregamento do NPS'); return; }
+  state.npsModal = { aba: aba || 'resumo', cat: cat || 'todas', soComentario: false };
+  let m = document.getElementById('npsModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'npsModal';
+    m.className = 'nps-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.addEventListener('click', e => { if (e.target === m) npsFecharDetalhe(); });
+    document.body.appendChild(m);
+  }
+  document.body.style.overflow = 'hidden';
+  npsRenderModal();
+}
+
+function npsFecharDetalhe() {
+  const m = document.getElementById('npsModal');
+  if (m) m.remove();
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') npsFecharDetalhe(); });
+
+function npsTrocarAba(aba) { state.npsModal.aba = aba; npsRenderModal(); }
+function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderModal(); }
+function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderModal(); }
+
+function npsRenderModal() {
+  const m = document.getElementById('npsModal');
+  const r = state.npsDados;
+  if (!m || !r) return;
+  const st = state.npsModal;
+  const abas = [['resumo', 'Resumo'], ['quesitos', 'Quesitos'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
+  let corpo = '';
+  if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
+  else if (st.aba === 'quesitos') corpo = npsHtmlQuesitos(r);
+  else if (st.aba === 'unidades') corpo = npsHtmlUnidades(r);
+  else corpo = npsHtmlRespostas(r, st);
+  m.innerHTML = `
+    <div class="nps-folha">
+      <div class="nps-modal-topo">
+        <div class="nps-modal-linha">
+          <div>
+            <div class="nps-modal-titulo">Satisfação do cliente (NPS)</div>
+            <div class="nps-modal-ctx">${esc(npsRotuloFiltro())}<br>Período pela data da análise</div>
+          </div>
+          <button type="button" class="nps-modal-x" onclick="npsFecharDetalhe()" aria-label="Fechar">✕</button>
+        </div>
+        <div class="nps-modal-abas" role="tablist">
+          ${abas.map(a => `<button type="button" role="tab" class="nps-modal-aba${st.aba === a[0] ? ' ativa' : ''}" onclick="npsTrocarAba('${a[0]}')">${a[1]}</button>`).join('')}
+        </div>
+      </div>
+      <div class="nps-modal-corpo">${corpo}</div>
+    </div>`;
+  const corpoEl = m.querySelector('.nps-modal-corpo');
+  if (corpoEl) corpoEl.scrollTop = 0;
+}
+
+function npsMesRotulo(ym) {
+  const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const p = String(ym).split('-');
+  if (p.length < 2) return 'sem data';
+  return meses[parseInt(p[1], 10) - 1] + '/' + p[0];
+}
+function npsDataBR(iso) {
+  const p = String(iso || '').substring(0, 10).split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '—';
+}
+
+function npsHtmlResumo(r) {
+  const s = r.resumo;
+  if (!s.respondidas) {
+    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}</div>`;
+  }
+  const max = Math.max.apply(null, r.distribuicao.concat([1]));
+  const dist = r.distribuicao.map((n, i) => `
+    <div class="nps-dcol">
+      <div class="nps-dn">${n || ''}</div>
+      <div class="nps-dbar" style="height:${Math.round(n * 80 / max)}%;background:${npsCorNota(i)}"></div>
+      <div class="nps-dl">${i}</div>
+    </div>`).join('');
+  const meses = r.porMes.map(m => {
+    const v = m.nps;
+    const larg = v === null ? 0 : Math.abs(v) / 2;         // -100..100 -> 0..50% do trilho
+    const pos = v !== null && v >= 0 ? 'left:50%' : 'right:50%';
+    return `
+    <div class="nps-linha-mes">
+      <span>${npsMesRotulo(m.mes)}</span>
+      <div class="nps-trilho"><span class="nps-preench" style="${pos};width:${larg}%;background:${npsCorValor(v)}"></span></div>
+      <span class="nps-val" style="color:${npsCorValor(v)}">${v === null ? '—' : v} <small style="font-weight:400;color:var(--text-light)">(${m.respostas})</small></span>
+    </div>`;
+  }).join('');
+  return `
+    <div class="nps-bloco">
+      <h4>Distribuição das notas</h4>
+      <div class="nps-dist">${dist}</div>
+      <div class="nps-legenda-faixas">
+        <span><i style="background:#E05252"></i>0–6 detratores</span>
+        <span><i style="background:#D4A017"></i>7–8 neutros</span>
+        <span><i style="background:#2E7D32"></i>9–10 promotores</span>
+        <span>Nota média: <b>${s.mediaNota === null ? '—' : String(s.mediaNota).replace('.', ',')}</b></span>
+      </div>
+    </div>
+    <div class="nps-bloco">
+      <h4>Evolução por mês da análise</h4>
+      ${meses}
+      <div class="nps-legenda-faixas" style="margin-top:8px">NPS do mês e, entre parênteses, o número de respostas.</div>
+    </div>`;
+}
+
+function npsHtmlQuesitos(r) {
+  if (!r.resumo.respondidas) return '<div class="nps-vazio">Nenhuma resposta neste filtro.</div>';
+  return '<div class="nps-bloco">' + NPS_QUESITOS_ORDEM.map(k => {
+    const q = r.quesitos[k];
+    const tot = q.total;
+    if (!tot) return `<div class="nps-quesito"><div class="nps-quesito-t">${esc(NPS_QUESITOS_TXT[k])}</div><div class="nps-quesito-leg">Sem respostas neste quesito.</div></div>`;
+    const seg = q.opcoes.map(o => {
+      const n = q.contagens[o] || 0;
+      return n ? `<span style="width:${n * 100 / tot}%;background:${NPS_COR_OPCAO[o] || '#999'}" title="${esc(o)}: ${n}"></span>` : '';
+    }).join('');
+    const leg = q.opcoes.map(o => {
+      const n = q.contagens[o] || 0;
+      return `<span><i style="background:${NPS_COR_OPCAO[o] || '#999'}"></i>${esc(o)}: <b>${n}</b> (${Math.round(n * 100 / tot)}%)</span>`;
+    }).join('');
+    return `<div class="nps-quesito"><div class="nps-quesito-t">${esc(NPS_QUESITOS_TXT[k])}</div><div class="nps-pilha">${seg}</div><div class="nps-quesito-leg">${leg}</div></div>`;
+  }).join('') + '</div>';
+}
+
+function npsHtmlUnidades(r) {
+  if (!r.porUnidade.length) return '<div class="nps-vazio">Nenhuma unidade com pesquisa neste filtro.</div>';
+  const linhas = r.porUnidade.map(u => `
+    <tr>
+      <td class="nps-un">${esc(u.unidade)}<small>${esc(u.cliente)}${u.ultimaAnalise ? ' · última análise ' + npsDataBR(u.ultimaAnalise) : ''}</small></td>
+      <td>${u.respostas}<small style="color:var(--text-light)">/${u.enviados}</small></td>
+      <td>${u.nps === null ? '<span style="color:var(--text-light)">—</span>' : `<span class="nps-pilula" style="background:${npsCorValor(u.nps)}">${u.nps}</span>`}</td>
+      <td style="color:#2E7D32;font-weight:700">${u.promotores}</td>
+      <td style="color:var(--amber);font-weight:700">${u.neutros}</td>
+      <td style="color:var(--red);font-weight:700">${u.detratores}</td>
+    </tr>`).join('');
+  return `
+    <div class="nps-bloco">
+      <h4>Do menor para o maior NPS</h4>
+      <table class="nps-tabela">
+        <thead><tr><th>Unidade</th><th>Resp./env.</th><th>NPS</th><th title="Promotores">P</th><th title="Neutros">N</th><th title="Detratores">D</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div class="nps-legenda-faixas" style="margin-top:8px">P = promotores · N = neutros · D = detratores. Unidades sem resposta aparecem por último.</div>
+    </div>`;
+}
+
+function npsHtmlRespostas(r, st) {
+  const cats = [['todas', 'Todas'], ['Promotor', 'Promotores'], ['Neutro', 'Neutros'], ['Detrator', 'Detratores']];
+  const chips = cats.map(c => `<button type="button" class="nps-chip-filtro${st.cat === c[0] ? ' ativo' : ''}" onclick="npsTrocarCat('${c[0]}')">${c[1]}</button>`).join('') +
+    `<button type="button" class="nps-chip-filtro${st.soComentario ? ' ativo' : ''}" onclick="npsToggleComentario()">Só com comentário</button>`;
+  let lista = r.respostas.filter(x => (st.cat === 'todas' || x.categoria === st.cat) && (!st.soComentario || x.comentario));
+  const total = r.respostas.length;
+  const cortado = r.resumo.respondidas > total ? `<div class="nps-legenda-faixas">Mostrando as ${total} respostas mais recentes.</div>` : '';
+  const itens = lista.map(x => {
+    const cls = x.categoria === 'Promotor' ? 'p' : (x.categoria === 'Neutro' ? 'n' : 'd');
+    const tags = NPS_QUESITOS_ORDEM.filter(k => x[k]).map(k => {
+      const t = NPS_OPCAO_RUIM.indexOf(x[k]) !== -1 ? ' ruim' : (NPS_OPCAO_MEDIA.indexOf(x[k]) !== -1 ? ' medio' : '');
+      const nome = { apresentacao: 'Apresentação', postura: 'Postura', supervisor: 'Supervisor', mapeamento: 'Mapeamento', horario: 'Horário' }[k];
+      return `<span class="nps-tag${t}">${nome}: ${esc(x[k])}</span>`;
+    }).join('');
+    return `
+    <div class="nps-resp ${cls}">
+      <div class="nps-resp-topo">
+        <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)} · respondida em ${npsDataBR(x.dataResposta)}</small></div>
+        <div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="${esc(x.categoria)}">${x.nota}</div>
+      </div>
+      ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}
+      ${tags ? `<div class="nps-tags">${tags}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `
+    <div class="nps-filtros-resp">${chips}</div>
+    ${cortado}
+    ${itens || '<div class="nps-vazio">Nenhuma resposta com este filtro.</div>'}`;
 }
 
 async function editarAuditoria(auditoriaId) {
@@ -1376,10 +1902,13 @@ async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
   }
 
   showLoading('Enviando relatório e apresentação...');
-  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email });
+  // r109: o backend monta o link da pesquisa NPS (só em análises DURANTE A OPERAÇÃO)
+  // a partir do endereço de onde o app está hospedado.
+  const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
+  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email, urlBaseApp });
   hideLoading();
   if (re.ok) {
-    toast('Relatório e apresentação enviados para ' + email);
+    toast('Relatório e apresentação enviados para ' + email + (re.npsIncluido ? ' (com pesquisa NPS)' : ''));
     verHistorico();
   } else {
     toast('Erro: ' + (re.erro || 'falha'));
