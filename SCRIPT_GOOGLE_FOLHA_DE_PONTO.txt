@@ -94,6 +94,12 @@ function doPost(e) {
     else if (action === 'npsResponder') { result = npsResponder(data); }
     else if (action === 'npsAnalise') { result = npsAnalise(data, data.cpf); }
 
+    // ── PERFORMANCE DAS UNIDADES — r110 ──
+    else if (action === 'performanceAnalise') { result = performanceAnalise(data, data.cpf); }
+    else if (action === 'performanceGerarTexto') { result = performanceGerarTexto(data, data.cpf); }
+    else if (action === 'performanceExportarPDF') { result = performanceExportarPDF(data, data.cpf); }
+    else if (action === 'performanceSalvarApresentacao') { result = performanceSalvarApresentacao(data, data.cpf); }
+
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
     // desatualizado em relacao ao index.html.
@@ -456,7 +462,7 @@ const PASTA_INVENTARIOS_ID = '1kJebpuzSdJnu2AjAEpAsorYahZw-LgDn';
 // Incrementado a cada entrega. Usado pelo index.html para confirmar que o
 // script publicado no Google e realmente o mais recente, sem depender de
 // suposicao sobre "voce ja publicou a Nova Versao?".
-const VERSAO_SCRIPT = '2026-09-18-r109';
+const VERSAO_SCRIPT = '2026-09-18-r110';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -478,7 +484,8 @@ function doGet(e) {
     'redefinirSenhaComCodigo', 'resetarSenhaComoDir',
     'salvarAnaliseInventario', 'getHistoricoInventarios', 'checarInventarioExistente',
     'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente',
-    'npsObterPesquisa', 'npsResponder', 'npsAnalise'
+    'npsObterPesquisa', 'npsResponder', 'npsAnalise',
+    'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -4329,4 +4336,600 @@ function npsMapaPorAuditoria() {
     if (m) { m.respondidas++; m.notas.push(r.nota); }
   });
   return mapa;
+}
+
+var PERF_LOGO_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAALAAAAAsCAYAAADFEzJmAAAjPElEQVR42u2dd3hcxbn/P3PqFq16tdx7x5heAhjTe8BcwJRQLpfQAgQwN5AYQkso4YYQSAgJJbRAKJcWIPRuwMYF2+BeZMmSLVl9yykz94+zu5axJK+MTe7v/pjn2WdXu2fmzJl5y/ct80qYJcMUO7gJASDYWU0pxfft+wZg7MjBdF0DBL7vI6W/0yatadr3O/d923EELIRACEGytR2kxMyPEQqFgB0vKQUCx3W/l8Lftx1DwELT8D0PP5Fk6uEHc/rJx7PbrhMpyI+BUhk8scOgg6ZpnHL2xcz6+FPsvDyklN9aOiulsgyRYcYcOiG7MFHO/Xq475bPIFBq+6BSZg5KKYQAIYL1+OY65SKQgnFkdoye5rs9wm5712aHErDQBL7jEA6FuO++Ozjz1JO+E64Lh21Ib1BX+OL7klQiATLHRRZpJWEYWJaJpglSKRfle+lV7KWPJjAtC13T8KXE83yk42z+PSfxoWPb9hYEJoQglUyhGwa6oaNk7gSjaRqe5+H7PrZtB5+dVLA+lpkbcwuB63oo1wUBumUFYyiJME0M0wwE03bCvlQqBZ6/zTnololpmkjp93o749twElKhI3jm8T9x+NQD8H0/2Du1cwytQKoIfH9rqZts60APhxgxchjhUCin+ysFhq6zsamJ+rp6nJRDab9KSkuKt/nsiWSStTW1uPEEZiRMfn4eg/pXB4QocuEdwaaWVtatqQEglBfF8zxcx2HY0MFs2NhEe3sHVshG5SA9haaRSiTJL8ynIBajZtUaCstKqKqsABS16xuId8YRvRCxEALp+5SVFtOvsgLXc6mtq6eqsgLbtmho2MjGjU1oht6n/dXSc8P3qR7Un5KiIlSPXB7YUDW1dbRvaMTMjyGE6PF+203AmqaRbGrmul9ew+FTD8BxXCzLREqJpu9cI8swjKwUEJpGqr2DQw+bws0zZzBm1HBs2yIXP4jneViWxU23/45f3XoHv7/vDo478lAKCmIIoXXbP7OMqVSKr5eu4Ppb7+KNF15kyhGn8dxj9+N5PtC7+ssweVt7B7Nmf8H1N/+GL+YuQBcat9wwg8svPI/lq1ZzzLRzqKtbj2FZW8CVbiVvIsHoUSN4/okHqKos5/IZN1Bb38ArzzwMSnHUyefw5mtvESrIx/f9Ho1wp7mFk889g9/feSPNLW2ces7FPPSH39Cvspzrb72LG2f+inBpcfo5cyTeeJwRw4dy6y//k4P235v8WKxbZKnSe+Z5HnX1G3jw0ae57a570XQdoWndrqmxvdLXSTmUDqzm8h+fg5QSI82Vmqaxck0N8+YvDLh9B0riQHNrbNjYhDBMhNBw29vZ7wf78PIzD2OZZp/GM9PXRyJh/vSne/jRablDoEg4xD57TuaVZx5mj/2PpKOjM0sEuWLh0pIijjl8KgfsuxdTjv43Fn29nIvP/xGRSJiJ48Zwy/UzOOvMH2OGQ72rXQG+53HXr2cyeuQwAC6/5N+56fbfYRrBFmt9wOeZ+etpQaSnpXZfMb6maXjJFIMGDuCtV55iQHVVzvsybMggbpl5NYMG9ueCi67CzovuOALWNA2ZiLPf3odQWlKMlBKlAuPjxX+8wRlnX0x7a1tgwO1oKCFAC4cxwqHgvsAvrrkMyzTp7Izz4ONPs3ZNLYZpbFPNCSHwkimKyor50WknIaXksznzeeHFf6B0o/u5C4HnugwdMpCzp59MJBLmZzMu44FHnshK57/89Sm+WrwEMxzqXv0LgfQ8Ju86kZNPOIr8WB533TqTE6afT8pxUErh+T7TTz6BPzz4OJ98+AmhWN5W0CmA0TqJllaO+eHRHHnIQbiui2EYeJ6HqevfCsrJNP7OSP++jiWEwE8mueG6KxlQXYWUkpdff5uPPvoUzehmf4RAKUnYtDhj+kkMGzKI/zj7NJ585gXefet9Qvlbr8F2SmDAlwwZNAClFFJK9PRi3Xjb3bS3tBItLU6rqh0f0MgYPK7nkV9SzKgRQ1FK8fJrb/GTCy4BMxoQ37bW29Qh2chPr70eAMd1Oeeiq/h69qfBGD1hT00DN05ZaQnTjj+K0SOGUVZSEjypEDzyxDN88PpLYBVCt+papHWlS+cjf+TcM/+NvXbflYnjxpBIJANLHYGua9x47RUcetSs7nkJ8HwfOxrhlp9flbURMi+1HVJzq33usoN9IWAhBK7rEikp5gf77oFSinc++ITjTzgj0CZaD8JN08Dt5MV/vs0Hr/2dSDjMkYdO4d1X3+z2Wb6VF8I0zeyggXHlE08kEbYdWOV9cN1slxGpFKauo2mB2m7c1IIZyidUVIjrbxujGYZBcqMkP5aXxbXJVAqjqBzbspA9cIChG8Qbm2hs2hQQiya2sPCLCguwYxXYBfnIbuahANM0aKldzxvvfMB5Z51CKGRTVlqM3wUqKKU45KD9OfGkY3nuqecJFxXidRlPM3SSjZu46IoLmTh+zP8637hUikgohG1ZCCH4cvEShFLEqirwPK9HrvH9AlauWktjUzODBkSC/emBEY0dPWmtB7C9s1rXO/nSx012YMr8nJhHSokn5RYurIwrStf1ng0nBb6UgTHZTevo7CTVvpGU74PvdS+BlSIUi3H26dPSfeKsrqlFNwJGeO6l19hz8kQGDuzPTdf9lFdffTMwnEQX+JNyKK6u4mdXXIiUkiXLVrBk+SpOOPqwHg2177p1XUHLCmyOZDKJ58tu/I2BMPBdl0g4lBWOvRmwRi6STtMCizwzkKZpWanX0/U7K9zbnYM7Y6D0r6rk0b89zK67jEdK1WsMJYPZ6zdsZNWqmvQ4fWO+7q71pWT82FEcfdhvGTigP57vbzUPIQS+5zF27Gh2GTcagL89+yJffb2MUNovPG/BIt77+DPuveOXjB09kv84/0zuvuP3hEpL8NMM5jS3cOXPr6J/v8A4uvnOe5k0fky3c9v8979OSieTSZTrkh+L4fpej9f5nk8kEt6s3bc3kKHrOq7r4rS2BTtuGoAgZejgdpBynK36dMbjyI4OElL2jCG/hQGXdaZ3JeC0tXzicUf0echxo0fyeP0LO47BpOTu227ok5rVhKBm3Xpcz8tGvQoL87njjt8y49LzGdC/H/95+UU8+fQLNDVtwrRtUp1xhk8Yy09+fA5KKRZ+tYQnH32cgx/4fc7M9l01oQUkOHL4UF557Rkmjh+DL+XWAlAF3uGMN6u8tCQtMEXfCVjXdZKtbcSKizjmh8dwyEH7UVFelpW8nuMwfPjQ7LUZyfzwfXfS3tGBpus7lNl9X2KYOvc/+AQvPPcioYJ8MjAqE61aumIVn8yajW3b29wwlbbg6xs2ZKHAjpiuYRjUrKujqbkFoxcvgBACKSUD+vejqLCAyy88l+dfeo1EMhmoW9PE62zkxjt+x1/uuZ3KijKuvfpSLr9kBnYkikyluPG6K8mLRgD4+U13olKdGOm9+N/UMu64Yw6ful1eEPoqgTVdJ9nSypHHHMZvfjWTMSOH5+Q3FEJwwH577dTFePv9j1GOuwX3+mlJ/+o/3+Xyiy6CcHEP1v9W1AbxRn5+081pAbAlFkbJbtWAJkSvEOnHV1zHqy+/TriwoEcsaug6nc0tXHjRedx3180UFRUwfNjgINQKQT+jgMefeJbzzzqNvXafxAVnT+fhx//OvE8+5uCjjuKUE48B4OXX3+all14Dq2ALI68neNc9U21+rp48F0Fqi0DTRK9ScUsoKZB+cL95Xy7mzbfexw73HimVUmLbNtOnHU9BQazXa41uJW9LK6dOn8YTD96T9S58E3uqtINb/wbHe56Xvk6wI0Ww5wXBkmQy1aNFatsWul1IuLD3jewqLROum3UBZhZeOQ4JRY8+bNfQkU7nFuvRddOllCjfx0+/elErNDZt2grLZ7WB0EglU1x38528+d+PEQrZzLzmMk48cRY3XvvTIKDkuFx/610IoaGEt5UbLONa0zSBclwSiSTK7x7auaaOdDtxXTcLO8Q3CFV5HolECplDPgOeRyIUyq7BW+99xNVX/ATsEujFC4HnoRUWcOShB6UJOEcJrGkaTjzO6AljePC+O7PE2xtXdkcUO6NlYK/VSzKJUipLNLlY4UKAr4I8gUyORSrlUNm/HwUFBQFO687N43lU7r4rUw/cHyklLa2ttLS1bUHMIm3I9iQ9NE1DaFrv6+VLoqX5vP3aWzz30mucdNyRHDH1QP78l/vZZ8/JCCF45Mln+eLjz8grL6VjQ+OWUKauPgtVOhNJiirLqOhXiedv/VyZmJM9dAj/duIxgYfG81ixcg3JVAopJfF4gnBBPoNGDN3C3dejH9jzKMzPzz5jOBzCCJUQLirC6yFfXCDw/KBfLo4A45vWvEymmHHFRYTDITzPxzA2S9ivlyzH9T00EbiaKsrLqKwoy3K5UrCmZh2plLOVilG9WJOKXPIWfAxTp3FTM+j6FjTs+z6e5/XZ7+z7Ej0a4ZVX32RTcwt50Sh333Y9Bx+w7+aw9NYUjJKSSCSSfcaHH3+W9vaOtG9TZLVVbymBmd8yhJLp192zaKbJzJt/w7FHHIJtW5x35slIKWlr7+DGX/8WPRLOXp8Zz7ZtZs+ex0efzmG/vXbjqkvOZ689JpOfF+3RQFZSYdk2lhmQxSv/fIfl82bz/Muvc8VF53HEoQdywXmnU11VmcYTOfjQurgmpR9k7Xm+36OGFEJkr8llX42uHVOOQ1G/Ko46dEoXolS0trUz/bxLeePN90DX0XWNVOMmrrruSu646Vp838cwDKT0Oe7U81i8aAmWHUYht0wJVpmFEgjR8wL0nEYcSBMjP5aVsEIIiosKMQyDvLxon0LXSikMy2J97Xp+OP18Hnvgbk467sg+9b/3gb/y0P0PMG36aVlJY+WacqgUtmVt7mdZm58lGjyLlBIrL8LieV9y422/5eZfXJ2V4D/75W2sW7GKUFFhYPAoRSwvD8MwKCspQinFmef9hL8/9kdOOObwPjH3q2+8wxUzbsAqKmPmL2+noqyE6Sef8K20aOaZcg1UFRdve1+3IGDpuAzo34+yspI08foIYXDfnx/l1WefI1TebzOk6AFWeJ6P73toEQcvpRC6QjpBWFMzA7vICCt8V6A8QEsTtJbJLgOhKaQbhFvTXiWUTP8mQXha1tWSTCaZMfNXlBQVMnvuAvRwuE+SWEqJnRfl/fc+YvIBR3P41AOpqixHStl9xpTaHCb9dPY8Pp01Gz0SY8Gir7hm5q9QKBZ9vQw9FOp1HlJK9HCIz+cu4Jrrf42UPvMWLGLmLXdRXl7Kx5/OQY+EUcpHobALY9x65z0sWrKMieNG8/mc+bz6+lvYRflI6SM0gR4J8ehTz7J4yVLqN2xEN01WrVnLQUdP46jDpjJk8MBAMPUScBACFi5eyquvv4MCLNsi4Tqcft4lPPDIk0yaOC7wKvSiNkVWomc0lsK0TOYuWIARDSGRPfvohULTNZKpFNfMvJXi4kLmzP1yCy2zxeWZQ52appHq6GTPvXfj07dfDEC952EaBuf/5D958A8PEiotxnU9DEMn0biJq6/9Kbff+DM8z8MwDHzpM2HPI1hWt5hpD21kyUsxKiclWPRUEdKH6j3jtKy22PuKJr56Lkb9FxFi1S7NKyyKhjl4SUF+f4eiYQ5LXy7AzvPJHxD4mjvqLQoGpmhZbbH63RheUqDpgYZw29oDr0M4hBWJoLr4GLtT4d3ll2Z83n57R+C/zmTSZdRB1/fMTlsWoVgUhSCVTEJnPPgpL5rNdMtossxnmZ5bxkpPpRzo6MiIKIgngmcJhbBiEbwkyJRAs9KYva0d8ECY6LFY1nOSmZPsiINMATpmSRSUgdshwWkHconOCcDAKouAEnhOgEsB/I5OkG4uuCG9qHLLr2UYEY0gNJmTdlMd7YAE08YsCHcrhY3eQn9dDYJMxlkOWhFQhAs9jLDEyvfQTIkSAiMi0S1FuNjHDEuEKTFCEmEojJBESS3bRzeDa81I8LBGSGJGJIadhh5pKah8HxGJYJoGjuPgJJJYIRsnnkDr5hSCUuCnEpjhcJaIMxyP7xMpKUYBiUQCy7KCkLKUaJoWQCVdD5Kx02uRTDko18WORlCWheO6WePXd5zgRIPrggLDtohGI7iuh+97pOJxNNMkVF6GUjLA5KFQkJWFJNWuKBjkMuq4VmL9naz7LTDMkkjZullydvEMBc+s+OD2ML7rssuPWikZ7tKbTZQhu3iTydJXwtQv0DBsyZ6XNFI4xMFPpl1smugZ+qYH8ZIaNZ9EWfVmPpqRDk5IGHpIK5W712LYvaWzb56LpumYYWj4UvHFX8Lo1tY0bOSK9frapCdQEpQXGHcoUH4wAekGn1FpNZN+V5lrPJEVfsrfDCEy/QWgPJ/SshKKCvJRStG0qZmywQNIOS5r1tQwcdJ41tWuJ55IZuGGlBLTNBg+bhQLFy/Bti2UgnhHB5VVlZSWFLFw0RJ0Q2eXCWOpW99AS2sboZBNKuWQlxeltbUte/raSaWoqCijsqKchYuXUJCfT2VFGU2bmumMxxkyagQ1despLytB+kHOxZGHHsTrb73P8iXLGL/LBBqbNlFf34CVDr54vo/QwEsIyscnmXLLevIq/DS0yjXyBV4KSkZFmXTOJsrHOenQ+TYcm+n1HnxIMx/+qpwVr+VTuUuc8vEuXhKMcI5778Kgqa2UjO1g1n+VIwTsO6Oekcd0gAqgZG5RTbBiIIWN8ou2Lxfi24R9t7Liu34neunXXZ8un4NMNElBNMJlF57LF/O+pCMeZ/yYUbz19vvsvdskKspKiCeSpByH4UMH8+yLrzJi2BCKCguwDJ1xo0cghMbsuQuId3Rw2ik/pLMzzuCBAwiHbcpKSuiMx1m9dh2RcJiVq9dyxcXnccmVvwCh4TsOA/tXc8q042hta6ewoIBxY0YQDYd576NPOWzqAcQ7E6xYtYYhgwfQr6qCe+5/hFEjh/Hy629zxJGHMmLYECKREM/+9z9YuXINhm0FqlOCZir2uGQj0VKfRJOgeZWNlxTbPCOrMq7UhGCXMzZRMtwh0QxtNRZOpxYwgepe7AlNUTjIwc5X7HHRRurnRki16rhJl471Oq1r7Kyt0hvR5Q9wiZR4jD2pjZoPo+ghxajjOki2QnyjQVutSS6pMoG9BBu+tBE63zEB78QmlcK0bZZ/uYjZcxfw+pvvsfvkiSSTKRrqNzDloP25/tqbqBoyiKkHH5ANYyoUdXUNPPC7X3P1L24hHArx0mtvss+eu/HZnPm88/JL3HXv3dTWrufBx57m3DNPQQjBpk0tTDlgHyLhMFMP2p/Xn38FLIPJkyfy5aKvaW5pZdKEsUQjEdo7Oqitq2fhoq+prCyntaWFt9+vobS4iKrKckqKijjmiKnE8qL8+obbmHLM4ey9524sX/gVWthGKoWXEBQNT1E4OIWSsPTlAj6/tww9lIYuqnfBIT1BuNjj2D+tRWiw7uMoH9xShdAVqB44QFN4cY0xJ7aw12UbCZdISsclcFMaVhQ2Lbd5a0Z/jIjsPkCZvrfvCoqGpjj0jlrsfJ+q3eMB7AMSTQZvzKimo84MDPpcFHva9NBM1X36MP+PNqUUWigEBEeCXNcDAQWxPJYsW8mlV17M0UcdiuO6PPXcyxQUxFizthbTNLj0qpnU1jWwdl0d551xCtL3mTRhHJdefSVvv/8xdfUbOPWkY8mLRhBCUF5eipSKhx77O4MH9mefg39Aab8qvpgzj912ncDE8WPIy4viOA6a0KisLCcvGiU/lsfQ4UMQQhCL5TFhzEgefvzvWaa44LIfs+duu/Dp51+krezMyQeBEVZZqdO0JHhOw1JopkKzen4ZlkIzFHZMIvRgjKalIfyEQLNU+rutX5oOQlc0fh3Cd0HTwQxtxvpCgLB6v7dmKqywpL3WItGkI3QwbIluSTQd4o06HetNhA7SD+yzbb2UCpirz8k8uRJREPWSCCGzOQnfRfOlRIRCPPq35/Fch/UNG1i7ro629nZmPf08k3YZz9p1dXR0dCKlZMYvbgUgGo0wZNBAFi5YRH5RAf2rq2jY0MjcBYuoqixnwYLFaIbOxPFjWLWmhtaWNoqLC3E9H89zmfflIvbbZw9mz19IY30DjzzxDLG8KCtWrSUcDjF44ABq1tXy1ZJljB45nAULv8IwjMC1pmmkmlt4453Aoh47ZhQtrW3U1dRiRsLZWg7ftKY1U202kNW2IUTWtujaX88tsq9bqmeLXrFNDaBUcL+t8Hra/2+EJHmVXm4HdVSA5+ONOm5C6xY+Gd+CerHTVnomH0LXte+s7JNSklDYZmD/fgihsXzlahbNX0heUSEFBfnMW7CIcCiEpgmKi4opLioIDpyuWktbezsjRg1n2fKVrFWKjrZ2orE8Fn21lEg0QjQaYd4nn1FY3Y89dtuFzz+fy8hRwzn1pGO55/6Hefml19h9j8msWruOdatrQBNE82Pomsb8WZ9RVN2P0SOH88XsuRi2jeu6jB45jJbWNtosk0EDqkk5LstXrcZ1XIrKSkjEE3hS0q2N/21TSlTuY+yQrMtuMLbywc73mXprHSWjUuRUeUyCEYH3bqhgzfsxrLyt4ct2EbDvS/S8KM+88A+WLFuB63loQqBQrKurD47X78T8U13TSHZ2ssd+e3DEIQfy/gezqKldj9vezkXnn8W62vUsX7maSCRMe0cnI4cNoaK8lHA4xOIly6iuqsQ0DL7s348Lzp7OeRdfze03XsvfnnsJ35ccddgUfvNfv+eCc09nY1Mzgwb254OPP6NfZQWe63H+v5+F5zgcfOC+/PXxZ2hYU8NhBx/ApAlj+d09f+T8c8+goX4D++w5mXt/ey8nTz+VieNHZz0fAwdU8+EHn3DQfnvx1PMvMe24I/nnW++zpmYdtmHxf60JAZ4D+f1dQuNdfDdHPvDBiqa1gtqBEEIphWZZLFm6nCXzF25x+k/YeURLNZSv0gVOtpYEqutpErW1elKqG3W11d8SyzJRUrF+fT0drW1UDx3CsMEDKSiIoesaS5etRNMEza2tLFm2klgsytDBA3nosacpLyvlzFNOpKZuPeeedWq27sCUH+xDaUkxp5w6jdVra3nywfsZu+cPmHb8UUSiYc487STyohFuv+laLrziOoaPHEZ9bR177rYL4VCYk6b9kOUrVvHMo3/kljt/T6iohBWrVpOfn4eua4TDIaQvqV/fwISJ4+joiBMKhdANg/+rTSnQTWhZZTDn/sKc3YFKgWYomlfa6Hb3Rty3ghCWbaOFw1uoCjcZoG8jHGAhw1ZZH6ZmKoShMMObcZJmdHk3AkPAsALjI/M3bP4sDJVJ5wqSvwX079+PeQu/YsLYUbz74Sx86VNaXMzuk3ehID+PZ55/hfKKcnRdZ8GXi7n0gnPwfZ9PZ8+lrLSE0SOH8d6Hsxg+dDB19Q3MmfclQwcPpKiogKt/cQNNzS0oFA8/+jRjx4xkU3MLl149k3AoxPzZXzBh14nU1tWzcvVaBg/sT2lpCZdf80uWr1yN09ZCcXER4ZBNeVkJGzY0ous6ZWWlrKur57ILzwUUGxo2YJgm//JzmWInjKECozDZrLPoiaI+uw70UJoOdigBdzHitvThCpQUNC21iG80aFkd+B+VJ+hsMEm16GxcbNLZYOJ0aiQ2Gbjx4N1LCTrDJmZE4XRoIKFzQ/ogYLNBR1iSbDbSWWRhPp+zgLU1dWkL3eK9j2YRb+/MhnzLK8uJRCKsXraCmvUNKKVIdnSyqbWNVMqhbl0t6Hq6BldQGsCJJwLmjISpqChj+snH89iTzwYVgFpa+fjzuUgpGT50MDXr6uhMOqxZW8u9ix9FOSnC+fmYpsGA6iq+XroCLZrHex/Oom59A/UbNtLe3sGQQQNIplJ8NGc+o0YMpbaunngyhWEa3YJVIcg5kNHttZnvevG/B4UACXJQeiDEnOag0oGo7sph6GAX+QEBq9yZQfmiR9edsfX1opv5qy4P2TuL6ga4nTqvXz4QgKUvbf6taUkgrWs+imW/a1wUvG9abveNK3WB6zg0Nm5KhzcFtm3jOkGC+uRJE1i6fCWrlyyjeuhgGps2YdsWdkkRa2vq0DRBaXkZo0YMY/bc+ZQUF1NVUUHjpk00NGxEKkV9QyN33H1/YJj6PqGiQjzPQwjB4kVfoVsWhm3TGY9jGDqalRecIXQcFi38CjPt5gNYvOhrhGlg6DpLly4HoWFZJl8t/joYJ12IJVhjhZ8SQRRSgJcSqLiGayiUL7ZJwNKDZKuG9NKnel2BSmh4tkR5osfonUxqFA1NoZmBm8tLiSwRKAmyQ8NFoaTo+d4uFAx2CBf7KAm+owXWWNo/nWo1NmvRHC1CoX3DO9IjAWsanfEEvu9vcdJC+hLdMPB9H6ebg5w7ohmG0aciHEII/M44Z517OrZl8dhTz3PatOO493d/5PyLzyfluOwxeSKP/PVJZlx2AY899TzRaIRpxx/Fnx95knFjR5GfLs9aWV7KsKGDcRyH9z6cRe26Okzbzkrlzcarn52jFQ5cYZkwdSbDTIjgaI7eJdciuD6U1VpWqMvncJiutdSUBN1WtK61aK2xqJjgEKt22ftn9eRVuQFRihyMpoQg2axTOMgnXOyz+08bKB6RQjo99FeBhCwZlUQISDRrNC4OMfr4VqQX/Db+7EaqJifw3e7HEAR5UIWDU9gFPihY/0UE3ZZMPKsd5cHYUzbRb/cE0ssBrqQzFzcuDrHgr8Xoluo5F0IphW5ZrF5TQ03tegYNqM56EhzXw3daiIXLKS0u3nFYqUtrbmnDdZyc6gkLIXAdl7KB/Rk5bCig2GX8GDo640glqKqq5BdXX8eg0WM4cMoBhEI2U36wD599MZ+GDY388NgjSCZTrFtfz6P338ekfQ9i0sRxLFy8jrr6DcHxnG0dCt1m8T7V4/U9fe4qDd24YPYfyphy03p2v6gJM5w2fnNIIhcaeEl4++eVGOFGJpzegmHn4CJT4LuBBP/igVI61lvYhUEtiuo94gyZGs8m6fWYkylAOkGIbOkreaybFUVoiiUvdjD4oE4G7J9E03sZ4xteCDsfzLDP/Ie6rxgquv6PjEya5O133czVP7mAZMohZFucc9FVDKgo49xzTqekuChd+mjHhYU1IThy2tl88O6H3da/2ip8mK5IechhUygpLqK1rZ3qfpVU96tkzpz5lJWXkheN4LhBOuj8hYsZNKCa/FiMN975gFOnHcfS5SsJhWxKiopYtaaG6qpKpJR89OlsFi0M4MG/9ig6uHGN4hFJxpzYQqTU61utcAEf3VYBAiac1kys2tl2fwHJVp3l/8inbnYEww7yMYqGOHgOQRg6hyWRrqD2syhLX8kPzBEEAsWo41upmhxHyxFCKBVI4A1fhpj759JuJfAWBCxEUBWltLiIOR++SnW/ShzHYfGSZUyaMG6nbtjBx57GO2+8S6ggtk0CzkiuUMimoy3I340WxMiLRgmFbGpq1zN4QDUNGxvxPJ9URyeabRHLixJPJLPQQAhB/+oqVqxaQywvSkVZKS2tbbS0tPZaR/e7JGIvKZBuOgzcx3OymhUcDPCT6f45GE++KxAamOmcB5nODBR9YBzpBYaXGe1SK1kGDCl0hWb0IbCSXgdNV9uWwBDkxqbaOthr79158emHKC8Liks4TlCxO8gE23GbJFFoCA494XTee+v9nAk4gzkDQgxOLUvpo6TEtCxcx0E3TQRkc3ozeb1dmcBzXKyQHYTEXQ/N0Lc6af2vDgJkssX6vOyq7/1FF6Nte6HiVmN0YcjtjvblGsiQvsTOj/HprNnsf+iJ3HbTzzj68KnZulY7q5nbUbo+c+o3UyZK1zefgrC6FDfJHEXRNW2LdRBCBBXQlQpKBITs/3UF8pTiWwmMvvZXKjfC6dMYdE/QO4TBe/o/cbquk0wfb5k4aQL77rUbFeWlO1w6ZYjv4cf/zqqVqzFs+/v/QPR9+/YEnJFwAKl4HJKpnTuRvOh2/wOR79v/v83YFsYEsCMRtJ7qCeyg5vvye8n7fduxBNyVkL/DVN/v2/ct5/Y/llDcUyA7j2EAAAAASUVORK5CYII=';
+
+/* ═══════════════════════════════════════════════════════════════════
+   MÓDULO: PERFORMANCE DAS UNIDADES — r110
+   Lê as análises CONCLUÍDAS (aba Auditoria_Operacao), agrega por unidade
+   e por cliente dentro do período e compara com o período anterior de
+   mesma duração. Nada é gravado na planilha: só leitura (+ arquivos no
+   Drive quando o Diretor exporta PDF / apresentação).
+   - Unidade = MÉDIA de todas as análises do período (peso igual por análise).
+   - Cliente = MÉDIA das unidades (peso igual por unidade).
+   - Critério N/A fica fora de tudo (nota ausente => "—", nunca zero).
+   - Infraestrutura (iluminação/equipamentos) fica fora do score, como no relatório.
+   ═══════════════════════════════════════════════════════════════════ */
+var PERF_METRICAS = ['geral', 'equipe', 'retaguarda', 'areaVendas', 'organizacao', 'volume', 'orgVol'];
+var PERF_FAIXAS = ['Excelente', 'Bom', 'Regular', 'Insatisfatório', 'Crítico'];
+var PERF_TIPOS = ['PRÉ-OPERAÇÃO', 'DURANTE A OPERAÇÃO'];
+
+function perfFaixa(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  if (n >= 9) return 'Excelente';
+  if (n >= 7.5) return 'Bom';
+  if (n >= 6) return 'Regular';
+  if (n >= 4) return 'Insatisfatório';
+  return 'Crítico';
+}
+
+function perfMedia(vals) {
+  var s = 0, n = 0;
+  vals.forEach(function (v) { if (v !== null && v !== undefined && !isNaN(v)) { s += v; n++; } });
+  return n ? s / n : null;
+}
+function perfArred(v) { return (v === null || v === undefined || isNaN(v)) ? null : Math.round(v * 10) / 10; }
+
+// mesmo critério de "equipe" usado no score do Histórico (calcularScoresAuditoria)
+function perfEhEquipe(id) {
+  return id.indexOf('eq_') !== -1 || id.indexOf('_eq_') !== -1 || id.indexOf('_pes_') !== -1 || id.indexOf('pesagem') !== -1;
+}
+// critério de ORGANIZAÇÃO: organização por SKU/código, organização de câmaras, aéreos e depósito
+function perfEhOrganizacao(id) {
+  return /_sku$/.test(id) || /_org$/.test(id) || id === 'dls_organizacao';
+}
+
+// Métricas de UMA análise (a partir das respostas), sem arredondar.
+function perfMetricasDaAnalise(respostas) {
+  var INFRA = { ef_iluminacao: 1, ef_equipamentos: 1 };
+  var geral = [], equipe = [], ret = [], av = [], org = [], vol = [];
+  for (var id in respostas) {
+    var v = respostas[id];
+    if (v === 'NA' || v === null || v === undefined || v === '') continue;
+    var nota = parseFloat(v);
+    if (isNaN(nota)) continue;
+    var m = CRITERIOS_MAP[id];
+    if (!INFRA[id]) {
+      geral.push(nota);
+      if (m && m.estrutura === 'Retaguarda') ret.push(nota);
+      if (m && m.estrutura === 'Área de Vendas') av.push(nota);
+    }
+    if (perfEhEquipe(id)) equipe.push(nota);
+    if (m && m.invertida) vol.push(nota);
+    else if (m && !m.equipe && perfEhOrganizacao(id)) org.push(nota);
+  }
+  var o = perfMedia(org), vv = perfMedia(vol);
+  return {
+    geral: perfMedia(geral), equipe: perfMedia(equipe), retaguarda: perfMedia(ret), areaVendas: perfMedia(av),
+    organizacao: o, volume: vv,
+    orgVol: (o !== null && vv !== null) ? (o + vv) / 2 : (o !== null ? o : vv)
+  };
+}
+
+function perfLerAnalises() {
+  var aba = getOuCriarAbaAuditoria();
+  var todas = aba.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < todas.length; i++) {
+    var row = todas[i];
+    if (String(row[9]) !== 'CONCLUIDO') continue;
+    var cliente = String(row[5] || '').trim(), unidade = String(row[6] || '').trim();
+    if (!cliente || !unidade) continue;
+    var resp = {};
+    try { resp = JSON.parse(row[11] || '{}'); } catch (e) {}
+    out.push({
+      id: String(row[0]), cliente: cliente, unidade: unidade, dataAuditoria: extrairDataISO(row[7]),
+      tipo: String(row[4] || ''), metricas: perfMetricasDaAnalise(resp)
+    });
+  }
+  return out;
+}
+
+function perfDataValida(s) { s = String(s || ''); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; }
+function perfDiasEntre(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000); }
+function perfSomaDias(iso, n) { return new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().substring(0, 10); }
+
+// Período anterior de MESMA duração, imediatamente antes de "de". Sem "de" (todo o período) não há anterior.
+function perfPeriodoAnterior(de, ate, hoje) {
+  if (!de) return null;
+  var fim = ate || hoje;
+  if (!fim || fim < de) return null;
+  var len = perfDiasEntre(de, fim) + 1;
+  var antAte = perfSomaDias(de, -1);
+  return { de: perfSomaDias(antAte, -(len - 1)), ate: antAte };
+}
+
+function perfPassa(a, f) {
+  if (f.cliente && a.cliente !== f.cliente) return false;
+  if (f.tipo && a.tipo !== f.tipo) return false;
+  var d = a.dataAuditoria || '';
+  if (f.de && (!d || d < f.de)) return false;
+  if (f.ate && (!d || d > f.ate)) return false;
+  return true;
+}
+
+function perfAgruparUnidades(analises) {
+  var mapa = {}, ordem = [];
+  analises.forEach(function (a) {
+    var k = a.cliente + '|' + a.unidade;
+    if (!mapa[k]) { mapa[k] = { cliente: a.cliente, unidade: a.unidade, lista: [] }; ordem.push(k); }
+    mapa[k].lista.push(a);
+  });
+  return ordem.map(function (k) {
+    var u = mapa[k], m = {}, ult = '';
+    PERF_METRICAS.forEach(function (mt) { m[mt] = perfMedia(u.lista.map(function (a) { return a.metricas[mt]; })); });
+    u.lista.forEach(function (a) { if (a.dataAuditoria > ult) ult = a.dataAuditoria; });
+    return { cliente: u.cliente, unidade: u.unidade, analises: u.lista.length, ultimaAnalise: ult, m: m };
+  });
+}
+
+function perfAgruparClientes(unidades) {
+  var mapa = {}, ordem = [];
+  unidades.forEach(function (u) {
+    if (!mapa[u.cliente]) { mapa[u.cliente] = []; ordem.push(u.cliente); }
+    mapa[u.cliente].push(u);
+  });
+  return ordem.map(function (c) {
+    var us = mapa[c], m = {};
+    PERF_METRICAS.forEach(function (mt) { m[mt] = perfMedia(us.map(function (u) { return u.m[mt]; })); });
+    return { cliente: c, unidadesRaw: us, analises: us.reduce(function (s, u) { return s + u.analises; }, 0), m: m };
+  });
+}
+
+function perfDelta(atual, anterior) {
+  var out = {};
+  PERF_METRICAS.forEach(function (mt) {
+    var a = atual ? atual[mt] : null, b = anterior ? anterior[mt] : null;
+    out[mt] = (a !== null && a !== undefined && b !== null && b !== undefined) ? perfArred(a - b) : null;
+  });
+  return out;
+}
+function perfArredObj(m) {
+  var o = {};
+  PERF_METRICAS.forEach(function (mt) { o[mt] = perfArred(m ? m[mt] : null); });
+  return o;
+}
+
+// Cálculo puro (sem planilha) — testável isoladamente.
+function perfCalcular(analises, f, hoje) {
+  f = f || {};
+  var filtro = { cliente: f.cliente || '', tipo: f.tipo || '', de: perfDataValida(f.de), ate: perfDataValida(f.ate) };
+  var atuais = analises.filter(function (a) { return perfPassa(a, filtro); });
+  var ant = perfPeriodoAnterior(filtro.de, filtro.ate, hoje);
+  var anteriores = ant ? analises.filter(function (a) { return perfPassa(a, { cliente: filtro.cliente, tipo: filtro.tipo, de: ant.de, ate: ant.ate }); }) : [];
+
+  var uAt = perfAgruparUnidades(atuais);
+  var uAn = perfAgruparUnidades(anteriores);
+  var uAnMapa = {};
+  uAn.forEach(function (u) { uAnMapa[u.cliente + '|' + u.unidade] = u; });
+  var cAn = perfAgruparClientes(uAn);
+  var cAnMapa = {};
+  cAn.forEach(function (c) { cAnMapa[c.cliente] = c; });
+
+  var clientes = perfAgruparClientes(uAt).map(function (c) {
+    var lista = c.unidadesRaw.map(function (u) {
+      var prev = uAnMapa[u.cliente + '|' + u.unidade] || null;
+      var obj = { unidade: u.unidade, analises: u.analises, ultimaAnalise: u.ultimaAnalise };
+      var r = perfArredObj(u.m);
+      PERF_METRICAS.forEach(function (mt) { obj[mt] = r[mt]; });
+      obj.faixa = perfFaixa(u.m.geral);
+      obj.variacao = perfDelta(u.m, prev ? prev.m : null);
+      obj.anterior = prev ? perfArredObj(prev.m) : null;
+      return obj;
+    });
+    // maior nota primeiro; unidades sem nota geral por último
+    lista.sort(function (a, b) {
+      if (a.geral === null && b.geral === null) return a.unidade.localeCompare(b.unidade);
+      if (a.geral === null) return 1;
+      if (b.geral === null) return -1;
+      return (b.geral - a.geral) || a.unidade.localeCompare(b.unidade);
+    });
+    var faixas = {};
+    PERF_FAIXAS.forEach(function (fx) { faixas[fx] = 0; });
+    lista.forEach(function (u) { if (u.faixa) faixas[u.faixa]++; });
+    var comNota = lista.filter(function (u) { return u.geral !== null; });
+    var ref = comNota.length ? comNota[0] : null;
+    var atn = comNota.length > 1 ? comNota[comNota.length - 1] : null;
+    if (ref && atn && ref.geral === atn.geral) atn = null;   // todas iguais: sem "maior oportunidade"
+    var obj = { cliente: c.cliente, unidades: lista.length, analises: c.analises };
+    var r = perfArredObj(c.m);
+    PERF_METRICAS.forEach(function (mt) { obj[mt] = r[mt]; });
+    obj.faixa = perfFaixa(c.m.geral);
+    obj.variacao = perfDelta(c.m, cAnMapa[c.cliente] ? cAnMapa[c.cliente].m : null);
+    obj.faixas = faixas;
+    obj.referencia = ref ? { unidade: ref.unidade, geral: ref.geral } : null;
+    obj.atencao = atn ? { unidade: atn.unidade, geral: atn.geral } : null;
+    obj.lista = lista;
+    return obj;
+  });
+  clientes.sort(function (a, b) { return a.cliente.localeCompare(b.cliente); });
+
+  return {
+    filtro: filtro,
+    periodoAnterior: ant ? { de: ant.de, ate: ant.ate, analises: anteriores.length } : null,
+    totais: { clientes: clientes.length, unidades: uAt.length, analises: atuais.length },
+    clientes: clientes
+  };
+}
+
+function perfHoje() { return Utilities.formatDate(new Date(), 'America/Fortaleza', 'yyyy-MM-dd'); }
+
+function perfFiltroDe(d) {
+  var tipo = String(d.tipo || '');
+  return { cliente: String(d.cliente || ''), tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate) };
+}
+
+/* ── DIRETOR: cards por cliente e por unidade ── */
+function performanceAnalise(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var out = perfCalcular(perfLerAnalises(), perfFiltroDe(d), perfHoje());
+    out.ok = true;
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Texto da análise (IA + contingência) ── */
+function perfFmt(n) { return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(1).replace('.', ','); }
+function perfDataBR(iso) { var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (m[3] + '/' + m[2] + '/' + m[1]) : ''; }
+function perfPeriodoTxt(filtro) {
+  if (filtro.de && filtro.ate) return perfDataBR(filtro.de) + ' a ' + perfDataBR(filtro.ate);
+  if (filtro.de) return 'de ' + perfDataBR(filtro.de) + ' até ' + perfDataBR(perfHoje());
+  if (filtro.ate) return 'até ' + perfDataBR(filtro.ate);
+  return 'todo o período registrado';
+}
+function perfTipoTxt(filtro) { return filtro.tipo ? filtro.tipo : 'todas as análises (pré-operação e durante a operação)'; }
+
+function perfMontarPrompt(cli, filtro, anterior) {
+  var linhas = [];
+  linhas.push('CLIENTE: ' + cli.cliente);
+  linhas.push('PERÍODO: ' + perfPeriodoTxt(filtro) + ' | TIPO DE AVALIAÇÃO: ' + perfTipoTxt(filtro));
+  linhas.push('PERÍODO ANTERIOR DE MESMA DURAÇÃO: ' + (anterior ? perfDataBR(anterior.de) + ' a ' + perfDataBR(anterior.ate) : 'não disponível'));
+  linhas.push('NOTA MÉDIA DO CLIENTE (média das unidades): ' + perfFmt(cli.geral) + '/10 — faixa ' + (cli.faixa || '—') + (cli.variacao.geral !== null ? ' — variação vs período anterior: ' + (cli.variacao.geral > 0 ? '+' : '') + perfFmt(cli.variacao.geral) : ''));
+  linhas.push('UNIDADES AVALIADAS: ' + cli.unidades + ' | ANÁLISES NO PERÍODO: ' + cli.analises);
+  linhas.push('');
+  cli.lista.forEach(function (u) {
+    linhas.push('=== UNIDADE: ' + u.unidade + ' (' + u.analises + ' análise(s); a nota da unidade é a média das análises) ===');
+    if (u.geral !== null) linhas.push('  Nota geral: ' + perfFmt(u.geral) + '/10 — faixa ' + u.faixa + (u.variacao.geral !== null ? ' — variação vs período anterior: ' + (u.variacao.geral > 0 ? '+' : '') + perfFmt(u.variacao.geral) : ''));
+    if (u.equipe !== null) linhas.push('  Equipe de apoio do cliente: ' + perfFmt(u.equipe) + '/10 (1=inadequado,10=excelente) [EQUIPE]');
+    if (u.retaguarda !== null) linhas.push('  Retaguarda: ' + perfFmt(u.retaguarda) + '/10 (1=inadequado,10=excelente)');
+    if (u.areaVendas !== null) linhas.push('  Área de Vendas: ' + perfFmt(u.areaVendas) + '/10 (1=inadequado,10=excelente)');
+    if (u.organizacao !== null) linhas.push('  Organização (média dos critérios de organização): ' + perfFmt(u.organizacao) + '/10 (1=inadequado,10=excelente)');
+    if (u.volume !== null) linhas.push('  Volume de mercadoria (média): ' + perfFmt(u.volume) + '/10 (ESCALA DE VOLUME: 1=volume excessivo, 10=volume ideal; nota BAIXA significa MUITA mercadoria, o que é ruim para o inventário)');
+    linhas.push('');
+  });
+  var temEquipe = cli.lista.some(function (u) { return u.equipe !== null; });
+  var temVolume = cli.lista.some(function (u) { return u.volume !== null; });
+  var temAnterior = cli.lista.some(function (u) { return u.variacao.geral !== null; }) || cli.variacao.geral !== null;
+
+  var sys = 'Você é um consultor sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
+    + 'Gere a ANÁLISE DE PERFORMANCE das unidades de UM cliente, comparando a preparação das unidades no período, com base apenas nos dados fornecidos. '
+    + 'O texto será lido PELO CLIENTE (é um material externo). REGRAS OBRIGATÓRIAS:\n'
+    + '1. Tom consultivo, respeitoso e de parceria. Use "sugerimos considerar", "uma oportunidade seria". Nunca "o cliente deve", "é necessário".\n'
+    + '2. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
+    + '3. COMPARAÇÃO SEM RANKING: compare as unidades destacando o que cada uma tem de melhor e o que pode evoluir, mas NUNCA use posições ou ordinais ("1º lugar", "última colocada"), nunca chame uma unidade de "pior" ou "a mais fraca" e nunca a exponha como culpada. A unidade de melhor nota pode ser citada como referência de boas práticas a ser replicada nas demais.\n'
+    + '4. TOM DE CONSTATAÇÃO: descreva as condições encontradas no período avaliado — nunca como preparação para algo futuro. Nada de "preparada para a operação", "prontos para prosseguir".\n'
+    + '5. A preparação do ambiente é SEMPRE responsabilidade do cliente, nunca da equipe FC. TODA ação recomendada é uma ação do próprio CLIENTE, executada internamente por ele — nunca visita, reunião, orientação ou comunicação promovida pela Formula Code. PROIBIDO: "a Formula Code deve orientar/alinhar com a equipe".\n'
+    + '6. Para critérios de volume/quantidade (escala invertida): nota baixa = excesso de mercadoria (ruim), nota alta = volume ideal (bom). Nunca leia uma nota de volume como "quanto mais mercadoria, melhor".\n'
+    + '6b. VOLUME x ORGANIZAÇÃO — leitura sem ambiguidade: quanto MAIOR o volume de mercadoria, PIOR para a operação de inventário (mais itens a contar, menos espaço e acesso, maior chance de erro induzido e de lentidão). Por isso: (i) volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo quando a organização da mesma unidade estiver excelente — boa organização NÃO compensa nem neutraliza volume excessivo; (ii) nesses casos escreva de forma explícita e conciliadora, por exemplo "embora organizada, o volume de mercadoria acima do ideal torna a operação mais complexa"; (iii) só descreva uma unidade como "em boas condições de organização e volume" quando AMBAS estiverem na faixa Bom/Excelente (>= 7.5); (iv) nunca apresente volume alto como algo positivo e não use expressões como "nota de volume alta/baixa" — diga "volume acima do ideal" ou "volume adequado".\n'
+    + '7. Quando o volume acima do ideal for citado como oportunidade, a ação recomendada é o cliente reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário.\n'
+    + '8. PROIBIDO, em qualquer seção, dar a entender que a contagem feita pela Formula Code foi incorreta, mal feita ou teve a qualidade afetada. A análise avalia exclusivamente a PREPARAÇÃO DO AMBIENTE feita pelo cliente. Nunca recomende recontagem nem mencione "recontagem" como risco.\n'
+    + '9. TERMOS PROIBIDOS: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado", e absolutismos como "impossível", "nunca" ou "totalmente". Use "exige adequação" ou "ponto de atenção". Nunca coloque o cliente ou sua equipe na defensiva; fale das condições do ambiente e do fluxo de processos.\n'
+    + '10. REENQUADRAMENTO CONSTRUTIVO: ao descrever qualquer ajuste necessário, exponha como oportunidade de ganho, encadeando condição observada + ação recomendada + ganho operacional (fluidez da operação, assertividade da contagem, organização). Substituições obrigatórias: nunca use "compromete a velocidade de leitura dos coletores" ou "risco de recontagem" — use "pode impactar na fluidez da operação e na assertividade da contagem"; nunca use "leitura clara e sem obstáculos" — use "favorecendo uma melhor organização das mercadorias, evitando que aconteçam erros induzidos".\n'
+    + '11. PROIBIDO exigir ou sugerir "SKU único por pallet" (ou equivalentes). Se falar de organização por pallet, use "pallets com produtos organizados por código de barras".\n'
+    + '12. PROIBIDO recomendar que o cliente comunique, informe, alinhe ou avise previamente a quem quer que seja sobre movimentações de mercadoria, espaço, volume ou layout entre a data da análise e a operação oficial. A análise certifica a preparação NO MOMENTO em que foi feita; não cria condição a ser preservada.\n'
+    + '13. Suavize qualquer linguagem de prazo (ex.: "sugerimos que as adequações sejam feitas com alguma antecedência, favorecendo a fluidez da operação"). Nunca soar como ameaça ou cobrança.\n'
+    + '14. CRITÉRIOS N/A: os dados abaixo já contêm APENAS o que foi efetivamente avaliado. NUNCA mencione, elogie ou faça referência a algo que não conste nos dados — nem como ausência. '
+    + (temEquipe ? 'Equipe de apoio: só cite a equipe de uma unidade se ela tiver nota nos dados; distinga o que for da equipe do que é do ambiente.' : 'Nenhuma unidade teve equipe de apoio avaliada: é PROIBIDO mencionar equipe, equipe de apoio ou equipe de pesagem em qualquer seção.') + '\n'
+    + '15. Cite apenas números presentes nos dados (notas com no máximo 1 casa decimal, variações). Não invente fatos, causas ou observações. Sem listar todas as notas no meio do texto; use os números apenas quando agregarem (extremos, variações).\n'
+    + '16. ' + (temAnterior ? 'Há dados do período anterior: comente a evolução (variação) de forma equilibrada, sem dramatizar quedas e sem exagerar melhoras; só cite variação de quem tem variação nos dados.' : 'NÃO há dados do período anterior: não comente evolução nem variação.') + '\n'
+    + '17. ' + (temVolume ? 'Inclua a leitura de volume x organização (regra 6b) na seção "volume_organizacao".' : 'Nenhuma unidade teve volume avaliado: deixe "volume_organizacao" como string vazia e não cite volume em nenhuma seção.') + '\n'
+    + '18. Se NENHUMA unidade tiver ponto de melhoria (todas as notas avaliadas em Bom/Excelente), "oportunidades" deve dizer isso de forma positiva em 1 frase e "sugestoes" deve conter APENAS uma recomendação: usar o padrão de preparação observado como referência de boas práticas, a ser mantido e replicado. Não invente sugestões para preencher espaço.\n'
+    + '19. Chame o documento de "Análise de Preparação para Inventário" quando precisar citá-lo. Texto fluido e natural, escrito por um humano, conciso: no máximo 700 palavras no total.\n';
+
+  var nomesUnid = cli.lista.map(function (u) { return u.unidade; });
+  var usr = 'Gere um JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n{\n'
+    + '"resumo_executivo": "3-4 frases: cenário geral do cliente no período (nota média e faixa, quantas unidades), principal destaque e principal ponto de atenção.",\n'
+    + '"comparativo": "4-5 frases comparando as unidades entre si (regra 3: sem ranking, sem culpados), destacando padrões em comum e diferenças relevantes.",\n'
+    + '"unidades": { ' + nomesUnid.map(function (n) { return JSON.stringify(n) + ': "2-3 frases de constatação sobre esta unidade"'; }).join(', ') + ' },\n'
+    + '"volume_organizacao": "2-3 frases sobre a leitura de volume x organização entre as unidades (regra 6b).",\n'
+    + '"evolucao": "1-2 frases sobre a variação em relação ao período anterior (regra 16).",\n'
+    + '"pontos_positivos": "3-4 frases.",\n'
+    + '"oportunidades": "3-4 frases.",\n'
+    + '"sugestoes": "Ações do CLIENTE (regras 5, 7, 12, 13, 18)."\n}\n\n'
+    + 'As chaves de "unidades" devem ser EXATAMENTE os nomes acima.\n\nDADOS:\n\n' + linhas.join('\n');
+  return { system: sys, user: usr };
+}
+
+function perfTextoFallback(cli, filtro, anterior) {
+  var lista = cli.lista.filter(function (u) { return u.geral !== null; });
+  var t = { unidades: {} };
+  t.resumo_executivo = 'No período ' + perfPeriodoTxt(filtro) + ', foram consideradas ' + cli.analises + ' análise(s) em ' + cli.unidades + ' unidade(s) do cliente ' + cli.cliente
+    + (cli.geral !== null ? ', com nota média de ' + perfFmt(cli.geral) + '/10 (faixa ' + cli.faixa + ').' : '.');
+  if (cli.referencia) t.resumo_executivo += ' A unidade ' + cli.referencia.unidade + ' apresentou a maior nota (' + perfFmt(cli.referencia.geral) + '/10), servindo de referência de boas práticas para as demais.';
+
+  var faixasTxt = PERF_FAIXAS.filter(function (fx) { return cli.faixas[fx] > 0; }).map(function (fx) { return cli.faixas[fx] + ' em ' + fx; }).join(', ');
+  t.comparativo = lista.length > 1
+    ? 'As notas das unidades variaram de ' + perfFmt(lista[lista.length - 1].geral) + ' a ' + perfFmt(lista[0].geral) + '. Distribuição por faixa: ' + faixasTxt + '. A comparação indica onde a preparação já está consolidada e onde há oportunidade de replicar as práticas das unidades com melhor resultado.'
+    : 'A avaliação considerou uma única unidade no período.';
+
+  var volRuins = [], orgBoaVolRuim = [], ambosBons = [];
+  cli.lista.forEach(function (u) {
+    var partes = [];
+    if (u.geral !== null) partes.push('A unidade ' + u.unidade + ' obteve nota média de ' + perfFmt(u.geral) + '/10 (faixa ' + u.faixa + ')' + (u.analises > 1 ? ', considerando ' + u.analises + ' análises no período.' : '.'));
+    if (u.retaguarda !== null && u.areaVendas !== null) partes.push('Retaguarda: ' + perfFmt(u.retaguarda) + '; Área de Vendas: ' + perfFmt(u.areaVendas) + '.');
+    if (u.volume !== null && u.volume < 6) {
+      volRuins.push(u.unidade);
+      if (u.organizacao !== null && u.organizacao >= 7.5) { orgBoaVolRuim.push(u.unidade); partes.push('Embora organizada, o volume de mercadoria acima do ideal torna a operação mais complexa.'); }
+      else partes.push('O volume de mercadoria está acima do ideal, ponto de atenção para a operação.');
+    } else if (u.volume !== null && u.organizacao !== null && u.volume >= 7.5 && u.organizacao >= 7.5) {
+      ambosBons.push(u.unidade);
+      partes.push('Organização e volume em boas condições.');
+    }
+    if (u.variacao.geral !== null && anterior) partes.push('Variação em relação ao período anterior: ' + (u.variacao.geral > 0 ? '+' : '') + perfFmt(u.variacao.geral) + '.');
+    t.unidades[u.unidade] = partes.join(' ');
+  });
+
+  var temVol = cli.lista.some(function (u) { return u.volume !== null; });
+  t.volume_organizacao = !temVol ? '' : (volRuins.length
+    ? 'Quanto maior o volume de mercadoria, mais complexa é a operação do inventário. O volume está acima do ideal em ' + volRuins.join(', ') + (orgBoaVolRuim.length ? '; em ' + orgBoaVolRuim.join(', ') + ', a boa organização não elimina o impacto do volume.' : '.')
+    : 'O volume de mercadoria está adequado nas unidades avaliadas' + (ambosBons.length ? ', com organização e volume em boas condições em ' + ambosBons.join(', ') + '.' : '.'));
+
+  t.evolucao = (anterior && cli.variacao.geral !== null)
+    ? 'Em relação ao período anterior (' + perfDataBR(anterior.de) + ' a ' + perfDataBR(anterior.ate) + '), a nota média do cliente variou ' + (cli.variacao.geral > 0 ? '+' : '') + perfFmt(cli.variacao.geral) + '.'
+    : '';
+
+  var temMelhoria = cli.lista.some(function (u) { return (u.geral !== null && u.geral < 7.5) || (u.volume !== null && u.volume < 6); });
+  var bons = lista.filter(function (u) { return u.geral >= 7.5; }).map(function (u) { return u.unidade; });
+  t.pontos_positivos = bons.length
+    ? 'As unidades ' + bons.join(', ') + ' apresentaram notas nas faixas Bom ou Excelente, demonstrando capacidade de entregar um ambiente bem preparado.'
+    : 'Nenhuma unidade atingiu a faixa Bom ou Excelente no período.';
+  t.oportunidades = temMelhoria
+    ? ('Há oportunidade de evolução nas unidades com nota abaixo de 7,5' + (volRuins.length ? ' e no volume de mercadoria acima do ideal em ' + volRuins.join(', ') : '') + ', favorecendo a fluidez da operação e a assertividade da contagem.')
+    : 'Todas as unidades avaliadas ficaram nas faixas Bom ou Excelente.';
+  t.sugestoes = temMelhoria
+    ? ('Sugerimos considerar' + (volRuins.length ? ' reduzir o abastecimento/recebimento de mercadoria nas unidades com volume acima do ideal com pelo menos 5 dias de antecedência ao inventário, e' : '') + ' replicar as práticas das unidades com melhor resultado, com alguma antecedência à contagem oficial, favorecendo a fluidez da operação.')
+    : 'Recomendamos usar o padrão de preparação observado como referência de boas práticas, a ser mantido e replicado nas demais unidades.';
+  return t;
+}
+
+function perfGarantirTextos(t, fb, cli) {
+  var out = { unidades: {} };
+  ['resumo_executivo', 'comparativo', 'volume_organizacao', 'evolucao', 'pontos_positivos', 'oportunidades', 'sugestoes'].forEach(function (k) {
+    var v = t && typeof t[k] === 'string' ? t[k].trim() : '';
+    out[k] = v || fb[k] || '';
+  });
+  cli.lista.forEach(function (u) {
+    var v = t && t.unidades && typeof t.unidades[u.unidade] === 'string' ? t.unidades[u.unidade].trim() : '';
+    out.unidades[u.unidade] = v || fb.unidades[u.unidade] || '';
+  });
+  return out;
+}
+
+// Localiza o cliente escolhido dentro do cálculo (exportações exigem UM cliente).
+function perfPrepararCliente(d) {
+  var f = perfFiltroDe(d);
+  if (!f.cliente) return { erro: 'Selecione um cliente para gerar a análise.' };
+  var calc = perfCalcular(perfLerAnalises(), f, perfHoje());
+  var cli = null;
+  calc.clientes.forEach(function (c) { if (c.cliente === f.cliente) cli = c; });
+  if (!cli) return { erro: 'Nenhuma análise concluída para este cliente no período selecionado.' };
+  return { calc: calc, cli: cli, filtro: calc.filtro, anterior: calc.periodoAnterior };
+}
+
+/* ── DIRETOR: texto da análise ── */
+function performanceGerarTexto(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararCliente(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var fb = perfTextoFallback(p.cli, p.filtro, p.anterior);
+    var textos, origem = 'ia';
+    try {
+      var prompt = perfMontarPrompt(p.cli, p.filtro, p.anterior);
+      var resp = chamarClaudeAPI(prompt.user, prompt.system);
+      textos = perfGarantirTextos(JSON.parse(resp.replace(/```json|```/g, '').trim()), fb, p.cli);
+    } catch (errIA) {
+      Logger.log('Performance: Claude API erro: ' + errIA.message + '. Usando texto de contingência.');
+      textos = perfGarantirTextos(null, fb, p.cli);
+      origem = 'contingencia';
+    }
+    return { ok: true, textos: textos, origem: origem };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── HTML da análise (PDF) — tabelas e estilos inline, como o relatório ── */
+function perfEsc(s) {
+  return String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function perfCorNota(n) { n = parseFloat(n); if (isNaN(n)) return '#9AA7B4'; if (n >= 9) return '#2E7D32'; if (n >= 7.5) return '#61CF00'; if (n >= 6) return '#D4A017'; if (n >= 4) return '#E8872B'; return '#E05252'; }
+function perfBgNota(n) { n = parseFloat(n); if (isNaN(n)) return '#F4F6F8'; if (n >= 9) return '#E8F5E9'; if (n >= 7.5) return '#EAF8E0'; if (n >= 6) return '#FFF8E1'; if (n >= 4) return '#FFF3E0'; return '#FDEAEA'; }
+function perfDeltaHtml(v) {
+  if (v === null || v === undefined) return '<span style="color:#9AA7B4">—</span>';
+  if (v === 0) return '<span style="color:#6B7B8D;font-weight:700">= 0,0</span>';
+  return '<span style="color:' + (v > 0 ? '#2E7D32' : '#C0392B') + ';font-weight:700">' + (v > 0 ? '▲ +' : '▼ ') + perfFmt(v) + '</span>';
+}
+function perfCelNota(v) {
+  return '<td style="padding:6px 6px;border-bottom:1px solid #F0F2F4;text-align:center;font-weight:700;color:' + perfCorNota(v) + ';background:' + perfBgNota(v) + '">' + perfFmt(v) + '</td>';
+}
+
+function perfMontarHTML(cli, filtro, anterior, textos) {
+  var titulo = 'Análise de Performance — ' + cli.cliente;
+  var per = perfPeriodoTxt(filtro);
+  var tipo = perfTipoTxt(filtro);
+  var sec = function (t, cor) { return '<div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid ' + (cor || '#61CF00') + ';padding-left:8px">' + t + '</div>'; };
+  var par = function (t) { return t ? '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(t) + '</p>' : ''; };
+  var h = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + perfEsc(titulo) + ' — Formula Code</title>'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}}</style></head><body><div class="page">';
+  // cabeçalho
+  h += '<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,' + PERF_LOGO_PNG_B64 + '" style="height:48px" alt="FC"></td>'
+    + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise de Performance<br>das Unidades</td></tr></table>';
+  h += '<table><tr><td style="padding:14px 32px;background:#002B50;color:#FFF;width:40%"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Cliente</div><div style="font-size:14px;font-weight:700">' + perfEsc(cli.cliente) + '</div></td>'
+    + '<td style="padding:14px 20px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Período (data da análise)</div><div style="font-size:14px;font-weight:700">' + perfEsc(per) + '</div></td></tr>'
+    + '<tr><td style="padding:14px 32px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Tipo de avaliação</div><div style="font-size:12px;font-weight:700">' + perfEsc(tipo) + '</div></td>'
+    + '<td style="padding:14px 20px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Período anterior (comparação)</div><div style="font-size:12px;font-weight:700">' + (anterior ? perfEsc(perfDataBR(anterior.de) + ' a ' + perfDataBR(anterior.ate)) : 'não disponível') + '</div></td></tr></table>';
+
+  // cards macro do cliente
+  var faixasTxt = PERF_FAIXAS.filter(function (fx) { return cli.faixas[fx] > 0; }).map(function (fx) { return cli.faixas[fx] + ' ' + fx; }).join('\n') || '—';
+  var card = function (rot, valor, sub, cor) {
+    return '<td style="padding:6px;width:25%;vertical-align:top"><div style="background:#F4F6F8;border-radius:10px;padding:12px 10px;text-align:center;border-top:4px solid ' + cor + '">'
+      + '<div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D">' + rot + '</div>'
+      + '<div style="font-size:26px;font-weight:700;color:' + cor + ';line-height:1.2">' + valor + '</div>'
+      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.4">' + sub + '</div></div></td>';
+  };
+  h += '<div style="padding:22px 26px 6px"><table><tr>'
+    + card('Nota média', perfFmt(cli.geral), 'faixa ' + perfEsc(cli.faixa || '—'), perfCorNota(cli.geral))
+    + card('Unidades', String(cli.unidades), cli.analises + ' análise(s) no período', '#002B50')
+    + card('Variação', perfDeltaHtml(cli.variacao.geral), 'vs período anterior', '#6B7B8D')
+    + card('Faixas', '<span style="font-size:11px;line-height:1.5;font-weight:700;color:#3a8000">' + perfEsc(faixasTxt).replace(/\n/g, '<br>') + '</span>', 'unidades por faixa', '#61CF00')
+    + '</tr></table></div>';
+
+  // resumo executivo
+  h += '<div style="padding:14px 32px 18px;border-bottom:1px solid #E2E8F0">' + sec('Resumo Executivo') + par(textos.resumo_executivo) + par(textos.evolucao) + '</div>';
+
+  // cards por unidade (2 por linha)
+  h += '<div style="padding:20px 26px 8px;border-bottom:1px solid #E2E8F0"><div style="padding:0 6px">' + sec('Resultado por Unidade') + '</div><table>';
+  for (var i = 0; i < cli.lista.length; i += 2) {
+    h += '<tr style="page-break-inside:avoid">';
+    for (var j = i; j < i + 2; j++) {
+      var u = cli.lista[j];
+      if (!u) { h += '<td style="width:50%;padding:6px"></td>'; continue; }
+      var mini = function (rot, v) { return '<td style="padding:3px 4px;font-size:10px;color:#6B7B8D;border-top:1px solid #E7ECF1">' + rot + '</td><td style="padding:3px 4px;font-size:11px;font-weight:700;text-align:right;color:' + perfCorNota(v) + ';border-top:1px solid #E7ECF1">' + perfFmt(v) + '</td>'; };
+      h += '<td style="width:50%;padding:6px;vertical-align:top"><div style="border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;border-top:4px solid ' + perfCorNota(u.geral) + '">'
+        + '<table><tr><td style="font-size:13px;font-weight:700;color:#002B50;vertical-align:top">' + perfEsc(u.unidade) + '<div style="font-size:9px;font-weight:400;color:#6B7B8D">' + u.analises + ' análise(s)' + (u.ultimaAnalise ? ' · última em ' + perfDataBR(u.ultimaAnalise) : '') + '</div></td>'
+        + '<td style="text-align:right;vertical-align:top"><span style="font-size:24px;font-weight:700;color:' + perfCorNota(u.geral) + '">' + perfFmt(u.geral) + '</span><div style="font-size:9px;font-weight:700;color:' + perfCorNota(u.geral) + ';text-transform:uppercase">' + perfEsc(u.faixa || '') + '</div></td></tr></table>'
+        + '<table style="margin-top:6px"><tr>' + mini('Retaguarda', u.retaguarda) + mini('Área de Vendas', u.areaVendas) + '</tr><tr>'
+        + mini('Organização', u.organizacao) + mini('Volume (10 = ideal)', u.volume) + '</tr>'
+        + (u.equipe !== null ? '<tr>' + mini('Equipe de apoio', u.equipe) + '<td style="padding:3px 4px;font-size:10px;color:#6B7B8D;border-top:1px solid #E7ECF1">Variação</td><td style="padding:3px 4px;font-size:11px;text-align:right;border-top:1px solid #E7ECF1">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>'
+          : '<tr><td style="padding:3px 4px;font-size:10px;color:#6B7B8D;border-top:1px solid #E7ECF1">Variação</td><td colspan="3" style="padding:3px 4px;font-size:11px;text-align:right;border-top:1px solid #E7ECF1">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>')
+        + '</table></div></td>';
+    }
+    h += '</tr>';
+  }
+  h += '</table></div>';
+
+  // comparativo entre unidades
+  h += '<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0">' + sec('Comparativo entre Unidades') + par(textos.comparativo)
+    + '<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:10px 0 6px"><tr style="background:#002B50;color:#FFF">'
+    + '<td style="padding:7px 10px;font-weight:600">Unidade</td>'
+    + ['Geral', 'Equipe', 'Retaguarda', 'Área de Vendas'].map(function (c) { return '<td style="padding:7px 6px;text-align:center;font-weight:600">' + c + '</td>'; }).join('')
+    + '<td style="padding:7px 6px;text-align:center;font-weight:600">Variação<br><span style="font-size:9px;font-weight:400;opacity:.8">vs anterior</span></td></tr>';
+  cli.lista.forEach(function (u) {
+    h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(u.unidade) + '</td>' + perfCelNota(u.geral) + perfCelNota(u.equipe) + perfCelNota(u.retaguarda) + perfCelNota(u.areaVendas)
+      + '<td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>';
+  });
+  h += '<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Média do cliente</td>' + perfCelNota(cli.geral) + perfCelNota(cli.equipe) + perfCelNota(cli.retaguarda) + perfCelNota(cli.areaVendas)
+    + '<td style="padding:7px 6px;text-align:center">' + perfDeltaHtml(cli.variacao.geral) + '</td></tr></table>'
+    + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Setor ou critério não avaliado aparece como "—".</div></div>';
+
+  // organização x volume
+  var temOV = cli.lista.some(function (u) { return u.organizacao !== null || u.volume !== null; });
+  if (temOV) {
+    h += '<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0">' + sec('Organização x Volume') + par(textos.volume_organizacao)
+      + '<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:10px 0 6px"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Unidade</td>'
+      + '<td style="padding:7px 6px;text-align:center;font-weight:600">Organização</td><td style="padding:7px 6px;text-align:center;font-weight:600">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 6px;text-align:center;font-weight:600">Média dos dois</td></tr>';
+    cli.lista.forEach(function (u) {
+      h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(u.unidade) + '</td>' + perfCelNota(u.organizacao) + perfCelNota(u.volume) + perfCelNota(u.orgVol) + '</tr>';
+    });
+    h += '<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Média do cliente</td>' + perfCelNota(cli.organizacao) + perfCelNota(cli.volume) + perfCelNota(cli.orgVol) + '</tr></table>'
+      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).</div></div>';
+  }
+
+  // análise por unidade
+  h += '<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0">' + sec('Análise por Unidade');
+  cli.lista.forEach(function (u) {
+    if (!textos.unidades[u.unidade]) return;
+    h += '<div style="margin:0 0 10px;page-break-inside:avoid"><span style="font-size:13px;font-weight:700;color:#002B50">' + perfEsc(u.unidade) + '</span><span style="font-size:12px;font-weight:600;color:' + perfCorNota(u.geral) + ';margin-left:8px">' + perfFmt(u.geral) + ' — ' + perfEsc(u.faixa || '') + '</span>'
+      + '<p style="font-size:13px;line-height:1.8;margin-top:2px">' + perfEsc(textos.unidades[u.unidade]) + '</p></div>';
+  });
+  h += '</div>';
+
+  // conclusão
+  h += '<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0">' + sec('Conclusão');
+  if (textos.pontos_positivos) h += '<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">' + perfEsc(textos.pontos_positivos) + '</p></div>';
+  if (textos.oportunidades) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ OPORTUNIDADES DE MELHORIA</div><p style="font-size:13px;line-height:1.7">' + perfEsc(textos.oportunidades) + '</p></div>';
+  if (textos.sugestoes) h += '<div style="background:#E3F2FD;border-left:4px solid #002B50;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#002B50;margin-bottom:6px">→ SUGESTÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(textos.sugestoes) + '</p></div>';
+  h += '</div>';
+  h += '<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#051323"><strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Análise gerada automaticamente pelo Sistema de Gestão FC</td></tr></table></div></body></html>';
+  return h;
+}
+
+function perfNomeLimpo(s) { return String(s || '').replace(/[\/\\:*?"<>|]/g, '_'); }
+
+// Pasta Performance_FC / <cliente>
+function perfPastaCliente(cliente) {
+  var raiz;
+  var it = DriveApp.getFoldersByName('Performance_FC');
+  if (it.hasNext()) raiz = it.next(); else raiz = DriveApp.createFolder('Performance_FC');
+  return getOuCriarSubpastaAud(raiz, perfNomeLimpo(cliente));
+}
+function perfNomeBase(filtro) {
+  return 'Performance_' + perfNomeLimpo(filtro.cliente) + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
+}
+
+/* ── DIRETOR: exporta a análise em PDF (HTML + PDF no Drive) ── */
+function performanceExportarPDF(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem exportar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararCliente(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var fb = perfTextoFallback(p.cli, p.filtro, p.anterior);
+    var textos = perfGarantirTextos(d.textos || null, fb, p.cli);
+    var html = perfMontarHTML(p.cli, p.filtro, p.anterior, textos);
+    var pasta = perfPastaCliente(p.filtro.cliente);
+    var base = perfNomeBase(p.filtro);
+    [base + '.html', base + '.pdf'].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var arquivo = pasta.createFile(base + '.html', html, 'text/html');
+    arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var pdfBlob = arquivo.getAs('application/pdf');
+    pdfBlob.setName(base + '.pdf');
+    var pdfFile = pasta.createFile(pdfBlob);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return {
+      ok: true,
+      linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
+      linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
+    };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── DIRETOR: salva a apresentação (PPTX montado no navegador) + converte em PDF ── */
+function performanceSalvarApresentacao(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var f = perfFiltroDe(d);
+    if (!f.cliente) return { ok: false, erro: 'Selecione um cliente para gerar a apresentação.' };
+    if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
+    var pasta = perfPastaCliente(f.cliente);
+    var base = 'Apresentacao_' + perfNomeBase(f).replace(/^Performance_/, 'Performance_');
+    var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
+    [nomePptx, nomePdf].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var bytes = Utilities.base64Decode(d.pptxBase64);
+    var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomePptx);
+    var arqPptx = pasta.createFile(pptxBlob);
+    arqPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var out = { ok: true, linkPPTX: 'https://drive.google.com/uc?id=' + arqPptx.getId() + '&export=download', linkPDF: '', erroPDF: null };
+    try {
+      var pdfBlob = converterPptxParaPdfReal(pptxBlob, base);
+      pdfBlob.setName(nomePdf);
+      var arqPdf = pasta.createFile(pdfBlob);
+      arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+    } catch (errPdf) {
+      out.erroPDF = errPdf.message || String(errPdf);
+      Logger.log('Performance: falha ao converter PDF da apresentação: ' + out.erroPDF);
+    }
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
 }
