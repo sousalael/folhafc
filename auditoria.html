@@ -399,7 +399,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r117';
+const VERSAO = 'r118';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -843,7 +843,7 @@ async function renderTelaInicial(aba) {
       <div id="abaConteudo"></div>
     </div>`;
   mostrarAbaHome(state.abaHome);
-  if (ehDiretor) npsCarregarCards();
+  if (ehDiretor) { npsCarregarCards(); if (!state.pfContagem) pfCarregarContagem(); else npsRedesenharCards(); }
 }
 
 // Aba "Preenchimento": os mesmos cards que já existiam (Nova Avaliação + rascunhos).
@@ -1821,6 +1821,7 @@ async function npsCarregarCards() {
   boxAtual.classList.remove('carregando');
   if (!r.ok) {
     state.npsDados = null;
+    state.npsErro = true;
     const naoPublicado = /nao reconhecida|não reconhecida/i.test(String(r.erro || ''));
     boxAtual.style.display = 'block';
     boxAtual.innerHTML = '<div class="nps-erro">' + (naoPublicado
@@ -1829,9 +1830,30 @@ async function npsCarregarCards() {
     return;
   }
   boxAtual.style.display = '';
+  state.npsErro = false;
   state.npsDados = r;
   boxAtual.innerHTML = htmlCardsNps(r);
   if (state.abaHome === 'nps') npsRenderAba();   // r114: a aba CSAT/NPS acompanha o filtro
+}
+
+// r118: redesenha os 4 cards com o que já está em memória (sem nova chamada ao servidor)
+function npsRedesenharCards() {
+  const box = $('#npsCards');
+  if (box && !state.npsErro) box.innerHTML = htmlCardsNps(state.npsDados || null);
+}
+
+// r118: contagem de clientes/unidades/análises concluídas — usa o filtro APLICADO na aba Performance
+// (na primeira abertura, o filtro padrão dela).
+async function pfCarregarContagem() {
+  const p = pfEstado();
+  const f = p.aplicado || p.filtro;
+  const iv = pfIntervalo(f);
+  const req = state.pfContagemReq = (state.pfContagemReq || 0) + 1;
+  const r = await apiCall('contarAnalisadasPerformance', { cliente: f.cliente, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  if (req !== state.pfContagemReq) return;
+  if (r && r.ok && r.totais) { state.pfContagem = r.totais; state.pfContagemErro = false; }
+  else { state.pfContagem = null; state.pfContagemErro = true; }
+  npsRedesenharCards();
 }
 
 const NPS_NIVEL_COR = { critico: '#C0392B', falha: '#E8872B', atencao: '#D4A017', neutro: '#8899AA', bom: '#61CF00', otimo: '#2E7D32' };
@@ -1846,7 +1868,7 @@ function npsCorCsat(n) { return n === null || n === undefined ? '#9AA7B4' : (n >
 // Todo o restante (recomendação, alertas, análise, diagnóstico...) fica na aba CSAT/NPS.
 function htmlCardsNps(r) {
   const s = r ? r.resumo : null;
-  const an = r ? r.analisadas : null;
+  const an = state.pfContagem || null;   // r118: vem dos filtros da aba Performance (não do filtro NPS)
   const zona = npsZona(s ? s.nps : null);
   const pct = v => (v === null || v === undefined) ? '—' : v + '%';
   const nps = s && s.nps !== null ? s.nps : '—';
@@ -1856,9 +1878,9 @@ function htmlCardsNps(r) {
   const env = s ? s.enviados : '—';
   const taxa = s && s.taxaResposta !== null ? s.taxaResposta + '% de retorno' : (s ? 'nenhuma pesquisa enviada' : 'carregando…');
   const cliTxt = an ? an.clientes : '—';
-  const cliSub = an ? an.unidades + ' unidade' + (an.unidades === 1 ? '' : 's') + ' · ' + an.analises + ' análise' + (an.analises === 1 ? '' : 's') : (s ? 'indisponível' : 'carregando…');
+  const cliSub = an ? an.unidades + ' unidade' + (an.unidades === 1 ? '' : 's') + ' · ' + an.analises + ' análise' + (an.analises === 1 ? '' : 's') : (state.pfContagemErro ? 'indisponível' : 'carregando…');
   return `
-      <button type="button" class="nps-card" onclick="npsAbrirDetalhe('analise')">
+      <button type="button" class="nps-card" onclick="mostrarAbaHome('perf')">
         <span class="nps-rot">Clientes e unidades analisadas</span>
         <span class="nps-num-s">${cliTxt}<small> cliente${an && an.clientes === 1 ? '' : 's'}</small></span>
         <span class="nps-sub">${cliSub}</span>
@@ -2375,6 +2397,7 @@ async function pfBuscar() {
   }
   p.dados = r;
   p.aplicado = JSON.parse(JSON.stringify(f));
+  if (r.totais) { state.pfContagem = { clientes: r.totais.clientes, unidades: r.totais.unidades, analises: r.totais.analises }; state.pfContagemErro = false; npsRedesenharCards(); }   // r118: card 1 acompanha a Performance
   p.foco = (f.cliente && r.clientes.some(c => c.cliente === f.cliente)) ? f.cliente : '';
   p.textos = null; p.textosChave = ''; p.origemTexto = '';
   pfMarcarPendente();

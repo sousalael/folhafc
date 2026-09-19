@@ -84,6 +84,7 @@ function doPost(e) {
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
+    else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
     else if (action === 'prepararApresentacaoAuditoria') { result = prepararApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'salvarApresentacaoAuditoria') { result = salvarApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'obterApresentacaoAuditoria') { result = obterApresentacaoAuditoria(data, data.cpf); }
@@ -496,7 +497,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r117';
+const VERSAO_SCRIPT = '2026-09-19-r118';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -519,7 +520,8 @@ function doGet(e) {
     'salvarAnaliseInventario', 'getHistoricoInventarios', 'checarInventarioExistente',
     'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente',
     'npsObterPesquisa', 'npsResponder', 'npsAnalise',
-    'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao'
+    'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao',
+    'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -4578,31 +4580,35 @@ function npsAnalise(dados, cpf) {
       };
     } catch (eT) { out.totais = null; }
     out.filtro = f;
-    // r114: card "clientes e unidades analisadas" (análises de Preparação CONCLUÍDAS no mesmo filtro)
-    try { out.analisadas = npsContarAnalisadas(f); } catch (eA) { out.analisadas = null; }
     return out;
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
-// r114: conta clientes, unidades e análises CONCLUÍDAS dentro do filtro (lê só as 10 primeiras colunas da aba).
-function npsContarAnalisadas(f) {
-  var aba = getOuCriarAbaAuditoria();
-  var ult = aba.getLastRow();
-  if (ult < 2) return { clientes: 0, unidades: 0, analises: 0 };
-  var dados = aba.getRange(2, 1, ult - 1, 10).getValues();
-  var cl = {}, un = {}, n = 0;
-  dados.forEach(function (row) {
-    if (String(row[9]) !== 'CONCLUIDO') return;
-    var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
-    if (!c || !u) return;
-    var item = { cliente: c, unidade: u, dataAuditoria: extrairDataISO(row[7]) };
-    if (!npsPassaFiltro(item, f)) return;
-    n++;
-    var ck = fcChave(c);
-    cl[ck] = 1;
-    un[ck + '|' + fcChave(u)] = 1;
-  });
-  return { clientes: Object.keys(cl).length, unidades: Object.keys(un).length, analises: n };
+// r118: clientes, unidades e análises de Preparação CONCLUÍDAS conforme os filtros da aba Performance
+// (cliente, tipo, período). Lê só as 10 primeiras colunas da aba (sem a coluna de respostas em JSON).
+function contarAnalisadasPerformance(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var f = perfFiltroDe(d);
+    var aba = getOuCriarAbaAuditoria();
+    var ult = aba.getLastRow();
+    if (ult < 2) return { ok: true, totais: { clientes: 0, unidades: 0, analises: 0 } };
+    var linhas = aba.getRange(2, 1, ult - 1, 10).getValues();
+    var cl = {}, un = {}, n = 0;
+    linhas.forEach(function (row) {
+      if (String(row[9]) !== 'CONCLUIDO') return;
+      var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
+      if (!c || !u) return;
+      var item = { cliente: c, unidade: u, tipo: String(row[4] || ''), dataAuditoria: extrairDataISO(row[7]) };
+      if (!perfPassa(item, f)) return;
+      n++;
+      var ck = fcChave(c);
+      cl[ck] = 1;
+      un[ck + '|' + fcChave(u)] = 1;
+    });
+    return { ok: true, totais: { clientes: Object.keys(cl).length, unidades: Object.keys(un).length, analises: n } };
+  } catch (e) { return { ok: false, erro: e.message }; }
 }
 
 // Resumo por análise (usado como selo no Histórico). Sempre isolado por try/catch no chamador.
