@@ -497,7 +497,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r122';
+const VERSAO_SCRIPT = '2026-09-19-r123';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4419,7 +4419,7 @@ function npsEnviarAviso(a) {
     + '<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D;margin-bottom:6px">O que podemos fazer para melhorar</div>'
     + '<div style="background:#F4F6F8;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap">' + (a.comentario ? perfEsc(a.comentario) : '<span style="color:#9AA7B4">Sem comentário.</span>') + '</div></div>'
     + '<div style="font-size:11px;color:#9AA7B4;margin-top:16px">Aviso automático do Sistema de Gestão FC. O acompanhamento completo está na tela inicial da Análise de Preparação.</div></div>';
-  MailApp.sendEmail(NPS_EMAIL_AVISO, assunto, '', { htmlBody: html, name: 'Formula Code — Pesquisa NPS' });
+  MailApp.sendEmail({ to: NPS_EMAIL_AVISO, cc: 'geizenberg@formulacode.tec.br', subject: assunto, htmlBody: html, name: 'Formula Code — Pesquisa NPS' });
 }
 
 /* ── Cálculo puro (sem planilha) — testável isoladamente ── */
