@@ -497,7 +497,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r120';
+const VERSAO_SCRIPT = '2026-09-19-r121';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4920,18 +4920,18 @@ function perfMontarPrompt(cli, filtro, anterior) {
     + '16. ' + (temAnterior ? 'Há dados do período anterior: comente a evolução (variação) de forma equilibrada, sem dramatizar quedas e sem exagerar melhoras; só cite variação de quem tem variação nos dados.' : 'NÃO há dados do período anterior: não comente evolução nem variação.') + '\n'
     + '17. ' + (temVolume ? 'Inclua a leitura de volume x organização (regra 6b) na seção "volume_organizacao".' : 'Nenhuma unidade teve volume avaliado: deixe "volume_organizacao" como string vazia e não cite volume em nenhuma seção.') + '\n'
     + '18. Se NENHUMA unidade tiver ponto de melhoria (todas as notas avaliadas em Bom/Excelente), "oportunidades" deve dizer isso de forma positiva em 1 frase e "sugestoes" deve conter APENAS uma recomendação: usar o padrão de preparação observado como referência de boas práticas, a ser mantido e replicado. Não invente sugestões para preencher espaço.\n'
-    + '19. Chame o documento de "Análise de Preparação para Inventário" quando precisar citá-lo. Texto fluido e natural, escrito por um humano, conciso: CONCISÃO OBRIGATÓRIA: no máximo 350 palavras no total, frases curtas e diretas, sem repetir informações entre seções.\n';
+    + '19. Chame o documento de "Análise de Preparação para Inventário" quando precisar citá-lo. Texto fluido e natural, escrito por um humano, conciso: CONCISÃO OBRIGATÓRIA: no máximo 400 palavras no total, frases curtas e diretas, sem repetir informações entre seções.\n';
 
   var nomesUnid = cli.lista.map(function (u) { return u.unidade; });
   var usr = 'Gere um JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n{\n'
-    + '"resumo_executivo": "1-2 frases: cenário geral (nota média, faixa, nº de unidades), principal destaque e principal ponto de atenção.",\n'
-    + '"comparativo": "2 frases comparando as unidades (regra 3: sem ranking, sem culpados), com padrões em comum e diferenças relevantes.",\n'
-    + '"unidades": { ' + nomesUnid.map(function (n) { return JSON.stringify(n) + ': "1 frase curta de constatação sobre esta unidade"'; }).join(', ') + ' },\n'
-    + '"volume_organizacao": "1 frase sobre volume x organização (regra 6b).",\n'
+    + '"resumo_executivo": "2 frases: cenário geral (nota média, faixa, nº de unidades), principal destaque e principal ponto de atenção.",\n'
+    + '"comparativo": "2-3 frases comparando as unidades (regra 3: sem ranking, sem culpados), com padrões em comum e diferenças relevantes.",\n'
+    + '"unidades": { ' + nomesUnid.map(function (n) { return JSON.stringify(n) + ': "1-2 frases curtas de constatação sobre esta unidade"'; }).join(', ') + ' },\n'
+    + '"volume_organizacao": "1-2 frases sobre volume x organização (regra 6b).",\n'
     + '"evolucao": "1 frase sobre a variação vs. período anterior (regra 16).",\n'
-    + '"pontos_positivos": "1-2 frases.",\n'
-    + '"oportunidades": "1-2 frases.",\n'
-    + '"sugestoes": "1-2 frases com ações do CLIENTE (regras 5, 7, 12, 13, 18)."\n}\n\n'
+    + '"pontos_positivos": "2 frases.",\n'
+    + '"oportunidades": "2 frases.",\n'
+    + '"sugestoes": "2 frases com ações do CLIENTE (regras 5, 7, 12, 13, 18)."\n}\n\n'
     + 'As chaves de "unidades" devem ser EXATAMENTE os nomes acima.\n\nDADOS:\n\n' + linhas.join('\n');
   return { system: sys, user: usr };
 }
@@ -4945,7 +4945,7 @@ function perfTextoFallback(cli, filtro, anterior) {
 
   var faixasTxt = PERF_FAIXAS.filter(function (fx) { return cli.faixas[fx] > 0; }).map(function (fx) { return cli.faixas[fx] + ' em ' + fx; }).join(', ');
   t.comparativo = lista.length > 1
-    ? 'As notas das unidades variaram de ' + perfFmt(lista[lista.length - 1].geral) + ' a ' + perfFmt(lista[0].geral) + '. Há oportunidade de replicar as práticas das unidades com melhor resultado.'
+    ? 'As notas das unidades variaram de ' + perfFmt(lista[lista.length - 1].geral) + ' a ' + perfFmt(lista[0].geral) + '. Distribuição por faixa: ' + faixasTxt + '. A comparação mostra onde a preparação está consolidada e onde há oportunidade de replicar as práticas das unidades com melhor resultado.'
     : 'A avaliação considerou uma única unidade no período.';
 
   var volRuins = [], orgBoaVolRuim = [], ambosBons = [];
@@ -4966,24 +4966,24 @@ function perfTextoFallback(cli, filtro, anterior) {
 
   var temVol = cli.lista.some(function (u) { return u.volume !== null; });
   t.volume_organizacao = !temVol ? '' : (volRuins.length
-    ? 'Volume acima do ideal em ' + volRuins.join(', ') + (orgBoaVolRuim.length ? '; em ' + orgBoaVolRuim.join(', ') + ', a boa organização não elimina o impacto.' : '.')
+    ? 'Quanto maior o volume de mercadoria, mais complexa é a operação do inventário. O volume está acima do ideal em ' + volRuins.join(', ') + (orgBoaVolRuim.length ? '; em ' + orgBoaVolRuim.join(', ') + ', a boa organização não elimina o impacto.' : '.')
     : 'O volume de mercadoria está adequado nas unidades avaliadas' + (ambosBons.length ? ', com organização e volume em boas condições em ' + ambosBons.join(', ') + '.' : '.'));
 
   t.evolucao = (anterior && cli.variacao.geral !== null)
-    ? 'Vs. período anterior, a nota média variou ' + (cli.variacao.geral > 0 ? '+' : '') + perfFmt(cli.variacao.geral) + '.'
+    ? 'Em relação ao período anterior, a nota média do cliente variou ' + (cli.variacao.geral > 0 ? '+' : '') + perfFmt(cli.variacao.geral) + '.'
     : '';
 
   var temMelhoria = cli.lista.some(function (u) { return (u.geral !== null && u.geral < 7.5) || (u.volume !== null && u.volume < 6); });
   var bons = lista.filter(function (u) { return u.geral >= 7.5; }).map(function (u) { return u.unidade; });
   t.pontos_positivos = bons.length
-    ? 'As unidades ' + bons.join(', ') + ' ficaram nas faixas Bom ou Excelente.'
+    ? 'As unidades ' + bons.join(', ') + ' apresentaram notas nas faixas Bom ou Excelente, indicando um ambiente bem preparado.'
     : 'Nenhuma unidade atingiu a faixa Bom ou Excelente no período.';
   t.oportunidades = temMelhoria
     ? ('Há oportunidade de evolução nas unidades com nota abaixo de 7,5' + (volRuins.length ? ' e no volume acima do ideal em ' + volRuins.join(', ') : '') + ', favorecendo a fluidez da operação e a assertividade da contagem.')
     : 'Todas as unidades avaliadas ficaram nas faixas Bom ou Excelente.';
   t.sugestoes = temMelhoria
     ? ('Sugerimos considerar' + (volRuins.length ? ' reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário, e' : '') + ' replicar as práticas das unidades com melhor resultado.')
-    : 'Sugerimos manter e replicar o padrão de preparação observado.';
+    : 'Sugerimos manter e replicar o padrão de preparação observado como referência de boas práticas nas demais unidades.';
   return t;
 }
 
