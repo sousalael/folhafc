@@ -83,6 +83,7 @@ function doPost(e) {
     else if (action === 'obterRelatorio') { result = obterRelatorio(data, data.cpf); }
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
+    else if (action === 'excluirAuditoriasLote') { result = excluirAuditoriasLote(data, data.cpf); }
     else if (action === 'prepararApresentacaoAuditoria') { result = prepararApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'salvarApresentacaoAuditoria') { result = salvarApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'obterApresentacaoAuditoria') { result = obterApresentacaoAuditoria(data, data.cpf); }
@@ -495,7 +496,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r114';
+const VERSAO_SCRIPT = '2026-09-19-r115';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3070,6 +3071,33 @@ function excluirAuditoria(dados, cpf) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
+// r114: exclusão em lote de avaliações NÃO concluídas (rascunhos). Só Diretor.
+// Nunca toca em análises CONCLUÍDAS: o servidor ignora qualquer id concluído.
+function excluirAuditoriasLote(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem excluir avaliações' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
+    var ids = Array.isArray(d.ids) ? d.ids.map(String) : [];
+    if (!ids.length) return { ok: false, erro: 'Nenhuma avaliação selecionada' };
+    var pedidos = {};
+    ids.forEach(function (id) { pedidos[id] = true; });
+    var aba = getOuCriarAbaAuditoria();
+    var ult = aba.getLastRow();
+    if (ult < 2) return { ok: true, excluidas: 0, ignoradas: ids.length };
+    var linhas = aba.getRange(2, 1, ult - 1, 10).getValues();
+    var excluidas = 0;
+    for (var i = 0; i < linhas.length; i++) {
+      var id = String(linhas[i][0]);
+      var status = String(linhas[i][9]);
+      if (!pedidos[id]) continue;
+      if (status === 'CONCLUIDO' || status === 'EXCLUIDO') continue;
+      aba.getRange(i + 2, 10).setValue('EXCLUIDO');
+      excluidas++;
+    }
+    return { ok: true, excluidas: excluidas, ignoradas: ids.length - excluidas };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
 function enviarRelatorioAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -4115,8 +4143,8 @@ var NPS_DESTAQUES = {
   pontualidade: 'Pontualidade no início/fim da contagem',
   supervisor: 'Liderança e comunicação do supervisor',
   postura: 'Postura e respeito do time às regras da loja',
-  mapeamento: 'Organização e mapeamento das áreas',
-  outro: 'Outro / Teve algum ponto negativo?'
+  mapeamento: 'Rápido fornecimento de informações e relatórios',
+  outro: 'Outro'
 };
 var NPS_DESTAQUES_ORDEM = ['pontualidade', 'supervisor', 'postura', 'mapeamento', 'outro'];
 
@@ -4542,8 +4570,31 @@ function npsAnalise(dados, cpf) {
     var out = npsCalcular(npsLerEnvios(), npsLerRespostas(), f);
     out.ok = true;
     out.filtro = f;
+    // r114: card "clientes e unidades analisadas" (análises de Preparação CONCLUÍDAS no mesmo filtro)
+    try { out.analisadas = npsContarAnalisadas(f); } catch (eA) { out.analisadas = null; }
     return out;
   } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// r114: conta clientes, unidades e análises CONCLUÍDAS dentro do filtro (lê só as 10 primeiras colunas da aba).
+function npsContarAnalisadas(f) {
+  var aba = getOuCriarAbaAuditoria();
+  var ult = aba.getLastRow();
+  if (ult < 2) return { clientes: 0, unidades: 0, analises: 0 };
+  var dados = aba.getRange(2, 1, ult - 1, 10).getValues();
+  var cl = {}, un = {}, n = 0;
+  dados.forEach(function (row) {
+    if (String(row[9]) !== 'CONCLUIDO') return;
+    var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
+    if (!c || !u) return;
+    var item = { cliente: c, unidade: u, dataAuditoria: extrairDataISO(row[7]) };
+    if (!npsPassaFiltro(item, f)) return;
+    n++;
+    var ck = fcChave(c);
+    cl[ck] = 1;
+    un[ck + '|' + fcChave(u)] = 1;
+  });
+  return { clientes: Object.keys(cl).length, unidades: Object.keys(un).length, analises: n };
 }
 
 // Resumo por análise (usado como selo no Histórico). Sempre isolado por try/catch no chamador.

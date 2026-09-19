@@ -225,6 +225,53 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .chip-nps.aguarda{background:var(--bg);color:var(--text-light)}
 @media(min-width:640px){.nps-modal{align-items:center}.nps-folha{border-radius:20px;max-height:88vh}}
 @media(prefers-reduced-motion:reduce){.nps-card,.nps-grid{transition:none}}
+/* r114: 4 cards fixos + aba CSAT/NPS + histórico com filtros */
+.nps-grid.k4{grid-template-columns:repeat(4,1fr)}
+.nps-grid.k4 .nps-card,.nps-grid.k4 .nps-card.nps-principal{grid-column:span 1;min-width:0}
+.nps-grid.k4 .nps-num{font-size:30px}
+.nps-grid.k4 .nps-num-s{font-size:26px}
+.nps-grid.k4 .nps-rot{font-size:9px;letter-spacing:.5px;line-height:1.25;min-height:23px}
+.nps-grid.k4 .nps-sub{font-size:10px}
+@media(max-width:480px){.nps-grid.k4{grid-template-columns:1fr 1fr}.nps-grid.k4 .nps-rot{min-height:0}}
+.nps-subabas{display:flex;gap:4px;overflow-x:auto;background:var(--white);padding:5px;border-radius:12px;margin-bottom:12px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.nps-grid.k3{grid-template-columns:repeat(3,1fr);margin-bottom:12px}
+.nps-grid.k3 .nps-card{grid-column:span 1;min-width:0}
+.nps-grid.k3 .nps-num-s{font-size:24px}
+.nps-grid.k3 .nps-rot{font-size:9px;line-height:1.25}
+.an-placar{display:grid;grid-template-columns:1fr;gap:14px}
+.an-medidor{position:relative;height:14px;border-radius:8px;background:linear-gradient(90deg,#E05252 0%,#E05252 50%,#D4A017 50%,#D4A017 75%,#61CF00 75%,#2E7D32 100%);margin:22px 0 4px}
+.an-medidor i{position:absolute;top:-6px;width:4px;height:26px;background:var(--navy);border-radius:2px;transform:translateX(-2px)}
+.an-medidor-esc{display:flex;justify-content:space-between;font-size:9px;color:var(--text-light)}
+.an-barra{display:flex;height:22px;border-radius:11px;overflow:hidden;background:var(--bg)}
+.an-barra span{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;min-width:0}
+.an-linha{display:grid;grid-template-columns:1fr 46px;gap:8px;align-items:center;font-size:12px;margin-bottom:8px}
+.an-linha .nome{line-height:1.3}
+.an-linha .trilho{grid-column:1/-1;height:8px;border-radius:5px;background:var(--bg);overflow:hidden;margin-top:-4px}
+.an-linha .trilho span{display:block;height:100%;border-radius:5px}
+.an-linha b{text-align:right}
+.an-rec{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:none;border-left:5px solid var(--border);background:var(--white);border-radius:0 12px 12px 0;padding:12px;margin-bottom:8px;font-family:inherit;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+button.an-rec{cursor:pointer}
+.an-rec .ic{font-size:20px;line-height:1.2}
+.an-rec b{display:block;font-size:13px;color:var(--navy);margin-bottom:2px}
+.an-rec span{font-size:12px;color:var(--text-light);line-height:1.45}
+.an-chips{display:flex;flex-wrap:wrap;gap:6px}
+.an-chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;background:#FDEAEA;color:#9B2C2C}
+.hist-filtros{background:var(--white);border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hist-filtros select,.hist-filtros input{width:100%;border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;background:var(--white);color:var(--text);min-width:0}
+.hist-filtros .full{grid-column:1/-1}
+.hist-datas{grid-column:1/-1;display:none;grid-template-columns:1fr 1fr;gap:8px}
+.hist-datas.aberto{display:grid}
+.hist-modos{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px}
+.hist-modo{flex:1;border:none;background:transparent;border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;font-family:inherit}
+.hist-modo.ativo{background:var(--navy);color:#fff}
+.hist-conta{font-size:11px;color:var(--text-light);margin:0 2px 8px}
+.hist-barra-excl{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--white);border-radius:12px;padding:10px 12px;margin-bottom:10px;box-shadow:0 2px 12px rgba(0,0,0,.06);font-size:12px;font-weight:700;color:var(--navy);position:sticky;top:0;z-index:5}
+.hist-barra-excl label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.hist-barra-excl input,.hist-check input{width:18px;height:18px}
+.hist-btn-excl{border:none;background:#E05252;color:#fff;font-weight:700;font-size:12px;padding:8px 12px;border-radius:10px;cursor:pointer;font-family:inherit}
+.hist-btn-excl:disabled{background:#D5DBE1;color:#8899AA;cursor:not-allowed}
+.hist-check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+
 
 /* PERFORMANCE (r110) */
 .pf-filtros{background:var(--white);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -361,7 +408,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r114';
+const VERSAO = 'r115';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -749,9 +796,10 @@ async function salvarRascunho(silencioso) {
    ═══════════════════════════════════════════════════════ */
 async function renderTelaInicial(aba) {
   showLoading('Carregando...');
-  // Buscar rascunhos do servidor
+  // r114: rascunhos e lista de clientes buscados EM PARALELO (antes eram um depois do outro).
+  // As demais telas (Histórico, Performance, CSAT/NPS) só carregam quando o usuário abre a aba.
+  const [r, rc] = await Promise.all([apiCall('listarRascunhosAuditoria', {}), apiCall('listarClientesFC', {})]);
   let rascunhos = [];
-  const r = await apiCall('listarRascunhosAuditoria', {});
   if (r.perfil) state.perfil = r.perfil;
   if (r.ok && r.rascunhos && r.rascunhos.length) {
     rascunhos = r.rascunhos.map(x => ({
@@ -772,8 +820,7 @@ async function renderTelaInicial(aba) {
       }
     }
   }
-  // Carregar lista de clientes
-  const rc = await apiCall('listarClientesFC', {});
+  // Lista de clientes (alimenta os filtros de todas as abas)
   if (rc.ok) {
     state.clientes = rc.clientes || [];
     state.unidades = {};
@@ -788,22 +835,19 @@ async function renderTelaInicial(aba) {
   state.rascunhos = rascunhos;
   hideLoading();
 
-  // r109: tela inicial em duas abas (Preenchimento | Histórico) e, para o
-  // Diretor, o painel de satisfação (NPS) fixo no topo, visível nas duas abas.
+  // r114: sem o card de título. Para o Diretor, os 4 cards (clientes/unidades, NPS, CSAT, respostas)
+  // ficam fixos no topo, sempre visíveis, e abrem por padrão no MTD (mês atual).
   state.abaHome = aba || state.abaHome || 'preench';
   const ehDiretor = state.perfil === 'DIRETOR';
 
   $('#app').innerHTML = `
     <div class="tela-inicial tela-home">
-      <div class="card-inicio" style="text-align:center;padding:28px 24px">
-        <h2 style="font-size:20px">Análise de Preparação para Inventário</h2>
-        <p style="margin-bottom:0">Avaliação das condições do ambiente para a operação de inventário</p>
-      </div>
       ${ehDiretor ? htmlPainelNps() : ''}
       <div class="abas-home" role="tablist">
         <button type="button" id="abaBtn-preench" class="aba-home" role="tab" onclick="mostrarAbaHome('preench')"><i class="bi bi-pencil-square"></i> Preenchimento</button>
         <button type="button" id="abaBtn-hist" class="aba-home" role="tab" onclick="mostrarAbaHome('hist')"><i class="bi bi-clock-history"></i> Histórico</button>
         ${ehDiretor ? '<button type="button" id="abaBtn-perf" class="aba-home" role="tab" onclick="mostrarAbaHome(\'perf\')"><i class="bi bi-graph-up-arrow"></i> Performance</button>' : ''}
+        ${ehDiretor ? '<button type="button" id="abaBtn-nps" class="aba-home" role="tab" onclick="mostrarAbaHome(\'nps\')"><i class="bi bi-emoji-smile"></i> CSAT/NPS</button>' : ''}
       </div>
       <div id="abaConteudo"></div>
     </div>`;
@@ -841,9 +885,9 @@ function htmlAbaPreenchimento() {
 }
 
 function mostrarAbaHome(aba) {
-  if (aba === 'perf' && state.perfil !== 'DIRETOR') aba = 'preench';   // r110: Performance é só do Diretor
+  if ((aba === 'perf' || aba === 'nps') && state.perfil !== 'DIRETOR') aba = 'preench';   // r110/r114: Performance e CSAT/NPS são só do Diretor
   state.abaHome = aba;
-  ['preench', 'hist', 'perf'].forEach(a => {
+  ['preench', 'hist', 'perf', 'nps'].forEach(a => {
     const b = $('#abaBtn-' + a);
     if (b) { b.classList.toggle('ativa', a === aba); b.setAttribute('aria-selected', a === aba ? 'true' : 'false'); }
   });
@@ -851,6 +895,7 @@ function mostrarAbaHome(aba) {
   if (!c) return;
   if (aba === 'hist') carregarHistoricoAba();
   else if (aba === 'perf') carregarPerformanceAba();
+  else if (aba === 'nps') npsRenderAba();
   else c.innerHTML = htmlAbaPreenchimento();
 }
 
@@ -1468,26 +1513,162 @@ function verHistorico() {
   else renderTelaInicial('hist');
 }
 
+// r114: Histórico com filtros (cliente e período) e exclusão em lote das avaliações NÃO concluídas.
+function histFiltro() {
+  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '', modo: 'concl' };
+  return state.histFiltro;
+}
+
+// yyyy-mm-dd a partir de "2026-09-18", "2026-09-18T03:00:00.000Z" ou "18/09/2026 10:30"
+function histDataISO(v) {
+  const t = String(v || '').trim();
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2] + '-' + m[1];
+  return '';
+}
+function histNorm(v) { return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+
+function histFiltrar(lista) {
+  const f = histFiltro();
+  const iv = npsIntervalo({ periodo: f.periodo, de: f.de, ate: f.ate });
+  const cli = histNorm(f.cliente);
+  return (lista || []).filter(a => {
+    if (cli && histNorm(a.cliente) !== cli) return false;
+    const d = histDataISO(a.dataAuditoria) || histDataISO(a.dataRegistro);
+    if (iv.de && (!d || d < iv.de)) return false;
+    if (iv.ate && (!d || d > iv.ate)) return false;
+    return true;
+  });
+}
+
 async function carregarHistoricoAba() {
   const c = $('#abaConteudo');
   if (!c) return;
+  const f = histFiltro();
+  if (state.perfil !== 'DIRETOR') f.modo = 'concl';   // só o Diretor vê/exclui as não concluídas
   c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
-  const r = await apiCall('listarHistoricoAuditorias', {});
+  const ehNao = f.modo === 'nao';
+  const r = await apiCall('listarHistoricoAuditorias', ehNao ? { status: 'RASCUNHO' } : {});
   if (state.abaHome !== 'hist' || !$('#abaConteudo')) return;
-
   if (!r.ok) {
     c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
     return;
   }
-  if (!r.auditorias || !r.auditorias.length) {
-    c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Nenhuma auditoria concluída encontrada.</div>';
-    return;
+  state.histLista = r.auditorias || [];
+  state.histSel = {};
+  histRender();
+}
+
+function histMudou(campo, valor) {
+  const f = histFiltro();
+  f[campo] = valor;
+  if (campo === 'periodo') {
+    const d = $('#histDatas');
+    if (d) d.classList.toggle('aberto', valor === 'custom');
+    if (valor === 'custom' && !(f.de || f.ate)) return;   // espera as datas
+  }
+  state.histSel = {};
+  histRender();
+}
+
+function histTrocarModo(modo) {
+  const f = histFiltro();
+  if (f.modo === modo) return;
+  f.modo = modo;
+  carregarHistoricoAba();   // cada modo busca a sua lista (sob demanda)
+}
+
+function histRender() {
+  const c = $('#abaConteudo');
+  if (!c) return;
+  const f = histFiltro();
+  const isDiretor = state.perfil === 'DIRETOR';
+  const ehNao = f.modo === 'nao';
+  const clientes = state.clientes || [];
+  const optsCli = '<option value="">Todos os clientes</option>' + clientes.map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
+  const lista = histFiltrar(state.histLista);
+  const total = (state.histLista || []).length;
+
+  const filtros = `
+    <div class="hist-filtros">
+      ${isDiretor ? `<div class="hist-modos full">
+        <button type="button" class="hist-modo${ehNao ? '' : ' ativo'}" onclick="histTrocarModo('concl')">Concluídas</button>
+        <button type="button" class="hist-modo${ehNao ? ' ativo' : ''}" onclick="histTrocarModo('nao')">Não concluídas</button>
+      </div>` : ''}
+      <select aria-label="Cliente" onchange="histMudou('cliente',this.value)">${optsCli}</select>
+      <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
+      <div class="hist-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="histDatas">
+        <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
+        <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
+      </div>
+    </div>
+    <div class="hist-conta">Mostrando ${lista.length} de ${total} ${ehNao ? 'avaliação(ões) não concluída(s)' : 'auditoria(s) concluída(s)'}</div>`;
+
+  let corpo = '';
+  if (!lista.length) {
+    corpo = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">' +
+      (total ? 'Nenhum resultado para os filtros escolhidos.' : (ehNao ? 'Nenhuma avaliação não concluída.' : 'Nenhuma auditoria concluída encontrada.')) + '</div>';
+  } else if (ehNao) {
+    const sel = state.histSel || {};
+    const nSel = lista.filter(a => sel[a.id]).length;
+    const todos = nSel === lista.length;
+    corpo = `
+      <div class="hist-barra-excl">
+        <label><input type="checkbox" ${todos ? 'checked' : ''} onchange="histSelecionarTodos(this.checked)"> Selecionar todas (${lista.length})</label>
+        <button type="button" class="hist-btn-excl" ${nSel ? '' : 'disabled'} onclick="histExcluirSelecionadas()">🗑️ Excluir (${nSel})</button>
+      </div>` + lista.map(a => `
+      <div class="rascunho-item" style="cursor:default">
+        <label class="hist-check">
+          <input type="checkbox" ${sel[a.id] ? 'checked' : ''} onchange="histSelecionar('${esc(a.id)}',this.checked)">
+          <span>
+            <span class="ri-titulo">${esc(a.cliente)} — ${esc(a.unidade)}</span><br>
+            <span class="ri-sub">${esc(a.dataAuditoria || a.dataRegistro || '—')} • ${esc(a.auditor || '—')} • ${esc(a.tipoAvaliacao || '—')}</span><br>
+            <span class="ri-badge">${esc(a.status || 'NÃO CONCLUÍDA')}</span>
+          </span>
+        </label>
+      </div>`).join('');
+  } else {
+    corpo = lista.map(a => histItemConcluido(a, isDiretor)).join('');
   }
 
-  const perfil = state.perfil || '';
-  const isDiretor = perfil === 'DIRETOR';
+  c.innerHTML = `
+      <div class="secao-card">
+        <div class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico de Auditorias</div>
+        <div class="secao-subtitulo">${ehNao ? 'Avaliações iniciadas e não concluídas' : 'Auditorias concluídas'}</div>
+      </div>
+      ${filtros}
+      ${corpo}`;
+}
 
-  let itens = r.auditorias.map(a => {
+function histSelecionar(id, marcado) {
+  if (!state.histSel) state.histSel = {};
+  if (marcado) state.histSel[id] = true; else delete state.histSel[id];
+  histRender();
+}
+function histSelecionarTodos(marcado) {
+  state.histSel = {};
+  if (marcado) histFiltrar(state.histLista).forEach(a => { state.histSel[a.id] = true; });
+  histRender();
+}
+async function histExcluirSelecionadas() {
+  const ids = Object.keys(state.histSel || {});
+  if (!ids.length) return;
+  if (!confirm('Excluir ' + ids.length + ' avaliação(ões) não concluída(s)?\n\nAs auditorias concluídas nunca são afetadas.')) return;
+  showLoading('Excluindo...');
+  const r = await apiCall('excluirAuditoriasLote', { ids: ids });
+  hideLoading();
+  if (r.ok) {
+    toast(r.excluidas + ' avaliação(ões) excluída(s)' + (r.ignoradas ? ' · ' + r.ignoradas + ' ignorada(s)' : ''));
+    carregarHistoricoAba();
+  } else {
+    toast('Erro: ' + (r.erro || 'falha ao excluir'));
+  }
+}
+
+function histItemConcluido(a, isDiretor) {
     let botoes = '';
     if (isDiretor) {
       botoes = `
@@ -1537,14 +1718,6 @@ async function carregarHistoricoAba() {
       </div>
       ${botoes}
     </div>`;
-  }).join('');
-
-  c.innerHTML = `
-      <div class="secao-card">
-        <div class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico de Auditorias</div>
-        <div class="secao-subtitulo">Auditorias concluídas</div>
-      </div>
-      ${itens}`;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1560,7 +1733,7 @@ function esc(s) {
 }
 
 const NPS_PERIODOS = [
-  { v: 'mes',    t: 'Este mês' },
+  { v: 'mes',    t: 'Mês atual (MTD)' },
   { v: '30',     t: 'Últimos 30 dias' },
   { v: '90',     t: 'Últimos 90 dias' },
   { v: 'ano',    t: 'Este ano' },
@@ -1583,7 +1756,7 @@ const NPS_COR_OPCAO = {
 const NPS_OPCAO_RUIM = ['Inadequado', 'Ruim', 'Com grande atraso'];
 const NPS_OPCAO_MEDIA = ['Regular', 'Com pequeno atraso'];
 
-function npsFiltroInicial() { return { cliente: '', unidade: '', periodo: '90', de: '', ate: '' }; }
+function npsFiltroInicial() { return { cliente: '', unidade: '', periodo: 'mes', de: '', ate: '' }; }   // r114: abre sempre no MTD
 
 function npsIsoLocal(d) {
   const p = n => String(n).padStart(2, '0');
@@ -1630,7 +1803,6 @@ function htmlPainelNps() {
     <div class="nps-painel" id="npsPainel">
       <div class="nps-topo">
         <div class="nps-titulo"><i class="bi bi-emoji-smile"></i> Satisfação do cliente <small>CSAT + NPS</small></div>
-        <button type="button" class="nps-btn-detalhe" onclick="npsAbrirDetalhe('resumo')">Ver detalhes</button>
       </div>
       <div class="nps-filtros">
         <select id="npsCliente" aria-label="Cliente" onchange="npsMudouCliente(this.value)">${optsCli}</select>
@@ -1641,7 +1813,7 @@ function htmlPainelNps() {
           <input type="date" id="npsAte" aria-label="Data final" value="${esc(f.ate)}" onchange="npsMudouDatas()">
         </div>
       </div>
-      <div class="nps-grid carregando" id="npsCards">${htmlCardsNps(null)}</div>
+      <div class="nps-grid k4 carregando" id="npsCards">${htmlCardsNps(null)}</div>
     </div>`;
 }
 
@@ -1697,6 +1869,7 @@ async function npsCarregarCards() {
   boxAtual.classList.remove('carregando');
   if (!r.ok) {
     state.npsDados = null;
+    if (state.abaHome === 'nps') npsRenderAba();
     const naoPublicado = /nao reconhecida|não reconhecida/i.test(String(r.erro || ''));
     boxAtual.style.display = 'block';
     boxAtual.innerHTML = '<div class="nps-erro">' + (naoPublicado
@@ -1707,6 +1880,7 @@ async function npsCarregarCards() {
   boxAtual.style.display = '';
   state.npsDados = r;
   boxAtual.innerHTML = htmlCardsNps(r);
+  if (state.abaHome === 'nps') npsRenderAba();   // r114: a aba CSAT/NPS acompanha o filtro
 }
 
 const NPS_NIVEL_COR = { critico: '#C0392B', falha: '#E8872B', atencao: '#D4A017', neutro: '#8899AA', bom: '#61CF00', otimo: '#2E7D32' };
@@ -1717,25 +1891,34 @@ const NPS_LINHAS = [['alto', 'CSAT 9–10'], ['medio', 'CSAT 7–8'], ['baixo', 
 const NPS_COLUNAS = [['prom', 'NPS 9–10'], ['neutro', 'NPS 7–8'], ['detr', 'NPS 0–6']];
 function npsCorCsat(n) { return n === null || n === undefined ? '#9AA7B4' : (n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252')); }
 
+// r114: SOMENTE os 4 cards fixos (título, informação principal em destaque e a secundária na linha abaixo).
+// Todo o restante (recomendação, alertas, análise, diagnóstico...) fica na aba CSAT/NPS.
 function htmlCardsNps(r) {
   const s = r ? r.resumo : null;
+  const an = r ? r.analisadas : null;
   const zona = npsZona(s ? s.nps : null);
   const pct = v => (v === null || v === undefined) ? '—' : v + '%';
   const nps = s && s.nps !== null ? s.nps : '—';
   const csat = s && s.csatMedio !== null && s.csatMedio !== undefined ? String(s.csatMedio).replace('.', ',') : '—';
-  const csatSub = !s ? 'carregando…' : (s.csatRespondidas ? pct(s.pctSatisfeitos) + ' satisfeitos (9–10) · ' + s.csatRespondidas + ' resp.' : 'sem respostas do novo modelo');
+  const csatSub = !s ? 'carregando…' : (s.csatRespondidas ? pct(s.pctSatisfeitos) + ' satisfeitos (9–10)' : 'sem respostas do novo modelo');
   const resp = s ? s.respondidas : '—';
   const env = s ? s.enviados : '—';
   const taxa = s && s.taxaResposta !== null ? s.taxaResposta + '% de retorno' : (s ? 'nenhuma pesquisa enviada' : 'carregando…');
-  const al = s ? s.alertas : null;
+  const cliTxt = an ? an.clientes : '—';
+  const cliSub = an ? an.unidades + ' unidade' + (an.unidades === 1 ? '' : 's') + ' · ' + an.analises + ' análise' + (an.analises === 1 ? '' : 's') : (s ? 'indisponível' : 'carregando…');
   return `
+      <button type="button" class="nps-card" onclick="npsAbrirDetalhe('analise')">
+        <span class="nps-rot">Clientes e unidades analisadas</span>
+        <span class="nps-num-s">${cliTxt}<small> cliente${an && an.clientes === 1 ? '' : 's'}</small></span>
+        <span class="nps-sub">${cliSub}</span>
+      </button>
       <button type="button" class="nps-card nps-principal" onclick="npsAbrirDetalhe('resumo')">
-        <span class="nps-rot">NPS · recomendação</span>
+        <span class="nps-rot">Nota NPS</span>
         <span class="nps-num" style="color:${zona.c}">${nps}</span>
         <span class="nps-sub">${zona.t}</span>
       </button>
-      <button type="button" class="nps-card nps-larga" onclick="npsAbrirDetalhe('resumo')">
-        <span class="nps-rot">CSAT · satisfação com a noite</span>
+      <button type="button" class="nps-card" onclick="npsAbrirDetalhe('resumo')">
+        <span class="nps-rot">Nota CSAT</span>
         <span class="nps-num" style="color:${s && s.csatMedio !== null && s.csatMedio !== undefined ? npsCorCsat(s.csatMedio) : '#8899AA'}">${csat}</span>
         <span class="nps-sub">${csatSub}</span>
       </button>
@@ -1743,93 +1926,167 @@ function htmlCardsNps(r) {
         <span class="nps-rot">Respostas</span>
         <span class="nps-num-s">${resp}<small> / ${env}</small></span>
         <span class="nps-sub">${taxa}</span>
-      </button>
-      <button type="button" class="nps-card nps-quatro" onclick="npsAbrirDetalhe('respostas','todas')">
-        <span class="nps-rot">Recomendação</span>
-        <span class="nps-tres">
-          <span class="nps-p"><b>${s ? pct(s.pctPromotores) : '—'}</b><i>Promotores 9–10${s ? ' · ' + s.promotores : ''}</i></span>
-          <span class="nps-n"><b>${s ? pct(s.pctNeutros) : '—'}</b><i>Neutros 7–8${s ? ' · ' + s.neutros : ''}</i></span>
-          <span class="nps-d"><b>${s ? pct(s.pctDetratores) : '—'}</b><i>Detratores 0–6${s ? ' · ' + s.detratores : ''}</i></span>
-        </span>
-      </button>
-      <button type="button" class="nps-card nps-acao critico${al && al.criticos ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_detr')">
+      </button>`;
+}
+
+// r114: cards que antes ficavam no painel (Recomendação e alertas) agora vivem na aba CSAT/NPS.
+function htmlBlocosNps(r) {
+  const s = r.resumo;
+  const al = s.alertas;
+  const pct = v => (v === null || v === undefined) ? '—' : v + '%';
+  return `
+    <div class="nps-bloco">
+      <h4>Recomendação</h4>
+      <span class="nps-tres">
+        <span class="nps-p"><b>${pct(s.pctPromotores)}</b><i>Promotores 9–10 · ${s.promotores}</i></span>
+        <span class="nps-n"><b>${pct(s.pctNeutros)}</b><i>Neutros 7–8 · ${s.neutros}</i></span>
+        <span class="nps-d"><b>${pct(s.pctDetratores)}</b><i>Detratores 0–6 · ${s.detratores}</i></span>
+      </span>
+    </div>
+    <div class="nps-grid k3">
+      <button type="button" class="nps-card nps-acao critico${al.criticos ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_detr')">
         <span class="nps-rot">🔴 Alerta vermelho</span>
-        <span class="nps-num-s">${al ? al.criticos : '—'}</span>
+        <span class="nps-num-s">${al.criticos}</span>
         <span class="nps-sub">ligação imediata</span>
       </button>
-      <button type="button" class="nps-card nps-acao falha${al && al.falhas ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_prom')">
+      <button type="button" class="nps-card nps-acao falha${al.falhas ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_prom')">
         <span class="nps-rot">🟠 Falha da noite</span>
-        <span class="nps-num-s">${al ? al.falhas : '—'}</span>
+        <span class="nps-num-s">${al.falhas}</span>
         <span class="nps-sub">correção de processo</span>
       </button>
       <button type="button" class="nps-card nps-acao otimo" onclick="npsAbrirDetalhe('diagnostico','alto_prom')">
         <span class="nps-rot">🟢 Operação perfeita</span>
-        <span class="nps-num-s">${al ? al.perfeitas : '—'}</span>
+        <span class="nps-num-s">${al.perfeitas}</span>
         <span class="nps-sub">pedir indicações</span>
-      </button>`;
+      </button>
+    </div>`;
 }
 
-/* ── DETALHE (folha sobreposta) ── */
+// r114: recomendações geradas por REGRAS (sem IA), a partir dos números do filtro atual.
+function npsRecomendacoes(r) {
+  const s = r.resumo, al = s.alertas, out = [];
+  const add = (nivel, ic, titulo, texto, ir) => out.push({ nivel, ic, titulo, texto, ir: ir || '' });
+  if (al.criticos > 0) add('critico', '🔴', 'Ligar hoje: ' + al.criticos + ' alerta(s) vermelho(s)', 'Noite ruim e cliente que não recomenda. Contato imediato da coordenação ou diretoria.', "npsAbrirDetalhe('diagnostico','baixo_detr')");
+  if (al.falhas > 0) add('falha', '🟠', 'Corrigir processo: ' + al.falhas + ' noite(s) com falha', 'A equipe ou o supervisor falhou, mesmo com relação ainda preservada. Alinhar com o supervisor e revisar o procedimento.', "npsAbrirDetalhe('diagnostico','baixo_prom')");
+  const risco = (r.porUnidade || []).filter(u => u.nps !== null && u.nps < 0).slice(0, 4);
+  if (risco.length) add('atencao', '⚠️', 'Unidades com NPS negativo', risco.map(u => u.unidade + ' (' + u.nps + ')').join(' · ') + '. Priorizar visita ou contato com a gerência.', "npsTrocarAba('unidades')");
+  if (s.nps !== null && s.nps < 50) add('atencao', '📉', 'NPS abaixo da zona de qualidade (' + s.nps + ')', 'Foco em reduzir detratores: ler os comentários das notas 0–6 e tratar as causas mais citadas.', "npsAbrirDetalhe('respostas','Detrator')");
+  if (s.csatMedio !== null && s.csatMedio < 9) add('atencao', '⭐', 'CSAT médio ' + String(s.csatMedio).replace('.', ',') + ' (meta: 9 ou mais)', 'Somente ' + s.pctSatisfeitos + '% avaliaram a noite com 9–10. Investigar as noites com nota baixa.', "npsAbrirDetalhe('respostas','todas')");
+  if (s.taxaResposta !== null && s.taxaResposta < 50) add('atencao', '📨', 'Retorno da pesquisa baixo (' + s.taxaResposta + '%)', 'Poucas respostas deixam o indicador instável. Reforçar o pedido de resposta logo após o inventário.');
+  const pend = s.enviados - s.respondidas;
+  if (pend > 0) add('neutro', '⏳', pend + ' pesquisa(s) aguardando resposta', 'Acompanhar e, se passar do prazo, reenviar um lembrete ao gerente.');
+  const d = r.destaques;
+  if (d && d.base > 0) {
+    const pos = d.itens.filter(x => x.chave !== 'outro');
+    const outro = d.itens.find(x => x.chave === 'outro');
+    const forte = pos.slice().sort((a, b) => b.quantidade - a.quantidade)[0];
+    const fraco = pos.slice().sort((a, b) => a.quantidade - b.quantidade)[0];
+    if (outro && outro.pct !== null && outro.pct >= 20) add('atencao', '💬', outro.pct + '% marcaram "Outro"', 'Ler os comentários: pode haver um problema que a lista de pontos não cobre.', "npsAbrirDetalhe('respostas','todas')");
+    if (forte && forte.quantidade > 0) add('bom', '💪', 'Ponto forte: ' + forte.rotulo + ' (' + forte.pct + '%)', 'É o que mais se destaca na operação. Manter e usar como argumento comercial.');
+    if (fraco && forte && fraco.chave !== forte.chave) add('neutro', '🎯', 'Pouco citado: ' + fraco.rotulo + ' (' + fraco.pct + '%)', 'Oportunidade de melhoria: reforçar este ponto no briefing da equipe.');
+  }
+  if (al.perfeitas > 0) add('otimo', '🌟', al.perfeitas + ' operação(ões) perfeita(s)', 'Momento ideal para pedir indicações comerciais a esses clientes.', "npsAbrirDetalhe('diagnostico','alto_prom')");
+  const ordem = { critico: 1, falha: 2, atencao: 3, neutro: 4, bom: 5, otimo: 6 };
+  out.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]);
+  return out;
+}
+
+// r114: análise resumida, visual (medidores, barras e selos coloridos).
+function npsHtmlAnalise(r) {
+  const s = r.resumo;
+  if (!s.respondidas) {
+    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}</div>`;
+  }
+  const zona = npsZona(s.nps);
+  const posNps = s.nps === null ? 50 : Math.max(0, Math.min(100, (s.nps + 100) / 2));
+  const posCsat = s.csatMedio === null || s.csatMedio === undefined ? null : Math.max(0, Math.min(100, (s.csatMedio - 1) * 100 / 9));
+  const P = s.pctPromotores || 0, N = s.pctNeutros || 0, D = s.pctDetratores || 0;
+  const seg = (v, cor) => v ? `<span style="width:${v}%;background:${cor}">${v >= 8 ? v + '%' : ''}</span>` : '';
+  const d = r.destaques;
+  let barrasDest = '';
+  if (d && d.base > 0) {
+    const max = Math.max.apply(null, d.itens.map(x => x.quantidade).concat([1]));
+    barrasDest = d.itens.map(x => `
+      <div class="an-linha">
+        <span class="nome">${esc(x.rotulo)}</span><b>${x.pct === null ? '—' : x.pct + '%'}</b>
+        <div class="trilho"><span style="width:${Math.round(x.quantidade * 100 / max)}%;background:${x.chave === 'outro' ? '#E8872B' : '#61CF00'}"></span></div>
+      </div>`).join('');
+  }
+  const recs = npsRecomendacoes(r);
+  const recHtml = recs.length ? recs.map(x => {
+    const cor = NPS_NIVEL_COR[x.nivel] || '#8899AA';
+    const inner = `<span class="ic">${x.ic}</span><span><b>${esc(x.titulo)}</b><span>${esc(x.texto)}</span></span>`;
+    return x.ir ? `<button type="button" class="an-rec" style="border-left-color:${cor}" onclick="${x.ir}">${inner}</button>`
+                : `<div class="an-rec" style="border-left-color:${cor}">${inner}</div>`;
+  }).join('') : '<div class="nps-vazio" style="padding:12px">Sem recomendações para este filtro.</div>';
+  return `
+    ${htmlBlocosNps(r)}
+    <div class="nps-bloco">
+      <h4>Placar</h4>
+      <div class="an-placar">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><b style="color:var(--navy)">NPS ${s.nps === null ? '—' : s.nps}</b><span style="color:${zona.c};font-weight:700">${zona.t}</span></div>
+          <div class="an-medidor"><i style="left:${posNps}%"></i></div>
+          <div class="an-medidor-esc"><span>-100</span><span>0</span><span>50</span><span>100</span></div>
+        </div>
+        ${posCsat === null ? '' : `<div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><b style="color:var(--navy)">CSAT ${String(s.csatMedio).replace('.', ',')}</b><span style="color:${npsCorCsat(s.csatMedio)};font-weight:700">${s.pctSatisfeitos}% satisfeitos</span></div>
+          <div class="an-medidor" style="background:linear-gradient(90deg,#E05252 0%,#E05252 55%,#D4A017 55%,#D4A017 78%,#2E7D32 78%,#2E7D32 100%)"><i style="left:${posCsat}%"></i></div>
+          <div class="an-medidor-esc"><span>1</span><span>6</span><span>8</span><span>10</span></div>
+        </div>`}
+        <div>
+          <div style="font-size:12px;margin-bottom:6px"><b style="color:var(--navy)">Quem respondeu</b></div>
+          <div class="an-barra">${seg(P, '#2E7D32')}${seg(N, '#D4A017')}${seg(D, '#E05252')}</div>
+          <div class="nps-legenda-faixas"><span><i style="background:#2E7D32"></i>Promotores ${P}%</span><span><i style="background:#D4A017"></i>Neutros ${N}%</span><span><i style="background:#E05252"></i>Detratores ${D}%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="nps-bloco">
+      <h4>Recomendações</h4>
+      ${recHtml}
+    </div>
+    ${barrasDest ? `<div class="nps-bloco"><h4>O que se destacou na operação</h4>${barrasDest}<div class="nps-legenda-faixas">% de quem respondeu o novo modelo (${d.base}).</div></div>` : ''}`;
+}
+
+/* ── DETALHE (r114: agora é a aba "CSAT/NPS", não mais uma folha sobreposta) ── */
 function npsAbrirDetalhe(aba, chave) {
   if (!state.npsDados) { toast('Aguarde o carregamento do NPS'); return; }
-  state.npsModal = { aba: aba || 'resumo', cat: (aba === 'respostas' && chave) ? chave : 'todas', diag: aba === 'diagnostico' ? (chave || '') : '', soComentario: false };
-  let m = document.getElementById('npsModal');
-  if (!m) {
-    m = document.createElement('div');
-    m.id = 'npsModal';
-    m.className = 'nps-modal';
-    m.setAttribute('role', 'dialog');
-    m.setAttribute('aria-modal', 'true');
-    m.addEventListener('click', e => { if (e.target === m) npsFecharDetalhe(); });
-    document.body.appendChild(m);
-  }
-  document.body.style.overflow = 'hidden';
-  npsRenderModal();
+  state.npsModal = { aba: aba || 'analise', cat: (aba === 'respostas' && chave) ? chave : 'todas', diag: aba === 'diagnostico' ? (chave || '') : '', soComentario: false };
+  if (state.abaHome === 'nps') npsRenderAba();
+  else mostrarAbaHome('nps');
+  const barra = document.querySelector('.abas-home');
+  if (barra && barra.scrollIntoView) barra.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function npsFecharDetalhe() {
-  const m = document.getElementById('npsModal');
-  if (m) m.remove();
-  document.body.style.overflow = '';
-}
+function npsTrocarAba(aba) { state.npsModal.aba = aba; npsRenderAba(); }
+function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderAba(); }
+function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderAba(); }
+function npsSelecionarDiag(chave) { state.npsModal.diag = (state.npsModal.diag === chave ? '' : chave); npsRenderAba(); }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') npsFecharDetalhe(); });
-
-function npsTrocarAba(aba) { state.npsModal.aba = aba; npsRenderModal(); }
-function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderModal(); }
-function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderModal(); }
-function npsSelecionarDiag(chave) { state.npsModal.diag = (state.npsModal.diag === chave ? '' : chave); npsRenderModal(); }
-
-function npsRenderModal() {
-  const m = document.getElementById('npsModal');
+function npsRenderAba() {
+  const c = $('#abaConteudo');
+  if (!c || state.abaHome !== 'nps') return;
   const r = state.npsDados;
-  if (!m || !r) return;
+  if (!r) {
+    c.innerHTML = '<div class="nps-vazio">Carregando os dados de CSAT/NPS…<br>Se persistir, veja a mensagem no painel acima.</div>';
+    return;
+  }
+  if (!state.npsModal) state.npsModal = { aba: 'analise', cat: 'todas', diag: '', soComentario: false };
   const st = state.npsModal;
-  const abas = [['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
+  const abas = [['analise', 'Análise'], ['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
   let corpo = '';
-  if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
+  if (st.aba === 'analise') corpo = npsHtmlAnalise(r);
+  else if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
   else if (st.aba === 'diagnostico') corpo = npsHtmlDiagnostico(r, st);
   else if (st.aba === 'destaques') corpo = npsHtmlDestaques(r);
   else if (st.aba === 'unidades') corpo = npsHtmlUnidades(r);
   else corpo = npsHtmlRespostas(r, st);
-  m.innerHTML = `
-    <div class="nps-folha">
-      <div class="nps-modal-topo">
-        <div class="nps-modal-linha">
-          <div>
-            <div class="nps-modal-titulo">Satisfação do cliente (CSAT + NPS)</div>
-            <div class="nps-modal-ctx">${esc(npsRotuloFiltro())}<br>Período pela data da análise</div>
-          </div>
-          <button type="button" class="nps-modal-x" onclick="npsFecharDetalhe()" aria-label="Fechar">✕</button>
-        </div>
-        <div class="nps-modal-abas" role="tablist">
-          ${abas.map(a => `<button type="button" role="tab" class="nps-modal-aba${st.aba === a[0] ? ' ativa' : ''}" onclick="npsTrocarAba('${a[0]}')">${a[1]}</button>`).join('')}
-        </div>
-      </div>
-      <div class="nps-modal-corpo">${corpo}</div>
-    </div>`;
-  const corpoEl = m.querySelector('.nps-modal-corpo');
-  if (corpoEl) corpoEl.scrollTop = 0;
+  c.innerHTML = `
+    <div class="nps-modal-ctx" style="margin:0 2px 8px">${esc(npsRotuloFiltro())} · período pela data da análise</div>
+    <div class="nps-subabas" role="tablist">
+      ${abas.map(a => `<button type="button" role="tab" class="nps-modal-aba${st.aba === a[0] ? ' ativa' : ''}" onclick="npsTrocarAba('${a[0]}')">${a[1]}</button>`).join('')}
+    </div>
+    <div>${corpo}</div>`;
 }
 
 function npsMesRotulo(ym) {
@@ -1963,7 +2220,7 @@ function npsHtmlDestaques(r) {
   }).join('');
   const outros = r.respostas.filter(x => (x.destaques || []).indexOf('outro') !== -1);
   const lista = outros.length ? `
-    <div class="nps-bloco"><h4>Marcaram "Outro / ponto negativo"</h4>${outros.map(x => `
+    <div class="nps-bloco"><h4>Marcaram "Outro"</h4>${outros.map(x => `
       <div class="nps-resp ${x.categoria === 'Promotor' ? 'p' : (x.categoria === 'Neutro' ? 'n' : 'd')}">
         <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)}</small></div>
         ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}

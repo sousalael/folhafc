@@ -123,8 +123,8 @@ const DESTAQUES = [
   ['pontualidade', 'Pontualidade no início/fim da contagem'],
   ['supervisor', 'Liderança e comunicação do supervisor'],
   ['postura', 'Postura e respeito do time às regras da loja'],
-  ['mapeamento', 'Organização e mapeamento das áreas'],
-  ['outro', 'Outro / Teve algum ponto negativo?']
+  ['mapeamento', 'Rápido fornecimento de informações e relatórios'],
+  ['outro', 'Outro']
 ];
 
 function escalaHtml(nome, de, ate) {
@@ -157,7 +157,7 @@ function telaFormulario(p) {
     </div>
 
     <div class="card" id="cartaoNps">
-      <div class="pergunta">2. Considerando sua experiência geral com os nossos serviços, em uma escala de 0 a 10, o quanto você recomendaria nossa empresa para outro gerente de loja ou parceiro? <span class="obrig" aria-hidden="true">*</span></div>
+      <div class="pergunta">2. Considerando sua experiência geral com os nossos serviços, em uma escala de 0 a 10, o quanto você recomendaria nossa empresa? <span class="obrig" aria-hidden="true">*</span></div>
       <div role="radiogroup" aria-label="Recomendação de 0 a 10">${escalaHtml('nota', 0, 10)}</div>
       <div class="pontas"><span>0 · Não Recomendaria</span><span>10 · Recomendaria Com Certeza</span></div>
       <div class="msg-faltou">Escolha uma nota de 0 a 10.</div>
