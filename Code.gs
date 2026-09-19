@@ -83,7 +83,7 @@ function doPost(e) {
     else if (action === 'obterRelatorio') { result = obterRelatorio(data, data.cpf); }
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
-    else if (action === 'excluirAuditoriasLote') { result = excluirAuditoriasLote(data, data.cpf); }
+    else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'prepararApresentacaoAuditoria') { result = prepararApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'salvarApresentacaoAuditoria') { result = salvarApresentacaoAuditoria(data, data.cpf); }
     else if (action === 'obterApresentacaoAuditoria') { result = obterApresentacaoAuditoria(data, data.cpf); }
@@ -496,7 +496,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r115';
+const VERSAO_SCRIPT = '2026-09-19-r116';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3071,30 +3071,28 @@ function excluirAuditoria(dados, cpf) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
-// r114: exclusão em lote de avaliações NÃO concluídas (rascunhos). Só Diretor.
-// Nunca toca em análises CONCLUÍDAS: o servidor ignora qualquer id concluído.
-function excluirAuditoriasLote(dados, cpf) {
+// r116: exclui UMA avaliação EM ANDAMENTO (rascunho). Diretor exclui qualquer uma;
+// Supervisor só as próprias. Nunca toca em análises CONCLUÍDAS.
+function excluirAvaliacaoEmAndamento(dados, cpf) {
   try {
-    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem excluir avaliações' };
+    var perfil = getPerfilPorCPF(cpf);
+    if (perfil !== 'DIRETOR' && perfil !== 'SUPERVISOR') return { ok: false, erro: 'Acesso restrito' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
-    var ids = Array.isArray(d.ids) ? d.ids.map(String) : [];
-    if (!ids.length) return { ok: false, erro: 'Nenhuma avaliação selecionada' };
-    var pedidos = {};
-    ids.forEach(function (id) { pedidos[id] = true; });
+    var id = String(d.id || '');
+    if (!id) return { ok: false, erro: 'Avaliação não informada' };
+    var cpfLimpo = normalizarCPF(cpf);
     var aba = getOuCriarAbaAuditoria();
     var ult = aba.getLastRow();
-    if (ult < 2) return { ok: true, excluidas: 0, ignoradas: ids.length };
+    if (ult < 2) return { ok: false, erro: 'Avaliação não encontrada' };
     var linhas = aba.getRange(2, 1, ult - 1, 10).getValues();
-    var excluidas = 0;
     for (var i = 0; i < linhas.length; i++) {
-      var id = String(linhas[i][0]);
-      var status = String(linhas[i][9]);
-      if (!pedidos[id]) continue;
-      if (status === 'CONCLUIDO' || status === 'EXCLUIDO') continue;
+      if (String(linhas[i][0]) !== id) continue;
+      if (String(linhas[i][9]) !== 'RASCUNHO') return { ok: false, erro: 'Só é possível excluir avaliações em andamento' };
+      if (perfil !== 'DIRETOR' && normalizarCPF(linhas[i][3]) !== cpfLimpo) return { ok: false, erro: 'Você só pode excluir as suas próprias avaliações' };
       aba.getRange(i + 2, 10).setValue('EXCLUIDO');
-      excluidas++;
+      return { ok: true };
     }
-    return { ok: true, excluidas: excluidas, ignoradas: ids.length - excluidas };
+    return { ok: false, erro: 'Avaliação não encontrada' };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 

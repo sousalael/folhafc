@@ -261,16 +261,7 @@ button.an-rec{cursor:pointer}
 .hist-filtros .full{grid-column:1/-1}
 .hist-datas{grid-column:1/-1;display:none;grid-template-columns:1fr 1fr;gap:8px}
 .hist-datas.aberto{display:grid}
-.hist-modos{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px}
-.hist-modo{flex:1;border:none;background:transparent;border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;font-family:inherit}
-.hist-modo.ativo{background:var(--navy);color:#fff}
 .hist-conta{font-size:11px;color:var(--text-light);margin:0 2px 8px}
-.hist-barra-excl{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--white);border-radius:12px;padding:10px 12px;margin-bottom:10px;box-shadow:0 2px 12px rgba(0,0,0,.06);font-size:12px;font-weight:700;color:var(--navy);position:sticky;top:0;z-index:5}
-.hist-barra-excl label{display:flex;gap:8px;align-items:center;cursor:pointer}
-.hist-barra-excl input,.hist-check input{width:18px;height:18px}
-.hist-btn-excl{border:none;background:#E05252;color:#fff;font-weight:700;font-size:12px;padding:8px 12px;border-radius:10px;cursor:pointer;font-family:inherit}
-.hist-btn-excl:disabled{background:#D5DBE1;color:#8899AA;cursor:not-allowed}
-.hist-check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
 
 
 /* PERFORMANCE (r110) */
@@ -408,7 +399,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r115';
+const VERSAO = 'r116';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1515,7 +1506,7 @@ function verHistorico() {
 
 // r114: Histórico com filtros (cliente e período) e exclusão em lote das avaliações NÃO concluídas.
 function histFiltro() {
-  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '', modo: 'concl' };
+  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '' };
   return state.histFiltro;
 }
 
@@ -1528,7 +1519,7 @@ function histDataISO(v) {
   if (m) return m[3] + '-' + m[2] + '-' + m[1];
   return '';
 }
-function histNorm(v) { return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+function histNorm(v) { return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 
 function histFiltrar(lista) {
   const f = histFiltro();
@@ -1546,18 +1537,19 @@ function histFiltrar(lista) {
 async function carregarHistoricoAba() {
   const c = $('#abaConteudo');
   if (!c) return;
-  const f = histFiltro();
-  if (state.perfil !== 'DIRETOR') f.modo = 'concl';   // só o Diretor vê/exclui as não concluídas
   c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
-  const ehNao = f.modo === 'nao';
-  const r = await apiCall('listarHistoricoAuditorias', ehNao ? { status: 'RASCUNHO' } : {});
+  // r116: concluídas + em andamento buscadas juntas (só quando a aba é aberta)
+  const [r, ra] = await Promise.all([
+    apiCall('listarHistoricoAuditorias', {}),
+    apiCall('listarHistoricoAuditorias', { status: 'RASCUNHO' })
+  ]);
   if (state.abaHome !== 'hist' || !$('#abaConteudo')) return;
   if (!r.ok) {
     c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
     return;
   }
   state.histLista = r.auditorias || [];
-  state.histSel = {};
+  state.histAndamento = (ra && ra.ok) ? (ra.auditorias || []) : [];
   histRender();
 }
 
@@ -1569,15 +1561,7 @@ function histMudou(campo, valor) {
     if (d) d.classList.toggle('aberto', valor === 'custom');
     if (valor === 'custom' && !(f.de || f.ate)) return;   // espera as datas
   }
-  state.histSel = {};
   histRender();
-}
-
-function histTrocarModo(modo) {
-  const f = histFiltro();
-  if (f.modo === modo) return;
-  f.modo = modo;
-  carregarHistoricoAba();   // cada modo busca a sua lista (sob demanda)
 }
 
 function histRender() {
@@ -1585,87 +1569,53 @@ function histRender() {
   if (!c) return;
   const f = histFiltro();
   const isDiretor = state.perfil === 'DIRETOR';
-  const ehNao = f.modo === 'nao';
   const clientes = state.clientes || [];
   const optsCli = '<option value="">Todos os clientes</option>' + clientes.map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   const lista = histFiltrar(state.histLista);
   const total = (state.histLista || []).length;
+  const andamento = histFiltrar(state.histAndamento);
 
   const filtros = `
     <div class="hist-filtros">
-      ${isDiretor ? `<div class="hist-modos full">
-        <button type="button" class="hist-modo${ehNao ? '' : ' ativo'}" onclick="histTrocarModo('concl')">Concluídas</button>
-        <button type="button" class="hist-modo${ehNao ? ' ativo' : ''}" onclick="histTrocarModo('nao')">Não concluídas</button>
-      </div>` : ''}
       <select aria-label="Cliente" onchange="histMudou('cliente',this.value)">${optsCli}</select>
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
       <div class="hist-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="histDatas">
         <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
         <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
       </div>
-    </div>
-    <div class="hist-conta">Mostrando ${lista.length} de ${total} ${ehNao ? 'avaliação(ões) não concluída(s)' : 'auditoria(s) concluída(s)'}</div>`;
+    </div>`;
+
+  // r116: avaliações EM ANDAMENTO (Diretor vê todas; Supervisor, as suas) — única exclusão nova do Histórico
+  const blocoAndamento = andamento.length ? `
+    <div class="hist-conta">Em andamento: ${andamento.length}</div>` + andamento.map(a => `
+      <div class="rascunho-item" style="cursor:default">
+        <div class="ri-titulo">${esc(a.cliente)} — ${esc(a.unidade)}</div>
+        <div class="ri-sub">${esc(a.dataAuditoria || a.dataRegistro || '—')} • ${esc(a.auditor || '—')} • ${esc(a.tipoAvaliacao || '—')}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+          <span class="ri-badge">EM ANDAMENTO</span>
+          <button class="btn-fc" style="width:auto;margin-left:auto;padding:6px 12px;font-size:11px;background:#FDEAEA;color:#E05252" onclick="histExcluirAndamento('${esc(a.id)}','${esc(a.cliente)} — ${esc(a.unidade)}')">🗑️ Excluir</button>
+        </div>
+      </div>`).join('') : '';
 
   let corpo = '';
   if (!lista.length) {
     corpo = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">' +
-      (total ? 'Nenhum resultado para os filtros escolhidos.' : (ehNao ? 'Nenhuma avaliação não concluída.' : 'Nenhuma auditoria concluída encontrada.')) + '</div>';
-  } else if (ehNao) {
-    const sel = state.histSel || {};
-    const nSel = lista.filter(a => sel[a.id]).length;
-    const todos = nSel === lista.length;
-    corpo = `
-      <div class="hist-barra-excl">
-        <label><input type="checkbox" ${todos ? 'checked' : ''} onchange="histSelecionarTodos(this.checked)"> Selecionar todas (${lista.length})</label>
-        <button type="button" class="hist-btn-excl" ${nSel ? '' : 'disabled'} onclick="histExcluirSelecionadas()">🗑️ Excluir (${nSel})</button>
-      </div>` + lista.map(a => `
-      <div class="rascunho-item" style="cursor:default">
-        <label class="hist-check">
-          <input type="checkbox" ${sel[a.id] ? 'checked' : ''} onchange="histSelecionar('${esc(a.id)}',this.checked)">
-          <span>
-            <span class="ri-titulo">${esc(a.cliente)} — ${esc(a.unidade)}</span><br>
-            <span class="ri-sub">${esc(a.dataAuditoria || a.dataRegistro || '—')} • ${esc(a.auditor || '—')} • ${esc(a.tipoAvaliacao || '—')}</span><br>
-            <span class="ri-badge">${esc(a.status || 'NÃO CONCLUÍDA')}</span>
-          </span>
-        </label>
-      </div>`).join('');
+      (total ? 'Nenhum resultado para os filtros escolhidos.' : 'Nenhuma auditoria concluída encontrada.') + '</div>';
   } else {
-    corpo = lista.map(a => histItemConcluido(a, isDiretor)).join('');
+    corpo = `<div class="hist-conta">Concluídas: ${lista.length} de ${total}</div>` + lista.map(a => histItemConcluido(a, isDiretor)).join('');
   }
 
-  c.innerHTML = `
-      <div class="secao-card">
-        <div class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico de Auditorias</div>
-        <div class="secao-subtitulo">${ehNao ? 'Avaliações iniciadas e não concluídas' : 'Auditorias concluídas'}</div>
-      </div>
-      ${filtros}
-      ${corpo}`;
+  c.innerHTML = filtros + blocoAndamento + corpo;
 }
 
-function histSelecionar(id, marcado) {
-  if (!state.histSel) state.histSel = {};
-  if (marcado) state.histSel[id] = true; else delete state.histSel[id];
-  histRender();
-}
-function histSelecionarTodos(marcado) {
-  state.histSel = {};
-  if (marcado) histFiltrar(state.histLista).forEach(a => { state.histSel[a.id] = true; });
-  histRender();
-}
-async function histExcluirSelecionadas() {
-  const ids = Object.keys(state.histSel || {});
-  if (!ids.length) return;
-  if (!confirm('Excluir ' + ids.length + ' avaliação(ões) não concluída(s)?\n\nAs auditorias concluídas nunca são afetadas.')) return;
+async function histExcluirAndamento(id, nome) {
+  if (!confirm('Excluir a avaliação em andamento "' + nome + '"?')) return;
   showLoading('Excluindo...');
-  const r = await apiCall('excluirAuditoriasLote', { ids: ids });
+  const r = await apiCall('excluirAvaliacaoEmAndamento', { id: id });
   hideLoading();
-  if (r.ok) {
-    toast(r.excluidas + ' avaliação(ões) excluída(s)' + (r.ignoradas ? ' · ' + r.ignoradas + ' ignorada(s)' : ''));
-    carregarHistoricoAba();
-  } else {
-    toast('Erro: ' + (r.erro || 'falha ao excluir'));
-  }
+  if (r.ok) { toast('Avaliação em andamento excluída'); carregarHistoricoAba(); }
+  else toast('Erro: ' + (r.erro || 'falha ao excluir'));
 }
 
 function histItemConcluido(a, isDiretor) {
@@ -1792,7 +1742,17 @@ function npsCorValor(n) {
 }
 function npsCorNota(n) { return n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252'); }
 
+// r116: o painel superior mostra SOMENTE os 4 cards. Os filtros ficam na aba CSAT/NPS e controlam os cards.
 function htmlPainelNps() {
+  if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
+  return `
+    <div class="nps-painel" id="npsPainel">
+      <div class="nps-grid k4 carregando" id="npsCards">${htmlCardsNps(null)}</div>
+    </div>`;
+}
+
+// r116: filtros (cliente, unidade, período) — exibidos no topo da aba CSAT/NPS.
+function htmlFiltrosNps() {
   if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
   const f = state.npsFiltro;
   const clientes = state.clientesConcluidos || state.clientes || [];
@@ -1800,11 +1760,8 @@ function htmlPainelNps() {
     clientes.map(c => `<option value="${esc(c)}"${c === f.cliente ? ' selected' : ''}>${esc(c)}</option>`).join('');
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   return `
-    <div class="nps-painel" id="npsPainel">
-      <div class="nps-topo">
-        <div class="nps-titulo"><i class="bi bi-emoji-smile"></i> Satisfação do cliente <small>CSAT + NPS</small></div>
-      </div>
-      <div class="nps-filtros">
+    <div class="nps-painel" style="margin-bottom:12px">
+      <div class="nps-filtros" style="margin-bottom:0">
         <select id="npsCliente" aria-label="Cliente" onchange="npsMudouCliente(this.value)">${optsCli}</select>
         <select id="npsUnidade" aria-label="Unidade" onchange="npsMudouUnidade(this.value)">${npsOpcoesUnidade()}</select>
         <select id="npsPeriodo" aria-label="Período (data da análise)" onchange="npsMudouPeriodo(this.value)" style="grid-column:1/-1">${optsPer}</select>
@@ -1813,7 +1770,6 @@ function htmlPainelNps() {
           <input type="date" id="npsAte" aria-label="Data final" value="${esc(f.ate)}" onchange="npsMudouDatas()">
         </div>
       </div>
-      <div class="nps-grid k4 carregando" id="npsCards">${htmlCardsNps(null)}</div>
     </div>`;
 }
 
@@ -1869,7 +1825,6 @@ async function npsCarregarCards() {
   boxAtual.classList.remove('carregando');
   if (!r.ok) {
     state.npsDados = null;
-    if (state.abaHome === 'nps') npsRenderAba();
     const naoPublicado = /nao reconhecida|não reconhecida/i.test(String(r.erro || ''));
     boxAtual.style.display = 'block';
     boxAtual.innerHTML = '<div class="nps-erro">' + (naoPublicado
@@ -1995,7 +1950,7 @@ function npsRecomendacoes(r) {
 function npsHtmlAnalise(r) {
   const s = r.resumo;
   if (!s.respondidas) {
-    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}</div>`;
+    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}<br><small>O período usa a data da <b>análise</b>, não a da resposta. Se esperava ver dados, escolha "Últimos 90 dias" no filtro acima.</small></div>`;
   }
   const zona = npsZona(s.nps);
   const posNps = s.nps === null ? 50 : Math.max(0, Math.min(100, (s.nps + 100) / 2));
@@ -2068,7 +2023,7 @@ function npsRenderAba() {
   if (!c || state.abaHome !== 'nps') return;
   const r = state.npsDados;
   if (!r) {
-    c.innerHTML = '<div class="nps-vazio">Carregando os dados de CSAT/NPS…<br>Se persistir, veja a mensagem no painel acima.</div>';
+    c.innerHTML = htmlFiltrosNps() + '<div class="nps-vazio">Carregando os dados de CSAT/NPS…<br>Se persistir, tente mudar o filtro ou recarregar a página.</div>';
     return;
   }
   if (!state.npsModal) state.npsModal = { aba: 'analise', cat: 'todas', diag: '', soComentario: false };
@@ -2081,7 +2036,7 @@ function npsRenderAba() {
   else if (st.aba === 'destaques') corpo = npsHtmlDestaques(r);
   else if (st.aba === 'unidades') corpo = npsHtmlUnidades(r);
   else corpo = npsHtmlRespostas(r, st);
-  c.innerHTML = `
+  c.innerHTML = htmlFiltrosNps() + `
     <div class="nps-modal-ctx" style="margin:0 2px 8px">${esc(npsRotuloFiltro())} · período pela data da análise</div>
     <div class="nps-subabas" role="tablist">
       ${abas.map(a => `<button type="button" role="tab" class="nps-modal-aba${st.aba === a[0] ? ' ativa' : ''}" onclick="npsTrocarAba('${a[0]}')">${a[1]}</button>`).join('')}
