@@ -399,7 +399,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r116';
+const VERSAO = 'r117';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -859,7 +859,10 @@ function htmlAbaPreenchimento() {
           <div class="rascunho-item" onclick="carregarRascunho(${i})">
             <div class="ri-titulo">${r.identificacao.cliente || 'Cliente não definido'}</div>
             <div class="ri-sub">${r.identificacao.unidade || '—'} • ${r.identificacao.data_auditoria || '—'}</div>
-            <span class="ri-badge">RASCUNHO</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+              <span class="ri-badge">RASCUNHO</span>
+              <button type="button" class="btn-fc" style="width:auto;margin-left:auto;padding:6px 12px;font-size:11px;background:#FDEAEA;color:#E05252" onclick="event.stopPropagation();excluirRascunho(${i})">🗑️ Excluir</button>
+            </div>
           </div>
         `).join('')}
       </div>`;
@@ -899,6 +902,26 @@ function novaAvaliacao() {
   state.secaoAtual = 0;
   state.status = 'RASCUNHO';
   renderFormulario();
+}
+
+// r117: exclui uma avaliação EM ANDAMENTO (Diretor e Supervisor — o servidor só deixa o Supervisor excluir as próprias).
+async function excluirRascunho(idx) {
+  const rasc = (state.rascunhos || [])[idx];
+  if (!rasc) return;
+  const nome = (rasc.identificacao.cliente || 'Cliente não definido') + ' — ' + (rasc.identificacao.unidade || '—');
+  if (!confirm('Excluir a avaliação em andamento "' + nome + '"?')) return;
+  showLoading('Excluindo...');
+  const r = await apiCall('excluirAvaliacaoEmAndamento', { id: rasc.id });
+  hideLoading();
+  const naoExisteNoServidor = !r.ok && /n[aã]o encontrada/i.test(String(r.erro || ''));   // rascunho só local
+  if (r.ok || naoExisteNoServidor) {
+    try { localStorage.removeItem('fc_aud_' + rasc.id); } catch (e) {}
+    state.rascunhos.splice(idx, 1);
+    toast('Avaliação em andamento excluída');
+    if (state.abaHome === 'preench') mostrarAbaHome('preench');
+  } else {
+    toast('Erro: ' + (r.erro || 'falha ao excluir'));
+  }
 }
 
 async function carregarRascunho(idx) {
@@ -1538,18 +1561,13 @@ async function carregarHistoricoAba() {
   const c = $('#abaConteudo');
   if (!c) return;
   c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
-  // r116: concluídas + em andamento buscadas juntas (só quando a aba é aberta)
-  const [r, ra] = await Promise.all([
-    apiCall('listarHistoricoAuditorias', {}),
-    apiCall('listarHistoricoAuditorias', { status: 'RASCUNHO' })
-  ]);
+  const r = await apiCall('listarHistoricoAuditorias', {});
   if (state.abaHome !== 'hist' || !$('#abaConteudo')) return;
   if (!r.ok) {
     c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
     return;
   }
   state.histLista = r.auditorias || [];
-  state.histAndamento = (ra && ra.ok) ? (ra.auditorias || []) : [];
   histRender();
 }
 
@@ -1574,7 +1592,6 @@ function histRender() {
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   const lista = histFiltrar(state.histLista);
   const total = (state.histLista || []).length;
-  const andamento = histFiltrar(state.histAndamento);
 
   const filtros = `
     <div class="hist-filtros">
@@ -1586,18 +1603,6 @@ function histRender() {
       </div>
     </div>`;
 
-  // r116: avaliações EM ANDAMENTO (Diretor vê todas; Supervisor, as suas) — única exclusão nova do Histórico
-  const blocoAndamento = andamento.length ? `
-    <div class="hist-conta">Em andamento: ${andamento.length}</div>` + andamento.map(a => `
-      <div class="rascunho-item" style="cursor:default">
-        <div class="ri-titulo">${esc(a.cliente)} — ${esc(a.unidade)}</div>
-        <div class="ri-sub">${esc(a.dataAuditoria || a.dataRegistro || '—')} • ${esc(a.auditor || '—')} • ${esc(a.tipoAvaliacao || '—')}</div>
-        <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-          <span class="ri-badge">EM ANDAMENTO</span>
-          <button class="btn-fc" style="width:auto;margin-left:auto;padding:6px 12px;font-size:11px;background:#FDEAEA;color:#E05252" onclick="histExcluirAndamento('${esc(a.id)}','${esc(a.cliente)} — ${esc(a.unidade)}')">🗑️ Excluir</button>
-        </div>
-      </div>`).join('') : '';
-
   let corpo = '';
   if (!lista.length) {
     corpo = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">' +
@@ -1606,16 +1611,7 @@ function histRender() {
     corpo = `<div class="hist-conta">Concluídas: ${lista.length} de ${total}</div>` + lista.map(a => histItemConcluido(a, isDiretor)).join('');
   }
 
-  c.innerHTML = filtros + blocoAndamento + corpo;
-}
-
-async function histExcluirAndamento(id, nome) {
-  if (!confirm('Excluir a avaliação em andamento "' + nome + '"?')) return;
-  showLoading('Excluindo...');
-  const r = await apiCall('excluirAvaliacaoEmAndamento', { id: id });
-  hideLoading();
-  if (r.ok) { toast('Avaliação em andamento excluída'); carregarHistoricoAba(); }
-  else toast('Erro: ' + (r.erro || 'falha ao excluir'));
+  c.innerHTML = filtros + corpo;
 }
 
 function histItemConcluido(a, isDiretor) {
@@ -1947,10 +1943,19 @@ function npsRecomendacoes(r) {
 }
 
 // r114: análise resumida, visual (medidores, barras e selos coloridos).
+// r117: mostra o que existe na planilha SEM filtro, para explicar por que o filtro atual está vazio.
+function npsHtmlBase(r) {
+  const t = r && r.totais;
+  if (!t) return '';
+  const br = d => d ? npsDataBR(d) : '—';
+  return `<div class="nps-legenda-faixas" style="margin-top:10px;justify-content:center;text-align:center">Base completa (sem filtro): ${t.envios} envio(s) · ${t.respostas} resposta(s) válida(s) · ${t.linhasRespostas} linha(s) na aba NPS_Respostas` +
+    (t.respostas ? ' · análises de ' + br(t.dataMin) + ' a ' + br(t.dataMax) : '') + '</div>';
+}
+
 function npsHtmlAnalise(r) {
   const s = r.resumo;
   if (!s.respondidas) {
-    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}<br><small>O período usa a data da <b>análise</b>, não a da resposta. Se esperava ver dados, escolha "Últimos 90 dias" no filtro acima.</small></div>`;
+    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}<br><small>O período usa a data da <b>análise</b>, não a da resposta. Se esperava ver dados, escolha "Todo o período" no filtro acima.</small>${npsHtmlBase(r)}</div>`;
   }
   const zona = npsZona(s.nps);
   const posNps = s.nps === null ? 50 : Math.max(0, Math.min(100, (s.nps + 100) / 2));
@@ -2068,7 +2073,7 @@ function npsBarrasDist(dist, de, corFn) {
 function npsHtmlResumo(r) {
   const s = r.resumo;
   if (!s.respondidas) {
-    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}</div>`;
+    return `<div class="nps-vazio">Nenhuma resposta neste filtro.<br>${s.enviados ? s.enviados + ' pesquisa(s) enviada(s) aguardando resposta.' : 'Nenhuma pesquisa foi enviada neste filtro.'}${npsHtmlBase(r)}</div>`;
   }
   const meses = r.porMes.map(m => {
     const v = m.nps;

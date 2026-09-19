@@ -496,7 +496,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r116';
+const VERSAO_SCRIPT = '2026-09-19-r117';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4565,8 +4565,18 @@ function npsAnalise(dados, cpf) {
     if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     var f = { cliente: String(d.cliente || ''), unidade: String(d.unidade || ''), de: extrairDataISO(d.de), ate: extrairDataISO(d.ate) };
-    var out = npsCalcular(npsLerEnvios(), npsLerRespostas(), f);
+    var envios = npsLerEnvios(), respostas = npsLerRespostas();
+    var out = npsCalcular(envios, respostas, f);
     out.ok = true;
+    // r117: totais SEM filtro (a tela usa para explicar filtros vazios)
+    try {
+      var datas = respostas.map(function (x) { return x.dataAuditoria; }).filter(function (x) { return x; }).sort();
+      out.totais = {
+        envios: envios.length, respostas: respostas.length,
+        linhasRespostas: Math.max(npsAbaRespostas().getLastRow() - 1, 0),
+        dataMin: datas.length ? datas[0] : '', dataMax: datas.length ? datas[datas.length - 1] : ''
+      };
+    } catch (eT) { out.totais = null; }
     out.filtro = f;
     // r114: card "clientes e unidades analisadas" (análises de Preparação CONCLUÍDAS no mesmo filtro)
     try { out.analisadas = npsContarAnalisadas(f); } catch (eA) { out.analisadas = null; }
