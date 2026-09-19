@@ -399,7 +399,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r123';
+const VERSAO = 'r124';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -414,7 +414,7 @@ const LOGO_APRESENTACAO_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg
 /* ═══════════════════════════════════════════════════════
    DEFINIÇÃO DOS CRITÉRIOS (fonte da verdade)
    ═══════════════════════════════════════════════════════ */
-const SECOES = [
+const SECOES_SUPER = [
   // ── 0. IDENTIFICAÇÃO ──
   {
     id:'identificacao', titulo:'Identificação', icone:'bi-clipboard-check',
@@ -634,6 +634,95 @@ const SECOES = [
     fotos:{max:99,label:'Fotos gerais — finalização'}
   }
 ];
+
+/* ═══════════════════════════════════════════════════════
+   r124: QUESTIONÁRIO DE FARMÁCIA
+   Mesma avaliação do supermercado (escala 1–10, N/A, observações, fotos e
+   as mesmas frentes de nota: Retaguarda, Área de Vendas, Organização,
+   Volume e Equipe de apoio). Só mudam as seções/subseções, próprias do
+   segmento. As seções idênticas reaproveitam os mesmos objetos/ids do
+   supermercado. O questionário do supermercado NÃO é alterado.
+   ═══════════════════════════════════════════════════════ */
+const _secSuper = id => SECOES_SUPER.find(x => x.id === id);
+const _fxSubSku = (k, titulo) => ({ id:'sub_fx_' + k, titulo:titulo, criterios:[
+  { id:'fx_' + k + '_sku', label:'Organização dos produtos por SKU', tipo:'escala_sku' },
+  { id:'fx_' + k + '_qtd', label:'Quantidade de mercadoria', tipo:'escala_volume' }
+]});
+const SECOES_FARMACIA = [
+  _secSuper('identificacao'),
+  _secSuper('estrutura_fisica'),
+  {
+    id:'deposito_med', titulo:'Depósito de Medicamentos', icone:'bi-box-seam',
+    estrutura:'Retaguarda', departamento:'Estoque de Medicamentos', secao:'Depósito de Medicamentos',
+    criterios:[
+      {id:'fx_dep_acesso',label:'Acesso aos produtos — fácil e sem obstruções'},
+      {id:'fx_dep_layout',label:'Loteamento de produtos adequado para mapeamento'},
+      {id:'fx_dep_espaco',label:'Espaço para movimentação de produtos'},
+      {id:'fx_dep_separacao',label:'Separação física da mercadoria'},
+      {id:'fx_dep_org',label:'Organização dos produtos'}
+    ],
+    observacao:{id:'obs_deposito_med',label:'Observações sobre o depósito de medicamentos'},
+    fotos:{max:99,label:'Fotos do depósito de medicamentos'}
+  },
+  _secSuper('aereos_retaguarda'),
+  _secSuper('equipe_retaguarda'),
+  {
+    id:'camara_med', titulo:'Geladeira / Câmara de Medicamentos', icone:'bi-snow2',
+    estrutura:'Retaguarda', departamento:'Medicamentos Termolábeis',
+    criterios:[
+      {id:'fx_cam_org',label:'Organização da geladeira/câmara'},
+      {id:'fx_cam_vol',label:'Volume de mercadoria',tipo:'escala_volume'},
+      {id:'fx_cam_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
+      {id:'fx_cam_eq_prest',label:'Equipe de suporte — prestatividade'}
+    ],
+    observacao:{id:'obs_camara_med',label:'Observações sobre a geladeira/câmara de medicamentos'},
+    fotos:{max:99,label:'Fotos da geladeira/câmara de medicamentos'}
+  },
+  {
+    id:'av_medicamentos', titulo:'Medicamentos — Área de Vendas', icone:'bi-capsule',
+    estrutura:'Área de Vendas', departamento:'Medicamentos',
+    subsecoes:[
+      _fxSubSku('eti','Medicamentos Éticos'),
+      _fxSubSku('gen','Genéricos e Similares'),
+      _fxSubSku('ctl','Medicamentos Controlados'),
+      _fxSubSku('otc','OTC (isentos de prescrição)'),
+      _fxSubSku('gel','Geladeira de Medicamentos')
+    ],
+    observacao:{id:'obs_av_medicamentos',label:'Observações sobre a área de vendas — medicamentos'},
+    fotos:{max:5,label:'Fotos da área de vendas — medicamentos'}
+  },
+  {
+    id:'av_nao_medicamentos', titulo:'Não Medicamentos — Área de Vendas', icone:'bi-bag-heart',
+    estrutura:'Área de Vendas', departamento:'Não Medicamentos',
+    subsecoes:[
+      _fxSubSku('perf','Perfumaria e Dermocosméticos'),
+      _fxSubSku('hig','Higiene Pessoal'),
+      _fxSubSku('sup','Suplementos e Vitaminas'),
+      _fxSubSku('inf','Infantil (fraldas, higiene)'),
+      _fxSubSku('baz','Conveniência / Bazar'),
+      _fxSubSku('alim','Alimentos e Bebidas de conveniência'),
+      {id:'sub_fx_pe',titulo:'Pontos-Extra',criterios:[
+        {id:'fx_pe_sku',label:'Organização das amarrações',tipo:'escala_sku'}
+      ]}
+    ],
+    observacao:{id:'obs_av_nao_medicamentos',label:'Observações sobre a área de vendas — não medicamentos'},
+    fotos:{max:5,label:'Fotos da área de vendas — não medicamentos'}
+  },
+  _secSuper('finalizacao')
+];
+
+// Questionário ativo (muda conforme o tipo do estabelecimento escolhido ao iniciar a avaliação).
+let SECOES = SECOES_SUPER;
+
+function detectarTipoEstabelecimento(ident, respostas) {
+  const t = String((ident && ident.tipo_estabelecimento) || '').toUpperCase();
+  if (t === 'FARMACIA' || t === 'SUPERMERCADO') return t;
+  if (respostas && Object.keys(respostas).some(k => k.indexOf('fx_') === 0)) return 'FARMACIA';
+  return 'SUPERMERCADO';
+}
+function aplicarTipoEstabelecimento(tipo) {
+  SECOES = (tipo === 'FARMACIA') ? SECOES_FARMACIA : SECOES_SUPER;
+}
 
 
 /* ═══════════════════════════════════════════════════════
@@ -893,12 +982,34 @@ function mostrarAbaHome(aba) {
   else c.innerHTML = htmlAbaPreenchimento();
 }
 
+// r124: ao iniciar, o supervisor escolhe Supermercado ou Farmácia (o tipo fica travado depois de iniciar).
 function novaAvaliacao() {
+  $('#app').innerHTML = `
+    <div class="form-container body-pad">
+      <div class="secao-card">
+        <div class="secao-titulo"><i class="bi bi-shop"></i> Tipo de estabelecimento</div>
+        <div class="secao-subtitulo">Escolha o tipo de loja. As perguntas da avaliação mudam conforme a escolha e não poderão ser trocadas depois de iniciar.</div>
+        <button class="btn-fc btn-fc-navy" style="width:100%;margin-bottom:10px;padding:16px" onclick="iniciarAvaliacaoTipo('SUPERMERCADO')">
+          <i class="bi bi-cart3"></i> Supermercado
+        </button>
+        <button class="btn-fc btn-fc-green" style="width:100%;margin-bottom:10px;padding:16px" onclick="iniciarAvaliacaoTipo('FARMACIA')">
+          <i class="bi bi-capsule"></i> Farmácia
+        </button>
+        <button class="btn-fc btn-fc-outline" style="width:100%" onclick="renderTelaInicial()">
+          <i class="bi bi-arrow-left"></i> Cancelar
+        </button>
+      </div>
+    </div>`;
+}
+
+function iniciarAvaliacaoTipo(tipo) {
+  aplicarTipoEstabelecimento(tipo);
   state.auditoriaId = 'aud_' + Date.now();
   state.respostas = {};
   state.observacoes = {};
   state.fotos = {};
-  state.identificacao = {};
+  state.fotosIds = {};
+  state.identificacao = { tipo_estabelecimento: tipo };
   state.secaoAtual = 0;
   state.status = 'RASCUNHO';
   renderFormulario();
@@ -955,6 +1066,7 @@ async function carregarRascunho(idx) {
       state.secaoAtual = 0;
     }
   }
+  aplicarTipoEstabelecimento(detectarTipoEstabelecimento(state.identificacao, state.respostas));
   state.status = 'RASCUNHO';
   hideLoading();
   renderFormulario();
@@ -1015,6 +1127,7 @@ function renderIdentificacao(secao) {
     <div class="secao-card">
       <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
       <div class="secao-subtitulo">Preencha os dados da operação</div>
+      <div style="margin:-4px 0 12px"><span style="display:inline-block;background:var(--green);color:var(--dark);font-size:11px;font-weight:700;padding:4px 12px;border-radius:10px;letter-spacing:.5px">${detectarTipoEstabelecimento(v) === 'FARMACIA' ? '💊 FARMÁCIA' : '🛒 SUPERMERCADO'}</span></div>
 
       <div class="campo-input">
         <label>Tipo de Avaliação</label>
@@ -2693,6 +2806,7 @@ async function editarAuditoria(auditoriaId) {
   state.status = a.status || 'CONCLUIDO';
   state.secaoAtual = 0;
   state.editando = true;
+  aplicarTipoEstabelecimento(detectarTipoEstabelecimento(state.identificacao, state.respostas));
   renderFormulario();
 }
 
@@ -2807,6 +2921,11 @@ const SECOES_META_APRESENTACAO = {
   camaras:            { titulo:'Câmaras Frigoríficas', obsId:'obs_camaras' },
   av_pereciveis:      { titulo:'Perecíveis — Área de Vendas' },
   av_mercearia:       { titulo:'Mercearia — Área de Vendas' },
+  // r124: Farmácia
+  deposito_med:       { titulo:'Depósito de Medicamentos', obsId:'obs_deposito_med' },
+  camara_med:         { titulo:'Geladeira / Câmara de Medicamentos', obsId:'obs_camara_med' },
+  av_medicamentos:    { titulo:'Medicamentos — Área de Vendas' },
+  av_nao_medicamentos:{ titulo:'Não Medicamentos — Área de Vendas' },
   // r72: espelha o backend — observação geral da Finalização, sem foto própria.
   finalizacao:        { titulo:'Observações Gerais — Área de Vendas', obsId:'obs_area_vendas', semFotos:true }
 };
