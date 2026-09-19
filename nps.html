@@ -150,7 +150,7 @@ function telaFormulario(p) {
     <div class="erro" id="erro" role="alert"></div>
 
     <div class="card" id="cartaoCsat">
-      <div class="pergunta">1. Pensando exclusivamente no inventário realizado na última noite, qual o seu nível de satisfação com a execução do serviço, organização e postura da equipe? <span class="obrig" aria-hidden="true">*</span></div>
+      <div class="pergunta">1. Pensando exclusivamente no último inventário realizado, qual o seu nível de satisfação com a execução do serviço, organização e postura da equipe? <span class="obrig" aria-hidden="true">*</span></div>
       <div role="radiogroup" aria-label="Satisfação de 1 a 10">${escalaHtml('csat', 1, 10)}</div>
       <div class="pontas"><span>1 · Totalmente Insatisfeito</span><span>10 · Totalmente Satisfeito</span></div>
       <div class="msg-faltou">Escolha uma nota de 1 a 10.</div>
@@ -164,7 +164,7 @@ function telaFormulario(p) {
     </div>
 
     <div class="card">
-      <div class="pergunta">3. Marque os pontos que se destacaram na operação desta noite: <span class="opcional">opcional</span></div>
+      <div class="pergunta">3. Marque os pontos que se destacaram na operação deste inventário: <span class="opcional">opcional</span></div>
       <div class="marcas">
         ${DESTAQUES.map(function (d) { return '<label><input type="checkbox" name="destaque" value="' + d[0] + '"><span>' + esc(d[1]) + '</span></label>'; }).join('')}
       </div>

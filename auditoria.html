@@ -399,7 +399,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r118';
+const VERSAO = 'r120';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1923,7 +1923,7 @@ function htmlBlocosNps(r) {
         <span class="nps-sub">ligação imediata</span>
       </button>
       <button type="button" class="nps-card nps-acao falha${al.falhas ? ' ativo' : ''}" onclick="npsAbrirDetalhe('diagnostico','baixo_prom')">
-        <span class="nps-rot">🟠 Falha da noite</span>
+        <span class="nps-rot">🟠 Falha do inventário</span>
         <span class="nps-num-s">${al.falhas}</span>
         <span class="nps-sub">correção de processo</span>
       </button>
@@ -1939,12 +1939,12 @@ function htmlBlocosNps(r) {
 function npsRecomendacoes(r) {
   const s = r.resumo, al = s.alertas, out = [];
   const add = (nivel, ic, titulo, texto, ir) => out.push({ nivel, ic, titulo, texto, ir: ir || '' });
-  if (al.criticos > 0) add('critico', '🔴', 'Ligar hoje: ' + al.criticos + ' alerta(s) vermelho(s)', 'Noite ruim e cliente que não recomenda. Contato imediato da coordenação ou diretoria.', "npsAbrirDetalhe('diagnostico','baixo_detr')");
-  if (al.falhas > 0) add('falha', '🟠', 'Corrigir processo: ' + al.falhas + ' noite(s) com falha', 'A equipe ou o supervisor falhou, mesmo com relação ainda preservada. Alinhar com o supervisor e revisar o procedimento.', "npsAbrirDetalhe('diagnostico','baixo_prom')");
+  if (al.criticos > 0) add('critico', '🔴', 'Ligar hoje: ' + al.criticos + ' alerta(s) vermelho(s)', 'Inventário mal avaliado e cliente que não recomenda. Contato imediato da coordenação ou diretoria.', "npsAbrirDetalhe('diagnostico','baixo_detr')");
+  if (al.falhas > 0) add('falha', '🟠', 'Corrigir processo: ' + al.falhas + ' inventário(s) com falha', 'A equipe ou o supervisor falhou, mesmo com relação ainda preservada. Alinhar com o supervisor e revisar o procedimento.', "npsAbrirDetalhe('diagnostico','baixo_prom')");
   const risco = (r.porUnidade || []).filter(u => u.nps !== null && u.nps < 0).slice(0, 4);
   if (risco.length) add('atencao', '⚠️', 'Unidades com NPS negativo', risco.map(u => u.unidade + ' (' + u.nps + ')').join(' · ') + '. Priorizar visita ou contato com a gerência.', "npsTrocarAba('unidades')");
   if (s.nps !== null && s.nps < 50) add('atencao', '📉', 'NPS abaixo da zona de qualidade (' + s.nps + ')', 'Foco em reduzir detratores: ler os comentários das notas 0–6 e tratar as causas mais citadas.', "npsAbrirDetalhe('respostas','Detrator')");
-  if (s.csatMedio !== null && s.csatMedio < 9) add('atencao', '⭐', 'CSAT médio ' + String(s.csatMedio).replace('.', ',') + ' (meta: 9 ou mais)', 'Somente ' + s.pctSatisfeitos + '% avaliaram a noite com 9–10. Investigar as noites com nota baixa.', "npsAbrirDetalhe('respostas','todas')");
+  if (s.csatMedio !== null && s.csatMedio < 9) add('atencao', '⭐', 'CSAT médio ' + String(s.csatMedio).replace('.', ',') + ' (meta: 9 ou mais)', 'Somente ' + s.pctSatisfeitos + '% avaliaram o inventário com 9–10. Investigar os inventários com nota baixa.', "npsAbrirDetalhe('respostas','todas')");
   if (s.taxaResposta !== null && s.taxaResposta < 50) add('atencao', '📨', 'Retorno da pesquisa baixo (' + s.taxaResposta + '%)', 'Poucas respostas deixam o indicador instável. Reforçar o pedido de resposta logo após o inventário.');
   const pend = s.enviados - s.respondidas;
   if (pend > 0) add('neutro', '⏳', pend + ' pesquisa(s) aguardando resposta', 'Acompanhar e, se passar do prazo, reenviar um lembrete ao gerente.');
@@ -2121,7 +2121,7 @@ function npsHtmlResumo(r) {
   }
   return `
     <div class="nps-bloco">
-      <h4>1 · Satisfação com a noite (CSAT, 1 a 10)</h4>
+      <h4>1 · Satisfação com o inventário (CSAT, 1 a 10)</h4>
       ${s.csatRespondidas ? `<div class="nps-dist">${npsBarrasDist(r.distribuicaoCsat, 1, npsCorCsat)}</div>
       <div class="nps-legenda-faixas">
         <span><i style="background:#E05252"></i>1–6 baixo</span><span><i style="background:#D4A017"></i>7–8 médio</span><span><i style="background:#2E7D32"></i>9–10 alto</span>
@@ -2148,7 +2148,7 @@ function npsHtmlDiagnostico(r, st) {
   const dg = {};
   r.diagnosticos.forEach(d => { dg[d.chave] = d; });
   if (!r.resumo.csatRespondidas) {
-    return '<div class="nps-vazio">O diagnóstico cruza a satisfação com a noite (CSAT) e a recomendação (NPS).<br>Ainda não há respostas do novo modelo neste filtro.</div>';
+    return '<div class="nps-vazio">O diagnóstico cruza a satisfação com o inventário (CSAT) e a recomendação (NPS).<br>Ainda não há respostas do novo modelo neste filtro.</div>';
   }
   const celulas = NPS_LINHAS.map(l => `<tr><th class="nps-mlin">${l[1]}</th>${NPS_COLUNAS.map(c => {
     const d = dg[l[0] + '_' + c[0]];
@@ -2182,7 +2182,7 @@ function npsHtmlDiagnostico(r, st) {
   }
   return `
     <div class="nps-bloco">
-      <h4>Satisfação com a noite (linhas) x Recomendação (colunas)</h4>
+      <h4>Satisfação com o inventário (linhas) x Recomendação (colunas)</h4>
       <table class="nps-matriz"><thead>${cab}</thead><tbody>${celulas}</tbody></table>
     </div>
     ${detalhe}`;
@@ -2228,10 +2228,10 @@ function npsHtmlUnidades(r) {
     <div class="nps-bloco">
       <h4>Do menor para o maior NPS</h4>
       <div class="nps-rolagem"><table class="nps-tabela">
-        <thead><tr><th>Unidade</th><th>Resp./env.</th><th>NPS</th><th title="Satisfação média com a noite (1 a 10)">CSAT</th><th title="Alertas vermelhos">🔴</th><th title="Falhas da noite">🟠</th></tr></thead>
+        <thead><tr><th>Unidade</th><th>Resp./env.</th><th>NPS</th><th title="Satisfação média com o inventário (1 a 10)">CSAT</th><th title="Alertas vermelhos">🔴</th><th title="Falhas do inventário">🟠</th></tr></thead>
         <tbody>${linhas}</tbody>
       </table></div>
-      <div class="nps-legenda-faixas" style="margin-top:8px">🔴 alerta vermelho (CSAT 1–6 e NPS 0–6) · 🟠 falha da noite (CSAT 1–6 e NPS 7–10). Unidades sem resposta aparecem por último.</div>
+      <div class="nps-legenda-faixas" style="margin-top:8px">🔴 alerta vermelho (CSAT 1–6 e NPS 0–6) · 🟠 falha do inventário (CSAT 1–6 e NPS 7–10). Unidades sem resposta aparecem por último.</div>
     </div>`;
 }
 
@@ -2253,7 +2253,7 @@ function npsHtmlRespostas(r, st) {
       return `<span class="nps-tag${t}">${nome}: ${esc(x[k])}</span>`;
     }).join('');
     const notas = (x.csat !== null && x.csat !== undefined)
-      ? `<div class="nps-notas-duplas"><div class="nps-nota" style="background:${npsCorCsat(x.csat)}" title="Satisfação com a noite">${x.csat}</div><div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="Recomendação">${x.nota}</div></div>`
+      ? `<div class="nps-notas-duplas"><div class="nps-nota" style="background:${npsCorCsat(x.csat)}" title="Satisfação com o inventário">${x.csat}</div><div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="Recomendação">${x.nota}</div></div>`
       : `<div class="nps-nota" style="background:${npsCorNota(x.nota)}" title="${esc(x.categoria)}">${x.nota}</div>`;
     return `
     <div class="nps-resp ${cls}">
