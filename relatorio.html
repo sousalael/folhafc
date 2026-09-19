@@ -165,7 +165,12 @@
         document.getElementById('f-ini').value = params.get('ini') || '';
         document.getElementById('f-fim').value = params.get('fim') || '';
         try {
-            const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: fmt(dozeMeses), dataFim: fmt(hoje) } });
+            // r114: antes buscava 12 meses so para montar os filtros (lento).
+            // Agora busca apenas o periodo da URL (mes atual); as opcoes dos
+            // filtros crescem a cada "Aplicar filtros" com o periodo escolhido.
+            const iniOpc = params.get('ini') || fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+            const fimOpc = params.get('fim') || fmt(hoje);
+            const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: iniOpc, dataFim: fimOpc } });
             // Liberado para SUPERVISOR e DIRETOR. O servidor ja garante que o
             // supervisor recebe apenas as PROPRIAS despesas (filtro por permissao).
             // Guarda so para extrair opcoes; NAO exibe despesas.
@@ -183,7 +188,8 @@
         const grps = [...new Set(lista.map(d => d.grupo).filter(Boolean))].sort();
         const fill = (id, arr) => {
             const s = document.getElementById(id);
-            arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.text = v; s.appendChild(o); });
+            const ja = new Set(Array.from(s.options).map(o => o.value));
+            arr.forEach(v => { if (ja.has(v)) return; const o = document.createElement('option'); o.value = v; o.text = v; s.appendChild(o); });
         };
         fill('f-sup', sups); fill('f-cli', clis); fill('f-grp', grps);
     }
@@ -200,6 +206,7 @@
         try {
             const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim } });
             despesasTodas = res.lista || [];
+            popularSeletores(despesasTodas); // r114: acrescenta opcoes novas sem perder a selecao
         } catch (err) {
             document.getElementById('area-lista').innerHTML = '<div class="estado-msg">⚠️ ' + escaparHtml(err.message) + '</div>';
             return;
@@ -256,7 +263,14 @@
         ).join('');
 
         // Carrega as fotos (todas de uma vez, conforme escolhido).
-        despesasVisiveis.forEach((d, i) => { if (d.url) carregarFoto(d.url, i); });
+        // r114: no maximo 3 comprovantes por vez (antes disparava todos juntos e
+        // travava o servidor).
+        const fila = [];
+        despesasVisiveis.forEach((d, i) => { if (d.url) fila.push([d.url, i]); });
+        const trabalhador = async () => {
+            while (fila.length) { const [u, i] = fila.shift(); await carregarFoto(u, i); }
+        };
+        for (let k = 0; k < 3; k++) trabalhador();
     }
 
     async function carregarFoto(url, i) {
