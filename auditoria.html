@@ -260,6 +260,9 @@ button.an-rec{cursor:pointer}
 .hist-filtros{background:var(--white);border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .hist-filtros select,.hist-filtros input{width:100%;border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;background:var(--white);color:var(--text);min-width:0}
 .hist-filtros .full{grid-column:1/-1}
+.hist-tipos{display:flex;gap:6px}
+.hist-tipo{flex:1;border:2px solid var(--border);background:var(--white);color:var(--text);border-radius:10px;padding:8px 6px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}
+.hist-tipo.ativo{background:var(--navy);border-color:var(--navy);color:var(--white)}
 .hist-datas{grid-column:1/-1;display:none;grid-template-columns:1fr 1fr;gap:8px}
 .hist-datas.aberto{display:grid}
 .hist-conta{font-size:11px;color:var(--text-light);margin:0 2px 8px}
@@ -399,7 +402,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r124';
+const VERSAO = 'r126';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -433,7 +436,7 @@ const SECOES_SUPER = [
     estrutura:'Retaguarda', departamento:'Estrutura Física',
     criterios:[
       {id:'ef_iluminacao',label:'Iluminação — suficiente para a contagem'},
-      {id:'ef_equipamentos',label:'Equipamentos de suporte aéreo — quantidade adequada'}
+      {id:'ef_equipamentos',label:'Equipamentos de suporte (escada, banco, etc.) — quantidade adequada'}
     ],
     observacao:{id:'obs_estrutura_fisica',label:'Observações sobre a estrutura física'},
     fotos:{max:99,label:'Fotos da estrutura física'}
@@ -652,31 +655,30 @@ const SECOES_FARMACIA = [
   _secSuper('identificacao'),
   _secSuper('estrutura_fisica'),
   {
-    id:'deposito_med', titulo:'Depósito de Medicamentos', icone:'bi-box-seam',
-    estrutura:'Retaguarda', departamento:'Estoque de Medicamentos', secao:'Depósito de Medicamentos',
+    id:'deposito_med', titulo:'Depósito', icone:'bi-box-seam',
+    estrutura:'Retaguarda', departamento:'Estoque de Medicamentos', secao:'Depósito',
     criterios:[
       {id:'fx_dep_acesso',label:'Acesso aos produtos — fácil e sem obstruções'},
       {id:'fx_dep_layout',label:'Loteamento de produtos adequado para mapeamento'},
       {id:'fx_dep_espaco',label:'Espaço para movimentação de produtos'},
       {id:'fx_dep_separacao',label:'Separação física da mercadoria'},
-      {id:'fx_dep_org',label:'Organização dos produtos'}
+      {id:'fx_dep_org',label:'Organização dos produtos'},
+      {id:'fx_dep_qtd',label:'Quantidade de produtos',tipo:'escala_volume'}
     ],
-    observacao:{id:'obs_deposito_med',label:'Observações sobre o depósito de medicamentos'},
-    fotos:{max:99,label:'Fotos do depósito de medicamentos'}
+    observacao:{id:'obs_deposito_med',label:'Observações sobre o depósito'},
+    fotos:{max:99,label:'Fotos do depósito'}
   },
   _secSuper('aereos_retaguarda'),
   _secSuper('equipe_retaguarda'),
   {
-    id:'camara_med', titulo:'Geladeira / Câmara de Medicamentos', icone:'bi-snow2',
+    id:'camara_med', titulo:'Geladeira', icone:'bi-snow2',
     estrutura:'Retaguarda', departamento:'Medicamentos Termolábeis',
     criterios:[
-      {id:'fx_cam_org',label:'Organização da geladeira/câmara'},
-      {id:'fx_cam_vol',label:'Volume de mercadoria',tipo:'escala_volume'},
-      {id:'fx_cam_eq_qtd',label:'Equipe de suporte — quantidade suficiente'},
-      {id:'fx_cam_eq_prest',label:'Equipe de suporte — prestatividade'}
+      {id:'fx_cam_org',label:'Organização da geladeira'},
+      {id:'fx_cam_vol',label:'Volume de mercadoria',tipo:'escala_volume'}
     ],
-    observacao:{id:'obs_camara_med',label:'Observações sobre a geladeira/câmara de medicamentos'},
-    fotos:{max:99,label:'Fotos da geladeira/câmara de medicamentos'}
+    observacao:{id:'obs_camara_med',label:'Observações sobre a geladeira'},
+    fotos:{max:99,label:'Fotos da geladeira'}
   },
   {
     id:'av_medicamentos', titulo:'Medicamentos — Área de Vendas', icone:'bi-capsule',
@@ -685,7 +687,7 @@ const SECOES_FARMACIA = [
       _fxSubSku('eti','Medicamentos Éticos'),
       _fxSubSku('gen','Genéricos e Similares'),
       _fxSubSku('ctl','Medicamentos Controlados'),
-      _fxSubSku('otc','OTC (isentos de prescrição)'),
+      _fxSubSku('otc','MIPs (medicamentos isentos de prescrição)'),
       _fxSubSku('gel','Geladeira de Medicamentos')
     ],
     observacao:{id:'obs_av_medicamentos',label:'Observações sobre a área de vendas — medicamentos'},
@@ -701,9 +703,7 @@ const SECOES_FARMACIA = [
       _fxSubSku('inf','Infantil (fraldas, higiene)'),
       _fxSubSku('baz','Conveniência / Bazar'),
       _fxSubSku('alim','Alimentos e Bebidas de conveniência'),
-      {id:'sub_fx_pe',titulo:'Pontos-Extra',criterios:[
-        {id:'fx_pe_sku',label:'Organização das amarrações',tipo:'escala_sku'}
-      ]}
+      _fxSubSku('ces','Cestões')
     ],
     observacao:{id:'obs_av_nao_medicamentos',label:'Observações sobre a área de vendas — não medicamentos'},
     fotos:{max:5,label:'Fotos da área de vendas — não medicamentos'}
@@ -1642,7 +1642,7 @@ function verHistorico() {
 
 // r114: Histórico com filtros (cliente e período) e exclusão em lote das avaliações NÃO concluídas.
 function histFiltro() {
-  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '' };
+  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '', tipoEst: '' };
   return state.histFiltro;
 }
 
@@ -1663,6 +1663,7 @@ function histFiltrar(lista) {
   const cli = histNorm(f.cliente);
   return (lista || []).filter(a => {
     if (cli && histNorm(a.cliente) !== cli) return false;
+    if (f.tipoEst && (a.tipoEstabelecimento || 'SUPERMERCADO') !== f.tipoEst) return false;
     const d = histDataISO(a.dataAuditoria) || histDataISO(a.dataRegistro);
     if (iv.de && (!d || d < iv.de)) return false;
     if (iv.ate && (!d || d > iv.ate)) return false;
@@ -1710,6 +1711,9 @@ function histRender() {
     <div class="hist-filtros">
       <select aria-label="Cliente" onchange="histMudou('cliente',this.value)">${optsCli}</select>
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
+      <div class="hist-tipos full" role="group" aria-label="Tipo de estabelecimento">
+        ${[['', 'Todos'], ['SUPERMERCADO', '🛒 Supermercado'], ['FARMACIA', '💊 Farmácia']].map(t => `<button type="button" class="hist-tipo${f.tipoEst === t[0] ? ' ativo' : ''}" onclick="histMudou('tipoEst','${t[0]}')">${t[1]}</button>`).join('')}
+      </div>
       <div class="hist-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="histDatas">
         <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
         <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
@@ -2922,8 +2926,8 @@ const SECOES_META_APRESENTACAO = {
   av_pereciveis:      { titulo:'Perecíveis — Área de Vendas' },
   av_mercearia:       { titulo:'Mercearia — Área de Vendas' },
   // r124: Farmácia
-  deposito_med:       { titulo:'Depósito de Medicamentos', obsId:'obs_deposito_med' },
-  camara_med:         { titulo:'Geladeira / Câmara de Medicamentos', obsId:'obs_camara_med' },
+  deposito_med:       { titulo:'Depósito', obsId:'obs_deposito_med' },
+  camara_med:         { titulo:'Geladeira', obsId:'obs_camara_med' },
   av_medicamentos:    { titulo:'Medicamentos — Área de Vendas' },
   av_nao_medicamentos:{ titulo:'Não Medicamentos — Área de Vendas' },
   // r72: espelha o backend — observação geral da Finalização, sem foto própria.

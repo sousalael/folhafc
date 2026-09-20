@@ -497,7 +497,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r124';
+const VERSAO_SCRIPT = '2026-09-19-r126';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -2577,6 +2577,12 @@ function tipoEstabelecimentoDaLinha(row, respostas) {
   return tipoEstabelecimentoPorRespostas(respostas) || 'SUPERMERCADO';
 }
 
+function tipoEstabelecimentoDaLinhaRapido(row) {
+  var t = String(row[19] || '').toUpperCase();
+  if (t === 'FARMACIA' || t === 'SUPERMERCADO') return t;
+  return String(row[11] || '').indexOf('"fx_') !== -1 ? 'FARMACIA' : 'SUPERMERCADO';
+}
+
 function salvarAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -2810,7 +2816,7 @@ function listarHistoricoAuditorias(dados, cpf) {
       if (d.unidade && row[6] !== d.unidade) continue;
       resultado.push({
         id: row[0], dataRegistro: row[1], auditor: row[2], tipoAvaliacao: row[4], nps: (perfil === 'DIRETOR' ? (mapaNps[row[0]] || null) : null),
-        cliente: row[5], unidade: row[6], dataAuditoria: row[7], status: status,
+        cliente: row[5], unidade: row[6], dataAuditoria: row[7], status: status, tipoEstabelecimento: tipoEstabelecimentoDaLinhaRapido(row),
         scoreGeral: (row[16] instanceof Date) ? '' : (parseFloat(row[16])||''), scoreEquipe: (row[17] instanceof Date) ? '' : (parseFloat(row[17])||''), emailCliente: String(row[14]||''), dataEnvio: row[15] ? String(row[15]) : ''
       });
     }
@@ -2845,7 +2851,7 @@ function chamarClaudeAPI(prompt, systemPrompt) {
 
 var CRITERIOS_MAP = {
   ef_iluminacao:{label:'Iluminação',secao:'Estrutura Física',estrutura:'Retaguarda'},
-  ef_equipamentos:{label:'Equipamentos de suporte aéreo',secao:'Estrutura Física',estrutura:'Retaguarda'},
+  ef_equipamentos:{label:'Equipamentos de suporte (escada, banco, etc.)',secao:'Estrutura Física',estrutura:'Retaguarda'},
   dls_acesso:{label:'Acesso aos produtos',secao:'Depósito Linha Seca',estrutura:'Retaguarda'},
   dls_layout:{label:'Loteamento de produtos para mapeamento',secao:'Depósito Linha Seca',estrutura:'Retaguarda'},
   dls_espaco:{label:'Espaço para movimentação',secao:'Depósito Linha Seca',estrutura:'Retaguarda'},
@@ -2912,20 +2918,18 @@ var CRITERIOS_MAP = {
 (function () {
   var dep = { fx_dep_acesso:'Acesso aos produtos', fx_dep_layout:'Loteamento de produtos para mapeamento', fx_dep_espaco:'Espaço para movimentação',
               fx_dep_separacao:'Separação física da mercadoria', fx_dep_org:'Organização dos produtos' };
-  for (var k in dep) CRITERIOS_MAP[k] = { label: dep[k], secao: 'Depósito de Medicamentos', estrutura: 'Retaguarda' };
-  CRITERIOS_MAP.fx_cam_org = { label: 'Organização — Geladeira/Câmara', secao: 'Câmara de Medicamentos', estrutura: 'Retaguarda' };
-  CRITERIOS_MAP.fx_cam_vol = { label: 'Volume de mercadoria — Geladeira/Câmara', secao: 'Câmara de Medicamentos', estrutura: 'Retaguarda', invertida: true };
-  CRITERIOS_MAP.fx_cam_eq_qtd = { label: 'Equipe — Geladeira/Câmara (qtd)', secao: 'Câmara de Medicamentos', estrutura: 'Retaguarda', equipe: true };
-  CRITERIOS_MAP.fx_cam_eq_prest = { label: 'Equipe — Geladeira/Câmara (prest.)', secao: 'Câmara de Medicamentos', estrutura: 'Retaguarda', equipe: true };
+  for (var k in dep) CRITERIOS_MAP[k] = { label: dep[k], secao: 'Depósito', estrutura: 'Retaguarda' };
+  CRITERIOS_MAP.fx_dep_qtd = { label: 'Quantidade de produtos', secao: 'Depósito', estrutura: 'Retaguarda', invertida: true };
+  CRITERIOS_MAP.fx_cam_org = { label: 'Organização — Geladeira', secao: 'Geladeira', estrutura: 'Retaguarda' };
+  CRITERIOS_MAP.fx_cam_vol = { label: 'Volume de mercadoria — Geladeira', secao: 'Geladeira', estrutura: 'Retaguarda', invertida: true };
   var av = [['eti', 'Medicamentos Éticos', 'Medicamentos'], ['gen', 'Genéricos e Similares', 'Medicamentos'], ['ctl', 'Medicamentos Controlados', 'Medicamentos'],
-            ['otc', 'OTC', 'Medicamentos'], ['gel', 'Geladeira de Medicamentos', 'Medicamentos'],
+            ['otc', 'MIPs (medicamentos isentos de prescrição)', 'Medicamentos'], ['gel', 'Geladeira de Medicamentos', 'Medicamentos'],
             ['perf', 'Perfumaria e Dermocosméticos', 'Não Medicamentos'], ['hig', 'Higiene Pessoal', 'Não Medicamentos'], ['sup', 'Suplementos e Vitaminas', 'Não Medicamentos'],
-            ['inf', 'Infantil', 'Não Medicamentos'], ['baz', 'Conveniência/Bazar', 'Não Medicamentos'], ['alim', 'Alimentos e Bebidas de conveniência', 'Não Medicamentos']];
+            ['inf', 'Infantil', 'Não Medicamentos'], ['baz', 'Conveniência/Bazar', 'Não Medicamentos'], ['alim', 'Alimentos e Bebidas de conveniência', 'Não Medicamentos'], ['ces', 'Cestões', 'Não Medicamentos']];
   av.forEach(function (x) {
     CRITERIOS_MAP['fx_' + x[0] + '_sku'] = { label: x[1] + ' — Organização por SKU', secao: x[2], estrutura: 'Área de Vendas' };
     CRITERIOS_MAP['fx_' + x[0] + '_qtd'] = { label: x[1] + ' — Volume de mercadoria', secao: x[2], estrutura: 'Área de Vendas', invertida: true };
   });
-  CRITERIOS_MAP.fx_pe_sku = { label: 'Pontos-extra — amarrações', secao: 'Não Medicamentos', estrutura: 'Área de Vendas' };
 })();
 
 function montarPromptAuditoria(ident, respostas, observacoes, scores) {
@@ -2945,7 +2949,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   // pesagem está disponível para apoiar".
   var temEquipe = notasEquipe.length > 0;
   var ehFarmacia = !!tipoEstabelecimentoPorRespostas(respostas);
-  var dadosTexto=(ehFarmacia?'TIPO DE ESTABELECIMENTO: FARMÁCIA (setores próprios do segmento: use a terminologia de farmácia e nunca termos de supermercado)\n':'')+'CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+'\nAUDITOR: '+(ident.auditor||'')+'\nSCORE GERAL (sem infraestrutura): '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\n\n';
+  var dadosTexto=(ehFarmacia?'TIPO DE ESTABELECIMENTO: FARMÁCIA (setores próprios do segmento: use a terminologia de farmácia e nunca termos de supermercado; o setor de medicamentos isentos de prescrição chama-se "MIPs (medicamentos isentos de prescrição)" — NUNCA use "OTC"; "Cestões" é um setor de medicamentos da área de vendas)\n':'')+'CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+'\nAUDITOR: '+(ident.auditor||'')+'\nSCORE GERAL (sem infraestrutura): '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\n\n';
   for(var sec in secoes){dadosTexto+='=== '+sec+' ===\n';
     secoes[sec].forEach(function(item){dadosTexto+='  '+item.criterio+': '+item.nota+'/10'+(item.invertida?' (ESCALA DE VOLUME: 1=volume excessivo, 10=volume ideal; nota BAIXA significa MUITA mercadoria, o que é ruim para o inventário)':' (1=inadequado,10=excelente)')+(item.equipe?' [EQUIPE]':'')+(item.infra?' [INFRAESTRUTURA]':'')+'\n';});dadosTexto+='\n';}
   dadosTexto+='=== OBSERVAÇÕES DO AUDITOR ===\n';
@@ -2965,6 +2969,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'8. '+(temEquipe
       ? 'EQUIPE DO CLIENTE: analisar dentro de cada área (retaguarda/área de vendas) mas SEMPRE em parágrafo separado dos setores, iniciando com "Quanto ao apoio da equipe do cliente nesta área:". Distinguir entre quantidade e prestatividade. Ex: "prestativa mas insuficiente em quantidade".'
       : 'EQUIPE DO CLIENTE: esta auditoria não teve nenhum critério de equipe avaliado (N/A ou não aplicável). É PROIBIDO mencionar equipe, equipe de apoio ou equipe de pesagem em qualquer seção do relatório, mesmo de forma genérica ou como frase de transição — trate como se equipe simplesmente não existisse nos dados desta auditoria.')+'\n'
+    +(ehFarmacia?'8b. FARMÁCIA: farmácia NÃO tem equipe de pesagem, hortifruti, câmaras frigoríficas nem perecíveis. É PROIBIDO mencionar "pesagem" ou "equipe de pesagem" em qualquer seção. A única equipe avaliável é a equipe de apoio do cliente na retaguarda (depósito) — só cite equipe se houver nota de equipe nos dados.\n':'')
     +'9. A preparação do ambiente é SEMPRE responsabilidade do cliente, nunca da equipe FC.\n'
     +'10. Texto fluido e natural como escrito por um humano. Sem listar scores no meio do texto (exceto extremos no resumo). Conciso sem perder clareza.\n'
     +'11. Incorporar TODAS as observações do auditor/supervisor fornecidas nos dados abaixo, naturalmente no texto, na seção pertinente ao tema de cada observação. Reescreva cada observação corrigindo ortografia, gramática e dando coerência ao texto — mantendo integralmente o sentido e os fatos relatados pelo auditor, sem adicionar, remover ou reinterpretar informação. Nunca ignore uma observação fornecida.\n'
@@ -2990,7 +2995,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var campoRetaguarda = temEquipe
     ? '"analise_retaguarda": "4-5 frases sobre depósito/aéreos/câmaras + 1-2 frases sobre equipe na retaguarda (parágrafo separado).",\n'
     : '"analise_retaguarda": "4-5 frases sobre depósito/aéreos/câmaras.",\n';
-  var campoAreaVendas = temEquipe
+  var campoAreaVendas = (temEquipe && !ehFarmacia)
     ? '"analise_area_vendas": "3-4 frases sobre organização e volume agrupados por tema + 1 frase sobre equipe de pesagem (parágrafo separado).",\n'
     : '"analise_area_vendas": "3-4 frases sobre organização e volume agrupados por tema.",\n';
   var campoEquipe = temEquipe
@@ -3243,8 +3248,8 @@ var SECOES_META_APRESENTACAO = {
   av_pereciveis:      { titulo:'Perecíveis — Área de Vendas', obsId:'obs_av_pereciveis' },
   av_mercearia:       { titulo:'Mercearia — Área de Vendas', obsId:'obs_av_mercearia' },
   // r124: Farmácia
-  deposito_med:       { titulo:'Depósito de Medicamentos', obsId:'obs_deposito_med' },
-  camara_med:         { titulo:'Geladeira / Câmara de Medicamentos', obsId:'obs_camara_med' },
+  deposito_med:       { titulo:'Depósito', obsId:'obs_deposito_med' },
+  camara_med:         { titulo:'Geladeira', obsId:'obs_camara_med' },
   av_medicamentos:    { titulo:'Medicamentos — Área de Vendas', obsId:'obs_av_medicamentos' },
   av_nao_medicamentos:{ titulo:'Não Medicamentos — Área de Vendas', obsId:'obs_av_nao_medicamentos' },
   finalizacao:        { titulo:'Observações Gerais — Área de Vendas', obsId:'obs_area_vendas' }
@@ -3266,8 +3271,8 @@ var SECAO_LABEL_PARA_GRUPO_APRESENTACAO = {
   'Aéreos': 'av_mercearia',
   'Sub-aéreos': 'av_mercearia',
   // r124: Farmácia
-  'Depósito de Medicamentos': 'deposito_med',
-  'Câmara de Medicamentos': 'camara_med',
+  'Depósito': 'deposito_med',
+  'Geladeira': 'camara_med',
   'Medicamentos': 'av_medicamentos',
   'Não Medicamentos': 'av_nao_medicamentos'
 };
@@ -3335,7 +3340,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
 
     var textos;
     try {
-      var promptApres = montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao);
+      var promptApres = montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, tipoEstabelecimentoDaLinha(row, respostas) === 'FARMACIA');
       var respostaIA = chamarClaudeAPI(promptApres.user, promptApres.system);
       textos = JSON.parse(respostaIA.replace(/```json|```/g, '').trim());
     } catch (errIA) {
@@ -3477,7 +3482,7 @@ function calcularNotasPorSetor(respostas) {
   return out;
 }
 
-function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao) {
+function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, ehFarmacia) {
   var obsTexto = '';
   var obsPresentes = [];
   OBS_IDS_APRESENTACAO.forEach(function(k){
@@ -3509,6 +3514,7 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
 
   var sys = 'Você é um consultor sênior de operações de inventário da Formula Code. '
     + 'Sua tarefa é preparar textos para uma APRESENTAÇÃO EXECUTIVA (slides) resumindo uma auditoria de preparação para inventário. '
+    + (ehFarmacia ? 'ATENÇÃO — ESTA É UMA ANÁLISE DE FARMÁCIA: farmácia NÃO tem equipe de pesagem, hortifruti, câmaras frigoríficas nem perecíveis; é PROIBIDO mencionar "pesagem" ou "equipe de pesagem" e ignore qualquer cenário que dependa delas. O setor de medicamentos isentos de prescrição chama-se "MIPs" (nunca "OTC"). ' : '')
     + 'REGRAS OBRIGATÓRIAS:\n'
     + '1. Tom consultivo, direto e profissional — linguagem de slide (frases curtas e diretas), não de relatório corrido.\n'
     + '2. NUNCA invente números, fatos ou observações que não estejam nos dados fornecidos. Os dados abaixo já foram filtrados para conter APENAS os critérios que o auditor efetivamente avaliou (nota numérica preenchida) — critérios marcados como N/A pelo auditor não aparecem nos dados e NÃO podem ser citados em nenhum texto (nem no "resumo", nem em "pontos_fortes"/"oportunidades", nem nas observações reescritas), mesmo que sejam itens comuns em auditorias desse tipo.\n'
@@ -3722,7 +3728,6 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
     var EQ_MAP={eq_ret_qtd:['Depósito','qtd'],eq_ret_prest:['Depósito','prest'],
       cam_cong_eq_qtd:['Congelados','qtd'],cam_cong_eq_prest:['Congelados','prest'],
       cam_resf_eq_qtd:['Resfriados','qtd'],cam_resf_eq_prest:['Resfriados','prest'],
-      fx_cam_eq_qtd:['Geladeira / Câmara','qtd'],fx_cam_eq_prest:['Geladeira / Câmara','prest'],
       cam_hort_pesagem:['Hortifruti','qtd'],
       av_pes_cong:['Pesagem Congelados','qtd'],av_pes_resf:['Pesagem Resfriados','qtd'],av_pes_hort:['Pesagem Hortifruti','qtd']};
     var porArea={};
@@ -3755,7 +3760,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   // fica cortada entre duas páginas) e o título não fica isolado sem
   // nenhuma foto embaixo (page-break-after:avoid). O resto flui
   // livremente entre páginas, aproveitando o espaço disponível.
-  var TITULOS_BLOCO_FOTOS={deposito_med:'Depósito de Medicamentos',camara_med:'Geladeira / Câmara de Medicamentos',av_medicamentos:'Medicamentos — Área de Vendas',av_nao_medicamentos:'Não Medicamentos — Área de Vendas',deposito:'Depósito Linha Seca',aereos_retaguarda:'Aéreos e Sub-aéreos — Retaguarda',camaras:'Câmaras Frigoríficas',av_pereciveis:'Perecíveis — Área de Vendas',av_mercearia:'Mercearia — Área de Vendas'};
+  var TITULOS_BLOCO_FOTOS={deposito_med:'Depósito',camara_med:'Geladeira',av_medicamentos:'Medicamentos — Área de Vendas',av_nao_medicamentos:'Não Medicamentos — Área de Vendas',deposito:'Depósito Linha Seca',aereos_retaguarda:'Aéreos e Sub-aéreos — Retaguarda',camaras:'Câmaras Frigoríficas',av_pereciveis:'Perecíveis — Área de Vendas',av_mercearia:'Mercearia — Área de Vendas'};
   function montarBlocoFotosSecao(secaoId){
     var ids=fotosIds?fotosIds[secaoId]:null;if(!ids||!ids.length)return'';
     var titulo=TITULOS_BLOCO_FOTOS[secaoId]||'Registros Fotográficos';
@@ -4024,7 +4029,7 @@ function gerarTextoTemplateFarmacia(ident, respostas, observacoes, scores) {
   for(var id in respostas){var v=respostas[id];if(!v||v==='NA')continue;var nota=parseFloat(v);if(isNaN(nota))continue;var m=CRITERIOS_MAP[id];if(!m)continue;
     if(INFRA[id]){if(nota<6)infraTxt+=(id==='ef_iluminacao'?'A iluminação é insuficiente para a contagem. ':'Os equipamentos de suporte aéreo estão em quantidade insuficiente. ');continue;}
     soma+=nota;n++;
-    if(m.equipe){somaEq+=nota;nEq++;var ar=id.indexOf('fx_cam')===0?'geladeira/câmara de medicamentos':'depósito';if(!eqAreas[ar])eqAreas[ar]=[];eqAreas[ar].push(nota);continue;}
+    if(m.equipe){somaEq+=nota;nEq++;var ar='depósito';if(!eqAreas[ar])eqAreas[ar]=[];eqAreas[ar].push(nota);continue;}
     var setor=(id.indexOf('fx_dep')===0||id.indexOf('fx_cam')===0||id.indexOf('ret_')===0)?m.secao:String(m.label).split(' — ')[0];
     var ehOrg=/_sku$/.test(id)||/_org$/.test(id);
     if(!porSetor[setor])porSetor[setor]={est:m.estrutura,org:null,vol:null};
@@ -4817,7 +4822,7 @@ function perfLerAnalises() {
     try { resp = JSON.parse(row[11] || '{}'); } catch (e) {}
     out.push({
       id: String(row[0]), cliente: cliente, unidade: unidade, dataAuditoria: extrairDataISO(row[7]),
-      tipo: String(row[4] || ''), metricas: perfMetricasDaAnalise(resp)
+      tipo: String(row[4] || ''), tipoEst: tipoEstabelecimentoDaLinha(row, resp), metricas: perfMetricasDaAnalise(resp)
     });
   }
   return out;
@@ -4979,7 +4984,7 @@ function perfPeriodoTxt(filtro) {
 }
 function perfTipoTxt(filtro) { return filtro.tipo ? filtro.tipo : 'todas as análises (pré-operação e durante a operação)'; }
 
-function perfMontarPrompt(cli, filtro, anterior) {
+function perfMontarPrompt(cli, filtro, anterior, farmacia) {
   var linhas = [];
   linhas.push('CLIENTE: ' + cli.cliente);
   linhas.push('PERÍODO: ' + perfPeriodoTxt(filtro) + ' | TIPO DE AVALIAÇÃO: ' + perfTipoTxt(filtro));
@@ -5024,6 +5029,7 @@ function perfMontarPrompt(cli, filtro, anterior) {
     + '16. ' + (temAnterior ? 'Há dados do período anterior: comente a evolução (variação) de forma equilibrada, sem dramatizar quedas e sem exagerar melhoras; só cite variação de quem tem variação nos dados.' : 'NÃO há dados do período anterior: não comente evolução nem variação.') + '\n'
     + '17. ' + (temVolume ? 'Inclua a leitura de volume x organização (regra 6b) na seção "volume_organizacao".' : 'Nenhuma unidade teve volume avaliado: deixe "volume_organizacao" como string vazia e não cite volume em nenhuma seção.') + '\n'
     + '18. Se NENHUMA unidade tiver ponto de melhoria (todas as notas avaliadas em Bom/Excelente), "oportunidades" deve dizer isso de forma positiva em 1 frase e "sugestoes" deve conter APENAS uma recomendação: usar o padrão de preparação observado como referência de boas práticas, a ser mantido e replicado. Não invente sugestões para preencher espaço.\n'
+    + (farmacia ? '19b. ESTE CLIENTE É UMA FARMÁCIA: farmácia NÃO tem equipe de pesagem; é PROIBIDO mencionar "pesagem" ou "equipe de pesagem" em qualquer seção. Se citar o setor de medicamentos isentos de prescrição, use "MIPs" (nunca "OTC").\n' : '')
     + '19. Chame o documento de "Análise de Preparação para Inventário" quando precisar citá-lo. Texto fluido e natural, escrito por um humano, conciso: CONCISÃO OBRIGATÓRIA: no máximo 400 palavras no total, frases curtas e diretas, sem repetir informações entre seções.\n';
 
   var nomesUnid = cli.lista.map(function (u) { return u.unidade; });
@@ -5108,11 +5114,13 @@ function perfGarantirTextos(t, fb, cli) {
 function perfPrepararCliente(d) {
   var f = perfFiltroDe(d);
   if (!f.cliente) return { erro: 'Selecione um cliente para gerar a análise.' };
-  var calc = perfCalcular(perfLerAnalises(), f, perfHoje());
+  var todasAnalises = perfLerAnalises();
+  var calc = perfCalcular(todasAnalises, f, perfHoje());
   var cli = null;
   calc.clientes.forEach(function (c) { if (fcChave(c.cliente) === fcChave(f.cliente)) cli = c; });
   if (!cli) return { erro: 'Nenhuma análise concluída para este cliente no período selecionado.' };
-  return { calc: calc, cli: cli, filtro: calc.filtro, anterior: calc.periodoAnterior };
+  var farmacia = todasAnalises.some(function (a) { return a.tipoEst === 'FARMACIA' && fcChave(a.cliente) === fcChave(cli.cliente); });
+  return { calc: calc, cli: cli, filtro: calc.filtro, anterior: calc.periodoAnterior, farmacia: farmacia };
 }
 
 /* ── DIRETOR: texto da análise ── */
@@ -5125,7 +5133,7 @@ function performanceGerarTexto(dados, cpf) {
     var fb = perfTextoFallback(p.cli, p.filtro, p.anterior);
     var textos, origem = 'ia';
     try {
-      var prompt = perfMontarPrompt(p.cli, p.filtro, p.anterior);
+      var prompt = perfMontarPrompt(p.cli, p.filtro, p.anterior, p.farmacia);
       var resp = chamarClaudeAPI(prompt.user, prompt.system);
       textos = perfGarantirTextos(JSON.parse(resp.replace(/```json|```/g, '').trim()), fb, p.cli);
     } catch (errIA) {
