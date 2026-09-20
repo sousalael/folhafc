@@ -417,7 +417,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r128';
+const VERSAO = 'r129';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -2861,13 +2861,13 @@ function carregarPerformanceAba() {
   const p = pfEstado();
   const f = p.filtro;
   const msCli = msHtml('pCli', { opcoes: (state.clientesConcluidos || state.clientes || []).map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, cb: v => pfMudou('clientes', v) });
-  const optsEstab = PF_ESTABS.map(x => `<option value="${x.v}"${x.v === f.estab ? ' selected' : ''}>${x.t}</option>`).join('');
+  const btnsEstab = PF_ESTABS.map(x => `<button type="button" class="hist-tipo${f.estab === x.v ? ' ativo' : ''}" onclick="pfEscolherEstab('${x.v}')">${x.v ? x.t : 'Todos'}</button>`).join('');
   const optsPer = NPS_PERIODOS.map(x => `<option value="${x.v}"${x.v === f.periodo ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsTipo = PF_TIPOS.map(x => `<option value="${esc(x.v)}"${x.v === f.tipo ? ' selected' : ''}>${x.t}</option>`).join('');
   c.innerHTML = `
     <div class="pf-filtros">
       ${msCli}
-      <select id="pfEstab" class="pf-full" aria-label="Tipo de estabelecimento" onchange="pfMudou('estab',this.value)">${optsEstab}</select>
+      <div class="hist-tipos pf-full" id="pfEstabBtns" role="group" aria-label="Tipo de estabelecimento">${btnsEstab}</div>
       <select id="pfPeriodo" aria-label="Período (data da análise)" onchange="pfMudou('periodo',this.value)">${optsPer}</select>
       <select id="pfTipo" aria-label="Tipo de avaliação" onchange="pfMudou('tipo',this.value)">${optsTipo}</select>
       <div class="pf-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="pfDatas">
@@ -2882,6 +2882,13 @@ function carregarPerformanceAba() {
   else pfBuscar();   // primeira abertura: cards macro com o filtro padrão (últimos 90 dias)
 }
 
+// r129: tipo de estabelecimento em botões (como no Histórico); aplica na hora, sem precisar tocar em Buscar.
+function pfEscolherEstab(v) {
+  const p = pfEstado();
+  p.filtro.estab = v;
+  document.querySelectorAll('#pfEstabBtns .hist-tipo').forEach((b, i) => b.classList.toggle('ativo', PF_ESTABS[i].v === v));
+  pfBuscar();
+}
 function pfMudou(campo, valor) {
   const p = pfEstado();
   p.filtro[campo] = valor;
@@ -3012,7 +3019,7 @@ function pfBuscarTodoPeriodo() {
 }
 function pfSincronizarCampos() {
   const f = pfEstado().filtro;
-  [['#pfEstab', f.estab], ['#pfPeriodo', f.periodo], ['#pfTipo', f.tipo], ['#pfDe', f.de], ['#pfAte', f.ate]].forEach(x => { const el = $(x[0]); if (el) el.value = x[1]; });
+  [['#pfPeriodo', f.periodo], ['#pfTipo', f.tipo], ['#pfDe', f.de], ['#pfAte', f.ate]].forEach(x => { const el = $(x[0]); if (el) el.value = x[1]; });
   const d = $('#pfDatas'); if (d) d.classList.toggle('aberto', f.periodo === 'custom');
 }
 
