@@ -273,6 +273,21 @@ button.an-rec{cursor:pointer}
 .pf-filtros select,.pf-filtros input{width:100%;border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;background:var(--white);color:var(--text);min-width:0}
 .pf-filtros select:focus,.pf-filtros input:focus{outline:none;border-color:var(--navy)}
 .pf-filtros .pf-full{grid-column:1/-1}
+/* r127: seleção múltipla */
+.ms{position:relative;min-width:0}
+.ms.full{grid-column:1/-1}
+.ms-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px;font-family:inherit;background:var(--white);color:var(--text);text-align:left;cursor:pointer;min-width:0}
+.ms-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ms-btn.ativo{border-color:var(--navy);font-weight:600}
+.ms-btn:disabled{background:var(--bg);color:var(--text-light);cursor:not-allowed}
+.ms-painel{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:60;background:var(--white);border:2px solid var(--navy);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:260px;overflow:auto;min-width:200px}
+.ms.aberto .ms-painel{display:block}
+.ms-topo{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--white)}
+.ms-topo button{border:0;background:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 0}
+.ms-op{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F1F3F5}
+.ms-op input{width:auto;margin:0;flex:none}
+.ms-op small{color:var(--text-light);display:block;font-size:10px}
+.ms-vazio{padding:10px;font-size:11px;color:var(--text-light)}
 .pf-datas{grid-column:1/-1;display:none;grid-template-columns:1fr 1fr;gap:8px}
 .pf-datas.aberto{display:grid}
 .pf-btn-buscar{grid-column:1/-1;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--navy);color:var(--white);cursor:pointer;transition:background .2s}
@@ -402,7 +417,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r126';
+const VERSAO = 'r128';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1640,9 +1655,84 @@ function verHistorico() {
   else renderTelaInicial('hist');
 }
 
+
+/* ── r127: componente de seleção múltipla (vazio = todos). Aplica ao fechar o painel. ── */
+const MS = {};
+function msInner(id) {
+  const m = MS[id];
+  const n = m.sel.length;
+  let rot = m.rotuloTodos;
+  if (n === 1) { const o = m.opcoes.find(x => x.v === m.sel[0]); rot = o ? (o.rot || o.t) : m.sel[0]; }
+  else if (n > 1) rot = n + ' ' + m.rotuloPlural + ' selecionados';
+  const lista = m.opcoes.length ? m.opcoes.map((o, i) => `<label class="ms-op"><input type="checkbox" ${m.sel.indexOf(o.v) !== -1 ? 'checked' : ''} onchange="msMarcar('${id}',${i},this.checked)"><span>${esc(o.t)}${o.sub ? '<small>' + esc(o.sub) + '</small>' : ''}</span></label>`).join('')
+    : `<div class="ms-vazio">${esc(m.msgVazio || 'Sem opções')}</div>`;
+  return `<button type="button" class="ms-btn${n ? ' ativo' : ''}" ${m.desabilitado ? 'disabled' : ''} onclick="msAlternar('${id}')" aria-label="${esc(m.rotuloTodos)}"><span>${esc(rot)}</span><span aria-hidden="true">▾</span></button>
+    <div class="ms-painel"><div class="ms-topo"><button type="button" onclick="msLimpar('${id}')">Limpar (todos)</button><button type="button" onclick="msFechar('${id}')">Concluir</button></div>${lista}</div>`;
+}
+// cfg: {opcoes:[{v,t,sub,rot}], sel:[], rotuloTodos, rotuloPlural, cb, full, desabilitado, msgVazio}
+function msHtml(id, cfg) {
+  MS[id] = Object.assign({ sel: [], opcoes: [], rotuloPlural: 'itens', cb: null }, cfg);
+  MS[id].sel = MS[id].sel.filter(v => MS[id].opcoes.some(o => o.v === v));
+  MS[id].orig = JSON.stringify(MS[id].sel);
+  return `<div class="ms${cfg.full ? ' full' : ''}" id="ms_${id}">${msInner(id)}</div>`;
+}
+function msRedesenhar(id, opcoes, desabilitado, msgVazio) {
+  const m = MS[id]; if (!m) return;
+  m.opcoes = opcoes;
+  m.desabilitado = !!desabilitado;
+  if (msgVazio !== undefined) m.msgVazio = msgVazio;
+  m.sel = m.sel.filter(v => opcoes.some(o => o.v === v));
+  m.orig = JSON.stringify(m.sel);
+  const el = $('#ms_' + id);
+  if (el) { el.classList.remove('aberto'); el.innerHTML = msInner(id); }
+}
+function msAlternar(id) {
+  const el = $('#ms_' + id); if (!el) return;
+  if (el.classList.contains('aberto')) { msFechar(id); return; }
+  Object.keys(MS).forEach(k => { if (k !== id) msFechar(k); });
+  el.classList.add('aberto');
+}
+function msMarcar(id, i, on) {
+  const m = MS[id]; const o = m.opcoes[i]; if (!o) return;
+  const p = m.sel.indexOf(o.v);
+  if (on && p === -1) m.sel.push(o.v);
+  if (!on && p !== -1) m.sel.splice(p, 1);
+  msAtualizarRotulo(id);
+}
+function msLimpar(id) {
+  const el = $('#ms_' + id); if (!el) return;
+  MS[id].sel = [];
+  el.querySelectorAll('.ms-op input').forEach(c => { c.checked = false; });
+  msAtualizarRotulo(id);
+}
+function msAtualizarRotulo(id) {
+  const el = $('#ms_' + id); if (!el) return;
+  const m = MS[id]; const n = m.sel.length;
+  let rot = m.rotuloTodos;
+  if (n === 1) { const o = m.opcoes.find(x => x.v === m.sel[0]); rot = o ? (o.rot || o.t) : m.sel[0]; }
+  else if (n > 1) rot = n + ' ' + m.rotuloPlural + ' selecionados';
+  const b = el.querySelector('.ms-btn');
+  if (b) { b.classList.toggle('ativo', n > 0); b.firstElementChild.textContent = rot; }
+}
+function msFechar(id) {
+  const m = MS[id]; const el = $('#ms_' + id);
+  if (!m || !el) return;
+  const estavaAberto = el.classList.contains('aberto');
+  el.classList.remove('aberto');
+  const atual = JSON.stringify(m.sel);
+  if (atual !== m.orig) { m.orig = atual; if (m.cb) m.cb(m.sel.slice()); }
+  else if (!estavaAberto) return;
+}
+document.addEventListener('click', e => {
+  Object.keys(MS).forEach(k => {
+    const el = document.getElementById('ms_' + k);
+    if (el && el.classList.contains('aberto') && !el.contains(e.target)) msFechar(k);
+  });
+});
+
 // r114: Histórico com filtros (cliente e período) e exclusão em lote das avaliações NÃO concluídas.
 function histFiltro() {
-  if (!state.histFiltro) state.histFiltro = { cliente: '', periodo: 'mes', de: '', ate: '', tipoEst: '' };
+  if (!state.histFiltro) state.histFiltro = { clientes: [], periodo: 'mes', de: '', ate: '', tipoEst: '' };
   return state.histFiltro;
 }
 
@@ -1660,9 +1750,9 @@ function histNorm(v) { return String(v || '').trim().toLowerCase().normalize('NF
 function histFiltrar(lista) {
   const f = histFiltro();
   const iv = npsIntervalo({ periodo: f.periodo, de: f.de, ate: f.ate });
-  const cli = histNorm(f.cliente);
+  const cli = (f.clientes || []).map(histNorm);
   return (lista || []).filter(a => {
-    if (cli && histNorm(a.cliente) !== cli) return false;
+    if (cli.length && cli.indexOf(histNorm(a.cliente)) === -1) return false;
     if (f.tipoEst && (a.tipoEstabelecimento || 'SUPERMERCADO') !== f.tipoEst) return false;
     const d = histDataISO(a.dataAuditoria) || histDataISO(a.dataRegistro);
     if (iv.de && (!d || d < iv.de)) return false;
@@ -1702,14 +1792,14 @@ function histRender() {
   const f = histFiltro();
   const isDiretor = state.perfil === 'DIRETOR';
   const clientes = state.clientes || [];
-  const optsCli = '<option value="">Todos os clientes</option>' + clientes.map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const msCli = msHtml('hCli', { opcoes: clientes.map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', cb: v => histMudou('clientes', v) });
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   const lista = histFiltrar(state.histLista);
   const total = (state.histLista || []).length;
 
   const filtros = `
     <div class="hist-filtros">
-      <select aria-label="Cliente" onchange="histMudou('cliente',this.value)">${optsCli}</select>
+      ${msCli}
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
       <div class="hist-tipos full" role="group" aria-label="Tipo de estabelecimento">
         ${[['', 'Todos'], ['SUPERMERCADO', '🛒 Supermercado'], ['FARMACIA', '💊 Farmácia']].map(t => `<button type="button" class="hist-tipo${f.tipoEst === t[0] ? ' ativo' : ''}" onclick="histMudou('tipoEst','${t[0]}')">${t[1]}</button>`).join('')}
@@ -1819,7 +1909,7 @@ const NPS_COR_OPCAO = {
 const NPS_OPCAO_RUIM = ['Inadequado', 'Ruim', 'Com grande atraso'];
 const NPS_OPCAO_MEDIA = ['Regular', 'Com pequeno atraso'];
 
-function npsFiltroInicial() { return { cliente: '', unidade: '', periodo: 'mes', de: '', ate: '' }; }   // r114: abre sempre no MTD
+function npsFiltroInicial() { return { clientes: [], unidades: [], supervisores: [], periodo: 'mes', de: '', ate: '' }; }   // r114: abre sempre no MTD
 
 function npsIsoLocal(d) {
   const p = n => String(n).padStart(2, '0');
@@ -1869,14 +1959,18 @@ function htmlFiltrosNps() {
   if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
   const f = state.npsFiltro;
   const clientes = state.clientesConcluidos || state.clientes || [];
-  const optsCli = '<option value="">Todos os clientes</option>' +
-    clientes.map(c => `<option value="${esc(c)}"${c === f.cliente ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const msCli = msHtml('nCli', { opcoes: clientes.map(c => ({ v: c, t: c })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', cb: v => npsMudouClientes(v) });
+  const ou = npsOpcoesUnidade();
+  const msUni = msHtml('nUni', { opcoes: ou, sel: f.unidades, rotuloTodos: 'Todas as unidades', rotuloPlural: 'unidades', desabilitado: !f.clientes.length, msgVazio: 'Sem unidades para os clientes escolhidos', cb: v => npsMudouUnidades(v) });
+  if (!f.supervisores) f.supervisores = [];
+  const msSup = msHtml('nSup', { opcoes: (state.npsSupervisores || []).map(x => ({ v: x, t: x })), sel: f.supervisores, rotuloTodos: 'Todos os supervisores', rotuloPlural: 'supervisores', full: true, msgVazio: 'Nenhum supervisor encontrado neste recorte', cb: v => npsMudouSupervisores(v) });
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   return `
     <div class="nps-painel" style="margin-bottom:12px">
       <div class="nps-filtros" style="margin-bottom:0">
-        <select id="npsCliente" aria-label="Cliente" onchange="npsMudouCliente(this.value)">${optsCli}</select>
-        <select id="npsUnidade" aria-label="Unidade" onchange="npsMudouUnidade(this.value)">${npsOpcoesUnidade()}</select>
+        ${msCli}
+        ${msUni}
+        ${msSup}
         <select id="npsPeriodo" aria-label="Período (data da análise)" onchange="npsMudouPeriodo(this.value)" style="grid-column:1/-1">${optsPer}</select>
         <div class="nps-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="npsDatas">
           <input type="date" id="npsDe" aria-label="Data inicial" value="${esc(f.de)}" onchange="npsMudouDatas()">
@@ -1886,21 +1980,27 @@ function htmlFiltrosNps() {
     </div>`;
 }
 
+// Unidades dos clientes escolhidos. Valor = "cliente\tunidade" (nomes de unidade podem repetir entre clientes).
 function npsOpcoesUnidade() {
   const f = state.npsFiltro || npsFiltroInicial();
-  const unids = f.cliente ? ((state.unidadesConcluidas || state.unidades || {})[f.cliente] || []) : [];
-  return '<option value="">Todas as unidades</option>' +
-    unids.map(u => `<option value="${esc(u)}"${u === f.unidade ? ' selected' : ''}>${esc(u)}</option>`).join('');
+  const mapa = state.unidadesConcluidas || state.unidades || {};
+  const varios = f.clientes.length > 1;
+  const out = [];
+  f.clientes.forEach(c => (mapa[c] || []).forEach(u => out.push({ v: c + '\t' + u, t: u, sub: varios ? c : '', rot: varios ? u + ' (' + c + ')' : u })));
+  return out;
 }
 
-function npsMudouCliente(v) {
-  state.npsFiltro.cliente = v;
-  state.npsFiltro.unidade = '';   // a unidade escolhida antes não vale mais para o novo cliente
-  const sel = $('#npsUnidade');
-  if (sel) sel.innerHTML = npsOpcoesUnidade();
+function npsMudouClientes(v) {
+  const f = state.npsFiltro;
+  f.clientes = v;
+  const ou = npsOpcoesUnidade();
+  f.unidades = f.unidades.filter(x => ou.some(o => o.v === x));   // unidades de clientes desmarcados saem
+  msRedesenhar('nUni', ou, !v.length);
+  if (MS.nUni) f.unidades = MS.nUni.sel.slice();
   npsCarregarCards();
 }
-function npsMudouUnidade(v) { state.npsFiltro.unidade = v; npsCarregarCards(); }
+function npsMudouSupervisores(v) { state.npsFiltro.supervisores = v; npsCarregarCards(); }
+function npsMudouUnidades(v) { state.npsFiltro.unidades = v; npsCarregarCards(); }
 function npsMudouPeriodo(v) {
   state.npsFiltro.periodo = v;
   const d = $('#npsDatas');
@@ -1922,7 +2022,8 @@ function npsRotuloFiltro() {
     const br = s => s ? s.split('-').reverse().join('/') : '…';
     per_t = br(f.de) + ' a ' + br(f.ate);
   }
-  return (f.cliente || 'Todos os clientes') + ' · ' + (f.unidade || 'Todas as unidades') + ' · ' + per_t;
+  const nomesUn = f.unidades.map(x => x.split('\t')[1] || x);
+  return (f.clientes.length ? f.clientes.join(', ') : 'Todos os clientes') + ' · ' + (nomesUn.length ? nomesUn.join(', ') : 'Todas as unidades') + ' · ' + ((f.supervisores || []).length ? 'Supervisor: ' + f.supervisores.join(', ') : 'Todos os supervisores') + ' · ' + per_t;
 }
 
 async function npsCarregarCards() {
@@ -1932,7 +2033,7 @@ async function npsCarregarCards() {
   const iv = npsIntervalo(f);
   const req = state.npsReq = (state.npsReq || 0) + 1;
   box.classList.add('carregando');
-  const r = await apiCall('npsAnalise', { cliente: f.cliente, unidade: f.unidade, de: iv.de, ate: iv.ate });
+  const r = await apiCall('npsAnalise', { clientes: f.clientes, unidades: f.unidades, supervisores: f.supervisores || [], de: iv.de, ate: iv.ate });
   const boxAtual = $('#npsCards');
   if (req !== state.npsReq || !boxAtual) return;   // resposta antiga ou tela já trocada
   boxAtual.classList.remove('carregando');
@@ -1948,6 +2049,11 @@ async function npsCarregarCards() {
   }
   boxAtual.style.display = '';
   state.npsErro = false;
+  // r127: lista de supervisores do recorte; quem saiu da lista (ex.: trocou de cliente) deixa de filtrar
+  state.npsSupervisores = r.supervisoresDisponiveis || [];
+  const supAntes = (f.supervisores || []).length;
+  f.supervisores = (f.supervisores || []).filter(x => state.npsSupervisores.indexOf(x) !== -1);
+  if (f.supervisores.length !== supAntes) { npsCarregarCards(); return; }
   state.npsDados = r;
   boxAtual.innerHTML = htmlCardsNps(r);
   if (state.abaHome === 'nps') npsRenderAba();   // r114: a aba CSAT/NPS acompanha o filtro
@@ -1966,7 +2072,7 @@ async function pfCarregarContagem() {
   const f = p.aplicado || p.filtro;
   const iv = pfIntervalo(f);
   const req = state.pfContagemReq = (state.pfContagemReq || 0) + 1;
-  const r = await apiCall('contarAnalisadasPerformance', { cliente: f.cliente, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  const r = await apiCall('contarAnalisadasPerformance', { clientes: f.clientes, estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
   if (req !== state.pfContagemReq) return;
   if (r && r.ok && r.totais) { state.pfContagem = r.totais; state.pfContagemErro = false; }
   else { state.pfContagem = null; state.pfContagemErro = true; }
@@ -2162,6 +2268,298 @@ function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderAba(); }
 function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderAba(); }
 function npsSelecionarDiag(chave) { state.npsModal.diag = (state.npsModal.diag === chave ? '' : chave); npsRenderAba(); }
 
+/* ═══════════════════════════════════════════════════════
+   r127 — ANÁLISE EM TEXTO DO CSAT/NPS (regras automáticas, sem IA) + exportação PDF/PPTX
+   Uso interno da diretoria. Responde a TODOS os filtros (cliente, unidade, supervisor, período).
+   ═══════════════════════════════════════════════════════ */
+function npsN1(v) { return (v === null || v === undefined || isNaN(v)) ? '—' : String(v).replace('.', ','); }
+function npsPlural(n, s, p) { return n + ' ' + (n === 1 ? s : p); }
+function npsLista(itens) {
+  if (itens.length <= 1) return itens.join('');
+  return itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1];
+}
+function npsCorHexNps(n) { return (n === null || n === undefined) ? '#8899AA' : (n >= 50 ? '#2E7D32' : (n >= 1 ? '#D4A017' : '#E05252')); }
+function npsCorHexCsat(c) { return (c === null || c === undefined) ? '#8899AA' : (c >= 9 ? '#2E7D32' : (c >= 8 ? '#D4A017' : '#E05252')); }
+
+function npsMontarTexto(r) {
+  const s = r.resumo;
+  const secoes = [];
+  const add = (h, paragrafos) => { const p = paragrafos.filter(Boolean); if (p.length) secoes.push({ h, paragrafos: p }); };
+  const zona = npsZona(s.nps).t.toLowerCase();
+
+  // 1. Visão geral
+  const vg = [];
+  vg.push('Neste recorte foram enviadas ' + npsPlural(s.enviados, 'pesquisa', 'pesquisas') + ' e ' + npsPlural(s.respondidas, 'foi respondida', 'foram respondidas') +
+    (s.taxaResposta !== null ? ' (retorno de ' + s.taxaResposta + '%)' : '') + '. O NPS é ' + npsN1(s.nps) + ' (' + zona + ')' +
+    (s.csatMedio !== null && s.csatMedio !== undefined ? ' e o CSAT médio é ' + npsN1(s.csatMedio) + ', com ' + s.pctSatisfeitos + '% dos inventários avaliados com nota 9 ou 10' : '') + '.');
+  if (s.nps !== null) {
+    if (s.nps >= 75) vg.push('O resultado está na zona de excelência: a maior parte de quem respondeu recomenda a Formula Code e há pouquíssimos detratores.');
+    else if (s.nps >= 50) vg.push('O resultado está na zona de qualidade, acima do patamar que consideramos saudável. Há espaço para chegar à excelência reduzindo os neutros e detratores.');
+    else if (s.nps >= 1) vg.push('O resultado está na zona de aperfeiçoamento: os promotores superam os detratores, mas por pouco. Vale tratar as causas dos detratores e neutros.');
+    else vg.push('O resultado está na zona crítica: os detratores igualam ou superam os promotores. É prioridade entender e corrigir as causas.');
+  }
+  if (s.respondidas < 10) vg.push('Atenção: com apenas ' + npsPlural(s.respondidas, 'resposta', 'respostas') + ', a leitura é indicativa e pode mudar bastante com novas respostas.');
+  add('Visão geral', vg);
+
+  // 2. Perfil de quem respondeu
+  add('Quem respondeu', [
+    'Entre as respostas, ' + s.pctPromotores + '% são promotores (nota 9–10), ' + s.pctNeutros + '% neutros (7–8) e ' + s.pctDetratores + '% detratores (0–6). A nota média de recomendação é ' + npsN1(s.mediaNota) + '.'
+  ]);
+
+  // 3. Evolução
+  const meses = (r.porMes || []).filter(m => m.mes !== 'sem-data' && m.respostas > 0);
+  const ev = [];
+  if (meses.length >= 2) {
+    const a = meses[meses.length - 1], b = meses[meses.length - 2];
+    const dn = (a.nps !== null && b.nps !== null) ? a.nps - b.nps : null;
+    let tend = 'ficou estável';
+    if (dn !== null && dn >= 6) tend = 'melhorou'; else if (dn !== null && dn <= -6) tend = 'piorou';
+    ev.push('Em ' + npsMesRotulo(a.mes) + ' o NPS foi ' + npsN1(a.nps) + ' contra ' + npsN1(b.nps) + ' em ' + npsMesRotulo(b.mes) + (dn !== null ? ' (' + (dn > 0 ? '+' : '') + dn + ' pontos)' : '') + ': o indicador ' + tend + '.' +
+      ((a.csat !== null && b.csat !== null) ? ' O CSAT foi de ' + npsN1(b.csat) + ' para ' + npsN1(a.csat) + '.' : ''));
+    if (meses.length >= 3) {
+      const comNps = meses.filter(m => m.nps !== null);
+      if (comNps.length >= 3) {
+        const melhor = comNps.slice().sort((x, y) => y.nps - x.nps)[0], pior = comNps.slice().sort((x, y) => x.nps - y.nps)[0];
+        if (melhor.mes !== pior.mes) ev.push('O melhor mês foi ' + npsMesRotulo(melhor.mes) + ' (NPS ' + melhor.nps + ') e o de maior dificuldade foi ' + npsMesRotulo(pior.mes) + ' (NPS ' + pior.nps + ').');
+      }
+    }
+  } else if (meses.length === 1) {
+    ev.push('Só há respostas de ' + npsMesRotulo(meses[0].mes) + ', então ainda não é possível comparar a evolução entre meses.');
+  }
+  add('Evolução no período', ev);
+
+  // 4. Alertas
+  const al = s.alertas || {};
+  const alt = [];
+  if (al.criticos > 0) alt.push(npsPlural(al.criticos, 'inventário mal avaliado por cliente que não recomenda (alerta vermelho)', 'inventários mal avaliados por clientes que não recomendam (alertas vermelhos)') + '. Pedem contato imediato da coordenação ou da diretoria.');
+  if (al.falhas > 0) alt.push(npsPlural(al.falhas, 'inventário com falha pontual, mas com relação ainda preservada', 'inventários com falha pontual, mas com relação ainda preservada') + '. Alinhar com o supervisor responsável e revisar o procedimento.');
+  if (al.perfeitas > 0) alt.push(npsPlural(al.perfeitas, 'operação perfeita', 'operações perfeitas') + ' (CSAT e NPS altos): bom momento para pedir indicações comerciais a esses clientes.');
+  if (!al.criticos && !al.falhas) alt.unshift('Nenhum alerta vermelho ou de falha neste recorte.');
+  add('Alertas', alt);
+
+  // 5. Destaques
+  const d = r.destaques;
+  const dt = [];
+  if (d && d.base > 0) {
+    const pos = d.itens.filter(x => x.chave !== 'outro');
+    const ord = pos.slice().sort((a, b) => b.quantidade - a.quantidade);
+    const outro = d.itens.find(x => x.chave === 'outro');
+    if (ord[0] && ord[0].quantidade > 0) {
+      const top = ord.filter(x => x.quantidade > 0).slice(0, 2).map(x => x.rotulo + ' (' + x.pct + '%)');
+      dt.push('O que mais se destacou na operação, segundo ' + npsPlural(d.base, 'resposta', 'respostas') + ': ' + npsLista(top) + '. É um ponto forte para manter e usar como argumento comercial.');
+    }
+    const fraco = ord[ord.length - 1];
+    if (fraco && ord[0] && fraco.chave !== ord[0].chave) dt.push('O ponto menos citado foi ' + fraco.rotulo + ' (' + fraco.pct + '%). Vale reforçá-lo no briefing das equipes.');
+    if (outro && outro.pct !== null && outro.pct >= 20) dt.push(outro.pct + '% marcaram "Outro"; ler os comentários pode revelar algo que a lista não cobre.');
+  }
+  add('Pontos fortes e oportunidades', dt);
+
+  // 6. Quesitos do modelo anterior
+  const q = [];
+  NPS_QUESITOS_ORDEM.forEach(k => {
+    const x = r.quesitos && r.quesitos[k];
+    if (!x || !x.total) return;
+    const ops = x.opcoes, melhor = ops[0], pior = ops[ops.length - 1];
+    q.push({ k, total: x.total, pMelhor: Math.round(x.contagens[melhor] * 100 / x.total), pPior: Math.round(x.contagens[pior] * 100 / x.total), melhor, pior });
+  });
+  if (q.length) {
+    const forte = q.slice().sort((a, b) => b.pMelhor - a.pMelhor)[0];
+    const fraco = q.slice().sort((a, b) => b.pPior - a.pPior)[0];
+    const par = ['Nas respostas do modelo anterior da pesquisa, o quesito mais bem avaliado foi "' + NPS_QUESITOS_TXT[forte.k] + '" (' + forte.pMelhor + '% "' + forte.melhor + '").'];
+    if (fraco.pPior > 0) par.push('O quesito com mais avaliações negativas foi "' + NPS_QUESITOS_TXT[fraco.k] + '" (' + fraco.pPior + '% "' + fraco.pior + '").');
+    add('Quesitos do modelo anterior', par);
+  }
+
+  // 7. Unidades
+  const un = (r.porUnidade || []).filter(u => u.respostas > 0 && u.nps !== null);
+  const ut = [];
+  if (un.length) {
+    const neg = un.filter(u => u.nps < 0).slice(0, 5);
+    const bons = un.slice().sort((a, b) => b.nps - a.nps).filter(u => u.nps >= 50).slice(0, 3);
+    const fmtU = u => u.unidade + (u.cliente ? ' — ' + u.cliente : '') + ' (NPS ' + u.nps + (u.csat !== null ? ', CSAT ' + npsN1(u.csat) : '') + ', ' + npsPlural(u.respostas, 'resposta', 'respostas') + ')';
+    if (neg.length) ut.push('Unidades que pedem atenção (NPS negativo): ' + neg.map(fmtU).join('; ') + '. Priorizar contato com a gerência ou visita.');
+    else ut.push('Nenhuma unidade com NPS negativo neste recorte.');
+    if (bons.length) ut.push('Unidades de referência (NPS 50 ou mais): ' + bons.map(fmtU).join('; ') + '.');
+  }
+  const semResp = (r.porUnidade || []).filter(u => u.enviados > 0 && u.respostas === 0).length;
+  if (semResp) ut.push(npsPlural(semResp, 'unidade ainda sem nenhuma resposta', 'unidades ainda sem nenhuma resposta') + '; acompanhar e reforçar o pedido de retorno.');
+  add('Unidades', ut);
+
+  // 8. Supervisores
+  const sp = (r.porSupervisor || []).filter(x => x.respondidas > 0);
+  const st = [];
+  if (sp.length) {
+    const fmtS = x => x.supervisor + ' (NPS ' + npsN1(x.nps) + (x.csat !== null ? ', CSAT ' + npsN1(x.csat) : '') + ', ' + npsPlural(x.respondidas, 'resposta', 'respostas') + ')';
+    st.push('Por supervisor (auditor responsável pela análise): ' + sp.slice().sort((a, b) => (b.nps === null ? -999 : b.nps) - (a.nps === null ? -999 : a.nps)).map(fmtS).join('; ') + '.');
+    if (sp.length >= 2) {
+      const ord = sp.filter(x => x.nps !== null);
+      if (ord.length >= 2) {
+        const pior = ord[0], melhor = ord[ord.length - 1];
+        if (pior.nps !== melhor.nps) st.push('A maior diferença está entre ' + melhor.supervisor + ' (NPS ' + melhor.nps + ') e ' + pior.supervisor + ' (NPS ' + pior.nps + '). Vale entender o que ' + melhor.supervisor + ' faz de diferente e replicar nas demais análises.');
+      }
+    }
+    const crit = sp.filter(x => x.criticos > 0);
+    if (crit.length) st.push('Alertas vermelhos em: ' + crit.map(x => x.supervisor + ' (' + x.criticos + ')').join(', ') + '. Acompanhar de perto.');
+    if (sp.some(x => x.respondidas < 5)) st.push('Supervisores com menos de 5 respostas têm leitura ainda instável; evitar conclusões definitivas.');
+  }
+  add('Supervisores', st);
+
+  // 9. Recomendações (as mesmas da aba Análise, em texto)
+  const rec = npsRecomendacoes(r).map(x => x.titulo + '. ' + x.texto);
+  add('Recomendações', rec);
+
+  const kpis = [
+    { r: 'NPS', v: npsN1(s.nps), sub: npsZona(s.nps).t, cor: npsCorHexNps(s.nps) },
+    { r: 'CSAT médio', v: npsN1(s.csatMedio), sub: (s.pctSatisfeitos !== null && s.pctSatisfeitos !== undefined ? s.pctSatisfeitos + '% satisfeitos' : 'sem respostas'), cor: npsCorHexCsat(s.csatMedio) },
+    { r: 'Respostas', v: String(s.respondidas), sub: 'de ' + s.enviados + ' enviadas', cor: '#002B50' },
+    { r: 'Retorno', v: s.taxaResposta === null ? '—' : s.taxaResposta + '%', sub: 'taxa de resposta', cor: '#002B50' }
+  ];
+  return { titulo: 'Análise CSAT / NPS', contexto: npsRotuloFiltro() + ' · período pela data da análise', kpis, secoes, resumo: s, porSupervisor: sp };
+}
+
+function npsHtmlTexto(r) {
+  const s = r.resumo;
+  if (!s.respondidas) return '<div class="nps-vazio">Nenhuma resposta neste filtro para analisar.<br><small>Ajuste os filtros acima (cliente, unidade, supervisor ou período).</small></div>';
+  const t = npsMontarTexto(r);
+  const corpo = t.secoes.map(sec => `<div class="nps-bloco"><h4>${esc(sec.h)}</h4>${sec.paragrafos.map(p => `<p style="font-size:13px;line-height:1.7;margin:0 0 8px;color:var(--text)">${esc(p)}</p>`).join('')}</div>`).join('');
+  return `
+    <div class="pf-acoes" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <button type="button" class="pf-acao pdf" onclick="npsExportarPDF()">📄 Exportar PDF</button>
+      <button type="button" class="pf-acao ppt" onclick="npsExportarPPTX()">📽️ Exportar PPTX</button>
+    </div>
+    ${corpo}
+    <div class="nps-legenda-faixas" style="justify-content:center;text-align:center">Texto gerado automaticamente por regras, a partir das respostas do filtro atual. Uso interno da diretoria.</div>`;
+}
+
+async function npsExportarPDF() {
+  if (!state.npsDados || !state.npsDados.resumo.respondidas) { toast('Não há respostas neste filtro'); return; }
+  const t = npsMontarTexto(state.npsDados);
+  showLoading('Gerando o PDF da análise...');
+  const r = await apiCall('npsExportarPDF', { texto: { titulo: t.titulo, contexto: t.contexto, kpis: t.kpis, secoes: t.secoes } });
+  hideLoading();
+  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha')); return; }
+  pfModalLinks('Análise em PDF pronta', 'A análise de CSAT/NPS foi salva no Drive (pasta NPS_FC).',
+    [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
+}
+
+async function npsExportarPPTX() {
+  if (!state.npsDados || !state.npsDados.resumo.respondidas) { toast('Não há respostas neste filtro'); return; }
+  const disponivel = await aguardarPptxGenJS();
+  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return; }
+  let b64;
+  try {
+    showLoading('Montando a apresentação...');
+    b64 = await montarPptxNps(npsMontarTexto(state.npsDados), state.npsDados);
+  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message); return; }
+  showLoading('Salvando no Drive e convertendo em PDF...');
+  const r = await apiCall('npsSalvarApresentacao', { pptxBase64: b64 });
+  hideLoading();
+  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha')); return; }
+  pfModalLinks('Apresentação pronta',
+    'A apresentação de CSAT/NPS foi salva no Drive (pasta NPS_FC).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
+    [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
+}
+
+// Apresentação CSAT/NPS (PPTX) — mesmo estilo visual da Performance (capa escura, faixa superior, verde da marca).
+function montarPptxNps(t, dados) {
+  return new Promise(function (resolve, reject) {
+    try {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_16x9';
+      const NAVY = '002B50', GREEN = '61CF00', DARK = '051323', BODY = '556677', LABEL = '8899AA';
+      const hex = c => String(c || '#002B50').replace('#', '');
+      function fullBg(s) {
+        s.background = { fill: 'FFFFFF' };
+        s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.5, fill: { color: DARK } });
+        s.addShape(pres.ShapeType.rect, { x: 0, y: 0.5, w: 10, h: 0.04, fill: { color: GREEN } });
+        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: 7.4, y: 0.07, w: 2.1, h: 0.36 }); } catch (e) {} }
+      }
+      let num = 0;
+      function rotulo(s, texto) {
+        num++;
+        s.addText((num < 10 ? '0' + num : num) + ' / ' + String(texto).toUpperCase(), { x: 0.5, y: 0.1, w: 6.5, h: 0.3, fontSize: 9, fontFace: 'Arial', bold: true, color: GREEN, isTextBox: true, margin: 0, charSpacing: 3 });
+      }
+      function titulo(s, a, b) {
+        s.addText([{ text: a, options: { color: DARK } }, { text: b, options: { color: GREEN } }], { x: 0.5, y: 0.7, w: 9, h: 0.5, fontSize: pptTituloFs(a + b, 9, 22, 16), fontFace: 'Calibri', bold: true, isTextBox: true, margin: 0 });
+      }
+      function rodape(s) {
+        s.addText('Uso interno da diretoria · texto gerado automaticamente a partir das respostas do filtro atual', { x: 0.5, y: 5.2, w: 9, h: 0.25, fontSize: 8, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0 });
+      }
+
+      /* Capa */
+      const s1 = pres.addSlide();
+      s1.background = { fill: DARK };
+      s1.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: GREEN } });
+      s1.addText([
+        { text: 'Análise de ', options: { color: 'FFFFFF', fontSize: 30, fontFace: 'Calibri', bold: true } },
+        { text: 'CSAT e NPS', options: { color: GREEN, fontSize: 30, fontFace: 'Calibri', bold: true } }
+      ], { x: 0.8, y: 0.7, w: 8.4, h: 1.1, isTextBox: true, margin: 0 });
+      s1.addText('Apresentação para a diretoria', { x: 0.8, y: 1.85, w: 6, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
+      s1.addText(t.contexto, { x: 0.8, y: 2.45, w: 8.4, h: Math.min(1.2, pptMedirAltura(t.contexto, 8.4, 13, 1.1)), fontSize: 13, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, valign: 'top' });
+      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: 3.2, y: 4.15, w: 3.6, h: 0.94 }); } catch (e) {} }
+
+      /* Indicadores */
+      const s2 = pres.addSlide();
+      fullBg(s2); rotulo(s2, 'Indicadores-chave'); titulo(s2, 'Placar do ', 'recorte');
+      t.kpis.forEach(function (k, i) {
+        const x = 0.5 + i * 2.28;
+        s2.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.1, h: 1.9, fill: { color: 'F4F6F8' }, line: { color: 'F4F6F8' } });
+        s2.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.1, h: 0.07, fill: { color: hex(k.cor) } });
+        s2.addText(k.r.toUpperCase(), { x: x, y: 1.7, w: 2.1, h: 0.3, fontSize: 9, fontFace: 'Arial', bold: true, color: '6B7B8D', align: 'center', isTextBox: true, margin: 0, charSpacing: 2 });
+        s2.addText(String(k.v), { x: x, y: 2.05, w: 2.1, h: 0.7, fontSize: 34, fontFace: 'Calibri', bold: true, color: hex(k.cor), align: 'center', isTextBox: true, margin: 0 });
+        s2.addText(String(k.sub || ''), { x: x + 0.1, y: 2.8, w: 1.9, h: 0.45, fontSize: 10, fontFace: 'Arial', color: '6B7B8D', align: 'center', isTextBox: true, margin: 0, valign: 'top' });
+      });
+      // barra promotores / neutros / detratores
+      const sm = dados.resumo, P = sm.pctPromotores || 0, N = sm.pctNeutros || 0, D = sm.pctDetratores || 0;
+      s2.addText('Quem respondeu', { x: 0.5, y: 3.65, w: 4, h: 0.3, fontSize: 11, fontFace: 'Arial', bold: true, color: NAVY, isTextBox: true, margin: 0 });
+      let px = 0.5; const W = 9;
+      [[P, '2E7D32', 'Promotores'], [N, 'D4A017', 'Neutros'], [D, 'E05252', 'Detratores']].forEach(function (b) {
+        const w = W * b[0] / 100;
+        if (w > 0) {
+          s2.addShape(pres.ShapeType.rect, { x: px, y: 4.0, w: w, h: 0.4, fill: { color: b[1] }, line: { color: b[1] } });
+          if (b[0] >= 8) s2.addText(b[0] + '%', { x: px, y: 4.0, w: w, h: 0.4, fontSize: 11, fontFace: 'Arial', bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', isTextBox: true, margin: 0 });
+        }
+        px += w;
+      });
+      s2.addText('Promotores ' + P + '%  ·  Neutros ' + N + '%  ·  Detratores ' + D + '%', { x: 0.5, y: 4.5, w: 9, h: 0.3, fontSize: 10, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0 });
+      rodape(s2);
+
+      /* Seções de texto (ordem: visão geral … recomendações) */
+      t.secoes.forEach(function (sec) {
+        const texto = sec.paragrafos.join('\n\n');
+        const hMax = PPT_Y_MAX - 1.4;
+        let fs = pptFonteQueCabe(texto, 9, hMax, 13, 10.5, 1.35);
+        const partes = fs ? [texto] : pptDividirTexto(texto, 9, hMax, (fs = 11), 1.35);
+        partes.forEach(function (p, i) {
+          const s = pres.addSlide();
+          fullBg(s); rotulo(s, sec.h + (i > 0 ? ' (cont.)' : ''));
+          titulo(s, sec.h + (i > 0 ? ' ' : ''), i > 0 ? '(cont.)' : '');
+          s.addText(p, { x: 0.5, y: 1.4, w: 9, h: Math.min(hMax, pptMedirAltura(p, 9, fs, 1.35)), fontSize: fs, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35, valign: 'top' });
+          rodape(s);
+        });
+      });
+
+      /* Tabela de supervisores (se houver) */
+      if (t.porSupervisor && t.porSupervisor.length) {
+        const linhas = t.porSupervisor.slice().sort((a, b) => (b.nps === null ? -999 : b.nps) - (a.nps === null ? -999 : a.nps));
+        for (let ini = 0; ini < linhas.length; ini += 8) {
+          const s = pres.addSlide();
+          fullBg(s); rotulo(s, 'Supervisores'); titulo(s, 'Resultado por ', 'supervisor');
+          const cab = ['Supervisor', 'Respostas', 'NPS', 'CSAT', 'Alertas vermelhos'].map(function (h) { return { text: h, options: { bold: true, color: 'FFFFFF', fill: { color: NAVY }, fontSize: 10, fontFace: 'Arial', align: 'center' } }; });
+          const rows = [cab].concat(linhas.slice(ini, ini + 8).map(function (x) {
+            const cel = function (v, o) { return { text: String(v), options: Object.assign({ fontSize: 10, fontFace: 'Arial', align: 'center', color: '333333' }, o || {}) }; };
+            return [cel(x.supervisor, { align: 'left' }), cel(x.respondidas), cel(npsN1(x.nps), { bold: true, color: hex(npsCorHexNps(x.nps)) }), cel(npsN1(x.csat), { bold: true, color: hex(npsCorHexCsat(x.csat)) }), cel(x.criticos || 0)];
+          }));
+          s.addTable(rows, { x: 0.5, y: 1.4, w: 9, colW: [3.6, 1.2, 1.2, 1.2, 1.8], border: { type: 'solid', pt: 0.5, color: 'E2E8F0' } });
+          rodape(s);
+        }
+      }
+
+      pres.write('base64').then(resolve).catch(reject);
+    } catch (e) { reject(e); }
+  });
+}
+
 function npsRenderAba() {
   const c = $('#abaConteudo');
   if (!c || state.abaHome !== 'nps') return;
@@ -2172,9 +2570,10 @@ function npsRenderAba() {
   }
   if (!state.npsModal) state.npsModal = { aba: 'analise', cat: 'todas', diag: '', soComentario: false };
   const st = state.npsModal;
-  const abas = [['analise', 'Análise'], ['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
+  const abas = [['analise', 'Análise'], ['texto', 'Texto'], ['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
   let corpo = '';
   if (st.aba === 'analise') corpo = npsHtmlAnalise(r);
+  else if (st.aba === 'texto') corpo = npsHtmlTexto(r);
   else if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
   else if (st.aba === 'diagnostico') corpo = npsHtmlDiagnostico(r, st);
   else if (st.aba === 'destaques') corpo = npsHtmlDestaques(r);
@@ -2433,7 +2832,9 @@ function pfDeltaCurto(v) {
 }
 function pfDeltaCor(v) { return (v === null || v === undefined || v === 0) ? '#6B7B8D' : (v > 0 ? '#2E7D32' : '#C0392B'); }
 
-function pfFiltroInicial() { return { cliente: '', tipo: '', periodo: '90', de: '', ate: '' }; }
+const PF_ESTABS = [{ v: '', t: 'Todos os estabelecimentos' }, { v: 'SUPERMERCADO', t: '🛒 Supermercado' }, { v: 'FARMACIA', t: '💊 Farmácia' }];
+function pfEstabRotulo(f) { const t = PF_ESTABS.find(x => x.v === f.estab); return t && t.v ? t.t : ''; }
+function pfFiltroInicial() { return { clientes: [], estab: '', tipo: '', periodo: '90', de: '', ate: '' }; }
 function pfEstado() {
   if (!state.pf) state.pf = { filtro: pfFiltroInicial(), dados: null, aplicado: null, foco: '', textos: null, textosChave: '', origemTexto: '', req: 0 };
   return state.pf;
@@ -2459,12 +2860,14 @@ function carregarPerformanceAba() {
   if (!c) return;
   const p = pfEstado();
   const f = p.filtro;
-  const optsCli = '<option value="">Todos os clientes</option>' + (state.clientesConcluidos || state.clientes || []).map(x => `<option value="${esc(x)}"${x === f.cliente ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const msCli = msHtml('pCli', { opcoes: (state.clientesConcluidos || state.clientes || []).map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, cb: v => pfMudou('clientes', v) });
+  const optsEstab = PF_ESTABS.map(x => `<option value="${x.v}"${x.v === f.estab ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsPer = NPS_PERIODOS.map(x => `<option value="${x.v}"${x.v === f.periodo ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsTipo = PF_TIPOS.map(x => `<option value="${esc(x.v)}"${x.v === f.tipo ? ' selected' : ''}>${x.t}</option>`).join('');
   c.innerHTML = `
     <div class="pf-filtros">
-      <select id="pfCliente" class="pf-full" aria-label="Cliente" onchange="pfMudou('cliente',this.value)">${optsCli}</select>
+      ${msCli}
+      <select id="pfEstab" class="pf-full" aria-label="Tipo de estabelecimento" onchange="pfMudou('estab',this.value)">${optsEstab}</select>
       <select id="pfPeriodo" aria-label="Período (data da análise)" onchange="pfMudou('periodo',this.value)">${optsPer}</select>
       <select id="pfTipo" aria-label="Tipo de avaliação" onchange="pfMudou('tipo',this.value)">${optsTipo}</select>
       <div class="pf-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="pfDatas">
@@ -2501,7 +2904,7 @@ async function pfBuscar() {
   const req = ++p.req;
   const box = $('#pfResultados');
   if (box) box.classList.add('pf-carregando');
-  const r = await apiCall('performanceAnalise', { cliente: f.cliente, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  const r = await apiCall('performanceAnalise', { clientes: f.clientes, estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
   const boxAtual = $('#pfResultados');
   if (req !== p.req || state.abaHome !== 'perf' || !boxAtual) return;
   boxAtual.classList.remove('pf-carregando');
@@ -2515,7 +2918,7 @@ async function pfBuscar() {
   p.dados = r;
   p.aplicado = JSON.parse(JSON.stringify(f));
   if (r.totais) { state.pfContagem = { clientes: r.totais.clientes, unidades: r.totais.unidades, analises: r.totais.analises }; state.pfContagemErro = false; npsRedesenharCards(); }   // r118: card 1 acompanha a Performance
-  p.foco = (f.cliente && r.clientes.some(c => c.cliente === f.cliente)) ? f.cliente : '';
+  p.foco = (f.clientes.length === 1 && r.clientes.some(c => c.cliente === f.clientes[0])) ? f.clientes[0] : '';
   p.textos = null; p.textosChave = ''; p.origemTexto = '';
   pfMarcarPendente();
   pfRender();
@@ -2528,7 +2931,7 @@ function pfRender() {
   const d = p.dados;
   if (!d.clientes.length) {
     const f = p.aplicado;
-    box.innerHTML = '<div class="pf-vazio">Nenhuma análise concluída ' + (f.cliente ? 'de <b>' + esc(f.cliente) + '</b> ' : '') +
+    box.innerHTML = '<div class="pf-vazio">Nenhuma análise concluída ' + (f.clientes.length ? 'de <b>' + esc(f.clientes.join(', ')) + '</b> ' : '') + (f.estab ? '(' + esc(pfEstabRotulo(f)) + ') ' : '') +
       'em <b>' + esc(pfPeriodoRotulo(f)) + '</b>' + (f.tipo ? ' (' + esc(pfTipoRotulo(f)) + ')' : '') + '.<br>Ajuste o cliente, o período ou o tipo de avaliação e toque em Buscar.' +
       (f.periodo !== 'tudo' ? '<br><button type="button" class="pf-acao txt" style="display:inline-flex;margin-top:12px" onclick="pfBuscarTodoPeriodo()">Buscar em todo o período</button>' : '') + '</div>';
     return;
@@ -2540,7 +2943,7 @@ function pfRender() {
 function pfHtmlPeriodoLinha() {
   const p = pfEstado();
   const ant = p.dados && p.dados.periodoAnterior;
-  return `Período (data da análise): <b>${esc(pfPeriodoRotulo(p.aplicado))}</b> · ${esc(pfTipoRotulo(p.aplicado))} · comparado com ` +
+  return `Período (data da análise): <b>${esc(pfPeriodoRotulo(p.aplicado))}</b> · ${esc(pfTipoRotulo(p.aplicado))}${pfEstabRotulo(p.aplicado) ? ' · ' + esc(pfEstabRotulo(p.aplicado)) : ''} · comparado com ` +
     (ant ? `<b>${npsDataBR(ant.de)} a ${npsDataBR(ant.ate)}</b> (período anterior de mesma duração)` : '<b>—</b> (sem período anterior para comparar)');
 }
 
@@ -2591,28 +2994,14 @@ function pfAbrirCliente(i) {
   const p = pfEstado();
   const c = p.dados.clientes[i];
   if (!c) return;
-  p.foco = c.cliente;
-  p.filtro.cliente = c.cliente;
-  p.aplicado.cliente = c.cliente;
-  const sel = $('#pfCliente'); if (sel) sel.value = c.cliente;
-  pfMarcarPendente();
+  p.foco = c.cliente;   // r127: abrir um cliente NÃO altera os filtros (que podem ter vários clientes)
   pfRender();
   window.scrollTo(0, 0);
 }
-// Volta para os cards de todos os clientes. Se a última busca foi filtrada por UM cliente, os demais
-// não vieram na resposta — então busca de novo, mantendo o período e o tipo que estavam aplicados.
+// Volta para os cards dos clientes da busca atual.
 function pfVoltarMacro() {
   const p = pfEstado();
   p.foco = '';
-  if (p.dados && p.dados.filtro && p.dados.filtro.cliente) {
-    p.filtro = Object.assign({}, p.aplicado, { cliente: '' });
-    pfSincronizarCampos();
-    pfBuscar();
-    return;
-  }
-  p.filtro.cliente = ''; p.aplicado.cliente = '';
-  const sel = $('#pfCliente'); if (sel) sel.value = '';
-  pfMarcarPendente();
   pfRender();
 }
 function pfBuscarTodoPeriodo() {
@@ -2623,7 +3012,7 @@ function pfBuscarTodoPeriodo() {
 }
 function pfSincronizarCampos() {
   const f = pfEstado().filtro;
-  [['#pfCliente', f.cliente], ['#pfPeriodo', f.periodo], ['#pfTipo', f.tipo], ['#pfDe', f.de], ['#pfAte', f.ate]].forEach(x => { const el = $(x[0]); if (el) el.value = x[1]; });
+  [['#pfEstab', f.estab], ['#pfPeriodo', f.periodo], ['#pfTipo', f.tipo], ['#pfDe', f.de], ['#pfAte', f.ate]].forEach(x => { const el = $(x[0]); if (el) el.value = x[1]; });
   const d = $('#pfDatas'); if (d) d.classList.toggle('aberto', f.periodo === 'custom');
 }
 
@@ -2708,7 +3097,7 @@ function pfHtmlTexto(c) {
 function pfPayloadBase() {
   const p = pfEstado();
   const iv = pfIntervalo(p.aplicado);
-  return { cliente: p.foco, tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
+  return { cliente: p.foco, estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
 }
 
 // Devolve os textos (gera se ainda não existem para este filtro). null = falhou.

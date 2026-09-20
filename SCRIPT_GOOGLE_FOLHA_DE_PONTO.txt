@@ -97,6 +97,8 @@ function doPost(e) {
     else if (action === 'npsObterPesquisa') { result = npsObterPesquisa(data); }
     else if (action === 'npsResponder') { result = npsResponder(data); }
     else if (action === 'npsAnalise') { result = npsAnalise(data, data.cpf); }
+    else if (action === 'npsExportarPDF') { result = npsExportarPDF(data, data.cpf); }
+    else if (action === 'npsSalvarApresentacao') { result = npsSalvarApresentacao(data, data.cpf); }
 
     // ── PERFORMANCE DAS UNIDADES — r110 ──
     else if (action === 'performanceAnalise') { result = performanceAnalise(data, data.cpf); }
@@ -497,7 +499,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r126';
+const VERSAO_SCRIPT = '2026-09-19-r128';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -519,7 +521,7 @@ function doGet(e) {
     'redefinirSenhaComCodigo', 'resetarSenhaComoDir',
     'salvarAnaliseInventario', 'getHistoricoInventarios', 'checarInventarioExistente',
     'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente',
-    'npsObterPesquisa', 'npsResponder', 'npsAnalise',
+    'npsObterPesquisa', 'npsResponder', 'npsAnalise', 'npsExportarPDF', 'npsSalvarApresentacao',
     'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao',
     'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance'
   ];
@@ -4532,13 +4534,64 @@ function npsEnviarAviso(a) {
 }
 
 /* ── Cálculo puro (sem planilha) — testável isoladamente ── */
+// r127: filtros de múltipla seleção. f.clientes = lista de nomes; f.unidades = lista de "cliente\tunidade".
+// Lista vazia = todos. f.cliente / f.unidade (texto único) continuam valendo por compatibilidade.
+function fcListaChaves(lista, unico) {
+  var out = [];
+  if (Object.prototype.toString.call(lista) === '[object Array]') {
+    lista.forEach(function (x) { var k = fcChave(x); if (k && out.indexOf(k) === -1) out.push(k); });
+  }
+  if (!out.length && unico) { var k1 = fcChave(unico); if (k1) out.push(k1); }
+  return out;
+}
+function fcListaUnidades(lista, unico) {
+  var out = [];
+  if (Object.prototype.toString.call(lista) === '[object Array]') {
+    lista.forEach(function (x) {
+      var p = String(x || '').split('\t');
+      var k = p.length > 1 ? fcChave(p[0]) + '|' + fcChave(p[1]) : '|' + fcChave(p[0]);
+      if (out.indexOf(k) === -1) out.push(k);
+    });
+  }
+  if (!out.length && unico) out.push('|' + fcChave(unico));
+  return out;
+}
+function fcUnidadeCasa(listaUn, cliente, unidade) {
+  if (!listaUn || !listaUn.length) return true;
+  var kc = fcChave(cliente), ku = fcChave(unidade);
+  return listaUn.indexOf(kc + '|' + ku) !== -1 || listaUn.indexOf('|' + ku) !== -1;
+}
 function npsPassaFiltro(item, f) {
-  if (f.cliente && fcChave(item.cliente) !== fcChave(f.cliente)) return false;
-  if (f.unidade && fcChave(item.unidade) !== fcChave(f.unidade)) return false;
+  var lc = fcListaChaves(f.clientes, f.cliente);
+  if (lc.length && lc.indexOf(fcChave(item.cliente)) === -1) return false;
+  if (!fcUnidadeCasa(fcListaUnidades(f.unidades, f.unidade), item.cliente, item.unidade)) return false;
+  if (f.supervisores && f.supervisores.length) {   // r127: supervisor = auditor responsável pela análise
+    var ls = fcListaChaves(f.supervisores, '');
+    if (ls.indexOf(fcChave(item.auditor || NPS_SEM_SUPERVISOR)) === -1) return false;
+  }
   var d = item.dataAuditoria || '';
   if (f.de && (!d || d < f.de)) return false;
   if (f.ate && (!d || d > f.ate)) return false;
   return true;
+}
+
+var NPS_SEM_SUPERVISOR = 'Não identificado';
+// r127: ID da análise -> nome do auditor (supervisor). Lê só as 3 primeiras colunas da aba de auditorias.
+function npsMapaAuditores() {
+  var mapa = {};
+  try {
+    var aba = getOuCriarAbaAuditoria();
+    var ult = aba.getLastRow();
+    if (ult < 2) return mapa;
+    aba.getRange(2, 1, ult - 1, 3).getValues().forEach(function (row) {
+      var id = String(row[0] || '');
+      if (id) mapa[id] = fcLimparNome(row[2]);
+    });
+  } catch (e) {}
+  return mapa;
+}
+function npsMarcarAuditor(lista, mapa) {
+  lista.forEach(function (x) { x.auditor = mapa[x.auditoriaId] || ''; });
 }
 
 function npsIndice(p, n, d) {
@@ -4560,7 +4613,12 @@ function npsCalcular(envios, respostas, f) {
     NPS_OPCOES[k].forEach(function (o) { c[o] = 0; });
     quesitos[k] = { opcoes: NPS_OPCOES[k].slice(), contagens: c, total: 0 };
   });
-  var meses = {}, unidades = {};
+  var meses = {}, unidades = {}, sups = {};
+  function supDe(nome) {
+    nome = nome || NPS_SEM_SUPERVISOR;
+    if (!sups[nome]) sups[nome] = { supervisor: nome, enviados: 0, respondidas: 0, promotores: 0, neutros: 0, detratores: 0, csatN: 0, csatSoma: 0, criticos: 0, falhas: 0 };
+    return sups[nome];
+  }
   var diagCont = {}, diagItens = {};
   Object.keys(NPS_DIAG).forEach(function (k) { diagCont[k] = 0; diagItens[k] = []; });
   var destCont = {}, destBase = 0;
@@ -4572,6 +4630,7 @@ function npsCalcular(envios, respostas, f) {
     return unidades[chave];
   }
   env.forEach(function (e) {
+    supDe(e.auditor).enviados++;
     var u = unidadeDe(e.cliente, e.unidade);
     u.enviados++;
     if (e.dataAuditoria > u.ultimaAnalise) u.ultimaAnalise = e.dataAuditoria;
@@ -4581,6 +4640,10 @@ function npsCalcular(envios, respostas, f) {
     soma += r.nota;
     dist[r.nota]++;
     var cat = npsCategoria(r.nota);
+    var sp = supDe(r.auditor);
+    sp.respondidas++;
+    if (cat === 'Promotor') sp.promotores++; else if (cat === 'Neutro') sp.neutros++; else sp.detratores++;
+    if (r.csat !== null && r.csat !== undefined) { sp.csatN++; sp.csatSoma += r.csat; }
     var u = unidadeDe(r.cliente, r.unidade);
     u.respostas++;
     if (r.dataAuditoria > u.ultimaAnalise) u.ultimaAnalise = r.dataAuditoria;
@@ -4604,8 +4667,8 @@ function npsCalcular(envios, respostas, f) {
     var dg = npsDiagnostico(r.csat, r.nota);
     if (dg) {
       diagCont[dg.chave]++;
-      if (dg.nivel === 'critico') u.criticos++;
-      if (dg.nivel === 'falha') u.falhas++;
+      if (dg.nivel === 'critico') { u.criticos++; sp.criticos++; }
+      if (dg.nivel === 'falha') { u.falhas++; sp.falhas++; }
       if (diagItens[dg.chave].length < 100) {
         diagItens[dg.chave].push({ cliente: r.cliente, unidade: r.unidade, dataAuditoria: r.dataAuditoria, dataResposta: r.dataResposta, csat: r.csat, nps: r.nota, comentario: r.comentario });
       }
@@ -4633,6 +4696,18 @@ function npsCalcular(envios, respostas, f) {
     if (b.nps === null) return -1;
     return a.nps - b.nps;
   });
+  var porSupervisor = Object.keys(sups).map(function (k) {
+    var x = sups[k];
+    x.nps = npsIndice(x.promotores, x.neutros, x.detratores);
+    x.csat = x.csatN ? Math.round(x.csatSoma * 10 / x.csatN) / 10 : null;
+    delete x.csatN; delete x.csatSoma;
+    return x;
+  }).sort(function (a, b) {
+    if (a.nps === null && b.nps === null) return a.supervisor.localeCompare(b.supervisor);
+    if (a.nps === null) return 1;
+    if (b.nps === null) return -1;
+    return a.nps - b.nps;
+  });
   var lista = res.slice().sort(function (a, b) { return String(b.dataResposta).localeCompare(String(a.dataResposta)); })
     .slice(0, 500).map(function (r) {
       var dg = npsDiagnostico(r.csat, r.nota);
@@ -4641,7 +4716,8 @@ function npsCalcular(envios, respostas, f) {
         nota: r.nota, categoria: npsCategoria(r.nota), csat: r.csat, destaques: r.destaques || [],
         diagnostico: dg ? { chave: dg.chave, titulo: dg.titulo, nivel: dg.nivel } : null,
         apresentacao: r.apresentacao, postura: r.postura,
-        supervisor: r.supervisor, mapeamento: r.mapeamento, horario: r.horario, comentario: r.comentario
+        supervisor: r.supervisor, mapeamento: r.mapeamento, horario: r.horario, comentario: r.comentario,
+        auditor: r.auditor || ''
       };
     });
   var diagnosticos = Object.keys(NPS_DIAG).sort(function (a, b) { return NPS_DIAG[a].ordem - NPS_DIAG[b].ordem; }).map(function (k) {
@@ -4666,7 +4742,7 @@ function npsCalcular(envios, respostas, f) {
       alertas: { criticos: diagCont.baixo_detr, falhas: diagCont.baixo_prom + diagCont.baixo_neutro, perfeitas: diagCont.alto_prom }
     },
     distribuicao: dist, distribuicaoCsat: distCsat, quesitos: quesitos, diagnosticos: diagnosticos, destaques: destaques,
-    porMes: porMes, porUnidade: porUnidade, respostas: lista
+    porMes: porMes, porUnidade: porUnidade, porSupervisor: porSupervisor, respostas: lista
   };
 }
 
@@ -4675,10 +4751,24 @@ function npsAnalise(dados, cpf) {
   try {
     if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
-    var f = { cliente: String(d.cliente || ''), unidade: String(d.unidade || ''), de: extrairDataISO(d.de), ate: extrairDataISO(d.ate) };
+    var f = {
+      cliente: String(d.cliente || ''), unidade: String(d.unidade || ''),
+      clientes: Array.isArray(d.clientes) ? d.clientes.map(String) : [],
+      unidades: Array.isArray(d.unidades) ? d.unidades.map(String) : [],
+      supervisores: Array.isArray(d.supervisores) ? d.supervisores.map(String) : [],
+      de: extrairDataISO(d.de), ate: extrairDataISO(d.ate)
+    };
     var envios = npsLerEnvios(), respostas = npsLerRespostas();
+    var mapaAud = npsMapaAuditores();
+    npsMarcarAuditor(envios, mapaAud);
+    npsMarcarAuditor(respostas, mapaAud);
     var out = npsCalcular(envios, respostas, f);
     out.ok = true;
+    // r127: supervisores disponíveis (respeitam cliente/unidade/período, mas NÃO o próprio filtro de supervisor)
+    var fSemSup = { cliente: f.cliente, unidade: f.unidade, clientes: f.clientes, unidades: f.unidades, de: f.de, ate: f.ate };
+    var nomesSup = {};
+    envios.concat(respostas).forEach(function (x) { if (npsPassaFiltro(x, fSemSup)) nomesSup[x.auditor || NPS_SEM_SUPERVISOR] = 1; });
+    out.supervisoresDisponiveis = Object.keys(nomesSup).sort(function (a, b) { return a.localeCompare(b); });
     // r117: totais SEM filtro (a tela usa para explicar filtros vazios)
     try {
       var datas = respostas.map(function (x) { return x.dataAuditoria; }).filter(function (x) { return x; }).sort();
@@ -4689,6 +4779,94 @@ function npsAnalise(dados, cpf) {
       };
     } catch (eT) { out.totais = null; }
     out.filtro = f;
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+
+/* ── r127: exportação da análise CSAT/NPS (uso interno da diretoria) ── */
+function npsPastaExportacao() {
+  var raiz;
+  var it = DriveApp.getFoldersByName('NPS_FC');
+  if (it.hasNext()) raiz = it.next(); else raiz = DriveApp.createFolder('NPS_FC');
+  return raiz;
+}
+function npsNomeExportacao(prefixo) {
+  return prefixo + '_' + perfHoje() + '_' + Utilities.formatDate(new Date(), 'America/Fortaleza', 'HHmmss');
+}
+function npsMontarHTMLTexto(t) {
+  t = t || {};
+  var h = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + perfEsc(t.titulo || 'Análise CSAT/NPS') + ' — Formula Code</title>'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}}</style></head><body><div class="page">';
+  h += '<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,' + PERF_LOGO_PNG_B64 + '" style="height:48px" alt="FC"></td>'
+    + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise CSAT / NPS<br>Uso interno da diretoria</td></tr></table>';
+  h += '<div style="padding:14px 32px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Recorte analisado</div><div style="font-size:13px;font-weight:700">' + perfEsc(t.contexto || '') + '</div></div>';
+  var kp = (t.kpis || []).slice(0, 4);
+  if (kp.length) {
+    h += '<div style="padding:22px 26px 6px"><table><tr>';
+    kp.forEach(function (k) {
+      var cor = /^#[0-9A-Fa-f]{6}$/.test(String(k.cor || '')) ? k.cor : '#002B50';
+      h += '<td style="padding:6px;width:25%;vertical-align:top"><div style="background:#F4F6F8;border-radius:10px;padding:12px 10px;text-align:center;border-top:4px solid ' + cor + '">'
+        + '<div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D">' + perfEsc(k.r) + '</div>'
+        + '<div style="font-size:26px;font-weight:700;color:' + cor + ';line-height:1.2">' + perfEsc(k.v) + '</div>'
+        + '<div style="font-size:10px;color:#6B7B8D;line-height:1.4">' + perfEsc(k.sub || '') + '</div></div></td>';
+    });
+    h += '</tr></table></div>';
+  }
+  (t.secoes || []).forEach(function (sec) {
+    h += '<div style="padding:16px 32px 4px"><div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;border-left:4px solid #61CF00;padding-left:8px">' + perfEsc(sec.h) + '</div>';
+    (sec.paragrafos || []).forEach(function (p) { h += '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(p) + '</p>'; });
+    h += '</div>';
+  });
+  h += '<div style="padding:18px 32px 24px;font-size:10px;color:#9AA7B4">Análise gerada automaticamente por regras, a partir das respostas do recorte filtrado. Documento interno — Formula Code.</div>';
+  return h + '</div></body></html>';
+}
+
+function npsExportarPDF(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem exportar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    if (!d.texto || !d.texto.secoes || !d.texto.secoes.length) return { ok: false, erro: 'Não há texto de análise para exportar.' };
+    var html = npsMontarHTMLTexto(d.texto);
+    var pasta = npsPastaExportacao();
+    var base = npsNomeExportacao('Analise_CSAT_NPS');
+    var arquivo = pasta.createFile(base + '.html', html, 'text/html');
+    arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var pdfBlob = arquivo.getAs('application/pdf');
+    pdfBlob.setName(base + '.pdf');
+    var pdfFile = pasta.createFile(pdfBlob);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return {
+      ok: true,
+      linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
+      linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
+    };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+function npsSalvarApresentacao(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
+    var pasta = npsPastaExportacao();
+    var base = npsNomeExportacao('Apresentacao_CSAT_NPS');
+    var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
+    var bytes = Utilities.base64Decode(d.pptxBase64);
+    var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomePptx);
+    var arqPptx = pasta.createFile(pptxBlob);
+    arqPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var out = { ok: true, linkPPTX: 'https://drive.google.com/uc?id=' + arqPptx.getId() + '&export=download', linkPDF: '', erroPDF: null };
+    try {
+      var pdfBlob = converterPptxParaPdfReal(pptxBlob, base);
+      pdfBlob.setName(nomePdf);
+      var arqPdf = pasta.createFile(pdfBlob);
+      arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+    } catch (errPdf) {
+      out.erroPDF = errPdf.message || String(errPdf);
+      Logger.log('NPS: falha ao converter PDF da apresentação: ' + out.erroPDF);
+    }
     return out;
   } catch (e) { return { ok: false, erro: e.message }; }
 }
@@ -4704,12 +4882,15 @@ function contarAnalisadasPerformance(dados, cpf) {
     var ult = aba.getLastRow();
     if (ult < 2) return { ok: true, totais: { clientes: 0, unidades: 0, analises: 0 } };
     var linhas = aba.getRange(2, 1, ult - 1, 10).getValues();
+    var colTipo = null;   // r127: coluna 20 (TipoEstabelecimento); linhas sem valor = Supermercado
+    if (f.estab && aba.getMaxColumns() >= 20) colTipo = aba.getRange(2, 20, ult - 1, 1).getValues();
     var cl = {}, un = {}, n = 0;
-    linhas.forEach(function (row) {
+    linhas.forEach(function (row, idx) {
       if (String(row[9]) !== 'CONCLUIDO') return;
       var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
       if (!c || !u) return;
-      var item = { cliente: c, unidade: u, tipo: String(row[4] || ''), dataAuditoria: extrairDataISO(row[7]) };
+      var tp = colTipo ? String(colTipo[idx][0] || '').toUpperCase() : '';
+      var item = { cliente: c, unidade: u, tipo: String(row[4] || ''), tipoEst: tp === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO', dataAuditoria: extrairDataISO(row[7]) };
       if (!perfPassa(item, f)) return;
       n++;
       var ck = fcChave(c);
@@ -4843,7 +5024,9 @@ function perfPeriodoAnterior(de, ate, hoje) {
 }
 
 function perfPassa(a, f) {
-  if (f.cliente && fcChave(a.cliente) !== fcChave(f.cliente)) return false;
+  var lc = fcListaChaves(f.clientes, f.cliente);
+  if (lc.length && lc.indexOf(fcChave(a.cliente)) === -1) return false;
+  if (f.estab && (a.tipoEst || 'SUPERMERCADO') !== f.estab) return false;
   if (f.tipo && a.tipo !== f.tipo) return false;
   var d = a.dataAuditoria || '';
   if (f.de && (!d || d < f.de)) return false;
@@ -4896,10 +5079,10 @@ function perfArredObj(m) {
 // Cálculo puro (sem planilha) — testável isoladamente.
 function perfCalcular(analises, f, hoje) {
   f = f || {};
-  var filtro = { cliente: f.cliente || '', tipo: f.tipo || '', de: perfDataValida(f.de), ate: perfDataValida(f.ate) };
+  var filtro = { cliente: f.cliente || '', clientes: f.clientes || [], estab: f.estab || '', tipo: f.tipo || '', de: perfDataValida(f.de), ate: perfDataValida(f.ate) };
   var atuais = analises.filter(function (a) { return perfPassa(a, filtro); });
   var ant = perfPeriodoAnterior(filtro.de, filtro.ate, hoje);
-  var anteriores = ant ? analises.filter(function (a) { return perfPassa(a, { cliente: filtro.cliente, tipo: filtro.tipo, de: ant.de, ate: ant.ate }); }) : [];
+  var anteriores = ant ? analises.filter(function (a) { return perfPassa(a, { cliente: filtro.cliente, clientes: filtro.clientes, estab: filtro.estab, tipo: filtro.tipo, de: ant.de, ate: ant.ate }); }) : [];
 
   var uAt = perfAgruparUnidades(atuais);
   var uAn = perfAgruparUnidades(anteriores);
@@ -4959,7 +5142,16 @@ function perfHoje() { return Utilities.formatDate(new Date(), 'America/Fortaleza
 
 function perfFiltroDe(d) {
   var tipo = String(d.tipo || '');
-  return { cliente: fcLimparNome(d.cliente), tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate) };
+  var estab = String(d.estab || '').toUpperCase();
+  var clientes = [];
+  if (Array.isArray(d.clientes)) d.clientes.forEach(function (x) { var n = fcLimparNome(x); if (n && clientes.indexOf(n) === -1) clientes.push(n); });
+  var unico = fcLimparNome(d.cliente);
+  if (!clientes.length && unico) clientes.push(unico);
+  return {
+    cliente: clientes.length === 1 ? clientes[0] : '', clientes: clientes,
+    estab: (estab === 'FARMACIA' || estab === 'SUPERMERCADO') ? estab : '',
+    tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate)
+  };
 }
 
 /* ── DIRETOR: cards por cliente e por unidade ── */
