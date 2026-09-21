@@ -104,6 +104,9 @@ function doPost(e) {
 
     // ── PERFORMANCE DAS UNIDADES — r110 ──
     else if (action === 'performanceAnalise') { result = performanceAnalise(data, data.cpf); }
+    else if (action === 'performanceGerarTextoGrupo') { result = performanceGerarTextoGrupo(data, data.cpf); }   // r131
+    else if (action === 'performanceExportarPDFGrupo') { result = performanceExportarPDFGrupo(data, data.cpf); }   // r131
+    else if (action === 'performanceSalvarApresentacaoGrupo') { result = performanceSalvarApresentacaoGrupo(data, data.cpf); }   // r131
     else if (action === 'performanceGerarTexto') { result = performanceGerarTexto(data, data.cpf); }
     else if (action === 'performanceExportarPDF') { result = performanceExportarPDF(data, data.cpf); }
     else if (action === 'performanceSalvarApresentacao') { result = performanceSalvarApresentacao(data, data.cpf); }
@@ -501,7 +504,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-21-r130';
+const VERSAO_SCRIPT = '2026-09-21-r131';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -526,7 +529,8 @@ function doGet(e) {
     'npsObterPesquisa', 'npsResponder', 'npsAnalise', 'npsExportarPDF', 'npsSalvarApresentacao',
     'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao',
     'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance',
-    'enviarPesquisaNps', 'listarProjetosAuditoria'
+    'enviarPesquisaNps', 'listarProjetosAuditoria',
+    'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -2786,7 +2790,7 @@ function listarClientesFC() {
       var us = cl.uordem.map(function (uk) { return cl.unidades[uk]; });
       us.sort(function (a, b) { return a.chave < b.chave ? -1 : (a.chave > b.chave ? 1 : 0); });
       // concluidas / unidadesConcluidas: usados pelos filtros (NPS e Performance) para só oferecer quem tem análise concluída
-      var det = { unidades: [], emails: {}, concluidas: cl.concluidas, unidadesConcluidas: [] };
+      var det = { unidades: [], emails: {}, concluidas: cl.concluidas, unidadesConcluidas: [], tipos: Object.keys(cl.tipos || {}) };
       us.forEach(function (un) {
         det.unidades.push(un.nome);
         if (un.concluidas > 0) det.unidadesConcluidas.push(un.nome);
@@ -4850,6 +4854,175 @@ function npsSufixoExportacao(s) {
 function npsNomeExportacao(prefixo) {
   return prefixo + '_' + perfHoje() + '_' + Utilities.formatDate(new Date(), 'America/Fortaleza', 'HHmmss');
 }
+/* ── r131: elementos visuais da exportação CSAT/NPS (montados só com tabelas e estilos inline, como o resto dos PDFs) ── */
+function npsCor(c, padrao) { return /^#[0-9A-Fa-f]{6}$/.test(String(c || '')) ? String(c) : (padrao || '#002B50'); }
+function npsNum(n, padrao) { n = Number(n); return isNaN(n) ? (padrao || 0) : n; }
+function npsPct(n) { return Math.max(0, Math.min(100, npsNum(n))); }
+function npsTitH(x) { return x ? '<div style="font-size:11px;font-weight:700;color:#002B50;margin:0 0 6px">' + perfEsc(x) + '</div>' : ''; }
+function npsNotaH(x) { return x ? '<div style="font-size:10px;color:#6B7B8D;line-height:1.5;margin-top:4px">' + perfEsc(x) + '</div>' : ''; }
+function npsLegendaH(itens) {
+  return '<div style="font-size:10px;color:#556677;margin-top:5px;line-height:1.7">' + (itens || []).map(function (i) {
+    return '<span style="display:inline-block;width:9px;height:9px;background:' + npsCor(i.cor, '#8899AA') + ';margin-right:4px"></span>' + perfEsc(i.rot) + '&nbsp;&nbsp;&nbsp;';
+  }).join('') + '</div>';
+}
+function npsTrilhoH(pct, cor) {
+  var w = Math.round(npsPct(pct));
+  if (w <= 0) return '<table style="width:100%"><tr><td style="height:10px;background:#EEF1F4"></td></tr></table>';
+  if (w >= 100) return '<table style="width:100%"><tr><td style="height:10px;background:' + npsCor(cor) + '"></td></tr></table>';
+  return '<table style="width:100%"><tr><td style="width:' + w + '%;height:10px;background:' + npsCor(cor) + '"></td><td style="background:#EEF1F4"></td></tr></table>';
+}
+function npsTabelaHTML(tab) {
+  if (!tab || !tab.cab || !tab.linhas || !tab.linhas.length) return '';
+  var h = '<table style="margin:6px 0 12px;font-size:11px;border:1px solid #E2E8F0"><thead><tr>';
+  tab.cab.forEach(function (c, ci) { h += '<th style="background:#002B50;color:#FFF;padding:6px 8px;text-align:' + (ci === 0 ? 'left' : 'center') + ';font-size:10px">' + perfEsc(c) + '</th>'; });
+  h += '</tr></thead><tbody>';
+  tab.linhas.forEach(function (lin) {
+    h += '<tr style="page-break-inside:avoid">';
+    lin.forEach(function (v, ci) {
+      var obj = (v !== null && typeof v === 'object') ? v : { t: v };
+      var est = 'padding:5px 8px;border-top:1px solid #E2E8F0;text-align:' + (ci === 0 ? 'left' : 'center') + ';';
+      if (obj.bg) est += 'background:' + npsCor(obj.bg, '#FFFFFF') + ';';
+      if (obj.cor) est += 'color:' + npsCor(obj.cor, '#1A2A3A') + ';';
+      if (obj.b) est += 'font-weight:700;';
+      h += '<td style="' + est + '">' + perfEsc(obj.t) + '</td>';
+    });
+    h += '</tr>';
+  });
+  return h + '</tbody></table>';
+}
+function npsBlocoHTML(b) {
+  if (!b) return '';
+  var t = String(b.t || ''), h = '', i;
+  if (t === 'cards') {
+    var it = b.itens || [], w = it.length ? Math.floor(100 / it.length) : 100;
+    h += '<table style="margin:4px 0 10px"><tr>';
+    it.forEach(function (k) {
+      var cor = npsCor(k.cor);
+      h += '<td style="padding:4px;width:' + w + '%;vertical-align:top"><div style="background:#F4F6F8;border-radius:10px;padding:10px 8px;text-align:center;border-top:4px solid ' + cor + '">'
+        + '<div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D">' + perfEsc(k.r) + '</div>'
+        + '<div style="font-size:24px;font-weight:700;color:' + cor + ';line-height:1.2">' + perfEsc(k.v) + '</div>'
+        + '<div style="font-size:10px;color:#6B7B8D;line-height:1.4">' + perfEsc(k.sub || '') + '</div></div></td>';
+    });
+    return h + '</tr></table>';
+  }
+  if (t === 'barra') {
+    var segs = (b.segs || []).filter(function (x) { return npsNum(x.v) > 0; });
+    h += npsTitH(b.rot);
+    if (!segs.length) h += '<table style="width:100%"><tr><td style="height:22px;background:#EEF1F4"></td></tr></table>';
+    else {
+      h += '<table style="width:100%;table-layout:fixed"><tr>';
+      segs.forEach(function (x) { h += '<td style="width:' + npsPct(x.v) + '%;height:22px;background:' + npsCor(x.cor, '#8899AA') + ';color:#FFF;font-size:10px;font-weight:700;text-align:center">' + (npsNum(x.v) >= 8 ? Math.round(npsNum(x.v)) + '%' : '') + '</td>'; });
+      h += '</tr></table>';
+    }
+    return '<div style="margin:0 0 12px;page-break-inside:avoid">' + h + npsLegendaH(b.segs) + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'medidor') {
+    var pos = npsPct(b.pos), marc = Math.min(49, Math.max(0, Math.round(pos / 2)));
+    var zonas = b.zonas || [];
+    h += '<table style="width:100%;margin-bottom:4px"><tr><td style="font-size:12px;font-weight:700;color:#002B50">' + perfEsc(b.rot) + '</td><td style="text-align:right;font-size:11px;font-weight:700;color:' + npsCor(b.txtCor, '#556677') + '">' + perfEsc(b.txt || '') + '</td></tr></table>';
+    h += '<table style="width:100%;table-layout:fixed"><tr>';
+    for (i = 0; i < 50; i++) {
+      var pc = i * 2 + 1, cor = '#8899AA';
+      zonas.forEach(function (z) { if (pc >= npsNum(z[0]) && pc < npsNum(z[1])) cor = npsCor(z[2], '#8899AA'); });
+      h += '<td style="width:2%;height:' + (i === marc ? 20 : 12) + 'px;background:' + (i === marc ? '#002B50' : cor) + '"></td>';
+    }
+    h += '</tr></table>';
+    var esc = b.esc || [];
+    if (esc.length >= 2) {
+      h += '<table style="width:100%;table-layout:fixed;font-size:9px;color:#6B7B8D"><tr>';
+      for (i = 0; i < esc.length - 1; i++) {
+        var ini = npsNum(esc[i].p), fim = (i === esc.length - 2) ? Math.max(ini + 1, npsNum(esc[i + 1].p) - 8) : npsNum(esc[i + 1].p);
+        h += '<td style="width:' + Math.max(1, fim - ini) + '%;text-align:left">' + perfEsc(esc[i].t) + '</td>';
+      }
+      h += '<td style="width:8%;text-align:right">' + perfEsc(esc[esc.length - 1].t) + '</td></tr></table>';
+    }
+    return '<div style="margin:0 0 14px;page-break-inside:avoid">' + h + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'barras') {
+    h += npsTitH(b.rot) + '<table style="width:100%;font-size:11px">';
+    (b.itens || []).forEach(function (x) {
+      h += '<tr style="page-break-inside:avoid"><td style="width:34%;padding:4px 8px 4px 0;color:#1A2A3A">' + perfEsc(x.rot) + '</td><td style="width:54%;padding:4px 0">' + npsTrilhoH(x.w, x.cor) + '</td><td style="width:12%;padding:4px 0 4px 8px;font-weight:700;text-align:right;color:#002B50">' + perfEsc(x.texto || '') + '</td></tr>';
+    });
+    return '<div style="margin:0 0 12px">' + h + '</table>' + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'hist') {
+    var vals = (b.vals || []).map(function (v) { return npsNum(v); }), de = npsNum(b.de), mx = Math.max.apply(null, vals.concat([1]));
+    var cores = b.cores || [];
+    h += npsTitH(b.rot) + '<table style="width:100%;table-layout:fixed"><tr>';
+    for (i = de; i < vals.length; i++) {
+      var alt = vals[i] > 0 ? Math.max(3, Math.round(vals[i] * 80 / mx)) : 1;
+      h += '<td style="vertical-align:bottom;text-align:center;height:100px"><div style="font-size:10px;color:#556677;height:14px">' + (vals[i] || '') + '</div><div style="margin:0 auto;width:70%;height:' + alt + 'px;background:' + npsCor(cores[i], '#8899AA') + '"></div></td>';
+    }
+    h += '</tr><tr>';
+    for (i = de; i < vals.length; i++) h += '<td style="text-align:center;font-size:10px;font-weight:700;color:#556677;border-top:1px solid #E2E8F0">' + i + '</td>';
+    return '<div style="margin:0 0 14px;page-break-inside:avoid">' + h + '</tr></table>' + npsLegendaH(b.leg) + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'mes') {
+    h += npsTitH(b.rot) + '<table style="width:100%;font-size:11px">';
+    (b.itens || []).forEach(function (x) {
+      var v = (x.nps === null || x.nps === undefined) ? null : Math.max(-100, Math.min(100, npsNum(x.nps))), cor = npsCor(x.cor, '#8899AA');
+      var meio = (v === null || v === 0) ? '<td style="width:100%;height:10px;background:#EEF1F4"></td>'
+        : (v > 0 ? '<td style="width:50%;height:10px;background:#EEF1F4"></td><td style="width:' + (v / 2) + '%;background:' + cor + '"></td><td style="background:#EEF1F4"></td>'
+                 : '<td style="width:' + (50 + v / 2) + '%;height:10px;background:#EEF1F4"></td><td style="width:' + (-v / 2) + '%;background:' + cor + '"></td><td style="width:50%;background:#EEF1F4"></td>');
+      h += '<tr style="page-break-inside:avoid"><td style="width:16%;padding:4px 8px 4px 0;color:#1A2A3A">' + perfEsc(x.rot) + '</td><td style="width:60%;padding:4px 0"><table style="width:100%;table-layout:fixed"><tr>' + meio + '</tr></table></td>'
+        + '<td style="width:24%;padding:4px 0 4px 8px;font-weight:700;color:' + cor + '">' + perfEsc(x.texto || '') + '</td></tr>';
+    });
+    return '<div style="margin:0 0 12px">' + h + '</table>' + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'quesitos') {
+    h += npsTitH(b.rot);
+    (b.itens || []).forEach(function (q) {
+      var tot = 0;
+      (q.segs || []).forEach(function (x) { tot += npsNum(x.n); });
+      h += '<div style="margin:0 0 10px;page-break-inside:avoid"><div style="font-size:11px;color:#1A2A3A;margin-bottom:3px">' + perfEsc(q.rot) + '</div>';
+      if (tot > 0) {
+        h += '<table style="width:100%;table-layout:fixed"><tr>';
+        (q.segs || []).forEach(function (x) { if (npsNum(x.n) > 0) h += '<td style="width:' + (npsNum(x.n) * 100 / tot) + '%;height:14px;background:' + npsCor(x.cor, '#8899AA') + '"></td>'; });
+        h += '</tr></table>';
+      }
+      h += npsLegendaH((q.segs || []).map(function (x) { return { cor: x.cor, rot: x.rot + ': ' + x.n }; })) + '</div>';
+    });
+    return h + npsNotaH(b.nota);
+  }
+  if (t === 'recs') {
+    (b.itens || []).forEach(function (x) {
+      h += '<div style="border-left:5px solid ' + npsCor(x.cor, '#8899AA') + ';background:#F9FAFB;padding:8px 12px;margin:0 0 6px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#002B50">' + perfEsc(x.titulo) + '</div>'
+        + (x.texto ? '<div style="font-size:11px;color:#556677;line-height:1.5">' + perfEsc(x.texto) + '</div>' : '') + '</div>';
+    });
+    return '<div style="margin:0 0 10px">' + npsTitH(b.rot) + h + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'matriz') {
+    var cab = b.cab || [];
+    h += npsTitH(b.rot) + '<table style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:4px"><tr>';
+    cab.forEach(function (c, ci) { h += '<td style="' + (ci === 0 ? 'width:18%;' : '') + 'font-size:10px;font-weight:700;color:#556677;text-align:center">' + perfEsc(c) + '</td>'; });
+    h += '</tr>';
+    (b.linhas || []).forEach(function (l) {
+      h += '<tr><td style="font-size:10px;font-weight:700;color:#556677">' + perfEsc(l.rot) + '</td>';
+      (l.cel || []).forEach(function (c) {
+        h += '<td style="background:' + npsCor(c.bg, '#F4F6F8') + ';border-left:4px solid ' + npsCor(c.cor, '#8899AA') + ';padding:8px;text-align:left;vertical-align:top;page-break-inside:avoid">'
+          + '<div style="font-size:20px;font-weight:700;color:' + npsCor(c.cor, '#556677') + ';line-height:1.1">' + perfEsc(c.n) + '</div><div style="font-size:10px;color:#1A2A3A;line-height:1.3">' + perfEsc(c.tit) + '</div></td>';
+      });
+      h += '</tr>';
+    });
+    return '<div style="margin:0 0 12px">' + h + '</table>' + npsNotaH(b.nota) + '</div>';
+  }
+  if (t === 'tabela') return npsTitH(b.rot) + npsTabelaHTML(b) + npsNotaH(b.nota);
+  if (t === 'resps') {
+    (b.itens || []).forEach(function (x) {
+      var cor = npsCor(x.cor, '#8899AA');
+      var pill = function (v, c) { return (v === null || v === undefined || v === '') ? '' : '<span style="display:inline-block;min-width:26px;padding:3px 6px;margin-left:4px;background:' + npsCor(c, '#8899AA') + ';color:#FFF;font-weight:700;font-size:12px;text-align:center">' + perfEsc(v) + '</span>'; };
+      h += '<div style="border-left:5px solid ' + cor + ';background:#F9FAFB;padding:8px 12px;margin:0 0 6px;page-break-inside:avoid">'
+        + '<table style="width:100%"><tr><td style="font-size:12px;font-weight:700;color:#002B50">' + perfEsc(x.tit) + '<div style="font-size:10px;font-weight:400;color:#6B7B8D">' + perfEsc(x.sub || '') + '</div></td>'
+        + '<td style="text-align:right;white-space:nowrap;vertical-align:top">' + pill(x.csat, x.corCsat) + pill(x.nps, x.corNps) + '</td></tr></table>'
+        + (x.tags && x.tags.length ? '<div style="margin-top:3px">' + x.tags.map(function (g) { return '<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;margin:0 4px 2px 0;background:' + npsCor(g.bg, '#F4F6F8') + ';color:' + npsCor(g.cor, '#556677') + '">' + perfEsc(g.t) + '</span>'; }).join('') + '</div>' : '')
+        + '<div style="font-size:11px;line-height:1.5;color:' + (x.txt ? '#1A2A3A' : '#9AA7B4') + ';margin-top:3px">' + perfEsc(x.txt || 'Sem comentário.') + '</div></div>';
+    });
+    return '<div style="margin:0 0 10px">' + npsTitH(b.rot) + npsNotaH(b.nota) + h + '</div>';
+  }
+  if (t === 'nota') return npsNotaH(b.txt);
+  return '';
+}
+
 function npsMontarHTMLTexto(t) {
   t = t || {};
   var h = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + perfEsc(t.titulo || 'Análise CSAT/NPS') + ' — Formula Code</title>'
@@ -4871,19 +5044,11 @@ function npsMontarHTMLTexto(t) {
   }
   (t.secoes || []).forEach(function (sec) {
     h += '<div style="padding:16px 32px 4px"><div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;border-left:4px solid #61CF00;padding-left:8px">' + perfEsc(sec.h) + '</div>';
+    // r131: blocos visuais (cartões, medidores, barras, histogramas, matriz, respostas...) — os mesmos elementos da tela
+    (sec.blocos || []).forEach(function (b) { h += npsBlocoHTML(b); });
     (sec.paragrafos || []).forEach(function (p) { h += '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(p) + '</p>'; });
-    // r130: tabela opcional dentro da seção (matriz do diagnóstico, resultado por unidade, evolução por mês)
-    if (sec.tabela && sec.tabela.cab && sec.tabela.linhas && sec.tabela.linhas.length) {
-      h += '<table style="margin:6px 0 12px;font-size:11px;border:1px solid #E2E8F0"><thead><tr>';
-      sec.tabela.cab.forEach(function (c, ci) { h += '<th style="background:#002B50;color:#FFF;padding:6px 8px;text-align:' + (ci === 0 ? 'left' : 'center') + ';font-size:10px">' + perfEsc(c) + '</th>'; });
-      h += '</tr></thead><tbody>';
-      sec.tabela.linhas.forEach(function (lin) {
-        h += '<tr style="page-break-inside:avoid">';
-        lin.forEach(function (v, ci) { h += '<td style="padding:5px 8px;border-top:1px solid #E2E8F0;text-align:' + (ci === 0 ? 'left' : 'center') + '">' + perfEsc(v) + '</td>'; });
-        h += '</tr>';
-      });
-      h += '</tbody></table>';
-    }
+    // r130/r131: tabela opcional dentro da seção (células podem ser coloridas)
+    if (sec.tabela) h += npsTabelaHTML(sec.tabela);
     h += '</div>';
   });
   h += '<div style="padding:18px 32px 24px;font-size:10px;color:#9AA7B4">Análise gerada automaticamente por regras, a partir das respostas do recorte filtrado. Documento interno — Formula Code.</div>';
@@ -5427,14 +5592,28 @@ function perfCelNota(v) {
   return '<td style="padding:6px 6px;border-bottom:1px solid #F0F2F4;text-align:center;font-weight:700;color:' + perfCorNota(v) + ';background:' + perfBgNota(v) + '">' + perfFmt(v) + '</td>';
 }
 
+/* r131: a abertura (head), o rodapé e o corpo de cada cliente são peças separadas, para o PDF único do grupo reaproveitar o corpo.
+   A exportação de UM cliente continua gerando exatamente o mesmo HTML de antes. */
+function perfHtmlAbertura(titulo) {
+  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + perfEsc(titulo) + ' — Formula Code</title>'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}}</style></head><body><div class="page">';
+}
+
+function perfHtmlRodape() {
+  return '<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#051323"><strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Análise gerada automaticamente pelo Sistema de Gestão FC</td></tr></table>';
+}
+
 function perfMontarHTML(cli, filtro, anterior, textos) {
   var titulo = 'Análise de Performance — ' + cli.cliente;
+  return perfHtmlAbertura(titulo) + perfMontarCorpoCliente(cli, filtro, anterior, textos) + perfHtmlRodape() + '</div></body></html>';
+}
+
+function perfMontarCorpoCliente(cli, filtro, anterior, textos) {
   var per = perfPeriodoTxt(filtro);
   var tipo = perfTipoTxt(filtro);
   var sec = function (t, cor) { return '<div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid ' + (cor || '#61CF00') + ';padding-left:8px">' + t + '</div>'; };
   var par = function (t) { return t ? '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(t) + '</p>' : ''; };
-  var h = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + perfEsc(titulo) + ' — Formula Code</title>'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}}</style></head><body><div class="page">';
+  var h = '';
   // cabeçalho
   h += '<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,' + PERF_LOGO_PNG_B64 + '" style="height:48px" alt="FC"></td>'
     + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise de Performance<br>das Unidades</td></tr></table>';
@@ -5524,7 +5703,6 @@ function perfMontarHTML(cli, filtro, anterior, textos) {
   if (textos.oportunidades) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ OPORTUNIDADES DE MELHORIA</div><p style="font-size:13px;line-height:1.7">' + perfEsc(textos.oportunidades) + '</p></div>';
   if (textos.sugestoes) h += '<div style="background:#E3F2FD;border-left:4px solid #002B50;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#002B50;margin-bottom:6px">→ SUGESTÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(textos.sugestoes) + '</p></div>';
   h += '</div>';
-  h += '<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#051323"><strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Análise gerada automaticamente pelo Sistema de Gestão FC</td></tr></table></div></body></html>';
   return h;
 }
 
@@ -5607,6 +5785,309 @@ function performanceSalvarApresentacao(dados, cpf) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   r131 — EXPORTAÇÃO DO GRUPO (vários clientes num arquivo único)
+   Ordem: capa do grupo → cliente 1 (conteúdo completo) → cliente 2 → ... →
+   comparação entre os clientes. Os clientes vêm na ordem em que foram selecionados.
+   ═══════════════════════════════════════════════════════════════════ */
+function perfPrepararGrupo(d) {
+  var f = perfFiltroDe(d);
+  if (!f.clientes.length) return { erro: 'Selecione ao menos um cliente para exportar o grupo.' };
+  var todas = perfLerAnalises();
+  var calc = perfCalcular(todas, f, perfHoje());
+  var lista = [];
+  f.clientes.forEach(function (nome) {
+    var k = fcChave(nome);
+    calc.clientes.forEach(function (c) { if (fcChave(c.cliente) === k && lista.indexOf(c) === -1) lista.push(c); });
+  });
+  if (!lista.length) return { erro: 'Nenhuma análise concluída dos clientes selecionados no período.' };
+  var farm = {};
+  lista.forEach(function (c) {
+    farm[c.cliente] = todas.some(function (a) { return a.tipoEst === 'FARMACIA' && fcChave(a.cliente) === fcChave(c.cliente); });
+  });
+  return { calc: calc, clientes: lista, filtro: calc.filtro, anterior: calc.periodoAnterior, farmacia: farm };
+}
+
+var PERF_TEXTOS_GRUPO = ['resumo', 'comparativo', 'pontos_positivos', 'oportunidades', 'sugestoes'];
+
+function perfTextoGrupoFallback(lista, filtro, anterior) {
+  var comNota = lista.filter(function (c) { return c.geral !== null; });
+  var un = 0, an = 0;
+  lista.forEach(function (c) { un += c.unidades; an += c.analises; });
+  var t = {};
+  t.resumo = 'No período ' + perfPeriodoTxt(filtro) + ', o grupo teve ' + lista.length + ' cliente(s) analisado(s), com ' + un + ' unidade(s) e ' + an + ' análise(s) concluída(s).'
+    + (comNota.length ? ' As notas médias dos clientes ficaram entre ' + perfFmt(Math.min.apply(null, comNota.map(function (c) { return c.geral; }))) + ' e ' + perfFmt(Math.max.apply(null, comNota.map(function (c) { return c.geral; }))) + ' (de 10).' : '');
+  var ord = comNota.slice().sort(function (a, b) { return b.geral - a.geral; });
+  t.comparativo = ord.length > 1
+    ? 'O cliente ' + ord[0].cliente + ' apresentou a maior nota média (' + perfFmt(ord[0].geral) + '/10, faixa ' + ord[0].faixa + '), referência de boas práticas a ser replicada nos demais. '
+      + 'A comparação mostra onde a preparação está consolidada e onde há oportunidade de evolução em cada cliente, considerando retaguarda, área de vendas' + (lista.some(function (c) { return c.organizacao !== null; }) ? ', organização e volume' : '') + '.'
+    : 'Apenas um cliente com nota no período; não há base para comparação entre clientes.';
+  var bons = comNota.filter(function (c) { return c.geral >= 7.5; }).map(function (c) { return c.cliente; });
+  var atencao = lista.filter(function (c) { return (c.geral !== null && c.geral < 7.5) || (c.volume !== null && c.volume < 6); }).map(function (c) { return c.cliente; });
+  var volRuim = lista.some(function (c) { return c.volume !== null && c.volume < 6; });
+  t.pontos_positivos = bons.length
+    ? 'Os clientes ' + bons.join(', ') + ' apresentaram nota média nas faixas Bom ou Excelente, indicando ambientes bem preparados.'
+    : 'Nenhum cliente atingiu a faixa Bom ou Excelente na média do período.';
+  t.oportunidades = atencao.length
+    ? 'Há oportunidade de evolução na preparação de ' + atencao.join(', ') + (volRuim ? ', inclusive no volume de mercadoria acima do ideal' : '') + ', favorecendo a fluidez da operação e a assertividade da contagem.'
+    : 'Todos os clientes ficaram nas faixas Bom ou Excelente.';
+  t.sugestoes = atencao.length
+    ? 'Sugerimos considerar' + (volRuim ? ' reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário, e' : '') + ' replicar, nos demais clientes, as práticas de preparação dos clientes com melhor resultado.'
+    : 'Sugerimos manter e replicar o padrão de preparação observado como referência de boas práticas.';
+  return t;
+}
+
+function perfGarantirTextosGrupo(t, fb) {
+  var out = {};
+  PERF_TEXTOS_GRUPO.forEach(function (k) {
+    var v = t && typeof t[k] === 'string' ? t[k].trim() : '';
+    out[k] = v || fb[k] || '';
+  });
+  return out;
+}
+
+function perfMontarPromptGrupo(lista, filtro, anterior, algumaFarmacia) {
+  var linhas = [];
+  linhas.push('PERÍODO: ' + perfPeriodoTxt(filtro) + ' | TIPO DE AVALIAÇÃO: ' + perfTipoTxt(filtro));
+  linhas.push('PERÍODO ANTERIOR DE MESMA DURAÇÃO: ' + (anterior ? perfDataBR(anterior.de) + ' a ' + perfDataBR(anterior.ate) : 'não disponível'));
+  linhas.push('CLIENTES DO GRUPO COMPARADOS: ' + lista.length);
+  linhas.push('');
+  lista.forEach(function (c) {
+    linhas.push('=== CLIENTE: ' + c.cliente + ' (' + c.unidades + ' unidade(s); ' + c.analises + ' análise(s)) ===');
+    if (c.geral !== null) linhas.push('  Nota média (média das unidades): ' + perfFmt(c.geral) + '/10 — faixa ' + c.faixa + (c.variacao.geral !== null ? ' — variação vs período anterior: ' + (c.variacao.geral > 0 ? '+' : '') + perfFmt(c.variacao.geral) : ''));
+    if (c.equipe !== null) linhas.push('  Equipe de apoio do cliente: ' + perfFmt(c.equipe) + '/10 [EQUIPE]');
+    if (c.retaguarda !== null) linhas.push('  Retaguarda: ' + perfFmt(c.retaguarda) + '/10');
+    if (c.areaVendas !== null) linhas.push('  Área de Vendas: ' + perfFmt(c.areaVendas) + '/10');
+    if (c.organizacao !== null) linhas.push('  Organização: ' + perfFmt(c.organizacao) + '/10');
+    if (c.volume !== null) linhas.push('  Volume de mercadoria: ' + perfFmt(c.volume) + '/10 (ESCALA DE VOLUME: 1=volume excessivo, 10=volume ideal; nota BAIXA significa MUITA mercadoria, o que é ruim para o inventário)');
+    var faixasTxt = PERF_FAIXAS.filter(function (fx) { return c.faixas[fx] > 0; }).map(function (fx) { return c.faixas[fx] + ' ' + fx; }).join(', ');
+    if (faixasTxt) linhas.push('  Unidades por faixa: ' + faixasTxt);
+    linhas.push('');
+  });
+  var temEquipe = lista.some(function (c) { return c.equipe !== null; });
+  var temVolume = lista.some(function (c) { return c.volume !== null; });
+  var temAnterior = lista.some(function (c) { return c.variacao.geral !== null; });
+  var sys = 'Você é um consultor sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
+    + 'Gere a COMPARAÇÃO ENTRE OS CLIENTES de um mesmo grupo, com base apenas nos dados fornecidos (a análise de cada cliente já foi feita separadamente). '
+    + 'O texto será lido PELO CLIENTE (é um material externo). REGRAS OBRIGATÓRIAS:\n'
+    + '1. Tom consultivo, respeitoso e de parceria. Use "sugerimos considerar", "uma oportunidade seria". Nunca "o cliente deve", "é necessário".\n'
+    + '2. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
+    + '3. COMPARAÇÃO SEM RANKING: compare os clientes destacando o que cada um tem de melhor e o que pode evoluir, mas NUNCA use posições ou ordinais ("1º lugar", "último"), nunca chame um cliente de "pior" ou "o mais fraco" e nunca o exponha como culpado. O cliente de melhor nota pode ser citado como referência de boas práticas a ser replicada nos demais.\n'
+    + '4. TOM DE CONSTATAÇÃO: descreva as condições encontradas no período avaliado — nunca como preparação para algo futuro.\n'
+    + '5. A preparação do ambiente é SEMPRE responsabilidade do cliente, nunca da equipe FC. TODA ação recomendada é uma ação do próprio CLIENTE, executada internamente por ele — nunca visita, reunião, orientação ou comunicação promovida pela Formula Code.\n'
+    + '6. Para critérios de volume (escala invertida): nota baixa = excesso de mercadoria (ruim), nota alta = volume ideal (bom). Quanto MAIOR o volume, PIOR para a operação; volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo com boa organização. Nunca apresente volume alto como algo positivo.\n'
+    + '7. Quando o volume acima do ideal for citado como oportunidade, a ação recomendada é o cliente reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário.\n'
+    + '8. PROIBIDO dar a entender que a contagem feita pela Formula Code foi incorreta, mal feita ou teve a qualidade afetada. A análise avalia exclusivamente a PREPARAÇÃO DO AMBIENTE feita pelo cliente. Nunca recomende recontagem nem mencione "recontagem".\n'
+    + '9. TERMOS PROIBIDOS: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado", e absolutismos como "impossível", "nunca" ou "totalmente". Use "exige adequação" ou "ponto de atenção".\n'
+    + '10. REENQUADRAMENTO CONSTRUTIVO: exponha ajustes como oportunidade de ganho (fluidez da operação, assertividade da contagem, organização). Nunca use "compromete a velocidade de leitura dos coletores" nem "risco de recontagem" — use "pode impactar na fluidez da operação e na assertividade da contagem".\n'
+    + '11. PROIBIDO exigir "SKU único por pallet". Se falar de pallet, use "pallets com produtos organizados por código de barras".\n'
+    + '12. PROIBIDO recomendar que o cliente comunique ou avise previamente a quem quer que seja sobre movimentações de mercadoria, espaço, volume ou layout entre a data da análise e a operação oficial.\n'
+    + '13. Suavize qualquer linguagem de prazo. Nunca soar como ameaça ou cobrança.\n'
+    + '14. CRITÉRIOS N/A: os dados contêm APENAS o que foi avaliado. NUNCA mencione algo que não conste nos dados. '
+    + (temEquipe ? 'Equipe de apoio: só cite a de um cliente que tenha nota nos dados.' : 'Nenhum cliente teve equipe de apoio avaliada: é PROIBIDO mencionar equipe, equipe de apoio ou equipe de pesagem.') + '\n'
+    + '15. Cite apenas números presentes nos dados (notas com no máximo 1 casa decimal, variações). Não invente fatos ou causas.\n'
+    + '16. ' + (temAnterior ? 'Há dados do período anterior: comente a evolução de forma equilibrada, só de quem tem variação nos dados.' : 'NÃO há dados do período anterior: não comente evolução nem variação.') + '\n'
+    + '17. ' + (temVolume ? 'Inclua a leitura de volume quando relevante.' : 'Nenhum cliente teve volume avaliado: não cite volume.') + '\n'
+    + '18. Se NENHUM cliente tiver ponto de melhoria (todos Bom/Excelente), "oportunidades" diz isso de forma positiva em 1 frase e "sugestoes" contém APENAS uma recomendação: manter e replicar o padrão observado.\n'
+    + (algumaFarmacia ? '19b. HÁ FARMÁCIAS NO GRUPO: farmácia NÃO tem equipe de pesagem; é PROIBIDO mencionar "pesagem". Se citar medicamentos isentos de prescrição, use "MIPs" (nunca "OTC").\n' : '')
+    + '19. Texto fluido e natural, escrito por um humano, conciso: no máximo 300 palavras no total, frases curtas e diretas, sem repetir informações entre seções.\n';
+  var usr = 'Gere um JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n{\n'
+    + '"resumo": "2 frases: cenário geral do grupo (nº de clientes, faixa das notas), principal destaque e principal ponto de atenção.",\n'
+    + '"comparativo": "3-4 frases comparando os clientes entre si (regra 3: sem ranking, sem culpados), com padrões em comum e diferenças relevantes por retaguarda, área de vendas' + (temVolume ? ', organização e volume' : '') + '.",\n'
+    + '"pontos_positivos": "2 frases.",\n'
+    + '"oportunidades": "2 frases.",\n'
+    + '"sugestoes": "2 frases com ações do CLIENTE (regras 5, 7, 12, 13, 18)."\n}\n\nDADOS:\n\n' + linhas.join('\n');
+  return { system: sys, user: usr };
+}
+
+/* ── DIRETOR: texto da comparação entre os clientes do grupo (IA + contingência) ── */
+function performanceGerarTextoGrupo(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararGrupo(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var fb = perfTextoGrupoFallback(p.clientes, p.filtro, p.anterior);
+    var textos, origem = 'ia';
+    try {
+      var alguma = p.clientes.some(function (c) { return p.farmacia[c.cliente]; });
+      var prompt = perfMontarPromptGrupo(p.clientes, p.filtro, p.anterior, alguma);
+      var resp = chamarClaudeAPI(prompt.user, prompt.system);
+      textos = perfGarantirTextosGrupo(JSON.parse(resp.replace(/```json|```/g, '').trim()), fb);
+    } catch (errIA) {
+      Logger.log('Performance (grupo): Claude API erro: ' + errIA.message + '. Usando texto de contingência.');
+      textos = perfGarantirTextosGrupo(null, fb);
+      origem = 'contingencia';
+    }
+    return { ok: true, textos: textos, origem: origem };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── HTML do grupo: capa, comparação entre clientes ── */
+function perfCardHtml(rot, valor, sub, cor) {
+  return '<td style="padding:6px;width:25%;vertical-align:top"><div style="background:#F4F6F8;border-radius:10px;padding:12px 10px;text-align:center;border-top:4px solid ' + cor + '">'
+    + '<div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6B7B8D">' + rot + '</div>'
+    + '<div style="font-size:26px;font-weight:700;color:' + cor + ';line-height:1.2">' + valor + '</div>'
+    + '<div style="font-size:10px;color:#6B7B8D;line-height:1.4">' + sub + '</div></div></td>';
+}
+function perfSecHtml(t) {
+  return '<div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid #61CF00;padding-left:8px">' + t + '</div>';
+}
+function perfParHtml(t) { return t ? '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(t) + '</p>' : ''; }
+function perfBarraHtml(v, cor) {
+  var n = parseFloat(v);
+  var w = isNaN(n) ? 0 : Math.max(0, Math.min(100, Math.round(n * 10)));
+  if (w <= 0) return '<table style="width:100%"><tr><td style="height:12px;background:#EEF1F4"></td></tr></table>';
+  if (w >= 100) return '<table style="width:100%"><tr><td style="height:12px;background:' + cor + '"></td></tr></table>';
+  return '<table style="width:100%"><tr><td style="width:' + w + '%;height:12px;background:' + cor + '"></td><td style="background:#EEF1F4"></td></tr></table>';
+}
+function perfHeaderGrupoHtml(rotulo) {
+  return '<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,' + PERF_LOGO_PNG_B64 + '" style="height:48px" alt="FC"></td>'
+    + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">' + rotulo + '</td></tr></table>';
+}
+function perfInfoGrupoHtml(lista, filtro, anterior) {
+  var estab = filtro.estab === 'FARMACIA' ? 'Farmácia' : (filtro.estab === 'SUPERMERCADO' ? 'Supermercado' : 'Todos os estabelecimentos');
+  var cel = function (rot, val, w, pad) { return '<td style="padding:14px ' + (pad || 20) + 'px;background:#002B50;color:#FFF;' + (w ? 'width:' + w + ';' : '') + '"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">' + rot + '</div><div style="font-size:12px;font-weight:700">' + val + '</div></td>'; };
+  return '<table><tr>' + cel('Clientes do grupo', perfEsc(lista.map(function (c) { return c.cliente; }).join(' · ')), '40%', 32) + cel('Período (data da análise)', perfEsc(perfPeriodoTxt(filtro))) + '</tr>'
+    + '<tr>' + cel('Tipo de avaliação', perfEsc(perfTipoTxt(filtro)), '', 32) + cel('Período anterior (comparação)', anterior ? perfEsc(perfDataBR(anterior.de) + ' a ' + perfDataBR(anterior.ate)) : 'não disponível') + '</tr>'
+    + '<tr>' + cel('Tipo de estabelecimento', estab, '', 32) + cel('Ordem do arquivo', 'um cliente após o outro e, no final, a comparação entre eles') + '</tr></table>';
+}
+
+function perfMontarCapaGrupo(lista, filtro, anterior) {
+  var un = 0, an = 0;
+  lista.forEach(function (c) { un += c.unidades; an += c.analises; });
+  var h = perfHeaderGrupoHtml('Análise de Performance<br>Grupo de Clientes') + perfInfoGrupoHtml(lista, filtro, anterior);
+  h += '<div style="padding:22px 26px 6px"><table><tr>'
+    + perfCardHtml('Clientes', String(lista.length), 'no grupo', '#002B50')
+    + perfCardHtml('Unidades', String(un), 'avaliadas no período', '#002B50')
+    + perfCardHtml('Análises', String(an), 'concluídas no período', '#61CF00')
+    + '</tr></table></div>';
+  h += '<div style="padding:14px 32px 22px">' + perfSecHtml('Sumário do arquivo')
+    + '<table style="width:100%;font-size:12px;border:1px solid #E2E8F0"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Cliente</td><td style="padding:7px 6px;text-align:center;font-weight:600">Unidades</td><td style="padding:7px 6px;text-align:center;font-weight:600">Análises</td><td style="padding:7px 6px;text-align:center;font-weight:600">Nota média</td></tr>';
+  lista.forEach(function (c, i) {
+    h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + (i + 1) + '. ' + perfEsc(c.cliente) + '</td><td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + c.unidades + '</td><td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + c.analises + '</td>' + perfCelNota(c.geral) + '</tr>';
+  });
+  h += '</table><div style="font-size:10px;color:#6B7B8D;margin-top:6px">Ao final: comparação entre os clientes.</div></div>';
+  return h;
+}
+
+function perfMontarComparativoClientes(lista, filtro, anterior, tg) {
+  var h = perfHeaderGrupoHtml('Comparação entre<br>Clientes') + perfInfoGrupoHtml(lista, filtro, anterior);
+  h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Comparativo entre Clientes') + perfParHtml(tg.resumo) + perfParHtml(tg.comparativo) + '</div>';
+  // gráfico: nota média por cliente
+  h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Nota média por Cliente') + '<table style="width:100%;font-size:12px">';
+  lista.forEach(function (c) {
+    h += '<tr style="page-break-inside:avoid"><td style="width:30%;padding:5px 8px 5px 0;font-weight:600;color:#002B50">' + perfEsc(c.cliente) + '</td><td style="width:58%;padding:5px 0">' + perfBarraHtml(c.geral, perfCorNota(c.geral)) + '</td><td style="width:12%;padding:5px 0 5px 8px;font-weight:700;color:' + perfCorNota(c.geral) + '">' + perfFmt(c.geral) + '</td></tr>';
+  });
+  h += '</table><div style="font-size:10px;color:#6B7B8D;margin-top:6px">Nota do cliente = média das notas das unidades (0 a 10).</div></div>';
+  // tabela comparativa
+  var temOV = lista.some(function (c) { return c.organizacao !== null || c.volume !== null; });
+  var colunas = [['Geral', 'geral'], ['Equipe', 'equipe'], ['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']];
+  if (temOV) { colunas.push(['Organização', 'organizacao']); colunas.push(['Volume', 'volume']); }
+  h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Tabela comparativa') + '<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:6px 0"><tr style="background:#002B50;color:#FFF"><td style="padding:7px 10px;font-weight:600">Cliente</td><td style="padding:7px 6px;text-align:center;font-weight:600">Unid.</td>'
+    + colunas.map(function (c) { return '<td style="padding:7px 6px;text-align:center;font-weight:600">' + c[0] + '</td>'; }).join('')
+    + '<td style="padding:7px 6px;text-align:center;font-weight:600">Variação<br><span style="font-size:9px;font-weight:400;opacity:.8">vs anterior</span></td></tr>';
+  lista.forEach(function (c) {
+    h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(c.cliente) + '</td><td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + c.unidades + '</td>'
+      + colunas.map(function (col) { return perfCelNota(c[col[1]]); }).join('')
+      + '<td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + perfDeltaHtml(c.variacao.geral) + '</td></tr>';
+  });
+  h += '</table><div style="font-size:10px;color:#6B7B8D;line-height:1.5">Setor ou critério não avaliado aparece como "—". Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).</div></div>';
+  // conclusão do grupo
+  h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Conclusão do Grupo');
+  if (tg.pontos_positivos) h += '<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">' + perfEsc(tg.pontos_positivos) + '</p></div>';
+  if (tg.oportunidades) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ OPORTUNIDADES DE MELHORIA</div><p style="font-size:13px;line-height:1.7">' + perfEsc(tg.oportunidades) + '</p></div>';
+  if (tg.sugestoes) h += '<div style="background:#E3F2FD;border-left:4px solid #002B50;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#002B50;margin-bottom:6px">→ SUGESTÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(tg.sugestoes) + '</p></div>';
+  h += '</div>';
+  return h;
+}
+
+function perfMontarHTMLGrupo(lista, filtro, anterior, textosPorCliente, tg) {
+  var h = perfHtmlAbertura('Análise de Performance — Grupo de Clientes');
+  h += perfMontarCapaGrupo(lista, filtro, anterior);
+  lista.forEach(function (c) {
+    h += '<div style="page-break-before:always">' + perfMontarCorpoCliente(c, filtro, anterior, textosPorCliente[c.cliente]) + '</div>';
+  });
+  if (lista.length > 1) h += '<div style="page-break-before:always">' + perfMontarComparativoClientes(lista, filtro, anterior, tg) + '</div>';
+  h += perfHtmlRodape() + '</div></body></html>';
+  return h;
+}
+
+function perfNomeBaseGrupo(filtro, lista) {
+  var nomes = perfNomeLimpo(lista.map(function (c) { return c.cliente; }).join('+'));
+  if (nomes.length > 70) nomes = nomes.substring(0, 70);
+  return 'Performance_Grupo_' + lista.length + 'clientes_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
+}
+
+/* ── DIRETOR: PDF único do grupo (HTML + PDF no Drive, pasta Performance_FC / Grupos) ── */
+function performanceExportarPDFGrupo(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem exportar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararGrupo(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var textosPorCliente = {};
+    p.clientes.forEach(function (c) {
+      var fb = perfTextoFallback(c, p.filtro, p.anterior);
+      var recebido = d.textos && d.textos[c.cliente] ? d.textos[c.cliente] : null;
+      textosPorCliente[c.cliente] = perfGarantirTextos(recebido, fb, c);
+    });
+    var tg = perfGarantirTextosGrupo(d.textosGrupo || null, perfTextoGrupoFallback(p.clientes, p.filtro, p.anterior));
+    var html = perfMontarHTMLGrupo(p.clientes, p.filtro, p.anterior, textosPorCliente, tg);
+    var pasta = perfPastaCliente('Grupos');
+    var base = perfNomeBaseGrupo(p.filtro, p.clientes);
+    [base + '.html', base + '.pdf'].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var arquivo = pasta.createFile(base + '.html', html, 'text/html');
+    arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var pdfBlob = arquivo.getAs('application/pdf');
+    pdfBlob.setName(base + '.pdf');
+    var pdfFile = pasta.createFile(pdfBlob);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return {
+      ok: true, clientes: p.clientes.length,
+      linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
+      linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
+    };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── DIRETOR: apresentação única do grupo (PPTX montado no navegador) + PDF ── */
+function performanceSalvarApresentacaoGrupo(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
+    var p = perfPrepararGrupo(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var pasta = perfPastaCliente('Grupos');
+    var base = 'Apresentacao_' + perfNomeBaseGrupo(p.filtro, p.clientes);
+    var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
+    [nomePptx, nomePdf].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var bytes = Utilities.base64Decode(d.pptxBase64);
+    var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomePptx);
+    var arqPptx = pasta.createFile(pptxBlob);
+    arqPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var out = { ok: true, linkPPTX: 'https://drive.google.com/uc?id=' + arqPptx.getId() + '&export=download', linkPDF: '', erroPDF: null };
+    try {
+      var pdfBlob = converterPptxParaPdfReal(pptxBlob, base);
+      pdfBlob.setName(nomePdf);
+      var arqPdf = pasta.createFile(pdfBlob);
+      arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+    } catch (errPdf) {
+      out.erroPDF = errPdf.message || String(errPdf);
+      Logger.log('Performance (grupo): falha ao converter PDF da apresentação: ' + out.erroPDF);
+    }
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    CATÁLOGO DE CLIENTES E UNIDADES — r111
    Fonte única e LIMPA dos nomes de clientes/unidades: vem das próprias
    análises (não excluídas), não da aba Clientes_FC (que só acumula nomes
@@ -5634,12 +6115,12 @@ function fcCatalogo() {
     var data = extrairDataISO(row[7]);
     var ck = fcChave(c), uk = fcChave(u);
     var cl = clientes[ck];
-    if (!cl) { cl = clientes[ck] = { chave: ck, nome: c, dataNome: data, concluidas: 0, unidades: {}, uordem: [] }; ordem.push(ck); }
+    if (!cl) { cl = clientes[ck] = { chave: ck, nome: c, dataNome: data, concluidas: 0, unidades: {}, uordem: [], tipos: {} }; ordem.push(ck); }
     if (data >= cl.dataNome) { cl.nome = c; cl.dataNome = data; }      // variante da análise mais recente
     var un = cl.unidades[uk];
     if (!un) { un = cl.unidades[uk] = { chave: uk, nome: u, dataNome: data, concluidas: 0 }; cl.uordem.push(uk); }
     if (data >= un.dataNome) { un.nome = u; un.dataNome = data; }
-    if (String(row[9]) === 'CONCLUIDO') { cl.concluidas++; un.concluidas++; }
+    if (String(row[9]) === 'CONCLUIDO') { cl.concluidas++; un.concluidas++; cl.tipos[tipoEstabelecimentoDaLinhaRapido(row)] = 1; }   // r131: tipos (SUPERMERCADO/FARMACIA) em que o cliente tem análise concluída
     porAud[String(row[0])] = { ck: ck, uk: uk, data: data };
   }
   return { clientes: clientes, ordem: ordem, porAud: porAud };

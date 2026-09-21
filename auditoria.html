@@ -430,7 +430,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r130';
+const VERSAO = 'r131';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -934,9 +934,9 @@ async function renderTelaInicial(aba) {
     state.unidades = {};
     const det = rc.detalhes || {};
     // r111: os filtros (NPS e Performance) só oferecem clientes/unidades com análise CONCLUÍDA
-    state.clientesConcluidos = []; state.unidadesConcluidas = {};
+    state.clientesConcluidos = []; state.unidadesConcluidas = {}; state.clientesTipos = {};
     for (const c in det) {
-      if (det[c].concluidas === undefined || det[c].concluidas > 0) { state.clientesConcluidos.push(c); state.unidadesConcluidas[c] = det[c].unidadesConcluidas || det[c].unidades || []; }
+      if (det[c].concluidas === undefined || det[c].concluidas > 0) { state.clientesConcluidos.push(c); state.unidadesConcluidas[c] = det[c].unidadesConcluidas || det[c].unidades || []; state.clientesTipos[c] = Array.isArray(det[c].tipos) ? det[c].tipos : null; }
     }
     for (const c in det) { state.unidades[c] = det[c].unidades || []; state.emailsCliente = state.emailsCliente || {}; for (const u in det[c].emails) state.emailsCliente[c+'|'+u] = det[c].emails[u]; }
   }
@@ -2562,76 +2562,135 @@ function npsHtmlTexto(r) {
     <div class="nps-legenda-faixas" style="justify-content:center;text-align:center">Texto gerado automaticamente por regras, a partir das respostas do filtro atual. Uso interno da diretoria.</div>`;
 }
 
-/* r130 — texto da aba "Detalhamento" (Diagnóstico + Por unidade + Respostas), no mesmo formato do texto da Visão geral */
+/* r131 — ELEMENTOS VISUAIS DA EXPORTAÇÃO (mesmos da tela: cartões, medidores, barras, histogramas, matriz, tabela colorida, respostas).
+   Cada seção leva "blocos"; o PDF (servidor) e o PPTX (navegador) desenham cada bloco com as mesmas cores da tela. */
 function npsPonto(t) { t = String(t || '').trim(); return /[.!?…]$/.test(t) ? t : t + '.'; }
+const NPS_COR_CAT = { Promotor: '#2E7D32', Neutro: '#D4A017', Detrator: '#E05252' };
 
-function npsMontarTextoDetalhe(r) {
-  const s = r.resumo;
-  const secoes = [];
+// Aba "Visão geral": Análise (recomendação e alertas, placar, recomendações, destaques) + Resumo (distribuições, evolução por mês, quesitos anteriores)
+function npsSecoesVisaoGeral(r) {
+  const s = r.resumo, al = s.alertas || {}, secoes = [];
+  if (!s.respondidas) return secoes;
+  const pct = v => (v === null || v === undefined) ? '—' : v + '%';
+  const P = s.pctPromotores || 0, N = s.pctNeutros || 0, D = s.pctDetratores || 0;
 
-  // 1. Diagnóstico (CSAT x NPS)
+  // 1 · Análise
+  secoes.push({ h: 'Análise — recomendação e alertas', blocos: [
+    { t: 'barra', rot: 'Recomendação', segs: [
+      { v: P, cor: '#2E7D32', rot: 'Promotores 9–10 · ' + s.promotores + ' (' + pct(s.pctPromotores) + ')' },
+      { v: N, cor: '#D4A017', rot: 'Neutros 7–8 · ' + s.neutros + ' (' + pct(s.pctNeutros) + ')' },
+      { v: D, cor: '#E05252', rot: 'Detratores 0–6 · ' + s.detratores + ' (' + pct(s.pctDetratores) + ')' }] },
+    { t: 'cards', itens: [
+      { r: 'Alerta vermelho', v: String(al.criticos || 0), sub: 'ligação imediata', cor: NPS_NIVEL_COR.critico },
+      { r: 'Falha do inventário', v: String(al.falhas || 0), sub: 'correção de processo', cor: NPS_NIVEL_COR.falha },
+      { r: 'Operação perfeita', v: String(al.perfeitas || 0), sub: 'pedir indicações', cor: NPS_NIVEL_COR.otimo }] }
+  ] });
+
+  const posNps = s.nps === null ? 50 : Math.max(0, Math.min(100, (s.nps + 100) / 2));
+  const posCsat = (s.csatMedio === null || s.csatMedio === undefined) ? null : Math.max(0, Math.min(100, (s.csatMedio - 1) * 100 / 9));
+  const placar = [{ t: 'medidor', rot: 'NPS ' + (s.nps === null ? '—' : s.nps), txt: npsZona(s.nps).t, txtCor: npsCorHexNps(s.nps), pos: posNps,
+    zonas: [[0, 50, '#E05252'], [50, 75, '#D4A017'], [75, 100, '#2E7D32']], esc: [{ p: 0, t: '-100' }, { p: 50, t: '0' }, { p: 75, t: '50' }, { p: 100, t: '100' }] }];
+  if (posCsat !== null) placar.push({ t: 'medidor', rot: 'CSAT ' + npsN1(s.csatMedio), txt: s.pctSatisfeitos + '% satisfeitos', txtCor: npsCorCsat(s.csatMedio), pos: posCsat,
+    zonas: [[0, 55, '#E05252'], [55, 78, '#D4A017'], [78, 100, '#2E7D32']], esc: [{ p: 0, t: '1' }, { p: 55, t: '6' }, { p: 78, t: '8' }, { p: 100, t: '10' }] });
+  placar.push({ t: 'barra', rot: 'Quem respondeu', segs: [
+    { v: P, cor: '#2E7D32', rot: 'Promotores ' + P + '%' }, { v: N, cor: '#D4A017', rot: 'Neutros ' + N + '%' }, { v: D, cor: '#E05252', rot: 'Detratores ' + D + '%' }] });
+  secoes.push({ h: 'Análise — placar', blocos: placar });
+
+  const recs = npsRecomendacoes(r).map(x => ({ titulo: x.titulo, texto: x.texto, cor: NPS_NIVEL_COR[x.nivel] || '#8899AA' }));
+  if (recs.length) secoes.push({ h: 'Análise — recomendações', blocos: [{ t: 'recs', itens: recs }] });
+
+  const d = r.destaques;
+  if (d && d.base > 0) {
+    const max = Math.max.apply(null, d.itens.map(x => x.quantidade).concat([1]));
+    secoes.push({ h: 'Análise — o que se destacou na operação', blocos: [{ t: 'barras', nota: '% de quem respondeu o novo modelo (' + d.base + ').',
+      itens: d.itens.map(x => ({ rot: x.rotulo, texto: x.pct === null ? '—' : x.pct + '%', w: Math.round(x.quantidade * 100 / max), cor: x.chave === 'outro' ? '#E8872B' : '#61CF00' })) }] });
+  }
+
+  // 2 · Resumo
+  if (s.csatRespondidas) {
+    secoes.push({ h: 'Resumo — satisfação com o inventário (CSAT)', blocos: [{ t: 'hist', rot: 'Satisfação com o inventário (CSAT, 1 a 10)', vals: r.distribuicaoCsat, de: 1,
+      cores: r.distribuicaoCsat.map((_, i) => npsCorCsat(i)),
+      leg: [{ cor: '#E05252', rot: '1–6 baixo' }, { cor: '#D4A017', rot: '7–8 médio' }, { cor: '#2E7D32', rot: '9–10 alto' }],
+      nota: 'Média: ' + npsN1(s.csatMedio) + ' · satisfeitos (9–10): ' + s.pctSatisfeitos + '%' }] });
+  }
+  secoes.push({ h: 'Resumo — recomendação (NPS)', blocos: [{ t: 'hist', rot: 'Recomendação (NPS, 0 a 10)', vals: r.distribuicao, de: 0,
+    cores: r.distribuicao.map((_, i) => npsCorNota(i)),
+    leg: [{ cor: '#E05252', rot: '0–6 detratores' }, { cor: '#D4A017', rot: '7–8 neutros' }, { cor: '#2E7D32', rot: '9–10 promotores' }],
+    nota: 'Nota média: ' + (s.mediaNota === null ? '—' : npsN1(s.mediaNota)) }] });
+  if ((r.porMes || []).length) {
+    secoes.push({ h: 'Resumo — evolução por mês da análise', blocos: [{ t: 'mes', nota: 'NPS do mês, CSAT médio (quando há) e, entre parênteses, o número de respostas.',
+      itens: r.porMes.map(m => ({ rot: npsMesRotulo(m.mes), nps: m.nps, cor: npsCorValor(m.nps),
+        texto: (m.nps === null ? '—' : m.nps) + ((m.csat !== null && m.csat !== undefined) ? ' · CSAT ' + npsN1(m.csat) : '') + ' (' + m.respostas + ')' })) }] });
+  }
+  const quesitos = NPS_QUESITOS_ORDEM.filter(k => r.quesitos[k] && r.quesitos[k].total > 0);
+  if (quesitos.length) {
+    secoes.push({ h: 'Resumo — quesitos do modelo anterior', blocos: [{ t: 'quesitos', nota: 'Respostas dadas antes da mudança do modelo de pesquisa.',
+      itens: quesitos.map(k => ({ rot: NPS_QUESITOS_TXT[k], segs: r.quesitos[k].opcoes.map(o => ({ n: r.quesitos[k].contagens[o] || 0, cor: NPS_COR_OPCAO[o] || '#999999', rot: o })) })) }] });
+  }
+  return secoes;
+}
+
+// Aba "Detalhamento": Diagnóstico (matriz CSAT x NPS e o que exige ação) + Por unidade (tabela colorida) + Respostas (com as notas coloridas)
+function npsSecoesDetalhe(r) {
+  const s = r.resumo, secoes = [];
   const dg = {};
   (r.diagnosticos || []).forEach(d => { dg[d.chave] = d; });
   if (s.csatRespondidas) {
-    const paras = ['O diagnóstico cruza a satisfação com o inventário (CSAT, nas linhas) com a recomendação (NPS, nas colunas). Base: ' + npsPlural(s.csatRespondidas, 'resposta', 'respostas') + ' do modelo atual da pesquisa.'];
+    const blocos = [{ t: 'matriz', rot: 'Satisfação com o inventário (linhas) x Recomendação (colunas)', cab: [''].concat(NPS_COLUNAS.map(c => c[1])),
+      linhas: NPS_LINHAS.map(l => ({ rot: l[1], cel: NPS_COLUNAS.map(c => { const d = dg[l[0] + '_' + c[0]]; return { n: String(d.quantidade), tit: d.titulo, cor: NPS_NIVEL_COR[d.nivel], bg: NPS_NIVEL_BG[d.nivel] }; }) })) }];
     const prio = (r.diagnosticos || []).filter(d => d.quantidade && (d.nivel === 'critico' || d.nivel === 'falha' || d.nivel === 'atencao'));
-    if (prio.length) {
-      paras.push('Exigem ação:');
-      prio.forEach(d => paras.push(d.titulo + ' — ' + npsPlural(d.quantidade, 'resposta', 'respostas') + '. ' + npsPonto(d.acao)));
-    } else paras.push('Nenhuma resposta exige ação neste recorte.');
-    secoes.push({
-      h: 'Diagnóstico CSAT x NPS', paragrafos: paras,
-      tabela: {
-        cab: ['CSAT \\ NPS'].concat(NPS_COLUNAS.map(c => c[1])), pesos: [1.2, 2, 2, 2],
-        linhas: NPS_LINHAS.map(l => [l[1]].concat(NPS_COLUNAS.map(c => { const d = dg[l[0] + '_' + c[0]]; return d ? d.quantidade + ' · ' + d.titulo : '—'; })))
-      }
-    });
+    if (prio.length) blocos.push({ t: 'recs', rot: 'Exigem ação', itens: prio.map(d => ({ titulo: d.titulo + ' · ' + npsPlural(d.quantidade, 'resposta', 'respostas'), texto: npsPonto(d.acao), cor: NPS_NIVEL_COR[d.nivel] })) });
+    else blocos.push({ t: 'nota', txt: 'Nenhuma resposta exige ação neste recorte.' });
+    secoes.push({ h: 'Diagnóstico CSAT x NPS', blocos });
   } else {
     secoes.push({ h: 'Diagnóstico CSAT x NPS', paragrafos: ['Ainda não há respostas do modelo atual da pesquisa (CSAT + NPS) neste recorte. O diagnóstico depende do cruzamento das duas notas.'] });
   }
 
-  // 2. Resultado por unidade
   const un = r.porUnidade || [];
   if (un.length) {
-    secoes.push({
-      h: 'Resultado por unidade',
-      paragrafos: ['Unidades do menor para o maior NPS; as sem resposta aparecem por último. Alerta vermelho = CSAT 1–6 e NPS 0–6. Falha do inventário = CSAT 1–6 e NPS 7–10.'],
-      tabela: {
-        cab: ['Unidade', 'Cliente', 'Resp./env.', 'NPS', 'CSAT', 'Alertas verm.', 'Falhas'], pesos: [2.4, 2, 1, 0.8, 0.8, 1, 0.8],
-        linhas: un.map(u => [u.unidade, u.cliente || '', u.respostas + '/' + u.enviados, npsN1(u.nps), npsN1(u.csat), String(u.criticos || 0), String(u.falhas || 0)])
-      }
-    });
+    const pilula = (v, cor) => (v === null || v === undefined) ? '—' : { t: npsN1(v), bg: cor, cor: '#FFFFFF', b: true };
+    secoes.push({ h: 'Resultado por unidade', blocos: [{ t: 'tabela', rot: 'Do menor para o maior NPS', pesos: [2.4, 2, 1, 0.8, 0.8, 1, 0.8],
+      cab: ['Unidade', 'Cliente', 'Resp./env.', 'NPS', 'CSAT', 'Alertas verm.', 'Falhas'],
+      nota: 'Alerta vermelho = CSAT 1–6 e NPS 0–6 · falha do inventário = CSAT 1–6 e NPS 7–10. Unidades sem resposta aparecem por último.',
+      linhas: un.map(u => [u.unidade, u.cliente || '', u.respostas + '/' + u.enviados,
+        pilula(u.nps, npsCorValor(u.nps)), pilula(u.csat, npsCorCsat(u.csat)),
+        { t: String(u.criticos || 0), cor: NPS_NIVEL_COR.critico, b: true }, { t: String(u.falhas || 0), cor: NPS_NIVEL_COR.falha, b: true }]) }] });
   }
 
-  // 3. Respostas recebidas
   const rs = r.respostas || [];
   if (rs.length) {
     const destRot = k => { const it = ((r.destaques || {}).itens || []).find(i => i.chave === k); return it ? it.rotulo : k; };
     const nomeQ = { apresentacao: 'Apresentação', postura: 'Postura', supervisor: 'Supervisor', mapeamento: 'Mapeamento', horario: 'Horário' };
-    const paras = [npsPlural(rs.length, 'resposta', 'respostas') + ', das mais recentes para as mais antigas' + (s.respondidas > rs.length ? ' (mostrando as ' + rs.length + ' mais recentes de ' + s.respondidas + ')' : '') + '.'];
-    rs.forEach(x => {
-      let p = x.unidade + (x.cliente ? ' — ' + x.cliente : '') + ' · análise de ' + npsDataBR(x.dataAuditoria) + ' · respondida em ' + npsDataBR(x.dataResposta) + ' · ' +
-        ((x.csat !== null && x.csat !== undefined) ? 'CSAT ' + x.csat + ' · ' : '') + 'NPS ' + x.nota + ' (' + x.categoria + ')';
-      if (x.diagnostico) p += ' · ' + x.diagnostico.titulo;
-      p += '. ' + (x.comentario ? 'Comentário: “' + String(x.comentario).replace(/\s+/g, ' ').trim() + '”.' : 'Sem comentário.');
-      if ((x.destaques || []).length) p += ' Pontos que se destacaram: ' + x.destaques.map(destRot).join(', ') + '.';
-      const lg = NPS_QUESITOS_ORDEM.filter(k => x[k]).map(k => nomeQ[k] + ': ' + x[k]);
-      if (lg.length) p += ' Modelo anterior da pesquisa — ' + lg.join('; ') + '.';
-      paras.push(p);
+    const itens = rs.map(x => {
+      const tags = [];
+      if (x.diagnostico) tags.push({ t: x.diagnostico.titulo, bg: NPS_NIVEL_BG[x.diagnostico.nivel], cor: NPS_NIVEL_COR[x.diagnostico.nivel] });
+      (x.destaques || []).forEach(k => tags.push(k === 'outro' ? { t: destRot(k), bg: '#FFF3E0', cor: '#E8872B' } : { t: destRot(k), bg: '#EAF8E0', cor: '#2E7D32' }));
+      NPS_QUESITOS_ORDEM.filter(k => x[k]).forEach(k => {
+        const ruim = NPS_OPCAO_RUIM.indexOf(x[k]) !== -1, media = NPS_OPCAO_MEDIA.indexOf(x[k]) !== -1;
+        tags.push({ t: nomeQ[k] + ': ' + x[k], bg: ruim ? '#FDEAEA' : (media ? '#FFF8E1' : '#F4F6F8'), cor: ruim ? '#C0392B' : (media ? '#D4A017' : '#556677') });
+      });
+      return { tit: x.unidade + (x.cliente ? ' — ' + x.cliente : ''), sub: 'análise de ' + npsDataBR(x.dataAuditoria) + ' · respondida em ' + npsDataBR(x.dataResposta),
+        csat: (x.csat !== null && x.csat !== undefined) ? x.csat : null, nps: x.nota, corCsat: npsCorCsat(x.csat), corNps: npsCorNota(x.nota),
+        cor: NPS_COR_CAT[x.categoria] || '#8899AA', tags, txt: x.comentario ? String(x.comentario).replace(/\s+/g, ' ').trim() : '' };
     });
-    secoes.push({ h: 'Respostas recebidas', paragrafos: paras });
+    secoes.push({ h: 'Respostas recebidas', blocos: [{ t: 'resps', itens,
+      rot: npsPlural(rs.length, 'resposta', 'respostas') + ', das mais recentes para as mais antigas' + (s.respondidas > rs.length ? ' (mostrando as ' + rs.length + ' mais recentes de ' + s.respondidas + ')' : ''),
+      nota: 'Notas: primeiro CSAT (satisfação com o inventário) e depois NPS (recomendação).' }] });
   }
-  return { secoes };
+  return secoes;
 }
+
+function npsMontarTextoDetalhe(r) { return { secoes: npsSecoesDetalhe(r) }; }
 
 /* r130 — monta o texto conforme o escopo: 'geral' (Visão geral), 'detalhe' (Detalhamento) ou 'completo' (as duas) */
 function npsMontarTextoEscopo(escopo) {
   const r = state.npsDados;
   const t1 = npsMontarTexto(r);
   let secoes, nome, sufixo, porSup;
-  if (escopo === 'geral') { secoes = t1.secoes; nome = 'Visão geral'; sufixo = 'Visao_Geral'; porSup = t1.porSupervisor; }
-  else if (escopo === 'detalhe') { secoes = npsMontarTextoDetalhe(r).secoes; nome = 'Detalhamento'; sufixo = 'Detalhamento'; porSup = null; }
-  else { secoes = t1.secoes.concat(npsMontarTextoDetalhe(r).secoes); nome = 'Completa'; sufixo = 'Completa'; porSup = t1.porSupervisor; }
+  // r131: cada aba leva os elementos visuais da tela + o texto (Visão geral: Análise, Resumo e Texto; Detalhamento: Diagnóstico, Por unidade e Respostas)
+  if (escopo === 'geral') { secoes = npsSecoesVisaoGeral(r).concat(t1.secoes); nome = 'Visão geral'; sufixo = 'Visao_Geral'; porSup = t1.porSupervisor; }
+  else if (escopo === 'detalhe') { secoes = npsSecoesDetalhe(r); nome = 'Detalhamento'; sufixo = 'Detalhamento'; porSup = null; }
+  else { secoes = npsSecoesVisaoGeral(r).concat(t1.secoes, npsSecoesDetalhe(r)); nome = 'Completa'; sufixo = 'Completa'; porSup = t1.porSupervisor; }
   return { titulo: 'Análise CSAT / NPS — ' + nome, subtitulo: nome, sufixo, contexto: t1.contexto, kpis: t1.kpis, secoes, resumo: t1.resumo, porSupervisor: porSup };
 }
 
@@ -2743,7 +2802,233 @@ function montarPptxNps(t, dados) {
         }));
         s.addTable(rows, { x: 0.5, y: y, w: 9, colW: colW, border: { type: 'solid', pt: 0.5, color: 'E2E8F0' } });
       }
+      /* r131 — seções com elementos visuais: cada bloco vira "peças" com altura conhecida; as peças são empilhadas nos slides */
+      const hexc = function (c) { return String(c || '#8899AA').replace('#', ''); };
+      function txtV(s, texto, x, y, w, h, o) {
+        s.addText(texto, Object.assign({ x: x, y: y, w: w, h: h, fontFace: 'Arial', isTextBox: true, margin: 0, valign: 'middle' }, o || {}));
+      }
+      function legendaV(s, itens, x, y) {
+        const runs = [];
+        (itens || []).forEach(function (i) {
+          runs.push({ text: '■ ', options: { color: hexc(i.cor), fontSize: 9 } });
+          runs.push({ text: String(i.rot) + '     ', options: { color: BODY, fontSize: 8.5 } });
+        });
+        if (runs.length) s.addText(runs, { x: x, y: y, w: 9, h: 0.25, fontFace: 'Arial', isTextBox: true, margin: 0, valign: 'middle' });
+      }
+      function fatiar(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
+      function pecasDoBloco(b) {
+        const t = b.t;
+        if (t === 'cards') {
+          const n = b.itens.length, gap = 0.2, w = (9 - gap * (n - 1)) / n;
+          return [{ h: 1.3, draw: function (s, y) {
+            b.itens.forEach(function (k, i) {
+              const x = 0.5 + i * (w + gap);
+              s.addShape(pres.ShapeType.rect, { x: x, y: y, w: w, h: 1.25, fill: { color: 'F4F6F8' }, line: { color: 'F4F6F8' } });
+              s.addShape(pres.ShapeType.rect, { x: x, y: y, w: w, h: 0.06, fill: { color: hexc(k.cor) }, line: { color: hexc(k.cor) } });
+              txtV(s, String(k.r).toUpperCase(), x, y + 0.14, w, 0.25, { fontSize: 8.5, bold: true, color: '6B7B8D', align: 'center', charSpacing: 1 });
+              txtV(s, String(k.v), x, y + 0.4, w, 0.5, { fontSize: 26, fontFace: 'Calibri', bold: true, color: hexc(k.cor), align: 'center' });
+              txtV(s, String(k.sub || ''), x + 0.1, y + 0.92, w - 0.2, 0.3, { fontSize: 9, color: '6B7B8D', align: 'center', valign: 'top' });
+            });
+          } }];
+        }
+        if (t === 'barra') {
+          return [{ h: (b.rot ? 0.3 : 0) + 0.42 + 0.3, draw: function (s, y) {
+            let yy = y;
+            if (b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+            const segs = (b.segs || []).filter(function (x) { return x.v > 0; });
+            const total = segs.reduce(function (a, x) { return a + x.v; }, 0) || 1;
+            if (!segs.length) s.addShape(pres.ShapeType.rect, { x: 0.5, y: yy, w: 9, h: 0.4, fill: { color: 'EEF1F4' }, line: { color: 'EEF1F4' } });
+            let px = 0.5;
+            segs.forEach(function (x) {
+              const w = 9 * x.v / total;
+              s.addShape(pres.ShapeType.rect, { x: px, y: yy, w: w, h: 0.4, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } });
+              if (x.v >= 8) txtV(s, Math.round(x.v) + '%', px, yy, w, 0.4, { fontSize: 11, bold: true, color: 'FFFFFF', align: 'center' });
+              px += w;
+            });
+            legendaV(s, b.segs, 0.5, yy + 0.44);
+          } }];
+        }
+        if (t === 'medidor') {
+          return [{ h: 1.1, draw: function (s, y) {
+            txtV(s, b.rot, 0.5, y, 4.5, 0.3, { fontSize: 12, bold: true, color: NAVY });
+            txtV(s, b.txt || '', 5, y, 4.5, 0.3, { fontSize: 10.5, bold: true, color: hexc(b.txtCor), align: 'right' });
+            (b.zonas || []).forEach(function (z) {
+              s.addShape(pres.ShapeType.rect, { x: 0.5 + 9 * z[0] / 100, y: y + 0.4, w: 9 * (z[1] - z[0]) / 100, h: 0.2, fill: { color: hexc(z[2]) }, line: { color: hexc(z[2]) } });
+            });
+            s.addShape(pres.ShapeType.rect, { x: 0.5 + 9 * b.pos / 100 - 0.03, y: y + 0.32, w: 0.06, h: 0.36, fill: { color: NAVY }, line: { color: NAVY } });
+            (b.esc || []).forEach(function (e) {
+              const cx = Math.max(0.5, Math.min(8.9, 0.5 + 9 * e.p / 100 - 0.3));
+              txtV(s, e.t, cx, y + 0.72, 0.6, 0.22, { fontSize: 8, color: LABEL, align: 'center' });
+            });
+          } }];
+        }
+        if (t === 'barras' || t === 'mes') {
+          const lotes = fatiar(b.itens, 9), n = lotes.length;
+          return lotes.map(function (lote, li) {
+            return { h: (li === 0 && b.rot ? 0.3 : 0) + lote.length * 0.36 + (li === n - 1 && b.nota ? 0.28 : 0), draw: function (s, y) {
+              let yy = y;
+              if (li === 0 && b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+              lote.forEach(function (x, i) {
+                const ry = yy + i * 0.36;
+                if (t === 'barras') {
+                  txtV(s, pptTruncar(x.rot, 60), 0.5, ry, 3.2, 0.34, { fontSize: 9.5, color: BODY });
+                  s.addShape(pres.ShapeType.rect, { x: 3.8, y: ry + 0.09, w: 4.6, h: 0.16, fill: { color: 'EEF1F4' }, line: { color: 'EEF1F4' } });
+                  if (x.w > 0) s.addShape(pres.ShapeType.rect, { x: 3.8, y: ry + 0.09, w: Math.max(0.04, 4.6 * x.w / 100), h: 0.16, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } });
+                  txtV(s, x.texto || '', 8.5, ry, 1, 0.34, { fontSize: 10, bold: true, color: NAVY, align: 'right' });
+                } else {
+                  txtV(s, x.rot, 0.5, ry, 1.3, 0.34, { fontSize: 9.5, color: BODY });
+                  s.addShape(pres.ShapeType.rect, { x: 1.9, y: ry + 0.09, w: 5.4, h: 0.16, fill: { color: 'EEF1F4' }, line: { color: 'EEF1F4' } });
+                  const v = (x.nps === null || x.nps === undefined) ? 0 : Math.max(-100, Math.min(100, x.nps));
+                  if (v !== 0) s.addShape(pres.ShapeType.rect, { x: v > 0 ? 4.6 : 4.6 - 2.7 * (-v) / 100, y: ry + 0.09, w: Math.max(0.04, 2.7 * Math.abs(v) / 100), h: 0.16, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } });
+                  s.addShape(pres.ShapeType.rect, { x: 4.59, y: ry + 0.04, w: 0.02, h: 0.26, fill: { color: LABEL }, line: { color: LABEL } });
+                  txtV(s, x.texto || '', 7.4, ry, 2.1, 0.34, { fontSize: 9, bold: true, color: hexc(x.cor) });
+                }
+              });
+              if (li === n - 1 && b.nota) txtV(s, b.nota, 0.5, yy + lote.length * 0.36, 9, 0.26, { fontSize: 8.5, color: LABEL });
+            } };
+          });
+        }
+        if (t === 'hist') {
+          return [{ h: (b.rot ? 0.3 : 0) + 1.95 + 0.3 + (b.nota ? 0.28 : 0), draw: function (s, y) {
+            let yy = y;
+            if (b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+            const n = b.vals.length - b.de, colW = 9 / n, base = yy + 1.6, maxV = Math.max.apply(null, b.vals.concat([1]));
+            for (let i = b.de; i < b.vals.length; i++) {
+              const k = i - b.de, v = b.vals[i], alt = v > 0 ? Math.max(0.05, v * 1.25 / maxV) : 0.02;
+              s.addShape(pres.ShapeType.rect, { x: 0.5 + k * colW + colW * 0.15, y: base - alt, w: colW * 0.7, h: alt, fill: { color: hexc((b.cores || [])[i]) }, line: { color: hexc((b.cores || [])[i]) } });
+              if (v > 0) txtV(s, String(v), 0.5 + k * colW, base - alt - 0.22, colW, 0.2, { fontSize: 9, color: BODY, align: 'center' });
+              txtV(s, String(i), 0.5 + k * colW, base + 0.03, colW, 0.2, { fontSize: 9, bold: true, color: BODY, align: 'center' });
+            }
+            legendaV(s, b.leg, 0.5, base + 0.3);
+            if (b.nota) txtV(s, b.nota, 0.5, base + 0.56, 9, 0.24, { fontSize: 9, color: LABEL });
+          } }];
+        }
+        if (t === 'quesitos') {
+          return fatiar(b.itens, 4).map(function (lote, li, arr) {
+            return { h: (li === 0 && b.rot ? 0.3 : 0) + lote.length * 0.78 + (li === arr.length - 1 && b.nota ? 0.28 : 0), draw: function (s, y) {
+              let yy = y;
+              if (li === 0 && b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+              lote.forEach(function (q, i) {
+                const qy = yy + i * 0.78, tot = q.segs.reduce(function (a, x) { return a + x.n; }, 0);
+                txtV(s, q.rot, 0.5, qy, 9, 0.26, { fontSize: 9.5, color: BODY });
+                let px = 0.5;
+                if (tot > 0) q.segs.forEach(function (x) { if (x.n > 0) { const w = 9 * x.n / tot; s.addShape(pres.ShapeType.rect, { x: px, y: qy + 0.28, w: w, h: 0.2, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } }); px += w; } });
+                legendaV(s, q.segs.map(function (x) { return { cor: x.cor, rot: x.rot + ': ' + x.n }; }), 0.5, qy + 0.5);
+              });
+              if (li === arr.length - 1 && b.nota) txtV(s, b.nota, 0.5, yy + lote.length * 0.78, 9, 0.26, { fontSize: 8.5, color: LABEL });
+            } };
+          });
+        }
+        if (t === 'recs') {
+          const pecas = [];
+          b.itens.forEach(function (x, i) {
+            const hT = x.texto ? pptMedirAltura(x.texto, 8.8, 9.5, 1.15) : 0;
+            const extra = (i === 0 && b.rot) ? 0.3 : 0;   // o título do grupo acompanha o primeiro item (nunca fica sozinho no fim do slide)
+            pecas.push({ h: extra + 0.34 + hT, draw: function (s, y) {
+              if (extra) txtV(s, b.rot, 0.5, y, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY });
+              const yy = y + extra;
+              s.addShape(pres.ShapeType.rect, { x: 0.5, y: yy, w: 0.06, h: 0.3 + hT, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } });
+              txtV(s, x.titulo, 0.7, yy, 8.8, 0.26, { fontSize: 10.5, bold: true, color: NAVY });
+              if (x.texto) txtV(s, x.texto, 0.7, yy + 0.26, 8.8, hT, { fontSize: 9.5, color: BODY, valign: 'top', lineSpacingMultiple: 1.15 });
+            } });
+          });
+          return pecas;
+        }
+        if (t === 'matriz') {
+          return [{ h: (b.rot ? 0.3 : 0) + 0.3 + 3 * 0.78, draw: function (s, y) {
+            let yy = y;
+            if (b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+            const cw = 7.5 / 3;
+            b.cab.slice(1).forEach(function (c, j) { txtV(s, c, 2.0 + j * cw, yy, cw - 0.1, 0.26, { fontSize: 9, bold: true, color: BODY, align: 'center' }); });
+            b.linhas.forEach(function (l, i) {
+              const ry = yy + 0.3 + i * 0.78;
+              txtV(s, l.rot, 0.5, ry, 1.4, 0.72, { fontSize: 9, bold: true, color: BODY });
+              l.cel.forEach(function (c, j) {
+                const cx = 2.0 + j * cw;
+                s.addShape(pres.ShapeType.rect, { x: cx, y: ry, w: cw - 0.1, h: 0.72, fill: { color: hexc(c.bg) }, line: { color: hexc(c.bg) } });
+                s.addShape(pres.ShapeType.rect, { x: cx, y: ry, w: 0.06, h: 0.72, fill: { color: hexc(c.cor) }, line: { color: hexc(c.cor) } });
+                txtV(s, c.n, cx + 0.14, ry + 0.04, 0.9, 0.4, { fontSize: 20, fontFace: 'Calibri', bold: true, color: hexc(c.cor) });
+                txtV(s, c.tit, cx + 0.14, ry + 0.42, cw - 0.3, 0.28, { fontSize: 8.5, color: '1A2A3A', valign: 'top' });
+              });
+            });
+          } }];
+        }
+        if (t === 'tabela') {
+          const lotes = fatiar(b.linhas, 8), pesos = (b.pesos && b.pesos.length === b.cab.length) ? b.pesos : b.cab.map(function (_, i) { return i === 0 ? 2 : 1; });
+          const soma = pesos.reduce(function (a, x) { return a + x; }, 0), colW = pesos.map(function (x) { return 9 * x / soma; });
+          return lotes.map(function (lote, li) {
+            return { h: (li === 0 && b.rot ? 0.3 : 0) + 0.34 * (lote.length + 1) + 0.1 + (li === lotes.length - 1 && b.nota ? 0.32 : 0), draw: function (s, y) {
+              let yy = y;
+              if (li === 0 && b.rot) { txtV(s, b.rot, 0.5, yy, 9, 0.28, { fontSize: 10.5, bold: true, color: NAVY }); yy += 0.3; }
+              const cab = b.cab.map(function (c, ci) { return { text: c, options: { bold: true, color: 'FFFFFF', fill: { color: NAVY }, fontSize: 9.5, fontFace: 'Arial', align: ci === 0 ? 'left' : 'center', valign: 'middle' } }; });
+              const rows = [cab].concat(lote.map(function (lin) {
+                return lin.map(function (v, ci) {
+                  const o = (v !== null && typeof v === 'object') ? v : { t: v };
+                  const op = { fontSize: 9.5, fontFace: 'Arial', align: ci === 0 ? 'left' : 'center', valign: 'middle', color: o.cor ? hexc(o.cor) : '333333', bold: !!o.b };
+                  if (o.bg) op.fill = { color: hexc(o.bg) };
+                  return { text: String(o.t), options: op };
+                });
+              }));
+              s.addTable(rows, { x: 0.5, y: yy, w: 9, colW: colW, rowH: 0.34, border: { type: 'solid', color: 'E2E8F0', pt: 0.5 } });
+              if (li === lotes.length - 1 && b.nota) txtV(s, b.nota, 0.5, yy + 0.34 * (lote.length + 1) + 0.06, 9, 0.28, { fontSize: 8.5, color: LABEL, valign: 'top' });
+            } };
+          });
+        }
+        if (t === 'resps') {
+          const pecas = [];
+          b.itens.forEach(function (x, i) {
+            const hTxt = pptMedirAltura(x.txt || 'Sem comentário.', 8.7, 9, 1.15);
+            const hTags = (x.tags && x.tags.length) ? 0.24 : 0;
+            const extra = (i === 0 && (b.rot || b.nota)) ? 0.5 : 0;   // título e legenda acompanham a primeira resposta
+            const h0 = 0.42 + hTags + hTxt;
+            const h = extra + h0;
+            pecas.push({ h: h, draw: function (s, y0) {
+              if (extra) {
+                if (b.rot) txtV(s, b.rot, 0.5, y0, 9, 0.26, { fontSize: 10.5, bold: true, color: NAVY });
+                if (b.nota) txtV(s, b.nota, 0.5, y0 + 0.26, 9, 0.22, { fontSize: 8.5, color: LABEL });
+              }
+              const y = y0 + extra;
+              s.addShape(pres.ShapeType.rect, { x: 0.5, y: y, w: 0.06, h: h0 - 0.08, fill: { color: hexc(x.cor) }, line: { color: hexc(x.cor) } });
+              txtV(s, pptTruncar(x.tit, 90), 0.7, y, 7.4, 0.22, { fontSize: 10, bold: true, color: NAVY });
+              txtV(s, x.sub || '', 0.7, y + 0.2, 7.4, 0.2, { fontSize: 8, color: LABEL });
+              [[x.csat, x.corCsat, 8.35], [x.nps, x.corNps, 8.9]].forEach(function (p) {
+                if (p[0] === null || p[0] === undefined || p[0] === '') return;
+                s.addShape(pres.ShapeType.rect, { x: p[2], y: y, w: 0.5, h: 0.32, fill: { color: hexc(p[1]) }, line: { color: hexc(p[1]) } });
+                txtV(s, String(p[0]), p[2], y, 0.5, 0.32, { fontSize: 11, bold: true, color: 'FFFFFF', align: 'center' });
+              });
+              let yy = y + 0.42;
+              if (hTags) {
+                const runs = [];
+                x.tags.forEach(function (g2) { runs.push({ text: '■ ', options: { color: hexc(g2.cor), fontSize: 8 } }); runs.push({ text: g2.t + '    ', options: { color: hexc(g2.cor), fontSize: 8.5, bold: true } }); });
+                s.addText(runs, { x: 0.7, y: yy, w: 8.8, h: 0.22, fontFace: 'Arial', isTextBox: true, margin: 0, valign: 'middle' });
+                yy += 0.24;
+              }
+              txtV(s, x.txt || 'Sem comentário.', 0.7, yy, 8.8, hTxt, { fontSize: 9, color: x.txt ? '1A2A3A' : LABEL, valign: 'top', lineSpacingMultiple: 1.15 });
+            } });
+          });
+          return pecas;
+        }
+        if (t === 'nota') return [{ h: 0.3, draw: function (s, y) { txtV(s, b.txt, 0.5, y, 9, 0.26, { fontSize: 9.5, color: BODY }); } }];
+        return [];
+      }
+      function secaoVisual(sec) {
+        const pecas = [];
+        sec.blocos.forEach(function (b) { pecas.push.apply(pecas, pecasDoBloco(b)); });
+        let s = null, y = 0, pag = 0;
+        pecas.forEach(function (pc) {
+          if (!s || y + pc.h > PPT_Y_MAX) {
+            s = pres.addSlide();
+            fullBg(s); rotulo(s, sec.h + (pag > 0 ? ' (cont.)' : '')); titulo(s, sec.h, pag > 0 ? ' (cont.)' : '');
+            rodape(s);
+            y = 1.4; pag++;
+          }
+          pc.draw(s, y);
+          y += pc.h + 0.12;
+        });
+      }
+
       t.secoes.forEach(function (sec) {
+        if (sec.blocos && sec.blocos.length) secaoVisual(sec);
         const temTab = !!(sec.tabela && sec.tabela.cab && sec.tabela.linhas && sec.tabela.linhas.length);
         let tabelaFeita = false;
         if (sec.paragrafos && sec.paragrafos.length) {
@@ -3097,12 +3382,24 @@ function pfPeriodoRotulo(f) {
 function pfTipoRotulo(f) { const t = PF_TIPOS.find(x => x.v === f.tipo); return t ? t.t : ''; }
 
 /* ── Aba ── */
+// r131: filtros hierárquicos — a lista de clientes só traz quem tem análise concluída no tipo de estabelecimento escolhido
+// (Supermercado ou Farmácia). Sem o tipo escolhido, aparecem todos. Servidor antigo (sem "tipos"): não restringe.
+function pfOpcoesClientes(estab) {
+  const todos = state.clientesConcluidos || state.clientes || [];
+  return todos.filter(c => {
+    if (!estab) return true;
+    const tipos = (state.clientesTipos || {})[c];
+    return !Array.isArray(tipos) || tipos.indexOf(estab) !== -1;
+  }).map(x => ({ v: x, t: x }));
+}
 function carregarPerformanceAba() {
   const c = $('#abaConteudo');
   if (!c) return;
   const p = pfEstado();
   const f = p.filtro;
-  const msCli = msHtml('pCli', { opcoes: (state.clientesConcluidos || state.clientes || []).map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, cb: v => pfMudou('clientes', v) });
+  const opcoesCli = pfOpcoesClientes(f.estab);
+  f.clientes = f.clientes.filter(x => opcoesCli.some(o => o.v === x));
+  const msCli = msHtml('pCli', { opcoes: opcoesCli, sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, msgVazio: 'Nenhum cliente com análise neste tipo de estabelecimento', cb: v => pfMudou('clientes', v) });
   const btnsEstab = PF_ESTABS.map(x => `<button type="button" class="hist-tipo${f.estab === x.v ? ' ativo' : ''}" onclick="pfEscolherEstab('${x.v}')">${x.v ? x.t : 'Todos'}</button>`).join('');
   const optsPer = NPS_PERIODOS.map(x => `<option value="${x.v}"${x.v === f.periodo ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsTipo = PF_TIPOS.map(x => `<option value="${esc(x.v)}"${x.v === f.tipo ? ' selected' : ''}>${x.t}</option>`).join('');
@@ -3129,6 +3426,16 @@ function pfEscolherEstab(v) {
   const p = pfEstado();
   p.filtro.estab = v;
   document.querySelectorAll('#pfEstabBtns .hist-tipo').forEach((b, i) => b.classList.toggle('ativo', PF_ESTABS[i].v === v));
+  // r131: a lista de clientes acompanha o tipo escolhido; quem não tem análise nesse tipo sai da seleção
+  const opc = pfOpcoesClientes(v);
+  const antes = p.filtro.clientes.length;
+  if (MS.pCli) {
+    msRedesenhar('pCli', opc, !opc.length, 'Nenhum cliente com análise neste tipo de estabelecimento');
+    p.filtro.clientes = MS.pCli.sel.slice();
+  } else {
+    p.filtro.clientes = p.filtro.clientes.filter(x => opc.some(o => o.v === x));
+  }
+  if (p.filtro.clientes.length !== antes) toast('Clientes sem análise nesse tipo de estabelecimento saíram da seleção', 4000);
   pfBuscar();
 }
 function pfMudou(campo, valor) {
@@ -3235,8 +3542,105 @@ function pfHtmlMacro(d) {
   }).join('');
   return `
     <div class="pf-resumo-linha"><b>${t.clientes}</b> cliente(s) · <b>${t.unidades}</b> unidade(s) · <b>${t.analises}</b> análise(s) concluída(s).<br>${pfHtmlPeriodoLinha()}</div>
+    ${pfHtmlExportarGrupo()}
     <div class="pf-grid">${cards}</div>
     <div class="pf-nota-tab">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Toque num cliente para ver as unidades, a análise e exportar.</div>`;
+}
+
+/* ── r131: exportação do GRUPO — os clientes selecionados num arquivo único (cliente 1, cliente 2... e a comparação entre eles) ── */
+// Clientes selecionados no filtro APLICADO que têm análise no resultado, na ordem em que foram selecionados.
+function pfClientesDoGrupo() {
+  const p = pfEstado();
+  const sel = (p.aplicado && p.aplicado.clientes) || [];
+  const lista = [];
+  if (!p.dados) return lista;
+  sel.forEach(n => { const c = p.dados.clientes.find(x => fcChave(x.cliente) === fcChave(n)); if (c && lista.indexOf(c) === -1) lista.push(c); });
+  return lista;
+}
+function pfHtmlExportarGrupo() {
+  const lista = pfClientesDoGrupo();
+  const sel = ((pfEstado().aplicado || {}).clientes || []).length;
+  if (!sel) return '<div class="pf-nota-tab" style="margin:0 0 12px">Para exportar o grupo em arquivo único, selecione ao menos 1 cliente no filtro e toque em Buscar.</div>';
+  if (!lista.length) return '<div class="pf-nota-tab" style="margin:0 0 12px">Os clientes selecionados não têm análise neste período.</div>';
+  return `
+    <div class="pf-bloco" style="margin-bottom:12px">
+      <h4>Exportar o grupo (${lista.length} cliente${lista.length === 1 ? '' : 's'}) em arquivo único</h4>
+      <div class="pf-nota-tab" style="margin:0 0 8px">${lista.length > 1 ? 'Ordem do arquivo: ' + esc(lista.map((c, i) => (i + 1) + '. ' + c.cliente).join(' · ')) + ' e, no final, a comparação entre os clientes.' : 'Um cliente selecionado: a exportação é a mesma do cliente.'}</div>
+      <div class="pf-acoes" style="margin-bottom:0">
+        <button type="button" class="pf-acao pdf" onclick="pfExportarGrupoPDF()">📄 Exportar grupo (PDF)</button>
+        <button type="button" class="pf-acao ppt" onclick="pfExportarGrupoPPTX()">🎬 Apresentação do grupo (PPTX + PDF)</button>
+      </div>
+    </div>`;
+}
+function pfPayloadGrupo(lista) {
+  const p = pfEstado();
+  const iv = pfIntervalo(p.aplicado);
+  return { clientes: lista.map(c => c.cliente), estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
+}
+// Gera (ou reaproveita) o texto de cada cliente, um após o outro, e a comparação entre eles. null = falhou.
+async function pfGarantirTextosGrupo(lista) {
+  const p = pfEstado();
+  const chave = JSON.stringify(p.aplicado) + '|' + lista.map(c => c.cliente).join('|');
+  if (p.textosGrupo && p.textosGrupo.chave === chave) return p.textosGrupo;
+  const base = pfPayloadGrupo(lista);
+  const porCliente = {};
+  for (let i = 0; i < lista.length; i++) {
+    const c = lista[i];
+    if (p.textos && p.textosChave === JSON.stringify(p.aplicado) + '|' + c.cliente) { porCliente[c.cliente] = p.textos; continue; }   // já gerado ao abrir este cliente
+    showLoading('Gerando a análise do cliente ' + (i + 1) + ' de ' + lista.length + ': ' + c.cliente + '...');
+    const r = await apiCall('performanceGerarTexto', { cliente: c.cliente, estab: base.estab, tipo: base.tipo, de: base.de, ate: base.ate });
+    if (!r.ok) { hideLoading(); toast('Erro ao gerar a análise de ' + c.cliente + ': ' + (r.erro || 'falha'), 5000); return null; }
+    porCliente[c.cliente] = r.textos;
+  }
+  let grupo = null;
+  if (lista.length > 1) {
+    showLoading('Gerando a comparação entre os ' + lista.length + ' clientes...');
+    const rg = await apiCall('performanceGerarTextoGrupo', base);
+    if (!rg.ok) { hideLoading(); toast('Erro ao gerar a comparação entre clientes: ' + (rg.erro || 'falha'), 5000); return null; }
+    grupo = rg.textos;
+  }
+  hideLoading();
+  p.textosGrupo = { chave, porCliente, grupo };
+  return p.textosGrupo;
+}
+async function pfExportarGrupoPDF() {
+  const p = pfEstado();
+  const lista = pfClientesDoGrupo();
+  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return; }
+  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); await pfExportarPDF(); return; }
+  const t = await pfGarantirTextosGrupo(lista);
+  if (!t) return;
+  showLoading('Gerando o PDF único do grupo...');
+  const r = await apiCall('performanceExportarPDFGrupo', Object.assign(pfPayloadGrupo(lista), { textos: t.porCliente, textosGrupo: t.grupo }));
+  hideLoading();
+  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha'), 5000); return; }
+  pfModalLinks('Análise do grupo em PDF pronta', 'O arquivo único com <b>' + lista.length + ' clientes</b> (um após o outro e, no final, a comparação entre eles) foi salvo no Drive (pasta Performance_FC / Grupos).',
+    [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
+}
+async function pfExportarGrupoPPTX() {
+  const p = pfEstado();
+  const lista = pfClientesDoGrupo();
+  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return; }
+  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); await pfExportarPPTX(); return; }
+  const disponivel = await aguardarPptxGenJS();
+  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return; }
+  const t = await pfGarantirTextosGrupo(lista);
+  if (!t) return;
+  let b64;
+  try {
+    showLoading('Montando a apresentação do grupo...');
+    b64 = await montarPptxPerformanceGrupo({
+      periodoTxt: pfPeriodoRotulo(p.aplicado), tipoTxt: pfTipoRotulo(p.aplicado), estabTxt: pfEstabRotulo(p.aplicado).replace(/^\S+\s/, ''), anterior: p.dados.periodoAnterior,
+      itens: lista.map(c => ({ cliente: c, textos: t.porCliente[c.cliente] })), textosGrupo: t.grupo
+    });
+  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message, 5000); return; }
+  showLoading('Salvando no Drive e convertendo em PDF...');
+  const r = await apiCall('performanceSalvarApresentacaoGrupo', Object.assign(pfPayloadGrupo(lista), { pptxBase64: b64 }));
+  hideLoading();
+  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha'), 5000); return; }
+  pfModalLinks('Apresentação do grupo pronta',
+    'A apresentação com <b>' + lista.length + ' clientes</b> (um após o outro e, no final, a comparação entre eles) foi salva no Drive (pasta Performance_FC / Grupos).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
+    [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
 }
 
 function pfAbrirCliente(i) {
@@ -4091,15 +4495,20 @@ function pptTruncar(t, n) { t = String(t || ''); return t.length > n ? t.substri
    O gráfico de barras é desenhado com formas (nome da unidade sempre
    aparece, em qualquer leitor: PowerPoint, Google Slides, PDF).
    ═══════════════════════════════════════════════════════ */
+// r131: um cliente = mesma apresentação de sempre; vários clientes = capa do grupo, cada cliente em sequência e a comparação no final.
 function montarPptxPerformance(prep) {
+  return montarPptxPerformanceGrupo({ periodoTxt: prep.periodoTxt, tipoTxt: prep.tipoTxt, anterior: prep.anterior, itens: [{ cliente: prep.cliente, textos: prep.textos }] });
+}
+
+function montarPptxPerformanceGrupo(g) {
   return new Promise(function(resolve, reject) {
     try {
       const pres = new PptxGenJS();
       pres.layout = 'LAYOUT_16x9';
       const NAVY='002B50', GREEN='61CF00', DARK='051323', ORANGE='E8872B', BODY='556677', LABEL='8899AA';
-      const cli = prep.cliente;
-      const textos = prep.textos || {};
-      const periodoTxt = prep.periodoTxt || '';
+      let cli = null, textos = {};   // cliente que está sendo montado no momento
+      const periodoTxt = g.periodoTxt || '';
+      const prep = { tipoTxt: g.tipoTxt, anterior: g.anterior };
       const fmt = function(n) { return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(1).replace('.', ','); };
       const corHex = function(n) {
         if (n === null || n === undefined || isNaN(n)) return '9AA7B4';
@@ -4182,203 +4591,330 @@ function montarPptxPerformance(prep) {
         });
       }
 
-      /* 1 — Capa */
-      const s1 = pres.addSlide();
-      s1.background = { fill: DARK };
-      s1.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.04, fill:{ color: GREEN } });
-      s1.addText([
-        { text:'Análise de ', options:{ color:'FFFFFF', fontSize:30, fontFace:'Calibri', bold:true } },
-        { text:'Performance das Unidades', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
-      ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
-      s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
-      const subCapa = String(cli.cliente || '') + '  ·  ' + periodoTxt;
-      s1.addText(subCapa, { x:0.8, y:2.45, w:8.4, h:Math.min(0.9, pptMedirAltura(subCapa, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
-      if (prep.tipoTxt) s1.addText(prep.tipoTxt, { x:0.8, y:3.4, w:8.4, h:0.3, fontSize:11, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
+      function slidesDoCliente() {
+        /* 1 — Capa */
+        const s1 = pres.addSlide();
+        s1.background = { fill: DARK };
+        s1.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.04, fill:{ color: GREEN } });
+        s1.addText([
+          { text:'Análise de ', options:{ color:'FFFFFF', fontSize:30, fontFace:'Calibri', bold:true } },
+          { text:'Performance das Unidades', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
+        ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
+        s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
+        const subCapa = String(cli.cliente || '') + '  ·  ' + periodoTxt;
+        s1.addText(subCapa, { x:0.8, y:2.45, w:8.4, h:Math.min(0.9, pptMedirAltura(subCapa, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
+        if (prep.tipoTxt) s1.addText(prep.tipoTxt, { x:0.8, y:3.4, w:8.4, h:0.3, fontSize:11, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
+        if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
 
-      /* 2 — Indicadores-chave */
-      const s2 = pres.addSlide();
-      splitBg(s2);
-      rotulo(s2, 'INDICADORES-CHAVE');
-      titulo2(s2, 'Nota do ', 'Cliente');
-      const kpis = [
-        { label:'NOTA MÉDIA DO CLIENTE' + (cli.faixa ? ' · ' + String(cli.faixa).toUpperCase() : ''), valor: fmt(cli.geral) + '/10', cor: corHex(cli.geral) },
-        { label:'UNIDADES AVALIADAS', valor: String(cli.unidades), cor: NAVY },
-        { label:'ANÁLISES NO PERÍODO', valor: String(cli.analises), cor: NAVY },
-        { label:'VARIAÇÃO VS PERÍODO ANTERIOR', valor: deltaTxt(cli.variacao.geral), cor: deltaCor(cli.variacao.geral) }
-      ];
-      if (cli.organizacao !== null && cli.organizacao !== undefined) kpis.push({ label:'ORGANIZAÇÃO (MÉDIA)', valor: fmt(cli.organizacao) + '/10', cor: corHex(cli.organizacao) });
-      if (cli.volume !== null && cli.volume !== undefined) kpis.push({ label:'VOLUME (MÉDIA · 10 = IDEAL)', valor: fmt(cli.volume) + '/10', cor: corHex(cli.volume) });
-      kpis.forEach(function(k, i) {
-        const ky = 1.7 + i * 0.58;
-        s2.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.4, fill:{ color: k.cor } });
-        s2.addText(k.valor, { x:1.05, y:ky, w:1.8, h:0.32, fontSize:19, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
-        s2.addText(k.label, { x:2.95, y:ky+0.04, w:3.5, h:0.3, fontSize:9, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, charSpacing:1 });
-      });
-      painelInfo(s2, cli.unidades + ' unidade(s)');
+        /* 2 — Indicadores-chave */
+        const s2 = pres.addSlide();
+        splitBg(s2);
+        rotulo(s2, 'INDICADORES-CHAVE');
+        titulo2(s2, 'Nota do ', 'Cliente');
+        const kpis = [
+          { label:'NOTA MÉDIA DO CLIENTE' + (cli.faixa ? ' · ' + String(cli.faixa).toUpperCase() : ''), valor: fmt(cli.geral) + '/10', cor: corHex(cli.geral) },
+          { label:'UNIDADES AVALIADAS', valor: String(cli.unidades), cor: NAVY },
+          { label:'ANÁLISES NO PERÍODO', valor: String(cli.analises), cor: NAVY },
+          { label:'VARIAÇÃO VS PERÍODO ANTERIOR', valor: deltaTxt(cli.variacao.geral), cor: deltaCor(cli.variacao.geral) }
+        ];
+        if (cli.organizacao !== null && cli.organizacao !== undefined) kpis.push({ label:'ORGANIZAÇÃO (MÉDIA)', valor: fmt(cli.organizacao) + '/10', cor: corHex(cli.organizacao) });
+        if (cli.volume !== null && cli.volume !== undefined) kpis.push({ label:'VOLUME (MÉDIA · 10 = IDEAL)', valor: fmt(cli.volume) + '/10', cor: corHex(cli.volume) });
+        kpis.forEach(function(k, i) {
+          const ky = 1.7 + i * 0.58;
+          s2.addShape(pres.ShapeType.rect, { x:0.8, y:ky, w:0.04, h:0.4, fill:{ color: k.cor } });
+          s2.addText(k.valor, { x:1.05, y:ky, w:1.8, h:0.32, fontSize:19, fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+          s2.addText(k.label, { x:2.95, y:ky+0.04, w:3.5, h:0.3, fontSize:9, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, charSpacing:1 });
+        });
+        painelInfo(s2, cli.unidades + ' unidade(s)');
 
-      /* 3 — Resumo executivo */
-      slideTexto('RESUMO EXECUTIVO', 'Resumo ', 'Executivo', [textos.resumo_executivo, textos.evolucao].filter(Boolean).join('\n\n'));
+        /* 3 — Resumo executivo */
+        slideTexto('RESUMO EXECUTIVO', 'Resumo ', 'Executivo', [textos.resumo_executivo, textos.evolucao].filter(Boolean).join('\n\n'));
 
-      /* 4 — Comparativo: gráfico de barras desenhado com formas (8 unidades por slide) */
-      const comNota = cli.lista.filter(function(u) { return u.geral !== null && u.geral !== undefined; });
-      const POR_GRAFICO = 8;
-      for (let ini = 0; ini < comNota.length; ini += POR_GRAFICO) {
-        const lote = comNota.slice(ini, ini + POR_GRAFICO);
-        const sG = pres.addSlide();
-        splitBg(sG);
-        rotulo(sG, 'COMPARATIVO ENTRE UNIDADES');
-        titulo2(sG, 'Nota por ', 'Unidade' + (ini > 0 ? ' (cont.)' : ''));
-        const xNome = PPT_X_ESQ, wNome = 2.15, xTrilho = 3.05, wTrilho = 2.85, yIni = 1.7, passo = 0.4;
-        lote.forEach(function(u, i) {
-          const y = yIni + i * passo;
-          sG.addText(pptTruncar(u.unidade, 60), { x:xNome, y:y, w:wNome, h:0.34, fontSize:8.5, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, valign:'middle', align:'right' });
-          sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:wTrilho, h:0.2, fill:{ color:'EEF1F4' }, line:{ color:'EEF1F4', width:0 } });
-          sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:Math.max(0.04, wTrilho * u.geral / 10), h:0.2, fill:{ color: corHex(u.geral) }, line:{ color: corHex(u.geral), width:0 } });
-          sG.addText(fmt(u.geral), { x:xTrilho + wTrilho + 0.08, y:y, w:0.55, h:0.34, fontSize:10, fontFace:'Arial', bold:true, color: DARK, isTextBox:true, margin:0, valign:'middle' });
-        });
-        const yEixo = yIni + lote.length * passo + 0.02;
-        [0, 5, 10].forEach(function(v) {
-          sG.addText(String(v), { x:xTrilho + wTrilho * v / 10 - 0.2, y:yEixo, w:0.4, h:0.2, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, align:'center' });
-        });
-        painelInfo(sG, 'Nota média por unidade (0 a 10)');
-      }
-
-      /* 5 — Tabela comparativa (largura total; 7 unidades por slide) */
-      const POR_TABELA = 7;
-      for (let ini = 0; ini < cli.lista.length; ini += POR_TABELA) {
-        const lote = cli.lista.slice(ini, ini + POR_TABELA);
-        const sT = pres.addSlide();
-        fullBg(sT);
-        rotuloFull(sT, 'TABELA COMPARATIVA');
-        tituloFull(sT, 'Comparativo ', 'entre Unidades' + (ini > 0 ? ' (cont.)' : ''));
-        const cab = ['Unidade', 'Geral', 'Equipe', 'Retaguarda', 'Área de Vendas', 'Variação vs anterior'].map(function(t, i) {
-          return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
-        });
-        const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
-        const linhas = lote.map(function(u) {
-          return [
-            { text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
-            cel(u.geral), cel(u.equipe), cel(u.retaguarda), cel(u.areaVendas),
-            { text: deltaTxt(u.variacao.geral), options:{ bold:true, color: deltaCor(u.variacao.geral), fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
-          ];
-        });
-        if (ini + POR_TABELA >= cli.lista.length) {
-          linhas.push([
-            { text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
-            cel(cli.geral), cel(cli.equipe), cel(cli.retaguarda), cel(cli.areaVendas),
-            { text: deltaTxt(cli.variacao.geral), options:{ bold:true, color: deltaCor(cli.variacao.geral), fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
-          ]);
+        /* 4 — Comparativo: gráfico de barras desenhado com formas (8 unidades por slide) */
+        const comNota = cli.lista.filter(function(u) { return u.geral !== null && u.geral !== undefined; });
+        const POR_GRAFICO = 8;
+        for (let ini = 0; ini < comNota.length; ini += POR_GRAFICO) {
+          const lote = comNota.slice(ini, ini + POR_GRAFICO);
+          const sG = pres.addSlide();
+          splitBg(sG);
+          rotulo(sG, 'COMPARATIVO ENTRE UNIDADES');
+          titulo2(sG, 'Nota por ', 'Unidade' + (ini > 0 ? ' (cont.)' : ''));
+          const xNome = PPT_X_ESQ, wNome = 2.15, xTrilho = 3.05, wTrilho = 2.85, yIni = 1.7, passo = 0.4;
+          lote.forEach(function(u, i) {
+            const y = yIni + i * passo;
+            sG.addText(pptTruncar(u.unidade, 60), { x:xNome, y:y, w:wNome, h:0.34, fontSize:8.5, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, valign:'middle', align:'right' });
+            sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:wTrilho, h:0.2, fill:{ color:'EEF1F4' }, line:{ color:'EEF1F4', width:0 } });
+            sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.07, w:Math.max(0.04, wTrilho * u.geral / 10), h:0.2, fill:{ color: corHex(u.geral) }, line:{ color: corHex(u.geral), width:0 } });
+            sG.addText(fmt(u.geral), { x:xTrilho + wTrilho + 0.08, y:y, w:0.55, h:0.34, fontSize:10, fontFace:'Arial', bold:true, color: DARK, isTextBox:true, margin:0, valign:'middle' });
+          });
+          const yEixo = yIni + lote.length * passo + 0.02;
+          [0, 5, 10].forEach(function(v) {
+            sG.addText(String(v), { x:xTrilho + wTrilho * v / 10 - 0.2, y:yEixo, w:0.4, h:0.2, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, align:'center' });
+          });
+          painelInfo(sG, 'Nota média por unidade (0 a 10)');
         }
-        sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.0, 1.0, 1.0, 1.3, 1.5, 1.2], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-        notaRodape(sT, 'Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.');
-      }
 
-      /* 6 — Leitura comparativa (texto) */
-      slideTexto('LEITURA COMPARATIVA', 'Leitura ', 'Comparativa', textos.comparativo);
-
-      /* 7 — Organização x Volume: texto + tabelas (7 unidades por slide) */
-      const temOV = cli.lista.some(function(u) { return (u.organizacao !== null && u.organizacao !== undefined) || (u.volume !== null && u.volume !== undefined); });
-      if (temOV) {
-        slideTexto('ORGANIZAÇÃO X VOLUME', 'Organização ', 'x Volume', textos.volume_organizacao);
-        const POR_OV = 7;
-        for (let ini = 0; ini < cli.lista.length; ini += POR_OV) {
-          const lote = cli.lista.slice(ini, ini + POR_OV);
-          const sO = pres.addSlide();
-          fullBg(sO);
-          rotuloFull(sO, 'ORGANIZAÇÃO X VOLUME');
-          tituloFull(sO, 'Organização ', 'x Volume' + (ini > 0 ? ' (cont.)' : ''));
-          const cab = ['Unidade', 'Organização', 'Volume (10 = ideal)', 'Média dos dois'].map(function(t, i) {
+        /* 5 — Tabela comparativa (largura total; 7 unidades por slide) */
+        const POR_TABELA = 7;
+        for (let ini = 0; ini < cli.lista.length; ini += POR_TABELA) {
+          const lote = cli.lista.slice(ini, ini + POR_TABELA);
+          const sT = pres.addSlide();
+          fullBg(sT);
+          rotuloFull(sT, 'TABELA COMPARATIVA');
+          tituloFull(sT, 'Comparativo ', 'entre Unidades' + (ini > 0 ? ' (cont.)' : ''));
+          const cab = ['Unidade', 'Geral', 'Equipe', 'Retaguarda', 'Área de Vendas', 'Variação vs anterior'].map(function(t, i) {
             return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
           });
           const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
           const linhas = lote.map(function(u) {
-            return [{ text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(u.organizacao), cel(u.volume), cel(u.orgVol)];
+            return [
+              { text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
+              cel(u.geral), cel(u.equipe), cel(u.retaguarda), cel(u.areaVendas),
+              { text: deltaTxt(u.variacao.geral), options:{ bold:true, color: deltaCor(u.variacao.geral), fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
+            ];
           });
-          if (ini + POR_OV >= cli.lista.length) linhas.push([{ text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(cli.organizacao), cel(cli.volume), cel(cli.orgVol)]);
-          sO.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.6, 1.7, 2.0, 1.7], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-          notaRodape(sO, 'Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).');
+          if (ini + POR_TABELA >= cli.lista.length) {
+            linhas.push([
+              { text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
+              cel(cli.geral), cel(cli.equipe), cel(cli.retaguarda), cel(cli.areaVendas),
+              { text: deltaTxt(cli.variacao.geral), options:{ bold:true, color: deltaCor(cli.variacao.geral), fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'center', valign:'middle' } }
+            ]);
+          }
+          sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.0, 1.0, 1.0, 1.3, 1.5, 1.2], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+          notaRodape(sT, 'Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.');
         }
-      }
 
-      /* 8 — Um slide por unidade (o texto que não couber continua no slide seguinte) */
-      cli.lista.forEach(function(u) {
-        const txtU = String((textos.unidades && textos.unidades[u.unidade]) || '').trim();
-        const mets = [];
-        if (u.retaguarda !== null && u.retaguarda !== undefined) mets.push(['Retaguarda', u.retaguarda]);
-        if (u.areaVendas !== null && u.areaVendas !== undefined) mets.push(['Área de Vendas', u.areaVendas]);
-        if (u.equipe !== null && u.equipe !== undefined) mets.push(['Equipe de apoio', u.equipe]);
-        if (u.organizacao !== null && u.organizacao !== undefined) mets.push(['Organização', u.organizacao]);
-        if (u.volume !== null && u.volume !== undefined) mets.push(['Volume (10 = ideal)', u.volume]);
-        mets.push(['Variação vs anterior', null]);
-        const yTxt = 2.3 + Math.ceil(mets.length / 2) * 0.42 + 0.1;
-        const hDisp = PPT_Y_MAX - yTxt;
-        let fs = pptFonteQueCabe(txtU, PPT_W_ESQ, hDisp, 10, 8.5, 1.3);
-        const partes = (!txtU || fs) ? [txtU] : pptDividirTexto(txtU, PPT_W_ESQ, hDisp, (fs = 9), 1.3);
+        /* 6 — Leitura comparativa (texto) */
+        slideTexto('LEITURA COMPARATIVA', 'Leitura ', 'Comparativa', textos.comparativo);
 
-        const sU = pres.addSlide();
-        splitBg(sU);
-        rotulo(sU, 'UNIDADE');
-        sU.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
-        sU.addText(fmt(u.geral), { x:PPT_X_ESQ, y:1.4, w:1.7, h:0.7, fontSize:36, fontFace:'Calibri', bold:true, color: corHex(u.geral), isTextBox:true, margin:0 });
-        sU.addText((u.faixa ? String(u.faixa).toUpperCase() : '') + '\n' + u.analises + ' análise(s) no período', { x:2.5, y:1.48, w:4.0, h:0.6, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
-        mets.forEach(function(m, i) {
-          const col = i % 2, row = Math.floor(i / 2);
-          const mx = 0.8 + col * 2.9, my = 2.3 + row * 0.42;
-          const isDelta = m[1] === null;
-          const cor = isDelta ? deltaCor(u.variacao.geral) : corHex(m[1]);
-          sU.addShape(pres.ShapeType.rect, { x:mx, y:my+0.02, w:0.04, h:0.3, fill:{ color: cor } });
-          sU.addText(isDelta ? deltaTxt(u.variacao.geral) : fmt(m[1]), { x:mx+0.14, y:my, w:0.85, h:0.34, fontSize:14, fontFace:'Calibri', bold:true, color: isDelta ? cor : DARK, isTextBox:true, margin:0, valign:'middle' });
-          sU.addText(m[0], { x:mx+1.0, y:my, w:1.75, h:0.34, fontSize:8, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, valign:'middle' });
-        });
-        if (partes[0]) sU.addText(partes[0], { x:PPT_X_ESQ, y:yTxt, w:PPT_W_ESQ, h:Math.min(hDisp, pptMedirAltura(partes[0], PPT_W_ESQ, fs, 1.3)), fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
-        painelInfo(sU);
-        for (let k = 1; k < partes.length; k++) {
-          const sC = pres.addSlide();
-          splitBg(sC);
-          rotulo(sC, 'UNIDADE (CONT.)');
-          sC.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
-          const hC = PPT_Y_MAX - 1.6;
-          const partesC = pptDividirTexto(partes[k], PPT_W_ESQ, hC, 11, 1.4);
-          sC.addText(partesC[0], { x:PPT_X_ESQ, y:1.6, w:PPT_W_ESQ, h:Math.min(hC, pptMedirAltura(partesC[0], PPT_W_ESQ, 11, 1.4)), fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
-          painelInfo(sC);
-        }
-      });
-
-      /* 9 — Conclusão: pontos positivos e oportunidades (blocos que não cabem passam ao slide seguinte) */
-      const itens = [];
-      if (textos.pontos_positivos) itens.push({ cor: GREEN, marca: '✓', texto: textos.pontos_positivos });
-      if (textos.oportunidades) itens.push({ cor: ORANGE, marca: '!', texto: textos.oportunidades });
-      let primeiro = true;
-      while (itens.length) {
-        const sF = pres.addSlide();
-        splitBg(sF);
-        rotulo(sF, 'CONCLUSÃO');
-        titulo2(sF, 'Pontos-Chave ', 'e Oportunidades');
-        let cy = 1.75;
-        while (itens.length) {
-          const it = itens[0];
-          const disp = PPT_Y_MAX - cy;
-          const fs = pptFonteQueCabe(it.texto, 5.3, disp, 10.5, 9.5, 1.3);
-          if (fs) {
-            const h = pptMedirAltura(it.texto, 5.3, fs, 1.3);
-            sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: it.cor } });
-            sF.addText(it.marca, { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
-            sF.addText(it.texto, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
-            cy += h + 0.25;
-            itens.shift();
-          } else if (cy > 1.8) {
-            break;                                   // não cabe aqui: vai para o próximo slide
-          } else {
-            const pedacos = pptDividirTexto(it.texto, 5.3, disp, 10, 1.3);
-            itens.shift();
-            for (let k = pedacos.length - 1; k >= 0; k--) itens.unshift({ cor: it.cor, marca: it.marca, texto: pedacos[k] });
+        /* 7 — Organização x Volume: texto + tabelas (7 unidades por slide) */
+        const temOV = cli.lista.some(function(u) { return (u.organizacao !== null && u.organizacao !== undefined) || (u.volume !== null && u.volume !== undefined); });
+        if (temOV) {
+          slideTexto('ORGANIZAÇÃO X VOLUME', 'Organização ', 'x Volume', textos.volume_organizacao);
+          const POR_OV = 7;
+          for (let ini = 0; ini < cli.lista.length; ini += POR_OV) {
+            const lote = cli.lista.slice(ini, ini + POR_OV);
+            const sO = pres.addSlide();
+            fullBg(sO);
+            rotuloFull(sO, 'ORGANIZAÇÃO X VOLUME');
+            tituloFull(sO, 'Organização ', 'x Volume' + (ini > 0 ? ' (cont.)' : ''));
+            const cab = ['Unidade', 'Organização', 'Volume (10 = ideal)', 'Média dos dois'].map(function(t, i) {
+              return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
+            });
+            const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
+            const linhas = lote.map(function(u) {
+              return [{ text: pptTruncar(u.unidade, 34), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(u.organizacao), cel(u.volume), cel(u.orgVol)];
+            });
+            if (ini + POR_OV >= cli.lista.length) linhas.push([{ text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(cli.organizacao), cel(cli.volume), cel(cli.orgVol)]);
+            sO.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.6, 1.7, 2.0, 1.7], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+            notaRodape(sO, 'Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).');
           }
         }
-        painelInfo(sF);
-        primeiro = false;
+
+        /* 8 — Um slide por unidade (o texto que não couber continua no slide seguinte) */
+        cli.lista.forEach(function(u) {
+          const txtU = String((textos.unidades && textos.unidades[u.unidade]) || '').trim();
+          const mets = [];
+          if (u.retaguarda !== null && u.retaguarda !== undefined) mets.push(['Retaguarda', u.retaguarda]);
+          if (u.areaVendas !== null && u.areaVendas !== undefined) mets.push(['Área de Vendas', u.areaVendas]);
+          if (u.equipe !== null && u.equipe !== undefined) mets.push(['Equipe de apoio', u.equipe]);
+          if (u.organizacao !== null && u.organizacao !== undefined) mets.push(['Organização', u.organizacao]);
+          if (u.volume !== null && u.volume !== undefined) mets.push(['Volume (10 = ideal)', u.volume]);
+          mets.push(['Variação vs anterior', null]);
+          const yTxt = 2.3 + Math.ceil(mets.length / 2) * 0.42 + 0.1;
+          const hDisp = PPT_Y_MAX - yTxt;
+          let fs = pptFonteQueCabe(txtU, PPT_W_ESQ, hDisp, 10, 8.5, 1.3);
+          const partes = (!txtU || fs) ? [txtU] : pptDividirTexto(txtU, PPT_W_ESQ, hDisp, (fs = 9), 1.3);
+
+          const sU = pres.addSlide();
+          splitBg(sU);
+          rotulo(sU, 'UNIDADE');
+          sU.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+          sU.addText(fmt(u.geral), { x:PPT_X_ESQ, y:1.4, w:1.7, h:0.7, fontSize:36, fontFace:'Calibri', bold:true, color: corHex(u.geral), isTextBox:true, margin:0 });
+          sU.addText((u.faixa ? String(u.faixa).toUpperCase() : '') + '\n' + u.analises + ' análise(s) no período', { x:2.5, y:1.48, w:4.0, h:0.6, fontSize:10, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
+          mets.forEach(function(m, i) {
+            const col = i % 2, row = Math.floor(i / 2);
+            const mx = 0.8 + col * 2.9, my = 2.3 + row * 0.42;
+            const isDelta = m[1] === null;
+            const cor = isDelta ? deltaCor(u.variacao.geral) : corHex(m[1]);
+            sU.addShape(pres.ShapeType.rect, { x:mx, y:my+0.02, w:0.04, h:0.3, fill:{ color: cor } });
+            sU.addText(isDelta ? deltaTxt(u.variacao.geral) : fmt(m[1]), { x:mx+0.14, y:my, w:0.85, h:0.34, fontSize:14, fontFace:'Calibri', bold:true, color: isDelta ? cor : DARK, isTextBox:true, margin:0, valign:'middle' });
+            sU.addText(m[0], { x:mx+1.0, y:my, w:1.75, h:0.34, fontSize:8, fontFace:'Arial', bold:true, color: BODY, isTextBox:true, margin:0, valign:'middle' });
+          });
+          if (partes[0]) sU.addText(partes[0], { x:PPT_X_ESQ, y:yTxt, w:PPT_W_ESQ, h:Math.min(hDisp, pptMedirAltura(partes[0], PPT_W_ESQ, fs, 1.3)), fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+          painelInfo(sU);
+          for (let k = 1; k < partes.length; k++) {
+            const sC = pres.addSlide();
+            splitBg(sC);
+            rotulo(sC, 'UNIDADE (CONT.)');
+            sC.addText(pptTruncar(u.unidade, 70), { x:PPT_X_ESQ, y:0.85, w:PPT_W_ESQ, h:0.5, fontSize:pptTituloFs(pptTruncar(u.unidade, 70), PPT_W_ESQ, 22, 13), fontFace:'Calibri', bold:true, color: DARK, isTextBox:true, margin:0 });
+            const hC = PPT_Y_MAX - 1.6;
+            const partesC = pptDividirTexto(partes[k], PPT_W_ESQ, hC, 11, 1.4);
+            sC.addText(partesC[0], { x:PPT_X_ESQ, y:1.6, w:PPT_W_ESQ, h:Math.min(hC, pptMedirAltura(partesC[0], PPT_W_ESQ, 11, 1.4)), fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
+            painelInfo(sC);
+          }
+        });
+
+        /* 9 — Conclusão: pontos positivos e oportunidades (blocos que não cabem passam ao slide seguinte) */
+        const itens = [];
+        if (textos.pontos_positivos) itens.push({ cor: GREEN, marca: '✓', texto: textos.pontos_positivos });
+        if (textos.oportunidades) itens.push({ cor: ORANGE, marca: '!', texto: textos.oportunidades });
+        let primeiro = true;
+        while (itens.length) {
+          const sF = pres.addSlide();
+          splitBg(sF);
+          rotulo(sF, 'CONCLUSÃO');
+          titulo2(sF, 'Pontos-Chave ', 'e Oportunidades');
+          let cy = 1.75;
+          while (itens.length) {
+            const it = itens[0];
+            const disp = PPT_Y_MAX - cy;
+            const fs = pptFonteQueCabe(it.texto, 5.3, disp, 10.5, 9.5, 1.3);
+            if (fs) {
+              const h = pptMedirAltura(it.texto, 5.3, fs, 1.3);
+              sF.addShape(pres.ShapeType.ellipse, { x:0.8, y:cy, w:0.25, h:0.25, fill:{ color: it.cor } });
+              sF.addText(it.marca, { x:0.8, y:cy, w:0.25, h:0.25, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', isTextBox:true, margin:0 });
+              sF.addText(it.texto, { x:1.15, y:cy-0.05, w:5.3, h:h, fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+              cy += h + 0.25;
+              itens.shift();
+            } else if (cy > 1.8) {
+              break;                                   // não cabe aqui: vai para o próximo slide
+            } else {
+              const pedacos = pptDividirTexto(it.texto, 5.3, disp, 10, 1.3);
+              itens.shift();
+              for (let k = pedacos.length - 1; k >= 0; k--) itens.unshift({ cor: it.cor, marca: it.marca, texto: pedacos[k] });
+            }
+          }
+          painelInfo(sF);
+          primeiro = false;
+        }
+        slideTexto('SUGESTÕES', 'Sugestões de ', 'Evolução', textos.sugestoes);
+
       }
-      slideTexto('SUGESTÕES', 'Sugestões de ', 'Evolução', textos.sugestoes);
+
+      /* ── Grupo (2+ clientes): capa + sumário no início; comparação entre os clientes no final ── */
+      function slideTextoFull(rot, a, b, texto) {
+        texto = String(texto || '').trim();
+        if (!texto) return;
+        const hMax = PPT_Y_MAX - 1.4;
+        let fs = pptFonteQueCabe(texto, 9, hMax, 13, 10.5, 1.35);
+        const partes = fs ? [texto] : pptDividirTexto(texto, 9, hMax, (fs = 11), 1.35);
+        partes.forEach(function(p, i) {
+          const s = pres.addSlide();
+          fullBg(s); rotuloFull(s, rot + (i > 0 ? ' (CONT.)' : '')); tituloFull(s, a, b + (i > 0 ? ' (cont.)' : ''));
+          s.addText(p, { x:0.5, y:1.4, w:9, h:Math.min(hMax, pptMedirAltura(p, 9, fs, 1.35)), fontSize:fs, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.35, valign:'top' });
+        });
+      }
+      function slidesInicioGrupo() {
+        const sc = pres.addSlide();
+        sc.background = { fill: DARK };
+        sc.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.04, fill:{ color: GREEN } });
+        sc.addText([
+          { text:'Análise de ', options:{ color:'FFFFFF', fontSize:30, fontFace:'Calibri', bold:true } },
+          { text:'Performance do Grupo', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
+        ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
+        sc.addText('Apresentação Executiva  ·  ' + g.itens.length + ' clientes', { x:0.8, y:1.85, w:8.4, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
+        const nomes = g.itens.map(function(it, i) { return (i + 1) + '. ' + String(it.cliente.cliente || ''); }).join('\n');
+        sc.addText(periodoTxt, { x:0.8, y:2.4, w:8.4, h:0.3, fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
+        sc.addText(nomes, { x:0.8, y:2.8, w:8.4, h:Math.min(1.3, pptMedirAltura(nomes, 8.4, 11, 1.2)), fontSize:11, fontFace:'Arial', color:'FFFFFF', isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
+        const extra = [g.tipoTxt, g.estabTxt].filter(Boolean).join('  ·  ');
+        if (extra) sc.addText(extra, { x:0.8, y:4.15, w:5.5, h:0.3, fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
+        if (LOGO_APRESENTACAO_DATA_URL) { try { sc.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:6.3, y:4.4, w:3.4, h:0.72 }); } catch(e) {} }
+
+        // sumário: um cliente por linha
+        const POR = 8;
+        for (let ini = 0; ini < g.itens.length; ini += POR) {
+          const sS = pres.addSlide();
+          fullBg(sS); rotuloFull(sS, 'SUMÁRIO'); tituloFull(sS, 'Clientes ', 'do grupo' + (ini > 0 ? ' (cont.)' : ''));
+          const cab = ['Cliente', 'Unidades', 'Análises', 'Nota média'].map(function(t, i) { return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } }; });
+          const linhas = g.itens.slice(ini, ini + POR).map(function(it, k) {
+            const c = it.cliente;
+            return [
+              { text: (ini + k + 1) + '. ' + pptTruncar(c.cliente, 46), options:{ bold:true, color: NAVY, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } },
+              { text: String(c.unidades), options:{ fontSize:10, fontFace:'Arial', align:'center', valign:'middle', color:'333333' } },
+              { text: String(c.analises), options:{ fontSize:10, fontFace:'Arial', align:'center', valign:'middle', color:'333333' } },
+              { text: fmt(c.geral), options:{ bold:true, color: corHex(c.geral), fill:{ color: bgHex(c.geral) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }
+            ];
+          });
+          sS.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[5.0, 1.2, 1.2, 1.6], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+          notaRodape(sS, 'Ordem do arquivo: cada cliente com suas unidades, um após o outro; ao final, a comparação entre os clientes.');
+        }
+      }
+      function slidesComparativoClientes() {
+        const lista = g.itens.map(function(it) { return it.cliente; });
+        const tg = g.textosGrupo || {};
+        slideTextoFull('COMPARAÇÃO ENTRE CLIENTES', 'Comparação entre ', 'Clientes', [tg.resumo, tg.comparativo].filter(Boolean).join('\n\n'));
+
+        // gráfico: nota média por cliente (barras desenhadas com formas; 8 por slide)
+        const comNota = lista.filter(function(c) { return c.geral !== null && c.geral !== undefined; });
+        for (let ini = 0; ini < comNota.length; ini += 8) {
+          const lote = comNota.slice(ini, ini + 8);
+          const sG = pres.addSlide();
+          fullBg(sG); rotuloFull(sG, 'NOTA MÉDIA POR CLIENTE'); tituloFull(sG, 'Nota por ', 'Cliente' + (ini > 0 ? ' (cont.)' : ''));
+          const xNome = 0.5, wNome = 3.0, xTrilho = 3.7, wTrilho = 4.6, yIni = 1.5, passo = 0.42;
+          lote.forEach(function(c, i) {
+            const y = yIni + i * passo;
+            sG.addText(pptTruncar(c.cliente, 50), { x:xNome, y:y, w:wNome, h:0.36, fontSize:10, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, valign:'middle', align:'right' });
+            sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.08, w:wTrilho, h:0.2, fill:{ color:'EEF1F4' }, line:{ color:'EEF1F4', width:0 } });
+            sG.addShape(pres.ShapeType.rect, { x:xTrilho, y:y+0.08, w:Math.max(0.04, wTrilho * c.geral / 10), h:0.2, fill:{ color: corHex(c.geral) }, line:{ color: corHex(c.geral), width:0 } });
+            sG.addText(fmt(c.geral), { x:xTrilho + wTrilho + 0.1, y:y, w:0.7, h:0.36, fontSize:11, fontFace:'Arial', bold:true, color: DARK, isTextBox:true, margin:0, valign:'middle' });
+          });
+          const yEixo = yIni + lote.length * passo + 0.02;
+          [0, 5, 10].forEach(function(v) { sG.addText(String(v), { x:xTrilho + wTrilho * v / 10 - 0.2, y:yEixo, w:0.4, h:0.2, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, align:'center' }); });
+          notaRodape(sG, 'Nota do cliente = média das notas das unidades (0 a 10).');
+        }
+
+        // tabela comparativa (7 clientes por slide)
+        const temOV = lista.some(function(c) { return (c.organizacao !== null && c.organizacao !== undefined) || (c.volume !== null && c.volume !== undefined); });
+        const cols = [['Geral', 'geral'], ['Equipe', 'equipe'], ['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']];
+        if (temOV) { cols.push(['Organização', 'organizacao']); cols.push(['Volume', 'volume']); }
+        const colW = temOV ? [2.2, 0.6, 0.8, 0.8, 1.0, 1.1, 1.1, 0.8, 0.9] : [3.2, 0.8, 1.0, 1.0, 1.2, 1.5, 1.3];
+        const dif = 9 - colW.reduce(function(a, b) { return a + b; }, 0);
+        colW[0] += dif;
+        for (let ini = 0; ini < lista.length; ini += 7) {
+          const lote = lista.slice(ini, ini + 7);
+          const sT = pres.addSlide();
+          fullBg(sT); rotuloFull(sT, 'TABELA COMPARATIVA'); tituloFull(sT, 'Comparativo entre ', 'Clientes' + (ini > 0 ? ' (cont.)' : ''));
+          const cab = ['Cliente', 'Unid.'].concat(cols.map(function(c) { return c[0]; })).concat(['Variação']).map(function(t, i) { return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:9.5, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } }; });
+          const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:10.5, fontFace:'Arial', align:'center', valign:'middle' } }; };
+          const linhas = lote.map(function(c) {
+            return [{ text: pptTruncar(c.cliente, 34), options:{ bold:true, color: NAVY, fontSize:9.5, fontFace:'Arial', align:'left', valign:'middle' } },
+              { text: String(c.unidades), options:{ fontSize:9.5, fontFace:'Arial', align:'center', valign:'middle', color:'333333' } }]
+              .concat(cols.map(function(col) { return cel(c[col[1]]); }))
+              .concat([{ text: deltaTxt(c.variacao.geral), options:{ bold:true, color: deltaCor(c.variacao.geral), fontSize:9.5, fontFace:'Arial', align:'center', valign:'middle' } }]);
+          });
+          sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW: colW, rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
+          notaRodape(sT, 'Nota do cliente = média das unidades · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).');
+        }
+
+        // conclusão do grupo: as três caixas num único slide quando cabem
+        const caixas = [['✓ PONTOS POSITIVOS', tg.pontos_positivos, '2E7D32'], ['! OPORTUNIDADES DE MELHORIA', tg.oportunidades, ORANGE], ['→ SUGESTÕES', tg.sugestoes, NAVY]].filter(function(c) { return c[1]; });
+        if (caixas.length) {
+          const alturas = caixas.map(function(c) { return 0.3 + pptMedirAltura(c[1], 8.6, 11, 1.3) + 0.15; });
+          const soma = alturas.reduce(function(a, b) { return a + b; }, 0);
+          if (soma <= PPT_Y_MAX - 1.4) {
+            const sC = pres.addSlide();
+            fullBg(sC); rotuloFull(sC, 'CONCLUSÃO DO GRUPO'); tituloFull(sC, 'Conclusão ', 'do Grupo');
+            let y = 1.4;
+            caixas.forEach(function(c, i) {
+              sC.addShape(pres.ShapeType.rect, { x:0.5, y:y, w:0.06, h:alturas[i] - 0.1, fill:{ color: c[2] } });
+              sC.addText(c[0], { x:0.7, y:y, w:8.6, h:0.25, fontSize:10, fontFace:'Arial', bold:true, color: c[2], isTextBox:true, margin:0 });
+              sC.addText(c[1], { x:0.7, y:y + 0.28, w:8.6, h:pptMedirAltura(c[1], 8.6, 11, 1.3), fontSize:11, fontFace:'Arial', color: BODY, isTextBox:true, margin:0, lineSpacingMultiple:1.3, valign:'top' });
+              y += alturas[i];
+            });
+          } else {
+            caixas.forEach(function(c) { slideTextoFull('CONCLUSÃO DO GRUPO', c[0].replace(/^\S+\s/, ''), '', c[1]); });
+          }
+        }
+      }
+
+      const multiplos = g.itens.length > 1;
+      if (multiplos) slidesInicioGrupo();
+      g.itens.forEach(function(it) {
+        cli = it.cliente; textos = it.textos || {}; numSecao = 0;
+        slidesDoCliente();
+      });
+      if (multiplos) slidesComparativoClientes();
 
       pres.write('base64').then(resolve).catch(reject);
     } catch (e) {
