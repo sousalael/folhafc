@@ -82,6 +82,8 @@ function doPost(e) {
     else if (action === 'gerarRelatorioAuditoria') { result = gerarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'obterRelatorio') { result = obterRelatorio(data, data.cpf); }
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
+    else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
+    else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -499,7 +501,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-19-r129';
+const VERSAO_SCRIPT = '2026-09-21-r130';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -523,7 +525,8 @@ function doGet(e) {
     'getArquivosInventario', 'gerarComparativoIA', 'buscarUnidadesCliente', 'buscarAnalisesCliente',
     'npsObterPesquisa', 'npsResponder', 'npsAnalise', 'npsExportarPDF', 'npsSalvarApresentacao',
     'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao',
-    'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance'
+    'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance',
+    'enviarPesquisaNps', 'listarProjetosAuditoria'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -3184,27 +3187,7 @@ function enviarRelatorioAuditoria(dados, cpf) {
       Logger.log('Falha ao anexar apresentação ao e-mail (' + d.auditoriaId + '): ' + (errApres.message || String(errApres)));
     }
 
-    // r109: pesquisa NPS — só em análises DURANTE A OPERAÇÃO. Isolado em
-    // try/catch: qualquer falha apenas deixa o link de fora, e o envio da
-    // análise (que já funcionava) segue normalmente.
-    var npsLink = '';
-    var npsIncluido = false;
-    try {
-      if (npsTipoPermiteEnvio(tipoAv)) {
-        npsLink = npsGerarLinkEnvio(d.auditoriaId, cliente, unidade, dataAud, d.email, d.urlBaseApp);
-        npsIncluido = !!npsLink;
-      }
-    } catch (errNps) {
-      Logger.log('Falha ao gerar link NPS (' + d.auditoriaId + '): ' + (errNps.message || String(errNps)));
-      npsLink = '';
-      npsIncluido = false;
-    }
-    var blocoNps = npsLink
-      ? ('<div style="border:2px solid #61CF00;border-radius:12px;padding:18px;margin:24px 0;text-align:center;background:#F7FDF0">'
-        + '<p style="font-size:15px;font-weight:700;color:#002B50;margin:0 0 6px">Sua opinião é muito importante para nós</p>'
-        + '<p style="font-size:13px;line-height:1.6;color:#1A2A3A;margin:0 0 14px">Leva menos de 1 minuto: conte como foi o inventário e como avalia a atuação da nossa equipe.</p>'
-        + '<a href="' + npsLink + '" style="display:inline-block;padding:12px 28px;background:#61CF00;color:#051323;text-decoration:none;border-radius:8px;font-weight:700">Avaliar o serviço</a></div>')
-      : '';
+    // r130: a pesquisa CSAT/NPS NÃO vai mais neste e-mail — tem botão e e-mail próprios (enviarPesquisaNps).
     var assunto = 'Análise de Preparação para Inventário — ' + cliente + ' / ' + unidade;
     var textoAnexos = apresentacaoAnexada
       ? 'A análise completa e a apresentação executiva estão em anexo (PDF).'
@@ -3216,14 +3199,82 @@ function enviarRelatorioAuditoria(dados, cpf) {
       + '<p style="font-size:14px;margin:0"><strong>' + cliente + '</strong> — ' + unidade + '<br>' + dataAud + '</p></div>'
       + '<p style="font-size:14px;line-height:1.7">' + textoAnexos + '</p>'
       + '<p style="text-align:center;margin:24px 0"><a href="' + relMeta.linkHTML + '" style="display:inline-block;padding:12px 28px;background:#002B50;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Ver Análise Online</a></p>'
-      + blocoNps
       + '</div><div style="background:#051323;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
       + '<strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
     MailApp.sendEmail(d.email, assunto, '', { htmlBody:corpoHTML, attachments:anexos, name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' });
     aba.getRange(linha, 15).setValue(d.email);
     aba.getRange(linha, 16).setValue(new Date());
     registrarClienteFC(cliente, unidade, d.email);
-    return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada, npsIncluido: npsIncluido };
+    return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   r130 — ENVIO SEPARADO DA PESQUISA CSAT/NPS
+   O e-mail dos relatórios (enviarRelatorioAuditoria) não leva mais a pesquisa.
+   Este e-mail é só da pesquisa: explica a qual inventário ela se refere
+   (cliente, unidade e data) e traz o link único da página nps.html.
+   Só análises DURANTE A OPERAÇÃO (regra da pesquisa). Só o Diretor envia.
+   ═══════════════════════════════════════════════════════════════════ */
+function enviarPesquisaNps(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem enviar a pesquisa' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
+    var email = String((d && d.email) || '').trim();
+    if (!email || !d.auditoriaId) return { ok: false, erro: 'E-mail e ID obrigatórios' };
+    var aba = getOuCriarAbaAuditoria();
+    var todas = aba.getDataRange().getValues();
+    var achou = false, cliente = '', unidade = '', dataAud = '', tipoAv = '', status = '';
+    for (var i = 1; i < todas.length; i++) {
+      if (todas[i][0] === d.auditoriaId) { achou = true; tipoAv = todas[i][4]; cliente = todas[i][5]; unidade = todas[i][6]; dataAud = todas[i][7]; status = todas[i][9]; break; }
+    }
+    if (!achou) return { ok: false, erro: 'Auditoria não encontrada' };
+    if (status !== 'CONCLUIDO') return { ok: false, erro: 'A pesquisa só pode ser enviada para análises concluídas' };
+    if (!npsTipoPermiteEnvio(tipoAv)) return { ok: false, erro: 'A pesquisa CSAT/NPS só é enviada em análises DURANTE A OPERAÇÃO' };
+    var link = npsGerarLinkEnvio(d.auditoriaId, cliente, unidade, dataAud, email, d.urlBaseApp);
+    if (!link) return { ok: false, erro: 'Não foi possível gerar o link da pesquisa (endereço do app inválido)' };
+    var dataBR = formatarDataBR(dataAud);
+    var assunto = 'Pesquisa de satisfação — inventário ' + cliente + ' / ' + unidade + (dataBR ? ' (' + dataBR + ')' : '');
+    var corpoHTML = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
+      + '<div style="background:#051323;padding:20px 24px;text-align:center"><span style="color:#61CF00;font-weight:700;font-size:18px">FORMULA CODE</span></div>'
+      + '<div style="padding:32px 24px;background:#FFF">'
+      + '<p style="font-size:15px;line-height:1.8;margin:0 0 16px">Olá! Esta é a pesquisa de satisfação referente ao inventário realizado na unidade <strong>' + perfEsc(unidade) + '</strong> (' + perfEsc(cliente) + ')' + (dataBR ? ', em <strong>' + dataBR + '</strong>' : '') + '.</p>'
+      + '<div style="background:#F4F6F8;padding:16px;border-radius:10px;margin:20px 0"><p style="font-size:12px;color:#6B7B8D;margin:0 0 4px">INVENTÁRIO AVALIADO</p>'
+      + '<p style="font-size:14px;margin:0"><strong>' + perfEsc(cliente) + '</strong> — ' + perfEsc(unidade) + (dataBR ? '<br>' + dataBR : '') + '</p></div>'
+      + '<div style="border:2px solid #61CF00;border-radius:12px;padding:18px;margin:24px 0;text-align:center;background:#F7FDF0">'
+      + '<p style="font-size:15px;font-weight:700;color:#002B50;margin:0 0 6px">Sua opinião é muito importante para nós</p>'
+      + '<p style="font-size:13px;line-height:1.6;color:#1A2A3A;margin:0 0 14px">Leva menos de 1 minuto: conte como foi esse inventário, qual o seu grau de satisfação e se recomendaria a Formula Code.</p>'
+      + '<a href="' + link + '" style="display:inline-block;padding:12px 28px;background:#61CF00;color:#051323;text-decoration:none;border-radius:8px;font-weight:700">Responder a pesquisa</a></div>'
+      + '</div><div style="background:#051323;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
+      + '<strong style="color:#61CF00">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
+    MailApp.sendEmail(email, assunto, '', { htmlBody: corpoHTML, name: 'Formula Code — Pesquisa de Satisfação', replyTo: 'lael@formulacode.tec.br' });
+    try { registrarClienteFC(cliente, unidade, email); } catch (eReg) { Logger.log('registrarClienteFC (pesquisa): ' + eReg.message); }
+    return { ok: true, mensagem: 'Pesquisa enviada para ' + email };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* r130 — lista de projetos (aba Projetos) para o preenchimento da avaliação.
+   Cliente > Unidade > Data. Qualquer status; do mais recente para o mais antigo. */
+function listarProjetosAuditoria(dados, cpf) {
+  try {
+    var perfil = getPerfilPorCPF(cpf);
+    if (perfil !== 'DIRETOR' && perfil !== 'SUPERVISOR') return { ok: false, erro: 'Acesso restrito' };
+    var linhas = getSheet('Projetos').getDataRange().getDisplayValues();
+    var vistos = {}, lista = [];
+    for (var i = 1; i < linhas.length; i++) {
+      var r = linhas[i];
+      var cli = String(r[1] || '').replace(/\s+/g, ' ').trim();
+      var uni = String(r[2] || '').replace(/\s+/g, ' ').trim();
+      var m = String(r[0] || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!cli || !uni || !m) continue;
+      var iso = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+      var chave = iso + '|' + fcChave(cli) + '|' + fcChave(uni);
+      if (vistos[chave]) continue;
+      vistos[chave] = 1;
+      lista.push({ data: iso, cliente: cli, unidade: uni, status: String(r[3] || '').trim() });
+    }
+    lista.sort(function (a, b) { return a.data < b.data ? 1 : (a.data > b.data ? -1 : 0); });
+    return { ok: true, projetos: lista };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
@@ -4791,6 +4842,11 @@ function npsPastaExportacao() {
   if (it.hasNext()) raiz = it.next(); else raiz = DriveApp.createFolder('NPS_FC');
   return raiz;
 }
+// r130: sufixo opcional (Visao_Geral, Detalhamento, Completa) para distinguir os arquivos de cada exportação
+function npsSufixoExportacao(s) {
+  var t = String(s || '').replace(/[^A-Za-z0-9_]/g, '').substring(0, 30);
+  return t ? '_' + t : '';
+}
 function npsNomeExportacao(prefixo) {
   return prefixo + '_' + perfHoje() + '_' + Utilities.formatDate(new Date(), 'America/Fortaleza', 'HHmmss');
 }
@@ -4799,7 +4855,7 @@ function npsMontarHTMLTexto(t) {
   var h = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + perfEsc(t.titulo || 'Análise CSAT/NPS') + ' — Formula Code</title>'
     + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#F4F6F8;color:#1A2A3A;line-height:1.6;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:800px;margin:0 auto;background:#FFF}table{border-collapse:collapse;width:100%}@media print{body{background:#FFF}}</style></head><body><div class="page">';
   h += '<table><tr><td style="padding:24px 32px;background:#051323"><img src="data:image/png;base64,' + PERF_LOGO_PNG_B64 + '" style="height:48px" alt="FC"></td>'
-    + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise CSAT / NPS<br>Uso interno da diretoria</td></tr></table>';
+    + '<td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#051323">Análise CSAT / NPS' + (t.rotulo ? ' — ' + perfEsc(t.rotulo) : '') + '<br>Uso interno da diretoria</td></tr></table>';
   h += '<div style="padding:14px 32px;background:#002B50;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Recorte analisado</div><div style="font-size:13px;font-weight:700">' + perfEsc(t.contexto || '') + '</div></div>';
   var kp = (t.kpis || []).slice(0, 4);
   if (kp.length) {
@@ -4816,6 +4872,18 @@ function npsMontarHTMLTexto(t) {
   (t.secoes || []).forEach(function (sec) {
     h += '<div style="padding:16px 32px 4px"><div style="font-size:13px;font-weight:700;color:#002B50;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;border-left:4px solid #61CF00;padding-left:8px">' + perfEsc(sec.h) + '</div>';
     (sec.paragrafos || []).forEach(function (p) { h += '<p style="font-size:13px;line-height:1.8;margin:0 0 8px">' + perfEsc(p) + '</p>'; });
+    // r130: tabela opcional dentro da seção (matriz do diagnóstico, resultado por unidade, evolução por mês)
+    if (sec.tabela && sec.tabela.cab && sec.tabela.linhas && sec.tabela.linhas.length) {
+      h += '<table style="margin:6px 0 12px;font-size:11px;border:1px solid #E2E8F0"><thead><tr>';
+      sec.tabela.cab.forEach(function (c, ci) { h += '<th style="background:#002B50;color:#FFF;padding:6px 8px;text-align:' + (ci === 0 ? 'left' : 'center') + ';font-size:10px">' + perfEsc(c) + '</th>'; });
+      h += '</tr></thead><tbody>';
+      sec.tabela.linhas.forEach(function (lin) {
+        h += '<tr style="page-break-inside:avoid">';
+        lin.forEach(function (v, ci) { h += '<td style="padding:5px 8px;border-top:1px solid #E2E8F0;text-align:' + (ci === 0 ? 'left' : 'center') + '">' + perfEsc(v) + '</td>'; });
+        h += '</tr>';
+      });
+      h += '</tbody></table>';
+    }
     h += '</div>';
   });
   h += '<div style="padding:18px 32px 24px;font-size:10px;color:#9AA7B4">Análise gerada automaticamente por regras, a partir das respostas do recorte filtrado. Documento interno — Formula Code.</div>';
@@ -4829,7 +4897,7 @@ function npsExportarPDF(dados, cpf) {
     if (!d.texto || !d.texto.secoes || !d.texto.secoes.length) return { ok: false, erro: 'Não há texto de análise para exportar.' };
     var html = npsMontarHTMLTexto(d.texto);
     var pasta = npsPastaExportacao();
-    var base = npsNomeExportacao('Analise_CSAT_NPS');
+    var base = npsNomeExportacao('Analise_CSAT_NPS' + npsSufixoExportacao(d.sufixo));
     var arquivo = pasta.createFile(base + '.html', html, 'text/html');
     arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var pdfBlob = arquivo.getAs('application/pdf');
@@ -4850,7 +4918,7 @@ function npsSalvarApresentacao(dados, cpf) {
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
     var pasta = npsPastaExportacao();
-    var base = npsNomeExportacao('Apresentacao_CSAT_NPS');
+    var base = npsNomeExportacao('Apresentacao_CSAT_NPS' + npsSufixoExportacao(d.sufixo));
     var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
     var bytes = Utilities.base64Decode(d.pptxBase64);
     var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomePptx);
@@ -4878,26 +4946,33 @@ function contarAnalisadasPerformance(dados, cpf) {
     if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     var f = perfFiltroDe(d);
+    // r130: os 2 cards do topo são POR TIPO (Supermercado e Farmácia); por isso o filtro de tipo de estabelecimento não se aplica aqui.
+    var f2 = {};
+    Object.keys(f).forEach(function (k) { f2[k] = f[k]; });
+    f2.estab = '';
+    var vazio = function () { return { clientes: 0, unidades: 0, analises: 0 }; };
     var aba = getOuCriarAbaAuditoria();
     var ult = aba.getLastRow();
-    if (ult < 2) return { ok: true, totais: { clientes: 0, unidades: 0, analises: 0 } };
+    if (ult < 2) return { ok: true, totais: { clientes: 0, unidades: 0, analises: 0, porTipo: { SUPERMERCADO: vazio(), FARMACIA: vazio() } } };
     var linhas = aba.getRange(2, 1, ult - 1, 10).getValues();
-    var colTipo = null;   // r127: coluna 20 (TipoEstabelecimento); linhas sem valor = Supermercado
-    if (f.estab && aba.getMaxColumns() >= 20) colTipo = aba.getRange(2, 20, ult - 1, 1).getValues();
-    var cl = {}, un = {}, n = 0;
+    var colTipo = null;   // coluna 20 (TipoEstabelecimento); linhas sem valor = Supermercado
+    if (aba.getMaxColumns() >= 20) colTipo = aba.getRange(2, 20, ult - 1, 1).getValues();
+    var acc = { todos: { cl: {}, un: {}, n: 0 }, SUPERMERCADO: { cl: {}, un: {}, n: 0 }, FARMACIA: { cl: {}, un: {}, n: 0 } };
     linhas.forEach(function (row, idx) {
       if (String(row[9]) !== 'CONCLUIDO') return;
       var c = fcLimparNome(row[5]), u = fcLimparNome(row[6]);
       if (!c || !u) return;
       var tp = colTipo ? String(colTipo[idx][0] || '').toUpperCase() : '';
-      var item = { cliente: c, unidade: u, tipo: String(row[4] || ''), tipoEst: tp === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO', dataAuditoria: extrairDataISO(row[7]) };
-      if (!perfPassa(item, f)) return;
-      n++;
-      var ck = fcChave(c);
-      cl[ck] = 1;
-      un[ck + '|' + fcChave(u)] = 1;
+      var tipoEst = tp === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO';
+      var item = { cliente: c, unidade: u, tipo: String(row[4] || ''), tipoEst: tipoEst, dataAuditoria: extrairDataISO(row[7]) };
+      if (!perfPassa(item, f2)) return;
+      var ck = fcChave(c), uk = ck + '|' + fcChave(u);
+      [acc.todos, acc[tipoEst]].forEach(function (a) { a.n++; a.cl[ck] = 1; a.un[uk] = 1; });
     });
-    return { ok: true, totais: { clientes: Object.keys(cl).length, unidades: Object.keys(un).length, analises: n } };
+    var resumo = function (a) { return { clientes: Object.keys(a.cl).length, unidades: Object.keys(a.un).length, analises: a.n }; };
+    var out = resumo(acc.todos);
+    out.porTipo = { SUPERMERCADO: resumo(acc.SUPERMERCADO), FARMACIA: resumo(acc.FARMACIA) };
+    return { ok: true, totais: out };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 

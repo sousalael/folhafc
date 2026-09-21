@@ -239,6 +239,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .nps-grid.k3 .nps-card{grid-column:span 1;min-width:0}
 .nps-grid.k3 .nps-num-s{font-size:24px}
 .nps-grid.k3 .nps-rot{font-size:9px;line-height:1.25}
+/* r130: 2 cards no topo (Supermercado / Farmácia); cards de NPS, CSAT e Respostas ficam na aba CSAT/NPS */
+.nps-grid.k2{grid-template-columns:repeat(2,1fr)}
+.nps-grid.k2 .nps-card{grid-column:span 1;min-width:0}
+.nps-grid.k2 .nps-num-s{font-size:32px}
+.nps-grid.k2 .nps-rot{font-size:10px;line-height:1.25}
+.nps-grid.k3 .nps-num{font-size:30px}
+.nps-secao-t{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--navy);margin:18px 2px 8px;padding-left:8px;border-left:4px solid var(--green)}
+.nps-exporta{background:var(--white);border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.nps-exporta .rot{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-light);margin:0 0 6px}
+.nps-exporta .pf-acoes{grid-template-columns:1fr 1fr;margin-bottom:10px}
+.nps-exporta .pf-acoes:last-child{margin-bottom:0}
+.proj-datas{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.proj-dica{font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.4}
 .an-placar{display:grid;grid-template-columns:1fr;gap:14px}
 .an-medidor{position:relative;height:14px;border-radius:8px;background:linear-gradient(90deg,#E05252 0%,#E05252 50%,#D4A017 50%,#D4A017 75%,#61CF00 75%,#2E7D32 100%);margin:22px 0 4px}
 .an-medidor i{position:absolute;top:-6px;width:4px;height:26px;background:var(--navy);border-radius:2px;transform:translateX(-2px)}
@@ -417,7 +430,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r129';
+const VERSAO = 'r130';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -928,10 +941,11 @@ async function renderTelaInicial(aba) {
     for (const c in det) { state.unidades[c] = det[c].unidades || []; state.emailsCliente = state.emailsCliente || {}; for (const u in det[c].emails) state.emailsCliente[c+'|'+u] = det[c].emails[u]; }
   }
   state.rascunhos = rascunhos;
+  state.projetosAudErro = '';   // r130: ao voltar para a tela inicial, uma falha anterior ao carregar os projetos pode ser tentada de novo
   hideLoading();
 
-  // r114: sem o card de título. Para o Diretor, os 4 cards (clientes/unidades, NPS, CSAT, respostas)
-  // ficam fixos no topo, sempre visíveis, e abrem por padrão no MTD (mês atual).
+  // r130: sem o card de título. Para o Diretor, só 2 cards fixos no topo (unidades analisadas de Supermercado e de Farmácia).
+  // Os cards de NPS, CSAT e Respostas passaram para a aba CSAT/NPS.
   state.abaHome = aba || state.abaHome || 'preench';
   const ehDiretor = state.perfil === 'DIRETOR';
 
@@ -947,7 +961,7 @@ async function renderTelaInicial(aba) {
       <div id="abaConteudo"></div>
     </div>`;
   mostrarAbaHome(state.abaHome);
-  if (ehDiretor) { npsCarregarCards(); if (!state.pfContagem) pfCarregarContagem(); else npsRedesenharCards(); }
+  if (ehDiretor) { if (!state.pfContagem) pfCarregarContagem(); else npsRedesenharCards(); }
 }
 
 // Aba "Preenchimento": os mesmos cards que já existiam (Nova Avaliação + rascunhos).
@@ -993,7 +1007,7 @@ function mostrarAbaHome(aba) {
   if (!c) return;
   if (aba === 'hist') carregarHistoricoAba();
   else if (aba === 'perf') carregarPerformanceAba();
-  else if (aba === 'nps') npsRenderAba();
+  else if (aba === 'nps') { if (!state.npsDados && !state.npsCarregando) npsCarregarCards(); npsRenderAba(); }   // r130: só busca ao abrir a aba
   else c.innerHTML = htmlAbaPreenchimento();
 }
 
@@ -1136,8 +1150,119 @@ function renderFormulario() {
 }
 
 /* ── IDENTIFICAÇÃO ── */
+/* r130: Cliente e Unidade vêm de listas suspensas alimentadas pela aba Projetos (Cliente > Unidade, filtros restritivos).
+   Ao escolher a unidade, a data da auditoria assume a data do projeto (a mais recente daquele cliente/unidade),
+   mas continua editável. Se a lista de projetos não puder ser carregada, o formulário volta aos campos de digitação. */
+async function carregarProjetosAud(forcar) {
+  if (state.projetosAudCarregando) return;
+  if (!forcar && state.projetosAud && state.projetosAudTs && (Date.now() - state.projetosAudTs) < 120000) return;
+  state.projetosAudCarregando = true;
+  const r = await apiCall('listarProjetosAuditoria', {});
+  state.projetosAudCarregando = false;
+  if (r && r.ok) { state.projetosAud = r.projetos || []; state.projetosAudTs = Date.now(); state.projetosAudErro = ''; }
+  else { state.projetosAudErro = (r && r.erro) || 'falha de conexão'; if (!state.projetosAud) state.projetosAudTs = 0; }
+  const sec = SECOES[state.secaoAtual];
+  if (sec && sec.tipo === 'identificacao' && $('.stepper-bar')) renderFormulario();
+}
+function projClientes() {
+  const mapa = {};
+  (state.projetosAud || []).forEach(p => { const k = fcChave(p.cliente); if (!mapa[k]) mapa[k] = p.cliente; });   // lista vem do mais recente: vale a grafia mais nova
+  return Object.keys(mapa).map(k => mapa[k]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+function projUnidades(cliente) {
+  const ck = fcChave(cliente);
+  if (!ck) return [];
+  const mapa = {};
+  (state.projetosAud || []).forEach(p => { if (fcChave(p.cliente) !== ck) return; const uk = fcChave(p.unidade); if (!mapa[uk]) mapa[uk] = p.unidade; });
+  return Object.keys(mapa).map(k => mapa[k]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+function projDatas(cliente, unidade) {
+  const ck = fcChave(cliente), uk = fcChave(unidade);
+  if (!ck || !uk) return [];
+  const datas = [];
+  (state.projetosAud || []).forEach(p => { if (fcChave(p.cliente) === ck && fcChave(p.unidade) === uk && datas.indexOf(p.data) === -1) datas.push(p.data); });
+  return datas.sort().reverse();
+}
+function escolherClienteProj(valor) {
+  state.identificacao.cliente = valor;
+  state.identificacao.unidade = '';
+  renderFormulario();
+}
+function escolherUnidadeProj(valor) {
+  state.identificacao.unidade = valor;
+  const datas = projDatas(state.identificacao.cliente, valor);
+  if (datas.length) state.identificacao.data_auditoria = datas[0];   // data do projeto (a mais recente); pode ser trocada
+  renderFormulario();
+}
+function escolherDataProj(iso) {
+  state.identificacao.data_auditoria = iso;
+  renderFormulario();
+}
+function opcoesSelectProj(lista, atual, rotuloVazio) {
+  const ak = fcChave(atual);
+  let achou = false;
+  let html = `<option value="">${rotuloVazio}</option>` + lista.map(x => {
+    const sel = ak && fcChave(x) === ak;
+    if (sel) achou = true;
+    return `<option value="${esc(x)}"${sel ? ' selected' : ''}>${esc(x)}</option>`;
+  }).join('');
+  if (ak && !achou) html += `<option value="${esc(atual)}" selected>${esc(atual)} (fora da lista de projetos)</option>`;   // análise antiga: não perde o valor já salvo
+  return html;
+}
+
 function renderIdentificacao(secao) {
   const v = state.identificacao;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const agora = Date.now();
+  if (!state.projetosAudCarregando && (!state.projetosAud || !state.projetosAudTs || (agora - state.projetosAudTs) > 120000) && !state.projetosAudErro) carregarProjetosAud();
+  const carregandoProj = !state.projetosAud && !state.projetosAudErro;
+  const usaLista = !!state.projetosAud;   // sem a lista (erro/servidor antigo), volta aos campos de digitação
+  let blocoClienteUnidade;
+  if (usaLista) {
+    const unidades = projUnidades(v.cliente);
+    blocoClienteUnidade = `
+      <div class="campo-input">
+        <label>Cliente</label>
+        <select onchange="escolherClienteProj(this.value)">${opcoesSelectProj(projClientes(), v.cliente, 'Selecione o cliente...')}</select>
+      </div>
+
+      <div class="campo-input">
+        <label>Unidade</label>
+        <select onchange="escolherUnidadeProj(this.value)"${v.cliente ? '' : ' disabled'}>${opcoesSelectProj(unidades, v.unidade, v.cliente ? 'Selecione a unidade...' : 'Escolha o cliente primeiro')}</select>
+        ${v.cliente && !unidades.length ? '<div class="proj-dica">Este cliente não tem projeto com unidade cadastrada na aba Projetos.</div>' : ''}
+      </div>`;
+  } else {
+    blocoClienteUnidade = `
+      ${carregandoProj ? '<div class="proj-dica" style="margin:0 0 10px">Carregando a lista de projetos…</div>' : (state.projetosAudErro ? '<div class="proj-dica" style="margin:0 0 10px;color:#E05252">Não foi possível carregar a lista de projetos (' + esc(state.projetosAudErro) + '). Digite o cliente e a unidade.</div>' : '')}
+      <div class="campo-input">
+        <label>Cliente</label>
+        <input type="text" list="listaClientes" value="${esc(v.cliente || '')}" placeholder="Digite ou selecione o cliente"
+               oninput="setIdent('cliente',this.value)" onchange="setIdent('cliente',this.value)">
+        <datalist id="listaClientes">
+          ${state.clientes.map(c => `<option value="${esc(c)}">`).join('')}
+        </datalist>
+      </div>
+
+      <div class="campo-input">
+        <label>Unidade</label>
+        <input type="text" list="listaUnidades" value="${esc(v.unidade || '')}" placeholder="Digite ou selecione a unidade"
+               oninput="setIdent('unidade',this.value)" onchange="setIdent('unidade',this.value)">
+        <datalist id="listaUnidades">
+          ${unidadesDoCliente(v.cliente).map(u => `<option value="${esc(u)}">`).join('')}
+        </datalist>
+      </div>`;
+  }
+
+  // datas dos projetos desse cliente/unidade (a data do projeto é sugerida, mas pode ser trocada)
+  const datasProj = usaLista ? projDatas(v.cliente, v.unidade) : [];
+  const dataAtual = v.data_auditoria || hoje;
+  let dicaData = '';
+  if (datasProj.length) {
+    const chips = datasProj.slice(0, 8).map(d => `<button type="button" class="nps-chip-filtro${d === dataAtual ? ' ativo' : ''}" onclick="escolherDataProj('${d}')">${npsDataBR(d)}</button>`).join('');
+    dicaData = `<div class="proj-datas"><span class="proj-dica" style="margin:0">Data do projeto:</span>${chips}</div>` +
+      (datasProj.indexOf(dataAtual) === -1 ? '<div class="proj-dica">Data alterada manualmente (diferente da data do projeto).</div>' : '');
+  }
+
   return `
     <div class="secao-card">
       <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
@@ -1153,33 +1278,18 @@ function renderIdentificacao(secao) {
         </select>
       </div>
 
-      <div class="campo-input">
-        <label>Cliente</label>
-        <input type="text" list="listaClientes" value="${v.cliente||''}" placeholder="Digite ou selecione o cliente"
-               oninput="setIdent('cliente',this.value)" onchange="setIdent('cliente',this.value)">
-        <datalist id="listaClientes">
-          ${state.clientes.map(c => `<option value="${c}">`).join('')}
-        </datalist>
-      </div>
-
-      <div class="campo-input">
-        <label>Unidade</label>
-        <input type="text" list="listaUnidades" value="${v.unidade||''}" placeholder="Digite ou selecione a unidade"
-               oninput="setIdent('unidade',this.value)" onchange="setIdent('unidade',this.value)">
-        <datalist id="listaUnidades">
-          ${unidadesDoCliente(v.cliente).map(u => `<option value="${u}">`).join('')}
-        </datalist>
-      </div>
+      ${blocoClienteUnidade}
 
       <div class="campo-input">
         <label>Data da Auditoria</label>
-        <input type="date" value="${v.data_auditoria||new Date().toISOString().slice(0,10)}"
-               onchange="setIdent('data_auditoria',this.value)">
+        <input type="date" value="${esc(dataAtual)}"
+               onchange="setIdent('data_auditoria',this.value)${usaLista ? ';renderFormulario()' : ''}">
+        ${dicaData}
       </div>
 
       <div class="campo-input">
         <label>Responsável do Cliente</label>
-        <input type="text" value="${v.responsavel_cliente||''}" placeholder="Nome do responsável na unidade"
+        <input type="text" value="${esc(v.responsavel_cliente || '')}" placeholder="Nome do responsável na unidade"
                oninput="setIdent('responsavel_cliente',this.value)">
       </div>
     </div>`;
@@ -1824,11 +1934,16 @@ function histRender() {
 function histItemConcluido(a, isDiretor) {
     let botoes = '';
     if (isDiretor) {
+      // r130: o envio dos relatórios e o envio da pesquisa CSAT/NPS são botões separados (a pesquisa só existe em análises DURANTE A OPERAÇÃO)
+      const permitePesquisa = String(a.tipoAvaliacao || '').toUpperCase().indexOf('DURANTE') !== -1;
       botoes = `
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn-fc btn-fc-navy" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','html')">📄 HTML</button>
           <button class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','pdf')">📥 PDF</button>
-          <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ E-mail</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ Enviar relatórios</button>
+          ${permitePesquisa ? `<button class="btn-fc btn-fc-green" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvioPesquisa('${a.id}')">📊 Enviar pesquisa CSAT/NPS</button>` : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="btn-fc" style="width:auto;flex:1;padding:6px;font-size:11px;background:#E8EAF6;color:var(--navy)" onclick="gerarApresentacaoVariante('${a.id}','${a.cliente}','${a.unidade}','detalhada')">🎬 Gerar Apresentação (PPTX+PDF)</button>
@@ -1945,12 +2060,12 @@ function npsCorValor(n) {
 }
 function npsCorNota(n) { return n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252'); }
 
-// r116: o painel superior mostra SOMENTE os 4 cards. Os filtros ficam na aba CSAT/NPS e controlam os cards.
+// r130: o painel superior mostra SOMENTE os 2 cards de unidades analisadas (Supermercado e Farmácia).
+// Os filtros e os cards de NPS/CSAT/Respostas ficam na aba CSAT/NPS.
 function htmlPainelNps() {
-  if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
   return `
     <div class="nps-painel" id="npsPainel">
-      <div class="nps-grid k4 carregando" id="npsCards">${htmlCardsNps(null)}</div>
+      <div class="nps-grid k2" id="npsCards">${htmlCardsNps()}</div>
     </div>`;
 }
 
@@ -2027,42 +2142,40 @@ function npsRotuloFiltro() {
 }
 
 async function npsCarregarCards() {
-  const box = $('#npsCards');
-  if (!box) return;
+  if (!state.npsFiltro) state.npsFiltro = npsFiltroInicial();
   const f = state.npsFiltro;
   const iv = npsIntervalo(f);
   const req = state.npsReq = (state.npsReq || 0) + 1;
-  box.classList.add('carregando');
+  state.npsCarregando = true;
+  const caixa = $('#csatCards');
+  if (caixa) caixa.classList.add('carregando');
   const r = await apiCall('npsAnalise', { clientes: f.clientes, unidades: f.unidades, supervisores: f.supervisores || [], de: iv.de, ate: iv.ate });
-  const boxAtual = $('#npsCards');
-  if (req !== state.npsReq || !boxAtual) return;   // resposta antiga ou tela já trocada
-  boxAtual.classList.remove('carregando');
+  if (req !== state.npsReq) return;   // resposta antiga (chegou depois de um filtro mais novo)
   if (!r.ok) {
+    state.npsCarregando = false;
     state.npsDados = null;
-    state.npsErro = true;
     const naoPublicado = /nao reconhecida|não reconhecida/i.test(String(r.erro || ''));
-    boxAtual.style.display = 'block';
-    boxAtual.innerHTML = '<div class="nps-erro">' + (naoPublicado
+    state.npsErroMsg = naoPublicado
       ? 'O script do servidor ainda não tem o módulo NPS. Publique a nova versão no Apps Script (Implantar → Gerenciar implantações → Nova versão).'
-      : 'Não foi possível carregar o NPS: ' + esc(r.erro || 'falha de conexão')) + '</div>';
+      : 'Não foi possível carregar o CSAT/NPS: ' + (r.erro || 'falha de conexão');
+    if (state.abaHome === 'nps') npsRenderAba();
     return;
   }
-  boxAtual.style.display = '';
-  state.npsErro = false;
+  state.npsErroMsg = '';
   // r127: lista de supervisores do recorte; quem saiu da lista (ex.: trocou de cliente) deixa de filtrar
   state.npsSupervisores = r.supervisoresDisponiveis || [];
   const supAntes = (f.supervisores || []).length;
   f.supervisores = (f.supervisores || []).filter(x => state.npsSupervisores.indexOf(x) !== -1);
   if (f.supervisores.length !== supAntes) { npsCarregarCards(); return; }
+  state.npsCarregando = false;
   state.npsDados = r;
-  boxAtual.innerHTML = htmlCardsNps(r);
-  if (state.abaHome === 'nps') npsRenderAba();   // r114: a aba CSAT/NPS acompanha o filtro
+  if (state.abaHome === 'nps') npsRenderAba();   // a aba CSAT/NPS acompanha o filtro
 }
 
-// r118: redesenha os 4 cards com o que já está em memória (sem nova chamada ao servidor)
+// r130: redesenha os 2 cards do topo com o que já está em memória (sem nova chamada ao servidor)
 function npsRedesenharCards() {
   const box = $('#npsCards');
-  if (box && !state.npsErro) box.innerHTML = htmlCardsNps(state.npsDados || null);
+  if (box) box.innerHTML = htmlCardsNps();
 }
 
 // r118: contagem de clientes/unidades/análises concluídas — usa o filtro APLICADO na aba Performance
@@ -2087,11 +2200,28 @@ const NPS_LINHAS = [['alto', 'CSAT 9–10'], ['medio', 'CSAT 7–8'], ['baixo', 
 const NPS_COLUNAS = [['prom', 'NPS 9–10'], ['neutro', 'NPS 7–8'], ['detr', 'NPS 0–6']];
 function npsCorCsat(n) { return n === null || n === undefined ? '#9AA7B4' : (n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252')); }
 
-// r114: SOMENTE os 4 cards fixos (título, informação principal em destaque e a secundária na linha abaixo).
-// Todo o restante (recomendação, alertas, análise, diagnóstico...) fica na aba CSAT/NPS.
-function htmlCardsNps(r) {
+// r130: os 2 cards fixos do topo — unidades analisadas em destaque e, na segunda linha, a quantidade de clientes.
+// Cada card é de um tipo de estabelecimento (Supermercado / Farmácia). A contagem segue os filtros da aba Performance.
+function htmlCardsNps() {
+  const an = state.pfContagem || null;
+  const pt = an && an.porTipo ? an.porTipo : null;
+  const card = (rotulo, t) => {
+    const un = t ? t.unidades : '—';
+    const sub = t ? (t.clientes + ' cliente' + (t.clientes === 1 ? '' : 's'))
+      : (state.pfContagemErro ? 'indisponível' : (an ? 'publique a nova versão do script' : 'carregando…'));
+    return `
+      <button type="button" class="nps-card" onclick="mostrarAbaHome('perf')">
+        <span class="nps-rot">${rotulo}</span>
+        <span class="nps-num-s">${un}<small> unidade${t && t.unidades === 1 ? '' : 's'}</small></span>
+        <span class="nps-sub">${sub}</span>
+      </button>`;
+  };
+  return card('🛒 Supermercado · analisadas', pt ? pt.SUPERMERCADO : null) + card('💊 Farmácia · analisadas', pt ? pt.FARMACIA : null);
+}
+
+// r130: os cards de NPS, CSAT e Respostas — agora no topo da aba CSAT/NPS (acompanham os filtros dessa aba).
+function htmlCardsCsat(r) {
   const s = r ? r.resumo : null;
-  const an = state.pfContagem || null;   // r118: vem dos filtros da aba Performance (não do filtro NPS)
   const zona = npsZona(s ? s.nps : null);
   const pct = v => (v === null || v === undefined) ? '—' : v + '%';
   const nps = s && s.nps !== null ? s.nps : '—';
@@ -2100,20 +2230,13 @@ function htmlCardsNps(r) {
   const resp = s ? s.respondidas : '—';
   const env = s ? s.enviados : '—';
   const taxa = s && s.taxaResposta !== null ? s.taxaResposta + '% de retorno' : (s ? 'nenhuma pesquisa enviada' : 'carregando…');
-  const cliTxt = an ? an.clientes : '—';
-  const cliSub = an ? an.unidades + ' unidade' + (an.unidades === 1 ? '' : 's') + ' · ' + an.analises + ' análise' + (an.analises === 1 ? '' : 's') : (state.pfContagemErro ? 'indisponível' : 'carregando…');
   return `
-      <button type="button" class="nps-card" onclick="mostrarAbaHome('perf')">
-        <span class="nps-rot">Clientes e unidades analisadas</span>
-        <span class="nps-num-s">${cliTxt}<small> cliente${an && an.clientes === 1 ? '' : 's'}</small></span>
-        <span class="nps-sub">${cliSub}</span>
-      </button>
-      <button type="button" class="nps-card nps-principal" onclick="npsAbrirDetalhe('resumo')">
+      <button type="button" class="nps-card nps-principal" onclick="npsTrocarAba('geral')">
         <span class="nps-rot">Nota NPS</span>
         <span class="nps-num" style="color:${zona.c}">${nps}</span>
         <span class="nps-sub">${zona.t}</span>
       </button>
-      <button type="button" class="nps-card" onclick="npsAbrirDetalhe('resumo')">
+      <button type="button" class="nps-card" onclick="npsTrocarAba('geral')">
         <span class="nps-rot">Nota CSAT</span>
         <span class="nps-num" style="color:${s && s.csatMedio !== null && s.csatMedio !== undefined ? npsCorCsat(s.csatMedio) : '#8899AA'}">${csat}</span>
         <span class="nps-sub">${csatSub}</span>
@@ -2253,17 +2376,25 @@ function npsHtmlAnalise(r) {
     ${barrasDest ? `<div class="nps-bloco"><h4>O que se destacou na operação</h4>${barrasDest}<div class="nps-legenda-faixas">% de quem respondeu o novo modelo (${d.base}).</div></div>` : ''}`;
 }
 
-/* ── DETALHE (r114: agora é a aba "CSAT/NPS", não mais uma folha sobreposta) ── */
+/* ── r130: a aba "CSAT/NPS" tem 2 sub-abas: "Visão geral" (Análise + Resumo + Texto) e "Detalhamento" (Diagnóstico + Por unidade + Respostas) ── */
+// Aceita também os nomes antigos (analise, texto, resumo, diagnostico, unidades, respostas) e leva para a sub-aba/seção certa.
 function npsAbrirDetalhe(aba, chave) {
-  if (!state.npsDados) { toast('Aguarde o carregamento do NPS'); return; }
-  state.npsModal = { aba: aba || 'analise', cat: (aba === 'respostas' && chave) ? chave : 'todas', diag: aba === 'diagnostico' ? (chave || '') : '', soComentario: false };
+  if (!state.npsDados) { toast('Aguarde o carregamento do CSAT/NPS'); return; }
+  const a = aba || 'analise';
+  const nomeAntigoDetalhe = { diagnostico: 'diag', unidades: 'unid', respostas: 'resp', detalhe: '' };
+  const ehDetalhe = Object.prototype.hasOwnProperty.call(nomeAntigoDetalhe, a);
+  state.npsModal = {
+    aba: ehDetalhe ? 'detalhe' : 'geral',
+    cat: (a === 'respostas' && chave) ? chave : 'todas',
+    diag: a === 'diagnostico' ? (chave || '') : '',
+    soComentario: false,
+    ancora: ehDetalhe ? nomeAntigoDetalhe[a] : ''
+  };
   if (state.abaHome === 'nps') npsRenderAba();
   else mostrarAbaHome('nps');
-  const barra = document.querySelector('.abas-home');
-  if (barra && barra.scrollIntoView) barra.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function npsTrocarAba(aba) { state.npsModal.aba = aba; npsRenderAba(); }
+function npsTrocarAba(aba) { if (!state.npsModal) state.npsModal = { aba: 'geral', cat: 'todas', diag: '', soComentario: false, ancora: '' }; state.npsModal.aba = aba; npsRenderAba(); }
 function npsTrocarCat(cat) { state.npsModal.cat = cat; npsRenderAba(); }
 function npsToggleComentario() { state.npsModal.soComentario = !state.npsModal.soComentario; npsRenderAba(); }
 function npsSelecionarDiag(chave) { state.npsModal.diag = (state.npsModal.diag === chave ? '' : chave); npsRenderAba(); }
@@ -2327,6 +2458,10 @@ function npsMontarTexto(r) {
     ev.push('Só há respostas de ' + npsMesRotulo(meses[0].mes) + ', então ainda não é possível comparar a evolução entre meses.');
   }
   add('Evolução no período', ev);
+  if (meses.length) {
+    const secEv = secoes.find(x => x.h === 'Evolução no período');
+    if (secEv) secEv.tabela = { cab: ['Mês', 'Respostas', 'NPS', 'CSAT'], pesos: [2, 1, 1, 1], linhas: meses.map(m => [npsMesRotulo(m.mes), String(m.respostas), npsN1(m.nps), npsN1(m.csat)]) };
+  }
 
   // 4. Alertas
   const al = s.alertas || {};
@@ -2423,40 +2558,112 @@ function npsHtmlTexto(r) {
   const t = npsMontarTexto(r);
   const corpo = t.secoes.map(sec => `<div class="nps-bloco"><h4>${esc(sec.h)}</h4>${sec.paragrafos.map(p => `<p style="font-size:13px;line-height:1.7;margin:0 0 8px;color:var(--text)">${esc(p)}</p>`).join('')}</div>`).join('');
   return `
-    <div class="pf-acoes" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <button type="button" class="pf-acao pdf" onclick="npsExportarPDF()">📄 Exportar PDF</button>
-      <button type="button" class="pf-acao ppt" onclick="npsExportarPPTX()">📽️ Exportar PPTX</button>
-    </div>
     ${corpo}
     <div class="nps-legenda-faixas" style="justify-content:center;text-align:center">Texto gerado automaticamente por regras, a partir das respostas do filtro atual. Uso interno da diretoria.</div>`;
 }
 
-async function npsExportarPDF() {
+/* r130 — texto da aba "Detalhamento" (Diagnóstico + Por unidade + Respostas), no mesmo formato do texto da Visão geral */
+function npsPonto(t) { t = String(t || '').trim(); return /[.!?…]$/.test(t) ? t : t + '.'; }
+
+function npsMontarTextoDetalhe(r) {
+  const s = r.resumo;
+  const secoes = [];
+
+  // 1. Diagnóstico (CSAT x NPS)
+  const dg = {};
+  (r.diagnosticos || []).forEach(d => { dg[d.chave] = d; });
+  if (s.csatRespondidas) {
+    const paras = ['O diagnóstico cruza a satisfação com o inventário (CSAT, nas linhas) com a recomendação (NPS, nas colunas). Base: ' + npsPlural(s.csatRespondidas, 'resposta', 'respostas') + ' do modelo atual da pesquisa.'];
+    const prio = (r.diagnosticos || []).filter(d => d.quantidade && (d.nivel === 'critico' || d.nivel === 'falha' || d.nivel === 'atencao'));
+    if (prio.length) {
+      paras.push('Exigem ação:');
+      prio.forEach(d => paras.push(d.titulo + ' — ' + npsPlural(d.quantidade, 'resposta', 'respostas') + '. ' + npsPonto(d.acao)));
+    } else paras.push('Nenhuma resposta exige ação neste recorte.');
+    secoes.push({
+      h: 'Diagnóstico CSAT x NPS', paragrafos: paras,
+      tabela: {
+        cab: ['CSAT \\ NPS'].concat(NPS_COLUNAS.map(c => c[1])), pesos: [1.2, 2, 2, 2],
+        linhas: NPS_LINHAS.map(l => [l[1]].concat(NPS_COLUNAS.map(c => { const d = dg[l[0] + '_' + c[0]]; return d ? d.quantidade + ' · ' + d.titulo : '—'; })))
+      }
+    });
+  } else {
+    secoes.push({ h: 'Diagnóstico CSAT x NPS', paragrafos: ['Ainda não há respostas do modelo atual da pesquisa (CSAT + NPS) neste recorte. O diagnóstico depende do cruzamento das duas notas.'] });
+  }
+
+  // 2. Resultado por unidade
+  const un = r.porUnidade || [];
+  if (un.length) {
+    secoes.push({
+      h: 'Resultado por unidade',
+      paragrafos: ['Unidades do menor para o maior NPS; as sem resposta aparecem por último. Alerta vermelho = CSAT 1–6 e NPS 0–6. Falha do inventário = CSAT 1–6 e NPS 7–10.'],
+      tabela: {
+        cab: ['Unidade', 'Cliente', 'Resp./env.', 'NPS', 'CSAT', 'Alertas verm.', 'Falhas'], pesos: [2.4, 2, 1, 0.8, 0.8, 1, 0.8],
+        linhas: un.map(u => [u.unidade, u.cliente || '', u.respostas + '/' + u.enviados, npsN1(u.nps), npsN1(u.csat), String(u.criticos || 0), String(u.falhas || 0)])
+      }
+    });
+  }
+
+  // 3. Respostas recebidas
+  const rs = r.respostas || [];
+  if (rs.length) {
+    const destRot = k => { const it = ((r.destaques || {}).itens || []).find(i => i.chave === k); return it ? it.rotulo : k; };
+    const nomeQ = { apresentacao: 'Apresentação', postura: 'Postura', supervisor: 'Supervisor', mapeamento: 'Mapeamento', horario: 'Horário' };
+    const paras = [npsPlural(rs.length, 'resposta', 'respostas') + ', das mais recentes para as mais antigas' + (s.respondidas > rs.length ? ' (mostrando as ' + rs.length + ' mais recentes de ' + s.respondidas + ')' : '') + '.'];
+    rs.forEach(x => {
+      let p = x.unidade + (x.cliente ? ' — ' + x.cliente : '') + ' · análise de ' + npsDataBR(x.dataAuditoria) + ' · respondida em ' + npsDataBR(x.dataResposta) + ' · ' +
+        ((x.csat !== null && x.csat !== undefined) ? 'CSAT ' + x.csat + ' · ' : '') + 'NPS ' + x.nota + ' (' + x.categoria + ')';
+      if (x.diagnostico) p += ' · ' + x.diagnostico.titulo;
+      p += '. ' + (x.comentario ? 'Comentário: “' + String(x.comentario).replace(/\s+/g, ' ').trim() + '”.' : 'Sem comentário.');
+      if ((x.destaques || []).length) p += ' Pontos que se destacaram: ' + x.destaques.map(destRot).join(', ') + '.';
+      const lg = NPS_QUESITOS_ORDEM.filter(k => x[k]).map(k => nomeQ[k] + ': ' + x[k]);
+      if (lg.length) p += ' Modelo anterior da pesquisa — ' + lg.join('; ') + '.';
+      paras.push(p);
+    });
+    secoes.push({ h: 'Respostas recebidas', paragrafos: paras });
+  }
+  return { secoes };
+}
+
+/* r130 — monta o texto conforme o escopo: 'geral' (Visão geral), 'detalhe' (Detalhamento) ou 'completo' (as duas) */
+function npsMontarTextoEscopo(escopo) {
+  const r = state.npsDados;
+  const t1 = npsMontarTexto(r);
+  let secoes, nome, sufixo, porSup;
+  if (escopo === 'geral') { secoes = t1.secoes; nome = 'Visão geral'; sufixo = 'Visao_Geral'; porSup = t1.porSupervisor; }
+  else if (escopo === 'detalhe') { secoes = npsMontarTextoDetalhe(r).secoes; nome = 'Detalhamento'; sufixo = 'Detalhamento'; porSup = null; }
+  else { secoes = t1.secoes.concat(npsMontarTextoDetalhe(r).secoes); nome = 'Completa'; sufixo = 'Completa'; porSup = t1.porSupervisor; }
+  return { titulo: 'Análise CSAT / NPS — ' + nome, subtitulo: nome, sufixo, contexto: t1.contexto, kpis: t1.kpis, secoes, resumo: t1.resumo, porSupervisor: porSup };
+}
+
+async function npsExportarPDF(escopo) {
+  escopo = escopo || 'completo';
   if (!state.npsDados || !state.npsDados.resumo.respondidas) { toast('Não há respostas neste filtro'); return; }
-  const t = npsMontarTexto(state.npsDados);
+  const t = npsMontarTextoEscopo(escopo);
   showLoading('Gerando o PDF da análise...');
-  const r = await apiCall('npsExportarPDF', { texto: { titulo: t.titulo, contexto: t.contexto, kpis: t.kpis, secoes: t.secoes } });
+  const r = await apiCall('npsExportarPDF', { texto: { titulo: t.titulo, rotulo: t.subtitulo, contexto: t.contexto, kpis: t.kpis, secoes: t.secoes }, sufixo: t.sufixo });
   hideLoading();
   if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha')); return; }
-  pfModalLinks('Análise em PDF pronta', 'A análise de CSAT/NPS foi salva no Drive (pasta NPS_FC).',
+  pfModalLinks('Análise em PDF pronta', 'A análise de CSAT/NPS (' + t.subtitulo.toLowerCase() + ') foi salva no Drive (pasta NPS_FC).',
     [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
 }
 
-async function npsExportarPPTX() {
+async function npsExportarPPTX(escopo) {
+  escopo = escopo || 'completo';
   if (!state.npsDados || !state.npsDados.resumo.respondidas) { toast('Não há respostas neste filtro'); return; }
   const disponivel = await aguardarPptxGenJS();
   if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return; }
+  const t = npsMontarTextoEscopo(escopo);
   let b64;
   try {
     showLoading('Montando a apresentação...');
-    b64 = await montarPptxNps(npsMontarTexto(state.npsDados), state.npsDados);
+    b64 = await montarPptxNps(t, state.npsDados);
   } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message); return; }
   showLoading('Salvando no Drive e convertendo em PDF...');
-  const r = await apiCall('npsSalvarApresentacao', { pptxBase64: b64 });
+  const r = await apiCall('npsSalvarApresentacao', { pptxBase64: b64, sufixo: t.sufixo });
   hideLoading();
   if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha')); return; }
   pfModalLinks('Apresentação pronta',
-    'A apresentação de CSAT/NPS foi salva no Drive (pasta NPS_FC).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
+    'A apresentação de CSAT/NPS (' + t.subtitulo.toLowerCase() + ') foi salva no Drive (pasta NPS_FC).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
     [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
 }
 
@@ -2494,7 +2701,7 @@ function montarPptxNps(t, dados) {
         { text: 'Análise de ', options: { color: 'FFFFFF', fontSize: 30, fontFace: 'Calibri', bold: true } },
         { text: 'CSAT e NPS', options: { color: GREEN, fontSize: 30, fontFace: 'Calibri', bold: true } }
       ], { x: 0.8, y: 0.7, w: 8.4, h: 1.1, isTextBox: true, margin: 0 });
-      s1.addText('Apresentação para a diretoria', { x: 0.8, y: 1.85, w: 6, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
+      s1.addText((t.subtitulo ? t.subtitulo + ' · ' : '') + 'Apresentação para a diretoria', { x: 0.8, y: 1.85, w: 8.4, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
       s1.addText(t.contexto, { x: 0.8, y: 2.45, w: 8.4, h: Math.min(1.2, pptMedirAltura(t.contexto, 8.4, 13, 1.1)), fontSize: 13, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, valign: 'top' });
       if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: 3.2, y: 4.15, w: 3.6, h: 0.94 }); } catch (e) {} }
 
@@ -2524,19 +2731,49 @@ function montarPptxNps(t, dados) {
       s2.addText('Promotores ' + P + '%  ·  Neutros ' + N + '%  ·  Detratores ' + D + '%', { x: 0.5, y: 4.5, w: 9, h: 0.3, fontSize: 10, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0 });
       rodape(s2);
 
-      /* Seções de texto (ordem: visão geral … recomendações) */
+      /* Seções de texto (com tabela opcional: fica no mesmo slide do texto quando cabe; senão, em slides próprios) */
+      function tabelaNoSlide(s, sec, linhasTab, y) {
+        const cabT = sec.tabela.cab;
+        const pesos = (sec.tabela.pesos && sec.tabela.pesos.length === cabT.length) ? sec.tabela.pesos : cabT.map(function (_, i) { return i === 0 ? 2 : 1; });
+        const somaP = pesos.reduce(function (a, b) { return a + b; }, 0);
+        const colW = pesos.map(function (pp) { return 9 * pp / somaP; });
+        const cabRow = cabT.map(function (h) { return { text: h, options: { bold: true, color: 'FFFFFF', fill: { color: NAVY }, fontSize: 10, fontFace: 'Arial', align: 'center' } }; });
+        const rows = [cabRow].concat(linhasTab.map(function (lin) {
+          return lin.map(function (v, ci) { return { text: String(v), options: { fontSize: 9.5, fontFace: 'Arial', align: ci === 0 ? 'left' : 'center', color: '333333' } }; });
+        }));
+        s.addTable(rows, { x: 0.5, y: y, w: 9, colW: colW, border: { type: 'solid', pt: 0.5, color: 'E2E8F0' } });
+      }
       t.secoes.forEach(function (sec) {
-        const texto = sec.paragrafos.join('\n\n');
-        const hMax = PPT_Y_MAX - 1.4;
-        let fs = pptFonteQueCabe(texto, 9, hMax, 13, 10.5, 1.35);
-        const partes = fs ? [texto] : pptDividirTexto(texto, 9, hMax, (fs = 11), 1.35);
-        partes.forEach(function (p, i) {
-          const s = pres.addSlide();
-          fullBg(s); rotulo(s, sec.h + (i > 0 ? ' (cont.)' : ''));
-          titulo(s, sec.h + (i > 0 ? ' ' : ''), i > 0 ? '(cont.)' : '');
-          s.addText(p, { x: 0.5, y: 1.4, w: 9, h: Math.min(hMax, pptMedirAltura(p, 9, fs, 1.35)), fontSize: fs, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35, valign: 'top' });
-          rodape(s);
-        });
+        const temTab = !!(sec.tabela && sec.tabela.cab && sec.tabela.linhas && sec.tabela.linhas.length);
+        let tabelaFeita = false;
+        if (sec.paragrafos && sec.paragrafos.length) {
+          const texto = sec.paragrafos.join('\n\n');
+          const hMax = PPT_Y_MAX - 1.4;
+          let fs = pptFonteQueCabe(texto, 9, hMax, 13, 10.5, 1.35);
+          const partes = fs ? [texto] : pptDividirTexto(texto, 9, hMax, (fs = 11), 1.35);
+          partes.forEach(function (p, i) {
+            const s = pres.addSlide();
+            fullBg(s); rotulo(s, sec.h + (i > 0 ? ' (cont.)' : ''));
+            titulo(s, sec.h + (i > 0 ? ' ' : ''), i > 0 ? '(cont.)' : '');
+            const hTxt = Math.min(hMax, pptMedirAltura(p, 9, fs, 1.35));
+            s.addText(p, { x: 0.5, y: 1.4, w: 9, h: hTxt, fontSize: fs, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35, valign: 'top' });
+            // tabela no mesmo slide quando o texto é curto e as linhas cabem (estimativa conservadora: 0,34 pol por linha)
+            if (temTab && i === partes.length - 1) {
+              const yTab = 1.4 + hTxt + 0.25;
+              if (sec.tabela.linhas.length <= 9 && yTab + 0.34 * (sec.tabela.linhas.length + 1) <= PPT_Y_MAX) { tabelaNoSlide(s, sec, sec.tabela.linhas, yTab); tabelaFeita = true; }
+            }
+            rodape(s);
+          });
+        }
+        if (temTab && !tabelaFeita) {
+          const porSlide = 9;
+          for (let ini = 0; ini < sec.tabela.linhas.length; ini += porSlide) {
+            const s = pres.addSlide();
+            fullBg(s); rotulo(s, sec.h + (ini > 0 ? ' (cont.)' : '')); titulo(s, sec.h, ini > 0 ? ' (cont.)' : '');
+            tabelaNoSlide(s, sec, sec.tabela.linhas.slice(ini, ini + porSlide), 1.4);
+            rodape(s);
+          }
+        }
       });
 
       /* Tabela de supervisores (se houver) */
@@ -2560,31 +2797,61 @@ function montarPptxNps(t, dados) {
   });
 }
 
+// r130: Visão geral = Análise + Resumo + Texto (do número para a narrativa).
+function npsHtmlVisaoGeral(r) {
+  const cab = (n, t) => `<div class="nps-secao-t">${n} · ${t}</div>`;
+  if (!r.resumo.respondidas) return npsHtmlAnalise(r);   // sem respostas: uma única mensagem, em vez de três iguais
+  return cab(1, 'Análise') + npsHtmlAnalise(r) + cab(2, 'Resumo') + npsHtmlResumo(r) + cab(3, 'Texto') + npsHtmlTexto(r);
+}
+
+// r130: Detalhamento = Diagnóstico + Por unidade + Respostas (do quadro geral para o detalhe de cada resposta).
+function npsHtmlDetalhamento(r, st) {
+  const cab = (n, t) => `<div class="nps-secao-t">${n} · ${t}</div>`;
+  return `<div id="nps-sec-diag">${cab(1, 'Diagnóstico')}${npsHtmlDiagnostico(r, st)}</div>
+    <div id="nps-sec-unid">${cab(2, 'Por unidade')}${npsHtmlUnidades(r)}</div>
+    <div id="nps-sec-resp">${cab(3, 'Respostas')}${npsHtmlRespostas(r, st)}</div>`;
+}
+
 function npsRenderAba() {
   const c = $('#abaConteudo');
   if (!c || state.abaHome !== 'nps') return;
   const r = state.npsDados;
   if (!r) {
-    c.innerHTML = htmlFiltrosNps() + '<div class="nps-vazio">Carregando os dados de CSAT/NPS…<br>Se persistir, tente mudar o filtro ou recarregar a página.</div>';
+    const msg = state.npsErroMsg
+      ? '<div class="nps-erro">' + esc(state.npsErroMsg) + '</div>'
+      : '<div class="nps-vazio">Carregando os dados de CSAT/NPS…<br>Se persistir, tente mudar o filtro ou recarregar a página.</div>';
+    c.innerHTML = htmlFiltrosNps() + msg;
     return;
   }
-  if (!state.npsModal) state.npsModal = { aba: 'analise', cat: 'todas', diag: '', soComentario: false };
+  if (!state.npsModal || (state.npsModal.aba !== 'geral' && state.npsModal.aba !== 'detalhe')) state.npsModal = { aba: 'geral', cat: 'todas', diag: '', soComentario: false, ancora: '' };
   const st = state.npsModal;
-  const abas = [['analise', 'Análise'], ['texto', 'Texto'], ['resumo', 'Resumo'], ['diagnostico', 'Diagnóstico'], ['destaques', 'Destaques'], ['unidades', 'Por unidade'], ['respostas', 'Respostas']];
-  let corpo = '';
-  if (st.aba === 'analise') corpo = npsHtmlAnalise(r);
-  else if (st.aba === 'texto') corpo = npsHtmlTexto(r);
-  else if (st.aba === 'resumo') corpo = npsHtmlResumo(r);
-  else if (st.aba === 'diagnostico') corpo = npsHtmlDiagnostico(r, st);
-  else if (st.aba === 'destaques') corpo = npsHtmlDestaques(r);
-  else if (st.aba === 'unidades') corpo = npsHtmlUnidades(r);
-  else corpo = npsHtmlRespostas(r, st);
+  const abas = [['geral', 'Visão geral'], ['detalhe', 'Detalhamento']];
+  const corpo = st.aba === 'detalhe' ? npsHtmlDetalhamento(r, st) : npsHtmlVisaoGeral(r);
+  const nomeAba = st.aba === 'detalhe' ? 'Detalhamento' : 'Visão geral';
   c.innerHTML = htmlFiltrosNps() + `
     <div class="nps-modal-ctx" style="margin:0 2px 8px">${esc(npsRotuloFiltro())} · período pela data da análise</div>
+    <div class="nps-grid k3${state.npsCarregando ? ' carregando' : ''}" id="csatCards">${htmlCardsCsat(r)}</div>
     <div class="nps-subabas" role="tablist">
       ${abas.map(a => `<button type="button" role="tab" class="nps-modal-aba${st.aba === a[0] ? ' ativa' : ''}" onclick="npsTrocarAba('${a[0]}')">${a[1]}</button>`).join('')}
     </div>
+    <div class="nps-exporta">
+      <div class="rot">Exportar esta aba (${nomeAba})</div>
+      <div class="pf-acoes">
+        <button type="button" class="pf-acao pdf" onclick="npsExportarPDF('${st.aba}')">📄 PDF</button>
+        <button type="button" class="pf-acao ppt" onclick="npsExportarPPTX('${st.aba}')">📽️ PPTX</button>
+      </div>
+      <div class="rot">Exportar o conteúdo completo (as 2 abas)</div>
+      <div class="pf-acoes">
+        <button type="button" class="pf-acao pdf" onclick="npsExportarPDF('completo')">📄 PDF completo</button>
+        <button type="button" class="pf-acao ppt" onclick="npsExportarPPTX('completo')">📽️ PPTX completo</button>
+      </div>
+    </div>
     <div>${corpo}</div>`;
+  if (st.ancora) {
+    const el = document.getElementById('nps-sec-' + st.ancora);
+    st.ancora = '';
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 function npsMesRotulo(ym) {
@@ -2704,31 +2971,6 @@ function npsHtmlDiagnostico(r, st) {
     ${detalhe}`;
 }
 
-function npsHtmlDestaques(r) {
-  const d = r.destaques;
-  if (!d.base) return '<div class="nps-vazio">Nenhuma resposta do novo modelo neste filtro.</div>';
-  const barras = d.itens.map(x => {
-    const cor = x.chave === 'outro' ? '#E8872B' : '#61CF00';
-    return `
-    <div class="nps-quesito">
-      <div class="nps-quesito-t">${esc(x.rotulo)}</div>
-      <div class="nps-pilha"><span style="width:${x.pct || 0}%;background:${cor}"></span></div>
-      <div class="nps-quesito-leg"><span><b>${x.quantidade}</b> de ${d.base} (${x.pct}%)</span></div>
-    </div>`;
-  }).join('');
-  const outros = r.respostas.filter(x => (x.destaques || []).indexOf('outro') !== -1);
-  const lista = outros.length ? `
-    <div class="nps-bloco"><h4>Marcaram "Outro"</h4>${outros.map(x => `
-      <div class="nps-resp ${x.categoria === 'Promotor' ? 'p' : (x.categoria === 'Neutro' ? 'n' : 'd')}">
-        <div class="nps-resp-un">${esc(x.unidade)}<small>${esc(x.cliente)} · análise de ${npsDataBR(x.dataAuditoria)}</small></div>
-        ${x.comentario ? `<div class="nps-resp-txt">${esc(x.comentario)}</div>` : '<div class="nps-resp-sem">Sem comentário.</div>'}
-      </div>`).join('')}</div>` : '';
-  return `
-    <div class="nps-bloco"><h4>Pontos que se destacaram na operação</h4>${barras}
-      <div class="nps-legenda-faixas" style="margin-top:8px">Cada cliente pode marcar vários pontos. Base: ${d.base} resposta(s) do novo modelo.</div></div>
-    ${lista}`;
-}
-
 function npsHtmlUnidades(r) {
   if (!r.porUnidade.length) return '<div class="nps-vazio">Nenhuma unidade com pesquisa neste filtro.</div>';
   const linhas = r.porUnidade.map(u => `
@@ -2752,11 +2994,11 @@ function npsHtmlUnidades(r) {
 }
 
 function npsHtmlRespostas(r, st) {
-  const cats = [['todas', 'Todas'], ['acao', 'Exigem ação'], ['Promotor', 'Promotores'], ['Neutro', 'Neutros'], ['Detrator', 'Detratores']];
+  const cats = [['todas', 'Todas'], ['acao', 'Exigem ação'], ['Promotor', 'Promotores'], ['Neutro', 'Neutros'], ['Detrator', 'Detratores'], ['outro', 'Marcaram "Outro"']];
   const chips = cats.map(c => `<button type="button" class="nps-chip-filtro${st.cat === c[0] ? ' ativo' : ''}" onclick="npsTrocarCat('${c[0]}')">${c[1]}</button>`).join('') +
     `<button type="button" class="nps-chip-filtro${st.soComentario ? ' ativo' : ''}" onclick="npsToggleComentario()">Só com comentário</button>`;
   const exigeAcao = x => x.diagnostico && (x.diagnostico.nivel === 'critico' || x.diagnostico.nivel === 'falha');
-  const lista = r.respostas.filter(x => (st.cat === 'todas' || (st.cat === 'acao' ? exigeAcao(x) : x.categoria === st.cat)) && (!st.soComentario || x.comentario));
+  const lista = r.respostas.filter(x => (st.cat === 'todas' || (st.cat === 'acao' ? exigeAcao(x) : (st.cat === 'outro' ? (x.destaques || []).indexOf('outro') !== -1 : x.categoria === st.cat))) && (!st.soComentario || x.comentario));
   const total = r.respostas.length;
   const cortado = r.resumo.respondidas > total ? `<div class="nps-legenda-faixas">Mostrando as ${total} respostas mais recentes.</div>` : '';
   const itens = lista.map(x => {
@@ -2924,7 +3166,7 @@ async function pfBuscar() {
   }
   p.dados = r;
   p.aplicado = JSON.parse(JSON.stringify(f));
-  if (r.totais) { state.pfContagem = { clientes: r.totais.clientes, unidades: r.totais.unidades, analises: r.totais.analises }; state.pfContagemErro = false; npsRedesenharCards(); }   // r118: card 1 acompanha a Performance
+  pfCarregarContagem();   // r130: os 2 cards do topo (Supermercado/Farmácia) acompanham os filtros aplicados na Performance
   p.foco = (f.clientes.length === 1 && r.clientes.some(c => c.cliente === f.clientes[0])) ? f.clientes[0] : '';
   p.textos = null; p.textosChave = ''; p.origemTexto = '';
   pfMarcarPendente();
@@ -3290,17 +3532,31 @@ async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
   }
 
   showLoading('Enviando relatório e apresentação...');
-  // r109: o backend monta o link da pesquisa NPS (só em análises DURANTE A OPERAÇÃO)
-  // a partir do endereço de onde o app está hospedado.
-  const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
-  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email, urlBaseApp });
+  // r130: este e-mail leva só os relatórios; a pesquisa CSAT/NPS tem botão e e-mail próprios (prepararEnvioPesquisa).
+  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email });
   hideLoading();
   if (re.ok) {
-    toast('Relatório e apresentação enviados para ' + email + (re.npsIncluido ? ' (com pesquisa NPS)' : ''));
+    toast('Relatório e apresentação enviados para ' + email);
     verHistorico();
   } else {
     toast('Erro: ' + (re.erro || 'falha'));
   }
+}
+
+// r130: envio SEPARADO da pesquisa CSAT/NPS. O e-mail explica a qual inventário a pesquisa se refere (cliente, unidade e data).
+async function prepararEnvioPesquisa(auditoriaId) {
+  const a = (state.histLista || []).find(x => x.id === auditoriaId);
+  if (!a) { toast('Análise não encontrada no histórico. Atualize a lista e tente de novo.', 4000); return; }
+  if (String(a.tipoAvaliacao || '').toUpperCase().indexOf('DURANTE') === -1) { toast('A pesquisa CSAT/NPS só é enviada em análises DURANTE A OPERAÇÃO', 4000); return; }
+  const email = prompt('E-mail do cliente para receber a pesquisa CSAT/NPS\n(' + a.cliente + ' — ' + a.unidade + '):', a.emailCliente || '');
+  if (!email || !email.includes('@')) return;
+  showLoading('Enviando a pesquisa CSAT/NPS...');
+  const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
+  const re = await apiCall('enviarPesquisaNps', { auditoriaId, email: email.trim(), urlBaseApp });
+  hideLoading();
+  if (re.ok) toast('Pesquisa CSAT/NPS enviada para ' + email.trim(), 4000);
+  else if (/nao reconhecida|não reconhecida/i.test(String(re.erro || ''))) toast('O script do servidor ainda não tem o envio da pesquisa. Publique a nova versão no Apps Script.', 6000);
+  else toast('Erro: ' + (re.erro || 'falha'), 5000);
 }
 
 /* ═══════════════════════════════════════════════════════

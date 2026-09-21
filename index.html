@@ -1301,7 +1301,7 @@
         // r114: tambem nao repete acoes que CRIAM registros (evita lancamento duplicado
         // quando a resposta demora mas o servidor ja gravou).
         const ACOES_SEM_RETRY = ['solicitarCodigoAcesso', 'lancarDespesa', 'lancarProvisionamento',
-            'lancarAdiantamento', 'salvarAnaliseInventario', 'enviarRelatorioAuditoria', 'uploadFotosAuditoria'];
+            'lancarAdiantamento', 'salvarAnaliseInventario', 'enviarRelatorioAuditoria', 'enviarPesquisaNps', 'uploadFotosAuditoria'];
 
         function ehAppsScript(url) {
             try { return typeof url === 'string' && url.indexOf('script.google.com') > -1; }
@@ -4197,7 +4197,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-19-r129';
+    const VERSAO_ESPERADA = '2026-09-21-r130';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
