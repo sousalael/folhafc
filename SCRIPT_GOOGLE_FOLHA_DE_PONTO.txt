@@ -127,7 +127,20 @@ function doPost(e) {
   }
 }
 
-function getSheet(name) { return SpreadsheetApp.openById(SHEET_ID).getSheetByName(name); }
+// r132: a planilha inteira era reaberta (SpreadsheetApp.openById) toda vez que
+// getSheet() era chamada — dentro de uma unica execucao (ex.: verificarSupervisor
+// chegava a reabrir 3x). Agora a planilha e aberta UMA vez por execucao e
+// reaproveitada (mesma tecnica ja usada no r114 para a aba Colaboradores).
+// A memoria vale so durante uma chamada: nada fica guardado entre chamadas.
+var __planilhaMemo = null;
+function getPlanilha() {
+  if (__planilhaMemo === null) {
+    __planilhaMemo = SpreadsheetApp.openById(SHEET_ID);
+  }
+  return __planilhaMemo;
+}
+
+function getSheet(name) { return getPlanilha().getSheetByName(name); }
 
 function normalizarCPF(cpf) {
   if (!cpf) return '';
@@ -504,7 +517,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-21-r131';
+const VERSAO_SCRIPT = '2026-09-22-r132';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -928,7 +941,7 @@ const CABECALHO_ANALISE = ['Timestamp', 'ID_Despesa', 'Data', 'Cliente', 'Unidad
   'Hash_Comprovante', 'Texto_OCR'];
 
 function getSheetAnalise() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = getPlanilha();
   let sheet = ss.getSheetByName(ABA_ANALISE);
   if (!sheet) {
     sheet = ss.insertSheet(ABA_ANALISE);
@@ -2057,7 +2070,7 @@ const CABECALHO_INVENTARIOS = ['Timestamp', 'Cliente', 'Unidade', 'Data_Inventar
   'Feito_Por', 'CPF', 'Link_Pasta', 'Qtd_Arquivos', 'Resumo_JSON'];
 
 function getSheetInventarios() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = getPlanilha();
   let sheet = ss.getSheetByName(ABA_INVENTARIOS);
   if (!sheet) {
     sheet = ss.insertSheet(ABA_INVENTARIOS);
@@ -2524,7 +2537,7 @@ var ABA_AUDITORIA = 'Auditoria_Operacao';
 var ABA_CLIENTES  = 'Clientes_FC';
 
 function getOuCriarAbaAuditoria() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = getPlanilha();
   var aba = ss.getSheetByName(ABA_AUDITORIA);
   if (!aba) {
     aba = ss.insertSheet(ABA_AUDITORIA);
@@ -2542,7 +2555,7 @@ function getOuCriarAbaAuditoria() {
 }
 
 function getOuCriarAbaClientes() {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = getPlanilha();
   var aba = ss.getSheetByName(ABA_CLIENTES);
   if (!aba) {
     aba = ss.insertSheet(ABA_CLIENTES);
@@ -4345,7 +4358,7 @@ var NPS_OPCOES = {
 };
 
 function npsAba(nome, colunas, colunasTexto) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var ss = getPlanilha();
   var aba = ss.getSheetByName(nome);
   if (!aba) {
     aba = ss.insertSheet(nome);

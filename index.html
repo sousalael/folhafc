@@ -436,6 +436,7 @@
             <div class="d-flex flex-column flex-md-row gap-2 mt-2">
                 <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalMultiRelatorio" onclick="popularModalMulti()">📑 Relatório Múltiplo Unificado</button>
                 <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab">🔍 Pesquisar Colaborador</button>
+                <button class="btn btn-outline-light btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalDiagnosticoDesempenho" onclick="abrirDiagnosticoDesempenho()">📊 Diagnóstico de Desempenho</button>
             </div>
         </div>
         <!-- ############ (fim do conteúdo original da Folha de Ponto) ############ -->
@@ -872,6 +873,35 @@
                 <tbody id="tbody-busca-resultados">
                     <tr><td colspan="4" class="text-muted py-3">Preencha os filtros acima e clique em Executar Busca.</td></tr>
                 </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ r132: MODAL DIAGNÓSTICO DE DESEMPENHO (só Diretor) ############ -->
+<div class="modal fade" id="modalDiagnosticoDesempenho" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">📊 Diagnóstico de Desempenho</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Tamanho e tempo de leitura de cada aba da planilha, do mais lento para o mais rápido. Ajuda a identificar quais abas estão pesando no sistema.</p>
+        <div id="diagnostico-status" class="text-center text-muted py-4">Carregando…</div>
+        <div class="table-responsive rounded shadow-sm" id="diagnostico-tabela-wrap" style="display:none;">
+            <table class="table table-sm table-bordered text-center align-middle text-sm mb-0" style="font-size: 0.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-primary">Aba</th>
+                        <th class="text-primary">Linhas</th>
+                        <th class="text-primary">Colunas</th>
+                        <th class="text-primary">Tempo de leitura</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-diagnostico-desempenho"></tbody>
             </table>
         </div>
       </div>
@@ -1585,6 +1615,33 @@
             alert("🔴 ERRO AO ENTRAR NA GESTÃO:\n\n" + err.message);
         } finally {
             btnLogin.innerText = txtOriginal; btnLogin.disabled = false;
+        }
+    }
+
+    // r132: Diagnóstico de Desempenho — mostra tamanho e tempo de leitura de
+    // cada aba da planilha (ação 'diagnosticoDesempenho' já existia desde o
+    // r114, mas nunca tinha um botão ligado a ela). Só Diretor.
+    async function abrirDiagnosticoDesempenho() {
+        const statusEl = document.getElementById('diagnostico-status');
+        const wrapEl = document.getElementById('diagnostico-tabela-wrap');
+        const tbody = document.getElementById('tbody-diagnostico-desempenho');
+        statusEl.style.display = 'block'; statusEl.innerText = 'Carregando…';
+        wrapEl.style.display = 'none'; tbody.innerHTML = '';
+        try {
+            const res = await chamarApi({ action: 'diagnosticoDesempenho', cpf: getCpfLogado() });
+            const linhaAbrir = `<tr class="table-light"><td colspan="3" class="text-start fw-bold">Tempo para abrir a planilha</td><td class="fw-bold">${res.msAbrirPlanilha} ms</td></tr>`;
+            const linhasAbas = (res.abas || []).map(a => `
+                <tr>
+                    <td class="text-start">${a.aba}</td>
+                    <td>${a.linhas}</td>
+                    <td>${a.colunas}</td>
+                    <td>${a.msLeitura >= 0 ? a.msLeitura + ' ms' : '⚠️ erro na leitura'}</td>
+                </tr>`).join('');
+            tbody.innerHTML = linhaAbrir + linhasAbas;
+            statusEl.style.display = 'none';
+            wrapEl.style.display = 'block';
+        } catch (err) {
+            statusEl.innerText = '⚠️ ' + err.message;
         }
     }
 
@@ -4197,7 +4254,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-21-r131';
+    const VERSAO_ESPERADA = '2026-09-22-r132';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
