@@ -1538,7 +1538,22 @@
         }
     }
 
-    async function entrar() {
+    // r132: lê o projeto selecionado na tela de login, para mandar junto com a
+    // própria chamada de entrada (senha, código ou 1º acesso) — o backend já
+    // marca a presença e monta as listas do Diretor NESSA mesma execução, sem
+    // precisar de uma 2ª ida ao servidor só pra isso.
+    function lerProjetoParaLogin() {
+        const selectProj = document.getElementById('sel-proj').value;
+        if (!selectProj) return { data: null, cliente: null, unidade: null, status: null };
+        try { return JSON.parse(selectProj); } catch (e) { return { data: null, cliente: null, unidade: null, status: null }; }
+    }
+
+    // dadosLogin (opcional): quando a própria chamada de login (entrarComSenha,
+    // definirSenhaPrimeiroAcesso, redefinirSenhaComCodigo, validarCodigoAcesso)
+    // já trouxe nome/perfil/listas do Diretor, usamos esses dados direto — sem
+    // repetir a ida ao servidor que verificarSupervisor faria. Sem dadosLogin
+    // (ex.: retorno do "Reiniciar Sessão"), o comportamento é o de sempre.
+    async function entrar(dadosLogin) {
         const cpf = document.getElementById('cpf-sup').value;
         const selectProj = document.getElementById('sel-proj').value;
         if(!cpf) return alert('Por favor, informe seu CPF.');
@@ -1554,15 +1569,20 @@
         btnLogin.innerText = "Autenticando..."; btnLogin.disabled = true;
 
         try {
-            const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf, projeto: projetoAtivo, token: tokenSessao})});
-            if (!response.ok) throw new Error("Código HTTP de erro: " + response.status);
-            
-            const rawText = await response.text();
             let res;
-            try { res = JSON.parse(rawText); } catch(e) {
-                throw new Error("Resposta corrompida do servidor. Verifique se o código do script no Google Sheets está correto.");
+            if (dadosLogin) {
+                // r132: já veio tudo junto da própria chamada de login.
+                res = dadosLogin;
+            } else {
+                const response = await fetch(API_URL, {method:'POST', body: JSON.stringify({action:'verificarSupervisor', cpf:cpf, projeto: projetoAtivo, token: tokenSessao})});
+                if (!response.ok) throw new Error("Código HTTP de erro: " + response.status);
+
+                const rawText = await response.text();
+                try { res = JSON.parse(rawText); } catch(e) {
+                    throw new Error("Resposta corrompida do servidor. Verifique se o código do script no Google Sheets está correto.");
+                }
             }
-            
+
             if(res && res.encontrado) {
                 document.getElementById('view-login').classList.add('hidden');
                 document.getElementById('view-dashboard').classList.remove('hidden');
@@ -2168,10 +2188,10 @@
         const btn = document.getElementById('btn-entrar-senha');
         btn.innerText = 'Entrando...'; btn.disabled = true;
         try {
-            const res = await chamarApi({ action: 'entrarComSenha', cpf: cpf, senha: senha });
+            const res = await chamarApi({ action: 'entrarComSenha', cpf: cpf, senha: senha, projeto: lerProjetoParaLogin() });
             tokenSessao = res.token; window.tokenSessao = res.token;
             avisoSessaoExibido = false;
-            entrar();
+            entrar(res);
         } catch (err) {
             alert('⚠️ ' + err.message);
         } finally {
@@ -2189,10 +2209,10 @@
         const btn = document.getElementById('btn-criar-senha');
         btn.innerText = 'Criando...'; btn.disabled = true;
         try {
-            const res = await chamarApi({ action: 'definirSenhaPrimeiroAcesso', cpf: cpf, senha: s1 });
+            const res = await chamarApi({ action: 'definirSenhaPrimeiroAcesso', cpf: cpf, senha: s1, projeto: lerProjetoParaLogin() });
             tokenSessao = res.token; window.tokenSessao = res.token;
             avisoSessaoExibido = false;
-            entrar();
+            entrar(res);
         } catch (err) {
             alert('⚠️ ' + err.message);
         } finally {
@@ -2252,16 +2272,16 @@
                 const s2 = document.getElementById('input-senha-recup2').value;
                 if (s1 !== s2) { alert('As senhas não conferem.'); btn.innerText = '🔓 Confirmar'; btn.disabled = false; return; }
                 if (!senhaForteOk(s1)) { alert('A senha deve ter no mínimo 8 caracteres, com letra e número.'); btn.innerText = '🔓 Confirmar'; btn.disabled = false; return; }
-                const res = await chamarApi({ action: 'redefinirSenhaComCodigo', cpf: cpf, codigo: codigo, senha: s1 });
+                const res = await chamarApi({ action: 'redefinirSenhaComCodigo', cpf: cpf, codigo: codigo, senha: s1, projeto: lerProjetoParaLogin() });
                 tokenSessao = res.token; window.tokenSessao = res.token;
                 avisoSessaoExibido = false;
-                entrar();
+                entrar(res);
             } else {
                 // Login direto pelo codigo (alternativa/compatibilidade).
-                const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo });
+                const res = await chamarApi({ action: 'validarCodigoAcesso', cpf: cpf, codigo: codigo, projeto: lerProjetoParaLogin() });
                 tokenSessao = res.token; window.tokenSessao = res.token;
                 avisoSessaoExibido = false;
-                entrar();
+                entrar(res);
             }
         } catch (err) {
             alert('⚠️ ' + err.message);

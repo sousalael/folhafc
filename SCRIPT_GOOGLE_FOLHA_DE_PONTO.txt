@@ -56,11 +56,11 @@ function doPost(e) {
     else if (action === 'getVersaoScript') { result = getVersaoScript(); }
     else if (action === 'diagnosticoDesempenho') { result = diagnosticoDesempenho(data.cpf); }
     else if (action === 'solicitarCodigoAcesso') { result = solicitarCodigoAcesso(data.cpf); }
-    else if (action === 'validarCodigoAcesso') { result = validarCodigoAcesso(data.cpf, data.codigo); }
+    else if (action === 'validarCodigoAcesso') { result = validarCodigoAcesso(data.cpf, data.codigo, data.projeto); }
     else if (action === 'verificarAcesso') { result = verificarAcesso(data.cpf); }
-    else if (action === 'definirSenhaPrimeiroAcesso') { result = definirSenhaPrimeiroAcesso(data.cpf, data.senha); }
-    else if (action === 'entrarComSenha') { result = entrarComSenha(data.cpf, data.senha); }
-    else if (action === 'redefinirSenhaComCodigo') { result = redefinirSenhaComCodigo(data.cpf, data.codigo, data.senha); }
+    else if (action === 'definirSenhaPrimeiroAcesso') { result = definirSenhaPrimeiroAcesso(data.cpf, data.senha, data.projeto); }
+    else if (action === 'entrarComSenha') { result = entrarComSenha(data.cpf, data.senha, data.projeto); }
+    else if (action === 'redefinirSenhaComCodigo') { result = redefinirSenhaComCodigo(data.cpf, data.codigo, data.senha, data.projeto); }
     else if (action === 'resetarSenhaComoDir') { result = resetarSenhaComoDir(data.cpf, data.cpfAlvo); }
     else if (action === 'salvarAnaliseInventario') { result = salvarAnaliseInventario(data); }
     else if (action === 'checarInventarioExistente') { result = checarInventarioExistente(data); }
@@ -142,6 +142,34 @@ function getPlanilha() {
 
 function getSheet(name) { return getPlanilha().getSheetByName(name); }
 
+// r132: a aba Presencas so cresce (nunca e arquivada) e era lida INTEIRA toda
+// vez que precisavamos achar as linhas de UM projeto/data — no login, ao
+// bater ponto, e ao montar a lista da tela. Como as linhas sao sempre
+// ACRESCENTADAS no fim (appendRow, nunca reordenadas), a PRIMEIRA linha com
+// aquela data marca com seguranca o inicio de onde ler: nada antes dela pode
+// pertencer a um projeto daquela data. Le so a coluna A (leve) pra achar esse
+// ponto, e so entao le a largura completa a partir dali ate o fim — nunca
+// deixa de achar uma linha, so evita reler o historico antigo.
+// Devolve { linhas, primeiraLinhaAbsoluta }: linhas[i] corresponde a linha
+// (primeiraLinhaAbsoluta + i) da planilha (rowId, 1-indexado). Se a data nao
+// aparecer, devolve linhas vazias sem ler mais nada.
+function lerPresencasDoProjeto(sheetPresencas, dataProjeto) {
+  const ultimaLinha = sheetPresencas.getLastRow();
+  if (ultimaLinha < 2) return { linhas: [], primeiraLinhaAbsoluta: -1 };
+
+  const colunaData = sheetPresencas.getRange(2, 1, ultimaLinha - 1, 1).getDisplayValues();
+  let primeiroIndice = -1;
+  for (let i = 0; i < colunaData.length; i++) {
+    if (colunaData[i][0] === dataProjeto) { primeiroIndice = i; break; }
+  }
+  if (primeiroIndice === -1) return { linhas: [], primeiraLinhaAbsoluta: -1 };
+
+  const primeiraLinhaAbsoluta = primeiroIndice + 2; // +2: pula o cabecalho e volta pra 1-indexado
+  const numLinhas = ultimaLinha - primeiraLinhaAbsoluta + 1;
+  const linhas = sheetPresencas.getRange(primeiraLinhaAbsoluta, 1, numLinhas, 8).getDisplayValues();
+  return { linhas: linhas, primeiraLinhaAbsoluta: primeiraLinhaAbsoluta };
+}
+
 function normalizarCPF(cpf) {
   if (!cpf) return '';
   let limpo = String(cpf).replace(/\D/g, '');
@@ -221,51 +249,61 @@ function getProjetos() {
   return { projetos: filtrados.map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]})) };
 }
 
+// r132: logica de marcar presenca do gestor + montar as listas do Diretor,
+// extraida de dentro de verificarSupervisor para ser reaproveitada pelas
+// acoes de login (entrarComSenha e companhia). Antes, o login precisava de
+// uma 2a ida ao servidor SO pra rodar este mesmo trecho — agora ele roda
+// dentro da PROPRIA chamada de login, quando o front manda o projeto ja
+// selecionado. verificarSupervisor continua existindo (chamada avulsa por
+// registrarPresencaGestor) e devolve exatamente o mesmo resultado de sempre.
+function montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) {
+  const cpfFormatado = formatarCPF(cpfLimpo);
+
+  if (projeto && projeto.data && !isProjetoEncerrado(projeto)) {
+     const sheetPresencas = getSheet('Presencas');
+     const { linhas } = lerPresencasDoProjeto(sheetPresencas, projeto.data);
+     let jaRegistrado = false;
+     for (let i = 0; i < linhas.length; i++) {
+       if (linhas[i][0] === projeto.data && linhas[i][1] === projeto.cliente && linhas[i][2] === projeto.unidade && normalizarCPF(linhas[i][3]) === cpfLimpo) {
+         jaRegistrado = true; break;
+       }
+     }
+     if (!jaRegistrado) {
+       sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, perfil === 'DIRETOR' ? 'DIRETORIA' : 'SUPERVISÃO', '', new Date().toLocaleString('pt-BR'), nome]);
+     }
+  }
+
+  let resposta = { encontrado: true, nome: nome, perfil: perfil };
+
+  if (perfil === 'DIRETOR') {
+     const sheetProj = getSheet('Projetos');
+     const dadosProj = sheetProj.getDataRange().getDisplayValues();
+     dadosProj.shift();
+     const hoje = getDataTrabalhoVigente();
+     resposta.ativosHoje = dadosProj.filter(r => r[0] === hoje && r[3] !== 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
+     resposta.encerrados = dadosProj.filter(r => r[3] === 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
+  }
+
+  return resposta;
+}
+
 function verificarSupervisor(cpf, projeto) {
-  const sheetColab = getSheet('Colaboradores');
   const dadosColab = getColabDados();
   const cpfLimpo = normalizarCPF(cpf);
-  const cpfFormatado = formatarCPF(cpfLimpo);
   const idx = getColabIndices();
-  
+
   const user = dadosColab.find(r => normalizarCPF(r[idx.cpf]) === cpfLimpo);
 
   if (user) {
     const perfil = String(user[idx.perfil]).trim().toUpperCase();
-    
     if (perfil === 'SUPERVISOR' || perfil === 'DIRETOR') {
       const nome = user[idx.nome];
-      
-      if (projeto && projeto.data && !isProjetoEncerrado(projeto)) {
-         const sheetPresencas = getSheet('Presencas');
-         const presencasData = sheetPresencas.getDataRange().getDisplayValues();
-         let jaRegistrado = false;
-         for (let i = 1; i < presencasData.length; i++) {
-           if (presencasData[i][0] === projeto.data && presencasData[i][1] === projeto.cliente && presencasData[i][2] === projeto.unidade && normalizarCPF(presencasData[i][3]) === cpfLimpo) {
-             jaRegistrado = true; break;
-           }
-         }
-         if (!jaRegistrado) {
-           sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, perfil === 'DIRETOR' ? 'DIRETORIA' : 'SUPERVISÃO', '', new Date().toLocaleString('pt-BR'), nome]);
-         }
-      }
-
-      let resposta = { encontrado: true, nome: nome, perfil: perfil };
-
-      if (perfil === 'DIRETOR') {
-         const sheetProj = getSheet('Projetos');
-         const dadosProj = sheetProj.getDataRange().getDisplayValues();
-         dadosProj.shift();
-         const hoje = getDataTrabalhoVigente();
-         resposta.ativosHoje = dadosProj.filter(r => r[0] === hoje && r[3] !== 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
-         resposta.encerrados = dadosProj.filter(r => r[3] === 'Encerrado').map(r => ({data: r[0], cliente: r[1], unidade: r[2], status: r[3]}));
-      }
-
-      return resposta;
+      return montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto);
     }
   }
   return { encontrado: false };
 }
+
 
 function registrarPonto(projeto, cpf, extras) {
   if (isProjetoEncerrado(projeto)) return { error: 'Este projeto já foi encerrado e não aceita novas presenças.' };
@@ -276,10 +314,10 @@ function registrarPonto(projeto, cpf, extras) {
   const idx = getColabIndices();
 
   const sheetPresencas = getSheet('Presencas');
-  const presencasData = sheetPresencas.getDataRange().getDisplayValues();
+  const { linhas: presencasProjeto } = lerPresencasDoProjeto(sheetPresencas, projeto.data);
 
-  for (let i = 1; i < presencasData.length; i++) {
-    if (presencasData[i][0] === projeto.data && presencasData[i][1] === projeto.cliente && presencasData[i][2] === projeto.unidade && normalizarCPF(presencasData[i][3]) === cpfLimpo) {
+  for (let i = 0; i < presencasProjeto.length; i++) {
+    if (presencasProjeto[i][0] === projeto.data && presencasProjeto[i][1] === projeto.cliente && presencasProjeto[i][2] === projeto.unidade && normalizarCPF(presencasProjeto[i][3]) === cpfLimpo) {
       if (extras && extras.updatePix) {
          const sheetColab = getSheet('Colaboradores');
          let colabData = getColabDados();
@@ -330,7 +368,7 @@ function registrarPonto(projeto, cpf, extras) {
 function getListaPresencas(projeto) {
   if (!projeto || !projeto.data) return { lista: [] };
   const sheetPresencas = getSheet('Presencas');
-  const dados = sheetPresencas.getDataRange().getDisplayValues(); 
+  const { linhas: dados, primeiraLinhaAbsoluta } = lerPresencasDoProjeto(sheetPresencas, projeto.data);
   const colabDados = getColabDados();
   const idx = getColabIndices();
   
@@ -345,12 +383,12 @@ function getListaPresencas(projeto) {
   }
 
   let lista = [];
-  for(let i=1; i<dados.length; i++) {
+  for(let i=0; i<dados.length; i++) {
     if(dados[i][0] === projeto.data && dados[i][1] === projeto.cliente && dados[i][2] === projeto.unidade) {
       let cpfLimpo = normalizarCPF(dados[i][3]);
       let infoColab = colabMap[cpfLimpo] || {pix: '', nomeReduzido: ''};
       lista.push({ 
-        rowId: i + 1, 
+        rowId: primeiraLinhaAbsoluta + i, 
         cpf: formatarCPF(dados[i][3]), 
         funcao: dados[i][4], 
         obs: dados[i][5], 
@@ -2351,7 +2389,7 @@ function verificarAcesso(cpf) {
 }
 
 // Define a senha no PRIMEIRO acesso (confirma o e-mail ja cadastrado).
-function definirSenhaPrimeiroAcesso(cpf, senha) {
+function definirSenhaPrimeiroAcesso(cpf, senha, projeto) {
   const cpfLimpo = normalizarCPF(cpf);
   const perfil = getPerfilPorCPF(cpfLimpo);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Acesso restrito.' };
@@ -2366,18 +2404,22 @@ function definirSenhaPrimeiroAcesso(cpf, senha) {
   const idx = getColabIndices();
   for (let i = 1; i < dados.length; i++) {
     if (normalizarCPF(dados[i][idx.cpf]) === cpfLimpo) {
+      const nome = dados[i][idx.nome];
       sheet.getRange(i + 1, idxSenha + 1).setValue(hashSenha(senha)); invalidarColabCache();
       // Emite o MESMO tipo de token do fluxo por e-mail.
       const token = Utilities.getUuid() + '-' + new Date().getTime();
       CacheService.getScriptCache().put('tok_' + token, cpfLimpo, SESSAO_VALIDADE_SEG);
-      return { success: true, token: token, nome: getNomePorCPF(cpfLimpo), perfil: perfil };
+      // r132: junta no MESMO round-trip o que antes exigia uma 2a chamada
+      // (verificarSupervisor) — so quando o front manda o projeto selecionado.
+      const dadosEntrada = projeto ? montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) : {};
+      return Object.assign({ success: true, token: token, nome: nome, perfil: perfil }, dadosEntrada);
     }
   }
   return { error: 'CPF nao encontrado.' };
 }
 
 // Login com senha: valida e emite o token (identico ao fluxo por e-mail).
-function entrarComSenha(cpf, senha) {
+function entrarComSenha(cpf, senha, projeto) {
   const cpfLimpo = normalizarCPF(cpf);
   const perfil = getPerfilPorCPF(cpfLimpo);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Acesso restrito.' };
@@ -2395,12 +2437,16 @@ function entrarComSenha(cpf, senha) {
 
   const token = Utilities.getUuid() + '-' + new Date().getTime();
   CacheService.getScriptCache().put('tok_' + token, cpfLimpo, SESSAO_VALIDADE_SEG);
-  return { success: true, token: token, nome: getNomePorCPF(cpfLimpo), perfil: perfil };
+  const nome = user[idx.nome];
+  // r132: junta no MESMO round-trip o que antes exigia uma 2a chamada
+  // (verificarSupervisor) — so quando o front manda o projeto selecionado.
+  const dadosEntrada = projeto ? montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) : {};
+  return Object.assign({ success: true, token: token, nome: nome, perfil: perfil }, dadosEntrada);
 }
 
 // Redefine a senha APOS validar o codigo do e-mail (recuperacao). Reusa o OTP.
-function redefinirSenhaComCodigo(cpf, codigo, novaSenha) {
-  const val = validarCodigoAcesso(cpf, codigo); // reusa a validacao existente
+function redefinirSenhaComCodigo(cpf, codigo, novaSenha, projeto) {
+  const val = validarCodigoAcesso(cpf, codigo); // reusa a validacao existente (sem marcar presenca ainda)
   if (!val || !val.success) return val || { error: 'Codigo invalido.' };
   if (!senhaValida(novaSenha)) return { error: 'A senha deve ter no minimo 8 caracteres, com letra e numero.' };
 
@@ -2413,7 +2459,10 @@ function redefinirSenhaComCodigo(cpf, codigo, novaSenha) {
   for (let i = 1; i < dados.length; i++) {
     if (normalizarCPF(dados[i][idx.cpf]) === cpfLimpo) {
       sheet.getRange(i + 1, idxSenha + 1).setValue(hashSenha(novaSenha)); invalidarColabCache();
-      return { success: true, token: val.token, nome: val.nome, perfil: val.perfil };
+      // r132: so agora, com a senha ja confirmada, marca a presenca e monta as
+      // listas do Diretor (mesma logica de sempre) — junto no MESMO round-trip.
+      const dadosEntrada = projeto ? montarDadosEntradaGestor(cpfLimpo, val.perfil, val.nome, projeto) : {};
+      return Object.assign({ success: true, token: val.token, nome: val.nome, perfil: val.perfil }, dadosEntrada);
     }
   }
   return { error: 'CPF nao encontrado.' };
@@ -2475,7 +2524,7 @@ function solicitarCodigoAcesso(cpf) {
   return { success: true, emailMascarado: mascararEmail(email) };
 }
 
-function validarCodigoAcesso(cpf, codigo) {
+function validarCodigoAcesso(cpf, codigo, projeto) {
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return { error: 'CPF invalido.' };
 
@@ -2491,7 +2540,9 @@ function validarCodigoAcesso(cpf, codigo) {
   const tokenAnterior = cache.get(chaveUsado);
   if (tokenAnterior) {
     const perfilR = getPerfilPorCPF(cpfLimpo);
-    return { success: true, token: tokenAnterior, nome: getNomePorCPF(cpfLimpo), perfil: perfilR, reaproveitado: true };
+    const nomeR = getNomePorCPF(cpfLimpo);
+    const dadosEntradaR = projeto ? montarDadosEntradaGestor(cpfLimpo, perfilR, nomeR, projeto) : {};
+    return Object.assign({ success: true, token: tokenAnterior, nome: nomeR, perfil: perfilR, reaproveitado: true }, dadosEntradaR);
   }
 
   const bruto = cache.get('otp_' + cpfLimpo);
@@ -2519,7 +2570,13 @@ function validarCodigoAcesso(cpf, codigo) {
   cache.put(chaveUsado, token, JANELA_REUSO_SEG);
 
   const perfil = getPerfilPorCPF(cpfLimpo);
-  return { success: true, token: token, nome: getNomePorCPF(cpfLimpo), perfil: perfil };
+  const nome = getNomePorCPF(cpfLimpo);
+  // r132: junta no MESMO round-trip o que antes exigia uma 2a chamada
+  // (verificarSupervisor) — so quando o front manda o projeto selecionado
+  // (fluxo de "login direto pelo codigo"; na recuperacao de senha, quem chama
+  // isto por dentro NAO manda projeto, ver redefinirSenhaComCodigo).
+  const dadosEntrada = projeto ? montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) : {};
+  return Object.assign({ success: true, token: token, nome: nome, perfil: perfil }, dadosEntrada);
 }
 
 function validarTokenSessao(token) {
