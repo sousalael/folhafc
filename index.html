@@ -29,6 +29,84 @@
             --fc-fundo: #f4f6f9;
         }
 
+        /* r135: cards de pendencia da Home (nao encerrados / sem analise),
+           no MESMO padrao visual ja usado nos cards de "unidades analisadas"
+           da Analise de Preparacao (auditoria.html): card branco arredondado,
+           sombra suave, borda colorida no topo, rotulo em caixa alta. Aqui
+           cada card carrega uma LISTA (nao um numero unico), entao o corpo
+           do card ganha uma lista de mini-blocos abaixo do cabecalho. */
+        .fc-pend-card {
+            background: #FFFFFF;
+            border-radius: 16px;
+            padding: 16px 16px 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.06);
+            border-top: 4px solid var(--fc-pend-cor, #999);
+        }
+        .fc-pend-card.fc-pend-vermelho { --fc-pend-cor: #E05252; }
+        .fc-pend-card.fc-pend-laranja  { --fc-pend-cor: #E8872B; }
+        .fc-pend-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .fc-pend-titulo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .6px;
+            text-transform: uppercase;
+            color: var(--fc-pend-cor, #666);
+        }
+        .fc-pend-icone {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+        .fc-pend-vermelho .fc-pend-icone { background: #FDEAEA; }
+        .fc-pend-laranja  .fc-pend-icone { background: #FFF3E0; }
+        .fc-pend-contagem {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--fc-primaria);
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .fc-pend-lista {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .fc-pend-item {
+            background: var(--fc-fundo);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .fc-pend-item .fc-pend-cliente {
+            font-weight: 700;
+            color: var(--fc-primaria);
+            font-size: 13.5px;
+            line-height: 1.3;
+        }
+        .fc-pend-item .fc-pend-detalhe {
+            font-size: 12px;
+            color: #6B7B8D;
+            margin-top: 2px;
+            line-height: 1.35;
+        }
+
         body {
             background-color: var(--fc-fundo) !important;
         }
@@ -268,15 +346,21 @@
 
     <div id="view-dashboard" class="hidden">
 
-        <!-- ############ r133: CARDS DE PENDÊNCIAS DO DIA ANTERIOR ############ -->
-        <div id="cards-pendencias-home" class="mb-4" style="display:none;">
-            <div class="alert alert-danger shadow-sm mb-2" id="card-pend-nao-encerrados" style="display:none;">
-                <h6 class="fw-bold mb-2">⚠️ Projetos de <span id="pend-data-nao-enc"></span> não encerrados</h6>
-                <ul class="mb-0 ps-3" id="lista-pend-nao-encerrados"></ul>
+        <!-- ############ r133/r135: CARDS DE PENDÊNCIAS DO DIA ANTERIOR ############ -->
+        <div id="cards-pendencias-home" class="mb-3" style="display:none;">
+            <div class="fc-pend-card fc-pend-vermelho" id="card-pend-nao-encerrados" style="display:none;">
+                <div class="fc-pend-head">
+                    <div class="fc-pend-titulo"><span class="fc-pend-icone">⚠️</span> Não encerrados · <span id="pend-data-nao-enc"></span></div>
+                    <div class="fc-pend-contagem" id="pend-count-nao-enc">0</div>
+                </div>
+                <ul class="fc-pend-lista" id="lista-pend-nao-encerrados"></ul>
             </div>
-            <div class="alert alert-warning shadow-sm mb-2" id="card-pend-sem-analise" style="display:none;">
-                <h6 class="fw-bold mb-2">📋 Projetos de <span id="pend-data-sem-analise"></span> sem Análise de Preparação para Inventário</h6>
-                <ul class="mb-0 ps-3" id="lista-pend-sem-analise"></ul>
+            <div class="fc-pend-card fc-pend-laranja" id="card-pend-sem-analise" style="display:none;">
+                <div class="fc-pend-head">
+                    <div class="fc-pend-titulo"><span class="fc-pend-icone">📋</span> Sem Análise de Preparação · <span id="pend-data-sem-analise"></span></div>
+                    <div class="fc-pend-contagem" id="pend-count-sem-analise">0</div>
+                </div>
+                <ul class="fc-pend-lista" id="lista-pend-sem-analise"></ul>
             </div>
         </div>
         <!-- ############ FIM DOS CARDS DE PENDÊNCIAS ############ -->
@@ -2153,7 +2237,7 @@
         return res;
     }
 
-    // r133: cards de pendências do dia anterior (corte 6h) na tela inicial.
+    // r133/r135: cards de pendências do dia anterior (corte 6h) na tela inicial.
     // Diretor vê todos os projetos pendentes; Supervisor só os seus. Some
     // sozinho quando não há pendência (projeto encerrado / análise concluída).
     async function carregarPendenciasHome() {
@@ -2166,9 +2250,12 @@
 
             if (res.naoEncerrados && res.naoEncerrados.length) {
                 document.getElementById('pend-data-nao-enc').innerText = res.dataReferencia;
-                document.getElementById('lista-pend-nao-encerrados').innerHTML = res.naoEncerrados.map(p =>
-                    `<li><strong>${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</strong> · Supervisor(es): ${escaparHtml(p.supervisores.join(', '))}</li>`
-                ).join('');
+                document.getElementById('pend-count-nao-enc').innerText = res.naoEncerrados.length;
+                document.getElementById('lista-pend-nao-encerrados').innerHTML = res.naoEncerrados.map(p => `
+                    <li class="fc-pend-item">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                        <div class="fc-pend-detalhe">Supervisor(es): ${escaparHtml(p.supervisores.join(', '))}</div>
+                    </li>`).join('');
                 cardNaoEnc.style.display = 'block';
             } else {
                 cardNaoEnc.style.display = 'none';
@@ -2176,9 +2263,11 @@
 
             if (res.semAnalise && res.semAnalise.length) {
                 document.getElementById('pend-data-sem-analise').innerText = res.dataReferencia;
-                document.getElementById('lista-pend-sem-analise').innerHTML = res.semAnalise.map(p =>
-                    `<li><strong>${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</strong></li>`
-                ).join('');
+                document.getElementById('pend-count-sem-analise').innerText = res.semAnalise.length;
+                document.getElementById('lista-pend-sem-analise').innerHTML = res.semAnalise.map(p => `
+                    <li class="fc-pend-item">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                    </li>`).join('');
                 cardSemAnalise.style.display = 'block';
             } else {
                 cardSemAnalise.style.display = 'none';
@@ -4327,7 +4416,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-23-r134';
+    const VERSAO_ESPERADA = '2026-09-23-r135';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
