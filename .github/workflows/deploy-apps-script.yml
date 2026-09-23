@@ -105,7 +105,7 @@ jobs:
           echo "" >> /tmp/prova.txt
           OK=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            RESP=$(curl -s --max-time 20 "$URL" || echo "FALHA_CURL")
+            RESP=$(curl -sL --max-time 20 "$URL" || echo "FALHA_CURL")
             echo "--- tentativa $i (t+$((i*10))s aprox) ---" >> /tmp/prova.txt
             echo "$RESP" >> /tmp/prova.txt
             echo "" >> /tmp/prova.txt
