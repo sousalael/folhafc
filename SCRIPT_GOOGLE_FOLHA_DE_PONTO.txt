@@ -1,3 +1,4 @@
+// marcador de verificacao de deploy — 2026-09-23T14:27:51Z
 const SHEET_ID = '1vbm0Uh8Qp87svlcCKluYBV_m9euoZukB_FWltGlHnvs';
 
 function doPost(e) {
