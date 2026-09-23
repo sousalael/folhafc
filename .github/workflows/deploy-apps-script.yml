@@ -42,47 +42,58 @@ jobs:
         run: clasp push --force
         working-directory: apps-script
 
-      - name: Atualizar TODAS as implantações
+      - name: Criar nova versão
         working-directory: apps-script
         run: |
           set -e -o pipefail
-
-          # Criar nova versão
           echo "--- Criando versão ---"
           clasp version "Auto $(date +'%Y-%m-%d %H:%M')" 2>&1 | tee /tmp/ver.txt
-
-          # r108: extrai o numero SOMENTE da linha "Created version N" (formato
-          # fixo do clasp), em vez de pegar "o ultimo numero encontrado em toda
-          # a saida" — a versao antiga podia acertar o numero errado sem avisar.
           VER=$(grep -oE 'Created version [0-9]+' /tmp/ver.txt | grep -oE '[0-9]+' | tail -1)
           echo "Versão detectada: $VER"
-
           if [ -z "$VER" ]; then
             echo "ERRO: não conseguiu extrair número da versão. Saída completa do 'clasp version':"
             cat /tmp/ver.txt
             exit 1
           fi
+          echo "VER=$VER" >> "$GITHUB_ENV"
 
-          # Listar todas as implantações e atualizar CADA UMA
-          echo "--- Listando implantações ---"
-          clasp deployments 2>&1 | tee /tmp/deps.txt
-
-          # r108: qualquer falha ao atualizar uma implantação agora é
-          # registrada num arquivo (evita o problema de variável perdida
-          # dentro do loop) e derruba o job no final — antes, uma falha aqui
-          # só virava um aviso e o job continuava marcado como sucesso.
-          rm -f /tmp/deploy_failed
-          grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
-            echo "Atualizando deployment: $DEP_ID -> versão $VER"
-            if ! clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')"; then
-              echo "ERRO: falhou para $DEP_ID"
-              touch /tmp/deploy_failed
-            fi
-          done
-
-          if [ -f /tmp/deploy_failed ]; then
-            echo "ERRO: uma ou mais implantações falharam ao atualizar. Veja os erros acima."
+      # r134: passo NOVO e OBRIGATÓRIO — atualiza explicitamente, por ID fixo
+      # (secret DEPLOYMENT_ID), a implantação que o site (index.html) de fato
+      # usa. Antes, só o passo seguinte existia: ele descobre implantações
+      # rodando "clasp deployments" no projeto apontado por APPS_SCRIPT_ID e
+      # atualiza cada uma encontrada — se APPS_SCRIPT_ID apontar para um
+      # projeto Apps Script diferente do vinculado à planilha real, esse passo
+      # roda com sucesso mas atualiza implantações erradas, deixando a URL do
+      # site sempre desatualizada, em silêncio. Este passo aqui falha alto e
+      # claro (exit code 1) se o DEPLOYMENT_ID não existir nesse projeto —
+      # nunca mais um "sucesso" que não atualiza a URL real do site.
+      - name: Atualizar a implantação do site (DEPLOYMENT_ID)
+        working-directory: apps-script
+        run: |
+          set -e -o pipefail
+          if [ -z "${{ secrets.DEPLOYMENT_ID }}" ]; then
+            echo "ERRO: secret DEPLOYMENT_ID não está configurado."
             exit 1
           fi
+          echo "--- Atualizando implantação do site: ${{ secrets.DEPLOYMENT_ID }} -> versão $VER ---"
+          clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VER" --description "Auto (site) v$VER $(date +'%Y-%m-%d %H:%M')"
 
+      # Passo secundário/best-effort: atualiza também qualquer OUTRA
+      # implantação que apareça listada no mesmo projeto (ex.: implantações
+      # extras criadas manualmente). Uma falha aqui NÃO derruba o job, porque
+      # o que realmente importa (a URL do site, passo acima) já foi garantido.
+      - name: Atualizar as demais implantações do projeto (melhor esforço)
+        working-directory: apps-script
+        continue-on-error: true
+        run: |
+          echo "--- Listando implantações ---"
+          clasp deployments 2>&1 | tee /tmp/deps.txt
+          grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
+            if [ "$DEP_ID" = "${{ secrets.DEPLOYMENT_ID }}" ]; then
+              echo "Pulando $DEP_ID (já atualizada no passo anterior)"
+              continue
+            fi
+            echo "Atualizando deployment extra: $DEP_ID -> versão $VER"
+            clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')" || echo "ERRO ao atualizar $DEP_ID (não crítico)"
+          done
           echo "--- Concluído ---"
