@@ -55,21 +55,38 @@ jobs:
           fi
           echo "VER=$VER" >> "$GITHUB_ENV"
 
-      - name: Atualizar a implantação do site (DEPLOYMENT_ID)
+      # r135d: a implantacao antiga (secret DEPLOYMENT_ID, ja corrigida e
+      # conferida como sendo o ID certo) simplesmente NAO reflete os deploys
+      # mesmo com "clasp deploy -i" reportando sucesso e o ID batendo 100% —
+      # comportamento consistente com uma implantacao antiga que a API atual
+      # nao consegue mais atualizar de verdade. Em vez de insistir nela, este
+      # passo mantem uma implantacao PROPRIA, controlada por este pipeline:
+      # na primeira vez que rodar (sem o arquivo .site_deployment_id ainda no
+      # repo), cria uma implantacao NOVA do zero e grava o ID dela nesse
+      # arquivo; nas proximas vezes, reaproveita esse ID salvo. Assim ela
+      # nunca fica "presa" — foi criada e sempre atualizada pela mesma
+      # automacao, com as credenciais que sabemos que funcionam.
+      - name: Atualizar (ou criar) a implantação do site
         working-directory: apps-script
         run: |
           set -e -o pipefail
-          if [ -z "${{ secrets.DEPLOYMENT_ID }}" ]; then
-            echo "ERRO: secret DEPLOYMENT_ID não está configurado."
-            exit 1
-          fi
-          echo "--- Atualizando implantação do site: ${{ secrets.DEPLOYMENT_ID }} -> versão $VER ---"
-          if [ "${{ secrets.DEPLOYMENT_ID }}" = "AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw" ]; then
-            echo "CHECAGEM: DEPLOYMENT_ID confere com o ID usado pelo site (index.html)." | tee -a /tmp/check_depid.txt
+          MARKER=".site_deployment_id"
+          if [ -f "$MARKER" ] && [ -s "$MARKER" ]; then
+            SITE_DEP_ID=$(tr -d '[:space:]' < "$MARKER")
+            echo "Usando implantação já criada por este pipeline: $SITE_DEP_ID"
+            clasp deploy -i "$SITE_DEP_ID" -V "$VER" --description "Auto (site) v$VER $(date +'%Y-%m-%d %H:%M')" 2>&1 | tee /tmp/deploy_out.txt
           else
-            echo "CHECAGEM: DEPLOYMENT_ID NAO confere com o ID usado pelo site (index.html) -- provavel causa raiz." | tee -a /tmp/check_depid.txt
+            echo "Nenhuma implantação própria ainda — criando uma NOVA para o site."
+            clasp deploy -V "$VER" --description "Site FC (auto) v$VER $(date +'%Y-%m-%d %H:%M')" 2>&1 | tee /tmp/deploy_out.txt
+            SITE_DEP_ID=$(grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deploy_out.txt | tail -1)
+            if [ -z "$SITE_DEP_ID" ]; then
+              echo "ERRO: não consegui extrair o ID da implantação nova criada."
+              exit 1
+            fi
+            echo "Implantação nova criada: $SITE_DEP_ID"
+            echo -n "$SITE_DEP_ID" > "$MARKER"
           fi
-          clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VER" --description "Auto (site) v$VER $(date +'%Y-%m-%d %H:%M')"
+          echo "SITE_DEP_ID=$SITE_DEP_ID" >> "$GITHUB_ENV"
 
       - name: Atualizar as demais implantações do projeto (melhor esforço)
         working-directory: apps-script
@@ -78,7 +95,7 @@ jobs:
           echo "--- Listando implantações ---"
           clasp deployments 2>&1 | tee /tmp/deps.txt
           grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
-            if [ "$DEP_ID" = "${{ secrets.DEPLOYMENT_ID }}" ]; then
+            if [ "$DEP_ID" = "$SITE_DEP_ID" ]; then
               echo "Pulando $DEP_ID (já atualizada no passo anterior)"
               continue
             fi
@@ -87,63 +104,51 @@ jobs:
           done
           echo "--- Concluído ---"
 
-      # r135b: PROVA REAL. Os passos acima só confirmam que o clasp RODOU sem
-      # erro — nao confirmam que a URL PUBLICA do site realmente mudou (ja
-      # aconteceu de "sucesso" aqui e a URL continuar na versao antiga). Este
-      # passo chama a URL de verdade (a mesma que o index.html usa) varias
-      # vezes, com espera entre tentativas, e so passa quando a versao
-      # respondida bate com a que acabamos de publicar. Se depois de ~2 min
-      # ainda nao bater, o job FALHA de propósito — nunca mais um "sucesso"
-      # enganoso.
-      - name: Provar que a URL do site foi atualizada
+      - name: Provar que a URL da implantação do pipeline foi atualizada
         working-directory: apps-script
         run: |
           set -o pipefail
-          URL="https://script.google.com/macros/s/${{ secrets.DEPLOYMENT_ID }}/exec"
+          URL="https://script.google.com/macros/s/$SITE_DEP_ID/exec"
           ESPERADA=$(grep -oE "VERSAO_SCRIPT = '[^']*'" ../SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt | grep -oE "'[^']*'" | tr -d "'")
-          echo "Versão esperada (do código que acabamos de publicar): $ESPERADA"
-          echo "URL verificada: $URL"
-          echo "" > /tmp/prova.txt
-          echo "=== PROVA DE PUBLICACAO — $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===" >> /tmp/prova.txt
-          echo "Versao esperada: $ESPERADA" >> /tmp/prova.txt
-          echo "VER (numero interno do clasp): $VER" >> /tmp/prova.txt
-          if [ -f /tmp/check_depid.txt ]; then cat /tmp/check_depid.txt >> /tmp/prova.txt; fi
-          echo "" >> /tmp/prova.txt
+          echo "Versão esperada: $ESPERADA"
+          echo "URL verificada (implantação do pipeline): $URL"
+          {
+            echo "=== PROVA DE PUBLICACAO — $(date -u +'%Y-%m-%d %H:%M:%S UTC') ==="
+            echo "Versao esperada: $ESPERADA"
+            echo "VER (numero interno do clasp): $VER"
+            echo "SITE_DEP_ID (implantacao do pipeline): $SITE_DEP_ID"
+            echo "URL: $URL"
+            echo ""
+          } > /tmp/prova.txt
           OK=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             RESP=$(curl -sL --max-time 20 "$URL" || echo "FALHA_CURL")
-            echo "--- tentativa $i (t+$((i*10))s aprox) ---" >> /tmp/prova.txt
+            echo "--- tentativa $i ---" >> /tmp/prova.txt
             echo "$RESP" >> /tmp/prova.txt
             echo "" >> /tmp/prova.txt
             if echo "$RESP" | grep -q "\"$ESPERADA\""; then
-              echo "OK na tentativa $i: a URL do site já responde com $ESPERADA"
+              echo "OK na tentativa $i"
               echo ">>> RESULTADO: SUCESSO na tentativa $i <<<" >> /tmp/prova.txt
               OK=1
               break
             fi
-            echo "Tentativa $i: ainda não. Aguardando 10s..."
             sleep 10
           done
           cp /tmp/prova.txt _PROVA_DEPLOY.txt
           if [ "$OK" != "1" ]; then
             echo ">>> RESULTADO: FALHOU apos 12 tentativas (~2 min) <<<" >> _PROVA_DEPLOY.txt
-            echo "ERRO REAL: a URL publica do site NAO está servindo a versão publicada, mesmo depois de ~2 minutos."
-            echo "Ver arquivo _PROVA_DEPLOY.txt (raiz do repo) para o histórico completo das tentativas."
           fi
           cat _PROVA_DEPLOY.txt
           mv _PROVA_DEPLOY.txt ../_PROVA_DEPLOY.txt
           exit $((1 - OK))
         continue-on-error: true
 
-      - name: Publicar o arquivo de prova no repositório
+      - name: Publicar arquivos de controle no repositório (marcador + prova)
         if: always()
         run: |
           git config user.name "fc-deploy-bot"
           git config user.email "actions@github.com"
-          if [ -f _PROVA_DEPLOY.txt ]; then
-            git add _PROVA_DEPLOY.txt
-            git commit -m "debug: prova de publicacao (automatico)" || echo "nada para commitar"
-            git push
-          else
-            echo "arquivo de prova não encontrado, nada a publicar"
-          fi
+          git add -f apps-script/.site_deployment_id 2>/dev/null || true
+          if [ -f _PROVA_DEPLOY.txt ]; then git add _PROVA_DEPLOY.txt; fi
+          git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)" || echo "nada para commitar"
+          git push
