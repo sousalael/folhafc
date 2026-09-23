@@ -1,0 +1,42 @@
+
+=== PROVA DE PUBLICACAO — 2026-09-23 14:29:07 UTC ===
+Versao esperada: 2026-09-23-r135
+VER (numero interno do clasp): 163
+
+--- tentativa 1 (t+10s aprox) ---
+
+
+--- tentativa 2 (t+20s aprox) ---
+
+
+--- tentativa 3 (t+30s aprox) ---
+
+
+--- tentativa 4 (t+40s aprox) ---
+
+
+--- tentativa 5 (t+50s aprox) ---
+
+
+--- tentativa 6 (t+60s aprox) ---
+
+
+--- tentativa 7 (t+70s aprox) ---
+
+
+--- tentativa 8 (t+80s aprox) ---
+
+
+--- tentativa 9 (t+90s aprox) ---
+
+
+--- tentativa 10 (t+100s aprox) ---
+
+
+--- tentativa 11 (t+110s aprox) ---
+
+
+--- tentativa 12 (t+120s aprox) ---
+
+
+>>> RESULTADO: FALHOU apos 12 tentativas (~2 min) <<<
