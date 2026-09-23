@@ -1,3 +1,4 @@
+// marcador de disparo — 2026-09-23T15:20:33Z
 const SHEET_ID = '1vbm0Uh8Qp87svlcCKluYBV_m9euoZukB_FWltGlHnvs';
 
 function doPost(e) {
@@ -556,7 +557,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-23-r135';
+const VERSAO_SCRIPT = '2026-09-23-r136';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
