@@ -430,7 +430,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r136';
+const VERSAO = 'r137';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1914,21 +1914,24 @@ async function histBuscar() {
   histRenderResultados();
 }
 
+// r136: array compartilhado dos botões de tipo (evita duplicar a lista em cada função)
+const HIST_TIPOS = [['', 'Todos'], ['SUPERMERCADO', '🛒 Supermercado'], ['FARMACIA', '💊 Farmácia']];
+
 function histRenderTudo() {
   const c = $('#abaConteudo');
   if (!c) return;
   const f = histFiltro();
-  const clientes = state.clientes || [];
-  const msCli = msHtml('hCli', { opcoes: clientes.map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', cb: v => histMudou('clientes', v) });
+  const opcoesCli = pfOpcoesClientes(f.tipoEst);   // r136b: mesma função da Performance — cliente respeita o tipo escolhido
+  f.clientes = f.clientes.filter(x => opcoesCli.some(o => o.v === x));
+  const msCli = msHtml('hCli', { opcoes: opcoesCli, sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', msgVazio: 'Nenhum cliente com análise neste tipo de estabelecimento', cb: v => histMudou('clientes', v) });
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
+  const btnsTipo = HIST_TIPOS.map(t => `<button type="button" class="hist-tipo${f.tipoEst === t[0] ? ' ativo' : ''}" onclick="histEscolherTipo('${t[0]}')">${t[1]}</button>`).join('');
 
   c.innerHTML = `
     <div class="hist-filtros">
       ${msCli}
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
-      <div class="hist-tipos full" role="group" aria-label="Tipo de estabelecimento">
-        ${[['', 'Todos'], ['SUPERMERCADO', '🛒 Supermercado'], ['FARMACIA', '💊 Farmácia']].map(t => `<button type="button" class="hist-tipo${f.tipoEst === t[0] ? ' ativo' : ''}" onclick="histMudou('tipoEst','${t[0]}')">${t[1]}</button>`).join('')}
-      </div>
+      <div class="hist-tipos full" id="histTipoBtns" role="group" aria-label="Tipo de estabelecimento">${btnsTipo}</div>
       <div class="hist-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="histDatas">
         <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
         <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
@@ -1938,6 +1941,22 @@ function histRenderTudo() {
     </div>
     <div id="histResultados"></div>`;
   histRenderResultados();
+}
+
+// r136b: botão de tipo — atualiza o destaque do botão e a lista de clientes NA HORA
+// (sem esperar trocar de aba), mas sem buscar sozinho (só marca pendente).
+function histEscolherTipo(v) {
+  const f = histFiltro();
+  f.tipoEst = v;
+  document.querySelectorAll('#histTipoBtns .hist-tipo').forEach((b, i) => b.classList.toggle('ativo', HIST_TIPOS[i][0] === v));
+  const opcoesCli = pfOpcoesClientes(v);
+  if (MS.hCli) {
+    msRedesenhar('hCli', opcoesCli, !opcoesCli.length, 'Nenhum cliente com análise neste tipo de estabelecimento');
+    f.clientes = MS.hCli.sel.slice();
+  } else {
+    f.clientes = f.clientes.filter(x => opcoesCli.some(o => o.v === x));
+  }
+  histMarcarPendente();
 }
 
 function histRenderResultados() {
