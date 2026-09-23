@@ -557,7 +557,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-23-r136';
+const VERSAO_SCRIPT = '2026-09-23-r137';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3097,14 +3097,25 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   return {system:sys,user:usr};
 }
 
+// r137: helper de diagnóstico de desempenho — mede quanto cada etapa leva,
+// sem mudar nenhum comportamento. Só escreve no Logger (Execuções do Apps
+// Script); não aparece pro usuário nem afeta o resultado de nada.
+function _perfMarca(t0, rotulo) {
+  var agora = new Date().getTime();
+  Logger.log('[PERF] ' + rotulo + ': ' + (agora - t0) + 'ms');
+  return agora;
+}
+
 function gerarRelatorioAuditoria(dados, cpf) {
   try {
+    var _t0 = new Date().getTime();
     var perfil = getPerfilPorCPF(cpf);
     if (perfil !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar relatórios' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
     var auditoriaId = d.auditoriaId || d.id;
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
+    _t0 = _perfMarca(_t0, 'relatorio: leitura da aba Auditoria_Operacao inteira (' + todas.length + ' linhas)');
     var row = null;
     for (var i = 1; i < todas.length; i++) { if (todas[i][0] === auditoriaId) { row = todas[i]; break; } }
     if (!row) return { ok: false, erro: 'Auditoria não encontrada' };
@@ -3128,9 +3139,12 @@ function gerarRelatorioAuditoria(dados, cpf) {
       Logger.log('Claude API erro: ' + errIA.message + '. Usando template.');
       relatorio = gerarTextoTemplate(ident, respostas, observacoes, scores);
     }
+    _t0 = _perfMarca(_t0, 'relatorio: chamada a IA (Claude) + parse do texto');
     var html = montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds);
+    _t0 = _perfMarca(_t0, 'relatorio: montagem do HTML');
     var pastaId = getOuCriarPastaAuditoria(ident.cliente, ident.unidade, ident.data_auditoria);
     var pasta = DriveApp.getFolderById(pastaId);
+    _t0 = _perfMarca(_t0, 'relatorio: localizar/criar pasta no Drive');
     var nomeArq = 'Analise_Preparacao_' + ident.cliente + '_' + ident.unidade + '_' + ident.data_auditoria + '.html';
     var existentes = pasta.getFilesByName(nomeArq);
     while (existentes.hasNext()) existentes.next().setTrashed(true);
@@ -3143,14 +3157,18 @@ function gerarRelatorioAuditoria(dados, cpf) {
         while (it.hasNext()) it.next().setTrashed(true);
       });
     } catch (eAntigo) { Logger.log('Limpeza de arquivos antigos: ' + eAntigo.message); }
+    _t0 = _perfMarca(_t0, 'relatorio: limpeza de arquivos antigos (getFilesByName x3 + trash)');
     var arquivo = pasta.createFile(nomeArq, html, 'text/html');
     arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var linkHTML = 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download';
+    _t0 = _perfMarca(_t0, 'relatorio: criar arquivo HTML + compartilhar');
     var pdfBlob = arquivo.getAs('application/pdf');
+    _t0 = _perfMarca(_t0, 'relatorio: converter HTML -> PDF (getAs)');
     pdfBlob.setName(nomeArq.replace('.html', '.pdf'));
     var pdfFile = pasta.createFile(pdfBlob);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var linkPDF = 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download';
+    _t0 = _perfMarca(_t0, 'relatorio: criar arquivo PDF + compartilhar');
     // r85: guardamos também o conteúdo narrativo do relatório (não só os
     // links) — é essa referência que a Apresentação Executiva usa depois
     // para garantir que pontuações, achados e recomendações do Resumo
@@ -3551,12 +3569,14 @@ function formatarDataBR(valor) {
 
 function prepararApresentacaoAuditoria(dados, cpf) {
   try {
+    var _t0 = new Date().getTime();
     var perfil = getPerfilPorCPF(cpf);
     if (perfil !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
     var auditoriaId = d.auditoriaId || d.id;
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
+    _t0 = _perfMarca(_t0, 'apresentacao-prep: leitura da aba Auditoria_Operacao inteira (' + todas.length + ' linhas)');
     var row = null;
     for (var i = 1; i < todas.length; i++) { if (todas[i][0] === auditoriaId) { row = todas[i]; break; } }
     if (!row) return { ok: false, erro: 'Auditoria não encontrada' };
@@ -3598,6 +3618,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
       Logger.log('Claude API (apresentação) erro: ' + errIA.message + '. Usando fallback.');
       textos = gerarTextosApresentacaoFallback(ident, observacoes, scores, analisePreparacao);
     }
+    _t0 = _perfMarca(_t0, 'apresentacao-prep: chamada a IA (Claude) + parse do texto');
 
     // r100: rede de segurança — mesmo quando a Claude API responde com
     // sucesso (não cai no catch acima), o JSON devolvido pode vir sem
@@ -3625,6 +3646,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     // OBSERVAÇÃO (antes, uma observação sem foto na mesma seção era
     // descartada junto — bug corrigido).
     var fotos = montarSecoesApresentacao(fotosIds, observacoes, 10, 60);
+    _t0 = _perfMarca(_t0, 'apresentacao-prep: buscar bytes das fotos no Drive (até 60 fotos)');
 
     // r73: diagnóstico de fotos — quantas existem no Drive pra esta
     // auditoria (fotosDisponiveis) vs quantas realmente entraram na
@@ -3634,6 +3656,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     var fotosDisponiveis = 0;
     for (var sid in fotosIds) { fotosDisponiveis += (fotosIds[sid] || []).length; }
     var fotosIncluidas = fotos.reduce(function (soma, s) { return soma + (s.fotos || []).length; }, 0);
+    Logger.log('[PERF] apresentacao-prep: fotos incluídas = ' + fotosIncluidas);
 
     // r72: notas por setor — mesmo nível dos setores do relatório em
     // texto, exceto o detalhamento interno da Mercearia (que tem ~17
@@ -3820,12 +3843,14 @@ function gerarTextosApresentacaoFallback(ident, observacoes, scores, analisePrep
 
 function salvarApresentacaoAuditoria(dados, cpf) {
   try {
+    var _t0 = new Date().getTime();
     var perfil = getPerfilPorCPF(cpf);
     if (perfil !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
     var auditoriaId = d.auditoriaId || d.id;
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
+    _t0 = _perfMarca(_t0, 'apresentacao-salvar: leitura da aba Auditoria_Operacao inteira (' + todas.length + ' linhas)');
     var row = null;
     for (var i = 1; i < todas.length; i++) { if (todas[i][0] === auditoriaId) { row = todas[i]; break; } }
     if (!row) return { ok: false, erro: 'Auditoria não encontrada' };
@@ -3856,22 +3881,26 @@ function salvarApresentacaoAuditoria(dados, cpf) {
         var existentes = pasta.getFilesByName(nomeArq);
         while (existentes.hasNext()) existentes.next().setTrashed(true);
       });
+      _t0 = _perfMarca(_t0, 'apresentacao-salvar: limpar versões antigas (' + v.chave + ')');
 
       var bytes = Utilities.base64Decode(v.base64);
       var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomeArqPptx);
       var arquivoPptx = pasta.createFile(pptxBlob);
       arquivoPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       var linkPptx = 'https://drive.google.com/uc?id=' + arquivoPptx.getId() + '&export=download';
+      _t0 = _perfMarca(_t0, 'apresentacao-salvar: salvar .pptx no Drive + compartilhar (' + v.chave + ', ' + bytes.length + ' bytes)');
 
       var linkPdf = '';
       var erroPdfMsg = '';
       var pdfId = null;
       try {
         var pdfBlob = converterPptxParaPdfReal(pptxBlob, nomeArqPptx.replace('.pptx',''));
+        _t0 = _perfMarca(_t0, 'apresentacao-salvar: converter .pptx -> PDF (' + v.chave + ')');
         pdfBlob.setName(nomeArqPdf);
         var arquivoPdf = pasta.createFile(pdfBlob);
         arquivoPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         linkPdf = 'https://drive.google.com/uc?id=' + arquivoPdf.getId() + '&export=download';
+        _t0 = _perfMarca(_t0, 'apresentacao-salvar: salvar .pdf no Drive + compartilhar (' + v.chave + ')');
         // r105: guarda também o fileId puro do PDF da apresentação (além do
         // link de download) — é o que enviarRelatorioAuditoria usa pra
         // anexar esse PDF no e-mail do relatório, sem precisar reextrair o
@@ -3906,13 +3935,17 @@ function salvarApresentacaoAuditoria(dados, cpf) {
 // parâmetro "convert"; a conversão acontece automaticamente ao enviar um
 // arquivo .pptx com resource.mimeType apontando pro tipo nativo do Slides.
 function converterPptxParaPdfReal(pptxBlob, nomeBase) {
+  var _t0 = new Date().getTime();
   var recurso = { name: nomeBase, mimeType: 'application/vnd.google-apps.presentation' };
   var arquivoConvertido = Drive.Files.create(recurso, pptxBlob);
+  _t0 = _perfMarca(_t0, '  converterPptxParaPdfReal: upload + conversão automática para Slides');
   var pdfBlob;
   try {
     pdfBlob = DriveApp.getFileById(arquivoConvertido.id).getAs('application/pdf');
+    _t0 = _perfMarca(_t0, '  converterPptxParaPdfReal: exportar Slides -> PDF');
   } finally {
     try { DriveApp.getFileById(arquivoConvertido.id).setTrashed(true); } catch(e) {}
+    _t0 = _perfMarca(_t0, '  converterPptxParaPdfReal: apagar cópia intermediária em Slides');
   }
   return pdfBlob;
 }
