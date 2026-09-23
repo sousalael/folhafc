@@ -1,43 +1,43 @@
-
-=== PROVA DE PUBLICACAO — 2026-09-23 15:09:58 UTC ===
+=== PROVA DE PUBLICACAO — 2026-09-23 15:21:40 UTC ===
 Versao esperada: 2026-09-23-r135
-VER (numero interno do clasp): 166
-CHECAGEM: DEPLOYMENT_ID confere com o ID usado pelo site (index.html).
+VER (numero interno do clasp): 167
+SITE_DEP_ID (implantacao do pipeline): AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G
+URL: https://script.google.com/macros/s/AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G/exec
 
---- tentativa 1 (t+10s aprox) ---
-{"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
-
---- tentativa 2 (t+20s aprox) ---
-{"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
-
---- tentativa 3 (t+30s aprox) ---
+--- tentativa 1 ---
 FALHA_CURL
 
---- tentativa 4 (t+40s aprox) ---
+--- tentativa 2 ---
 FALHA_CURL
 
---- tentativa 5 (t+50s aprox) ---
+--- tentativa 3 ---
 FALHA_CURL
 
---- tentativa 6 (t+60s aprox) ---
-FALHA_CURL
-
---- tentativa 7 (t+70s aprox) ---
+--- tentativa 4 ---
 {"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
 
---- tentativa 8 (t+80s aprox) ---
+--- tentativa 5 ---
 FALHA_CURL
 
---- tentativa 9 (t+90s aprox) ---
-{"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
-
---- tentativa 10 (t+100s aprox) ---
+--- tentativa 6 ---
 FALHA_CURL
 
---- tentativa 11 (t+110s aprox) ---
+--- tentativa 7 ---
 {"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
 
---- tentativa 12 (t+120s aprox) ---
+--- tentativa 8 ---
 {"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
+
+--- tentativa 9 ---
+{"versao":"2026-09-23-r133","totalAcoes":64,"acoes":["getProjetos","verificarSupervisor","getListaPresencas","registrarPonto","salvarApenas","encerrarProjeto","getRelatorioMultiplo","pesquisarColaboradores","getContadoresPonto","getProjetosEncerrados","getConfigDespesas","getConfigPagamento","getConfigCentros","lancarDespesa","getDespesas","excluirDespesa","setSessaoDespesas","getDespesasRelatorio","pesquisarPessoaFinanceiro","lancarProvisionamento","getProvisionamentos","lancarAdiantamento","getAdiantamentos","getAcertoContas","editarDespesa","pesquisarProjetos","getBiFinanceiro","getContadoresFinanceiro","getVersaoScript","solicitarCodigoAcesso","validarCodigoAcesso","getComprovanteImagem","getLancamentosRevisao","marcarRevisado","gravarRevisoes","verificarAcesso","definirSenhaPrimeiroAcesso","entrarComSenha","redefinirSenhaComCodigo","resetarSenhaComoDir","salvarAnaliseInventario","getHistoricoInventarios","checarInventarioExistente","getArquivosInventario","gerarComparativoIA","buscarUnidadesCliente","buscarAnalisesCliente","npsObterPesquisa","npsResponder","npsAnalise","npsExportarPDF","npsSalvarApresentacao","performanceAnalise","performanceGerarTexto","performanceExportarPDF","performanceSalvarApresentacao","diagnosticoDesempenho","excluirAvaliacaoEmAndamento","contarAnalisadasPerformance","enviarPesquisaNps","listarProjetosAuditoria","performanceGerarTextoGrupo","performanceExportarPDFGrupo","performanceSalvarApresentacaoGrupo"],"mensagem":"Se voce esta vendo este texto, ESTA URL esta servindo o codigo da versao acima."}
+
+--- tentativa 10 ---
+FALHA_CURL
+
+--- tentativa 11 ---
+FALHA_CURL
+
+--- tentativa 12 ---
+FALHA_CURL
 
 >>> RESULTADO: FALHOU apos 12 tentativas (~2 min) <<<
