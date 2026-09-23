@@ -430,7 +430,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,43,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r135';
+const VERSAO = 'r136';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1760,9 +1760,10 @@ async function finalizarAvaliacao() {
 /* ═══════════════════════════════════════════════════════
    HISTÓRICO (r109: agora é a aba "Histórico" da tela inicial)
    ═══════════════════════════════════════════════════════ */
-function verHistorico() {
+function verHistorico(forcarBusca) {
   if ($('#abaConteudo')) mostrarAbaHome('hist');
   else renderTelaInicial('hist');
+  if (forcarBusca) histBuscar();   // r136: excluir/enviar/voltar-da-apresentação continuam atualizando sozinhos
 }
 
 
@@ -1871,18 +1872,12 @@ function histFiltrar(lista) {
   });
 }
 
-async function carregarHistoricoAba() {
-  const c = $('#abaConteudo');
-  if (!c) return;
-  c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
-  const r = await apiCall('listarHistoricoAuditorias', {});
-  if (state.abaHome !== 'hist' || !$('#abaConteudo')) return;
-  if (!r.ok) {
-    c.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
-    return;
-  }
-  state.histLista = r.auditorias || [];
-  histRender();
+// r136: a aba Histórico passa a funcionar como a Performance — os filtros
+// aparecem na hora (sem tocar o servidor) e a busca só roda quando o usuário
+// toca em Buscar. Antes, ela buscava TUDO sozinha assim que a aba abria,
+// escondendo os filtros atrás de "Carregando...".
+function carregarHistoricoAba() {
+  histRenderTudo();
 }
 
 function histMudou(campo, valor) {
@@ -1891,23 +1886,43 @@ function histMudou(campo, valor) {
   if (campo === 'periodo') {
     const d = $('#histDatas');
     if (d) d.classList.toggle('aberto', valor === 'custom');
-    if (valor === 'custom' && !(f.de || f.ate)) return;   // espera as datas
   }
-  histRender();
+  histMarcarPendente();
 }
 
-function histRender() {
+function histMarcarPendente() {
+  const pend = !state.histAplicado || JSON.stringify(histFiltro()) !== JSON.stringify(state.histAplicado);
+  const b = $('#histBtnBuscar'), a = $('#histAviso');
+  if (b) b.classList.toggle('pendente', !!(pend && state.histAplicado));
+  if (a) a.classList.toggle('visivel', !!(pend && state.histAplicado));
+}
+
+// r136: busca real (chama o servidor) — só roda aqui, nunca sozinha.
+async function histBuscar() {
+  const req = (state.histReq = (state.histReq || 0) + 1);
+  const box = $('#histResultados');
+  if (box) box.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Carregando histórico...</div>';
+  const r = await apiCall('listarHistoricoAuditorias', {});
+  if (req !== state.histReq || state.abaHome !== 'hist' || !$('#histResultados')) return;
+  if (!r.ok) {
+    $('#histResultados').innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--red);padding:24px">Não foi possível carregar o histórico: ' + esc(r.erro || 'falha de conexão') + '</div>';
+    return;
+  }
+  state.histLista = r.auditorias || [];
+  state.histAplicado = JSON.parse(JSON.stringify(histFiltro()));
+  histMarcarPendente();
+  histRenderResultados();
+}
+
+function histRenderTudo() {
   const c = $('#abaConteudo');
   if (!c) return;
   const f = histFiltro();
-  const isDiretor = state.perfil === 'DIRETOR';
   const clientes = state.clientes || [];
   const msCli = msHtml('hCli', { opcoes: clientes.map(x => ({ v: x, t: x })), sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', cb: v => histMudou('clientes', v) });
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
-  const lista = histFiltrar(state.histLista);
-  const total = (state.histLista || []).length;
 
-  const filtros = `
+  c.innerHTML = `
     <div class="hist-filtros">
       ${msCli}
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
@@ -1918,7 +1933,23 @@ function histRender() {
         <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
         <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
       </div>
-    </div>`;
+      <div class="pf-aviso-pendente" id="histAviso">Filtros alterados — toque em Buscar para atualizar.</div>
+      <button type="button" class="pf-btn-buscar" id="histBtnBuscar" onclick="histBuscar()">🔍 Buscar</button>
+    </div>
+    <div id="histResultados"></div>`;
+  histRenderResultados();
+}
+
+function histRenderResultados() {
+  const box = $('#histResultados');
+  if (!box) return;
+  const isDiretor = state.perfil === 'DIRETOR';
+  if (!state.histAplicado) {
+    box.innerHTML = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">Ajuste os filtros e toque em Buscar.</div>';
+    return;
+  }
+  const lista = histFiltrar(state.histLista);
+  const total = (state.histLista || []).length;
 
   let corpo = '';
   if (!lista.length) {
@@ -1928,7 +1959,7 @@ function histRender() {
     corpo = `<div class="hist-conta">Concluídas: ${lista.length} de ${total}</div>` + lista.map(a => histItemConcluido(a, isDiretor)).join('');
   }
 
-  c.innerHTML = filtros + corpo;
+  box.innerHTML = corpo;
 }
 
 function histItemConcluido(a, isDiretor) {
@@ -3862,7 +3893,7 @@ async function excluirAuditoria(auditoriaId, nome) {
   showLoading('Excluindo...');
   const r = await apiCall('excluirAuditoria', { auditoriaId });
   hideLoading();
-  if (r.ok) { toast('Auditoria excluída'); verHistorico(); }
+  if (r.ok) { toast('Auditoria excluída'); verHistorico(true); }
   else toast('Erro: ' + (r.erro || 'falha'));
 }
 
@@ -3941,7 +3972,7 @@ async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
   hideLoading();
   if (re.ok) {
     toast('Relatório e apresentação enviados para ' + email);
-    verHistorico();
+    verHistorico(true);
   } else {
     toast('Erro: ' + (re.erro || 'falha'));
   }
@@ -4130,7 +4161,7 @@ function mostrarLinksApresentacao(cliente, unidade, salvo, variante, prep) {
         <p style="color:var(--text-light);margin-bottom:4px">${cliente} — ${unidade}</p>
         ${bloco}
         ${avisoFotos}
-        <button class="btn-fc btn-fc-outline" onclick="verHistorico()" style="margin-top:24px">
+        <button class="btn-fc btn-fc-outline" onclick="verHistorico(true)" style="margin-top:24px">
           <i class="bi bi-arrow-left"></i> Voltar ao Histórico
         </button>
       </div>
