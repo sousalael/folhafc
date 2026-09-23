@@ -84,6 +84,7 @@ function doPost(e) {
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
+    else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -555,7 +556,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-22-r132';
+const VERSAO_SCRIPT = '2026-09-23-r133';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3349,6 +3350,128 @@ function listarProjetosAuditoria(dados, cpf) {
     }
     lista.sort(function (a, b) { return a.data < b.data ? 1 : (a.data > b.data ? -1 : 0); });
     return { ok: true, projetos: lista };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PENDÊNCIAS DO DIA ANTERIOR (cards da Home) — r133
+   Corte PRÓPRIO desta funcionalidade: 6h da manhã (fuso America/Fortaleza).
+   É independente do corte de 3h30 usado em getDataTrabalhoVigente() para
+   decidir qual projeto está "ativo hoje" — aqui o corte é sempre 6h, por
+   pedido do Lael, e serve só para calcular qual é "o dia anterior".
+   ═══════════════════════════════════════════════════════════════════ */
+var HORA_CORTE_PENDENCIAS = 6;
+
+// Devolve a data do "dia anterior" de referência, já nos dois formatos
+// usados nas planilhas: BR (dd/MM/yyyy, usado na aba Projetos e na aba
+// Presencas) e ISO (yyyy-MM-dd, usado na coluna DataAuditoria da aba
+// Auditoria_Operacao, que vem de um <input type="date"> no auditoria.html).
+function getDataPendenciaAnterior() {
+  var TZ = 'America/Fortaleza';
+  var agora = new Date();
+  var hh = parseInt(Utilities.formatDate(agora, TZ, 'HH'), 10);
+  var referencia = agora;
+  // Antes das 6h, ainda estamos "no dia de ontem" para efeito deste alerta.
+  if (hh < HORA_CORTE_PENDENCIAS) {
+    referencia = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
+  }
+  var diaAnterior = new Date(referencia.getTime() - 24 * 60 * 60 * 1000);
+  return {
+    br: Utilities.formatDate(diaAnterior, TZ, 'dd/MM/yyyy'),
+    iso: Utilities.formatDate(diaAnterior, TZ, 'yyyy-MM-dd')
+  };
+}
+
+// Cards da Home: projetos do dia anterior (corte 6h) que (a) não foram
+// encerrados e (b) não têm Análise de Preparação para Inventário concluída.
+// Diretor vê TODOS os projetos do dia anterior; Supervisor só vê os projetos
+// em que bateu presença (qualquer cargo) naquela data — cada um vê só os
+// projetos em que atuou, por decisão do Lael.
+function getPendenciasHome(cpf) {
+  try {
+    var perfil = getPerfilPorCPF(cpf);
+    if (perfil !== 'DIRETOR' && perfil !== 'SUPERVISOR') return { ok: false, erro: 'Acesso restrito' };
+    var cpfLimpo = normalizarCPF(cpf);
+    var dataAlvo = getDataPendenciaAnterior();
+
+    var dadosProj = getSheet('Projetos').getDataRange().getDisplayValues();
+    var projetosDoDia = [];
+    for (var i = 1; i < dadosProj.length; i++) {
+      var r = dadosProj[i];
+      if (String(r[0]).trim() === dataAlvo.br) {
+        projetosDoDia.push({
+          cliente: fcLimparNome(r[1]),
+          unidade: fcLimparNome(r[2]),
+          status: String(r[3] || '').trim()
+        });
+      }
+    }
+    if (!projetosDoDia.length) {
+      return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: [], semAnalise: [] };
+    }
+
+    // Presenças do dia anterior: lerPresencasDoProjeto devolve do primeiro
+    // registro daquela data até o fim da aba (nunca reabre a aba inteira,
+    // técnica já usada no r132); filtramos de novo pela data, como o resto
+    // do sistema já faz.
+    var presencasDoDia = lerPresencasDoProjeto(getSheet('Presencas'), dataAlvo.br).linhas;
+    var colabDados = getColabDados();
+    var idxColab = getColabIndices();
+    var nomePorCpf = {};
+    for (var j = 1; j < colabDados.length; j++) {
+      var cpfC = normalizarCPF(colabDados[j][idxColab.cpf]);
+      if (cpfC) nomePorCpf[cpfC] = String(colabDados[j][idxColab.nome] || '');
+    }
+
+    var supervisoresPorProjeto = {};   // chave "cliente|unidade" -> { nome: true }
+    var atuouPorProjeto = {};          // chave "cliente|unidade" -> { cpfLimpo: true }
+    presencasDoDia.forEach(function (p) {
+      if (p[0] !== dataAlvo.br) return;
+      var chave = fcChave(p[1]) + '|' + fcChave(p[2]);
+      var cpfPresenca = normalizarCPF(p[3]);
+      var cargo = String(p[4] || '').toUpperCase();
+      if (!atuouPorProjeto[chave]) atuouPorProjeto[chave] = {};
+      if (cpfPresenca) atuouPorProjeto[chave][cpfPresenca] = true;
+      if (cargo.indexOf('SUPERVIS') === 0) {
+        var nomeSup = nomePorCpf[cpfPresenca] || p[7] || '';
+        if (nomeSup) {
+          if (!supervisoresPorProjeto[chave]) supervisoresPorProjeto[chave] = {};
+          supervisoresPorProjeto[chave][nomeSup] = true;
+        }
+      }
+    });
+
+    // Análises concluídas do dia anterior (DataAuditoria pode estar em ISO,
+    // formato padrão do input type=date, ou em BR por segurança).
+    var dadosAud = getOuCriarAbaAuditoria().getDataRange().getDisplayValues();
+    var analisadosSet = {};
+    for (var k = 1; k < dadosAud.length; k++) {
+      var rowA = dadosAud[k];
+      if (String(rowA[9]).trim() !== 'CONCLUIDO') continue;
+      var dataAud = String(rowA[7]).trim();
+      if (dataAud !== dataAlvo.iso && dataAud !== dataAlvo.br) continue;
+      analisadosSet[fcChave(rowA[5]) + '|' + fcChave(rowA[6])] = true;
+    }
+
+    var naoEncerrados = [], semAnalise = [];
+    projetosDoDia.forEach(function (p) {
+      var chave = fcChave(p.cliente) + '|' + fcChave(p.unidade);
+      var atuou = (perfil === 'DIRETOR') || (atuouPorProjeto[chave] && atuouPorProjeto[chave][cpfLimpo]);
+      if (!atuou) return; // Supervisor só vê os projetos em que atuou
+
+      if (p.status !== 'Encerrado') {
+        var nomesSup = supervisoresPorProjeto[chave] ? Object.keys(supervisoresPorProjeto[chave]) : [];
+        naoEncerrados.push({
+          cliente: p.cliente, unidade: p.unidade,
+          supervisores: nomesSup.length ? nomesSup : ['Nenhum supervisor registrado']
+        });
+      }
+      if (!analisadosSet[chave]) {
+        semAnalise.push({ cliente: p.cliente, unidade: p.unidade });
+      }
+    });
+
+    return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: naoEncerrados, semAnalise: semAnalise };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 

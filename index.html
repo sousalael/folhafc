@@ -267,7 +267,20 @@
     </div>
 
     <div id="view-dashboard" class="hidden">
-        
+
+        <!-- ############ r133: CARDS DE PENDÊNCIAS DO DIA ANTERIOR ############ -->
+        <div id="cards-pendencias-home" class="mb-4" style="display:none;">
+            <div class="alert alert-danger shadow-sm mb-2" id="card-pend-nao-encerrados" style="display:none;">
+                <h6 class="fw-bold mb-2">⚠️ Projetos de <span id="pend-data-nao-enc"></span> não encerrados</h6>
+                <ul class="mb-0 ps-3" id="lista-pend-nao-encerrados"></ul>
+            </div>
+            <div class="alert alert-warning shadow-sm mb-2" id="card-pend-sem-analise" style="display:none;">
+                <h6 class="fw-bold mb-2">📋 Projetos de <span id="pend-data-sem-analise"></span> sem Análise de Preparação para Inventário</h6>
+                <ul class="mb-0 ps-3" id="lista-pend-sem-analise"></ul>
+            </div>
+        </div>
+        <!-- ############ FIM DOS CARDS DE PENDÊNCIAS ############ -->
+
         <!-- ############ NOVO: SELEÇÃO DE PROJETO (saiu da tela de login) ############ -->
         <div class="card mb-4 border-0 shadow-sm" style="background-color: #f4f4fb;">
             <div class="card-body">
@@ -1588,7 +1601,9 @@
                 document.getElementById('view-dashboard').classList.remove('hidden');
                 document.getElementById('fc-header-barra').style.display = 'block';
                 document.getElementById('span-nome-sup').innerText = res.nome + ` (${res.perfil})`;
-                
+
+                carregarPendenciasHome(); // r133: cards de pendências do dia anterior (não bloqueia o restante do login)
+
                 if (projetoAtivo && projetoAtivo.data) atualizarCabecalhoProjeto();
 
                 if (res.perfil === 'DIRETOR') {
@@ -2136,6 +2151,44 @@
         }
         if (!res || res.error) throw new Error((res && res.error) ? res.error : 'Resposta inesperada do servidor.');
         return res;
+    }
+
+    // r133: cards de pendências do dia anterior (corte 6h) na tela inicial.
+    // Diretor vê todos os projetos pendentes; Supervisor só os seus. Some
+    // sozinho quando não há pendência (projeto encerrado / análise concluída).
+    async function carregarPendenciasHome() {
+        const wrap = document.getElementById('cards-pendencias-home');
+        const cardNaoEnc = document.getElementById('card-pend-nao-encerrados');
+        const cardSemAnalise = document.getElementById('card-pend-sem-analise');
+        try {
+            const res = await chamarApi({ action: 'getPendenciasHome', cpf: getCpfLogado() });
+            if (!res || !res.ok) { wrap.style.display = 'none'; return; }
+
+            if (res.naoEncerrados && res.naoEncerrados.length) {
+                document.getElementById('pend-data-nao-enc').innerText = res.dataReferencia;
+                document.getElementById('lista-pend-nao-encerrados').innerHTML = res.naoEncerrados.map(p =>
+                    `<li><strong>${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</strong> · Supervisor(es): ${escaparHtml(p.supervisores.join(', '))}</li>`
+                ).join('');
+                cardNaoEnc.style.display = 'block';
+            } else {
+                cardNaoEnc.style.display = 'none';
+            }
+
+            if (res.semAnalise && res.semAnalise.length) {
+                document.getElementById('pend-data-sem-analise').innerText = res.dataReferencia;
+                document.getElementById('lista-pend-sem-analise').innerHTML = res.semAnalise.map(p =>
+                    `<li><strong>${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</strong></li>`
+                ).join('');
+                cardSemAnalise.style.display = 'block';
+            } else {
+                cardSemAnalise.style.display = 'none';
+            }
+
+            wrap.style.display = (cardNaoEnc.style.display === 'block' || cardSemAnalise.style.display === 'block') ? 'block' : 'none';
+        } catch (err) {
+            // Falha ao carregar pendências não deve travar o login: só esconde os cards.
+            wrap.style.display = 'none';
+        }
     }
 
     // ===== FLUXO DE ACESSO POR SENHA (codigo por e-mail = recuperacao) =====
@@ -4274,7 +4327,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-22-r132';
+    const VERSAO_ESPERADA = '2026-09-23-r133';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
