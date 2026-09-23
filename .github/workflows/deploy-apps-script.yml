@@ -145,10 +145,27 @@ jobs:
 
       - name: Publicar arquivos de controle no repositório (marcador + prova)
         if: always()
+        continue-on-error: true
         run: |
           git config user.name "fc-deploy-bot"
           git config user.email "actions@github.com"
           git add -f apps-script/.site_deployment_id 2>/dev/null || true
           if [ -f _PROVA_DEPLOY.txt ]; then git add _PROVA_DEPLOY.txt; fi
-          git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)" || echo "nada para commitar"
-          git push
+          if git diff --cached --quiet; then
+            echo "nada para commitar"
+            exit 0
+          fi
+          git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)"
+          # r136b: se outra execucao (disparada por outro push quase ao mesmo tempo)
+          # ja publicou nesse meio-tempo, faz rebase e tenta de novo em vez de falhar.
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "push OK na tentativa $i"
+              exit 0
+            fi
+            echo "push falhou (tentativa $i) — rebase e tenta de novo"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; git reset --soft origin/main; git add -f apps-script/.site_deployment_id _PROVA_DEPLOY.txt 2>/dev/null; git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)"; }
+            sleep 3
+          done
+          echo "AVISO: nao consegui publicar o log de debug apos 5 tentativas (nao critico, deploy real ja foi feito nos passos anteriores)"
