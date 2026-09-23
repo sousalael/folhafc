@@ -8,6 +8,9 @@ on:
       - "SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt"
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,11 +29,6 @@ jobs:
       - name: Configurar credenciais do clasp
         run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
-      # r108: fonte única da verdade passa a ser o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt
-      # da raiz (o mesmo arquivo entregue em cada zip de versão). Antes de
-      # publicar, este passo sempre sobrescreve apps-script/Code.gs com o
-      # conteúdo atual desse arquivo — as duas cópias nunca mais ficam
-      # dessincronizadas, mesmo que só a raiz tenha sido atualizada.
       - name: Sincronizar Code.gs com o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt da raiz
         run: cp SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt apps-script/Code.gs
 
@@ -57,16 +55,6 @@ jobs:
           fi
           echo "VER=$VER" >> "$GITHUB_ENV"
 
-      # r134: passo NOVO e OBRIGATÓRIO — atualiza explicitamente, por ID fixo
-      # (secret DEPLOYMENT_ID), a implantação que o site (index.html) de fato
-      # usa. Antes, só o passo seguinte existia: ele descobre implantações
-      # rodando "clasp deployments" no projeto apontado por APPS_SCRIPT_ID e
-      # atualiza cada uma encontrada — se APPS_SCRIPT_ID apontar para um
-      # projeto Apps Script diferente do vinculado à planilha real, esse passo
-      # roda com sucesso mas atualiza implantações erradas, deixando a URL do
-      # site sempre desatualizada, em silêncio. Este passo aqui falha alto e
-      # claro (exit code 1) se o DEPLOYMENT_ID não existir nesse projeto —
-      # nunca mais um "sucesso" que não atualiza a URL real do site.
       - name: Atualizar a implantação do site (DEPLOYMENT_ID)
         working-directory: apps-script
         run: |
@@ -78,10 +66,6 @@ jobs:
           echo "--- Atualizando implantação do site: ${{ secrets.DEPLOYMENT_ID }} -> versão $VER ---"
           clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VER" --description "Auto (site) v$VER $(date +'%Y-%m-%d %H:%M')"
 
-      # Passo secundário/best-effort: atualiza também qualquer OUTRA
-      # implantação que apareça listada no mesmo projeto (ex.: implantações
-      # extras criadas manualmente). Uma falha aqui NÃO derruba o job, porque
-      # o que realmente importa (a URL do site, passo acima) já foi garantido.
       - name: Atualizar as demais implantações do projeto (melhor esforço)
         working-directory: apps-script
         continue-on-error: true
@@ -97,3 +81,63 @@ jobs:
             clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $(date +'%Y-%m-%d %H:%M')" || echo "ERRO ao atualizar $DEP_ID (não crítico)"
           done
           echo "--- Concluído ---"
+
+      # r135b: PROVA REAL. Os passos acima só confirmam que o clasp RODOU sem
+      # erro — nao confirmam que a URL PUBLICA do site realmente mudou (ja
+      # aconteceu de "sucesso" aqui e a URL continuar na versao antiga). Este
+      # passo chama a URL de verdade (a mesma que o index.html usa) varias
+      # vezes, com espera entre tentativas, e so passa quando a versao
+      # respondida bate com a que acabamos de publicar. Se depois de ~2 min
+      # ainda nao bater, o job FALHA de propósito — nunca mais um "sucesso"
+      # enganoso.
+      - name: Provar que a URL do site foi atualizada
+        working-directory: apps-script
+        run: |
+          set -o pipefail
+          URL="https://script.google.com/macros/s/${{ secrets.DEPLOYMENT_ID }}/exec"
+          ESPERADA=$(grep -oE "VERSAO_SCRIPT = '[^']*'" ../SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt | grep -oE "'[^']*'" | tr -d "'")
+          echo "Versão esperada (do código que acabamos de publicar): $ESPERADA"
+          echo "URL verificada: $URL"
+          echo "" > /tmp/prova.txt
+          echo "=== PROVA DE PUBLICACAO — $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===" >> /tmp/prova.txt
+          echo "Versao esperada: $ESPERADA" >> /tmp/prova.txt
+          echo "VER (numero interno do clasp): $VER" >> /tmp/prova.txt
+          echo "" >> /tmp/prova.txt
+          OK=0
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            RESP=$(curl -s --max-time 20 "$URL" || echo "FALHA_CURL")
+            echo "--- tentativa $i (t+$((i*10))s aprox) ---" >> /tmp/prova.txt
+            echo "$RESP" >> /tmp/prova.txt
+            echo "" >> /tmp/prova.txt
+            if echo "$RESP" | grep -q "\"$ESPERADA\""; then
+              echo "OK na tentativa $i: a URL do site já responde com $ESPERADA"
+              echo ">>> RESULTADO: SUCESSO na tentativa $i <<<" >> /tmp/prova.txt
+              OK=1
+              break
+            fi
+            echo "Tentativa $i: ainda não. Aguardando 10s..."
+            sleep 10
+          done
+          cp /tmp/prova.txt _PROVA_DEPLOY.txt
+          if [ "$OK" != "1" ]; then
+            echo ">>> RESULTADO: FALHOU apos 12 tentativas (~2 min) <<<" >> _PROVA_DEPLOY.txt
+            echo "ERRO REAL: a URL publica do site NAO está servindo a versão publicada, mesmo depois de ~2 minutos."
+            echo "Ver arquivo _PROVA_DEPLOY.txt (raiz do repo) para o histórico completo das tentativas."
+          fi
+          cat _PROVA_DEPLOY.txt
+          mv _PROVA_DEPLOY.txt ../_PROVA_DEPLOY.txt
+          exit $((1 - OK))
+        continue-on-error: true
+
+      - name: Publicar o arquivo de prova no repositório
+        if: always()
+        run: |
+          git config user.name "fc-deploy-bot"
+          git config user.email "actions@github.com"
+          if [ -f _PROVA_DEPLOY.txt ]; then
+            git add _PROVA_DEPLOY.txt
+            git commit -m "debug: prova de publicacao (automatico)" || echo "nada para commitar"
+            git push
+          else
+            echo "arquivo de prova não encontrado, nada a publicar"
+          fi
