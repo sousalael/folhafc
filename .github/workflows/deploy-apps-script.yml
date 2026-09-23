@@ -64,6 +64,11 @@ jobs:
             exit 1
           fi
           echo "--- Atualizando implantação do site: ${{ secrets.DEPLOYMENT_ID }} -> versão $VER ---"
+          if [ "${{ secrets.DEPLOYMENT_ID }}" = "AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw" ]; then
+            echo "CHECAGEM: DEPLOYMENT_ID confere com o ID usado pelo site (index.html)." | tee -a /tmp/check_depid.txt
+          else
+            echo "CHECAGEM: DEPLOYMENT_ID NAO confere com o ID usado pelo site (index.html) -- provavel causa raiz." | tee -a /tmp/check_depid.txt
+          fi
           clasp deploy -i "${{ secrets.DEPLOYMENT_ID }}" -V "$VER" --description "Auto (site) v$VER $(date +'%Y-%m-%d %H:%M')"
 
       - name: Atualizar as demais implantações do projeto (melhor esforço)
@@ -102,6 +107,7 @@ jobs:
           echo "=== PROVA DE PUBLICACAO — $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===" >> /tmp/prova.txt
           echo "Versao esperada: $ESPERADA" >> /tmp/prova.txt
           echo "VER (numero interno do clasp): $VER" >> /tmp/prova.txt
+          if [ -f /tmp/check_depid.txt ]; then cat /tmp/check_depid.txt >> /tmp/prova.txt; fi
           echo "" >> /tmp/prova.txt
           OK=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
