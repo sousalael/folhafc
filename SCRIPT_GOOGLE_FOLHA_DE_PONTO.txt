@@ -563,7 +563,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r140';
+const VERSAO_SCRIPT = '2026-09-25-r141';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6649,22 +6649,49 @@ function biFinValidarConfig_(cfg) {
   return { ordem: ordem, visiveis: visiveis };
 }
 
+// r141: filtros persistentes (globais e de cada aba) ficam na mesma aba, no nome
+// reservado "__FILTROS__". So listas de textos curtos sao aceitas.
+function biFinValidarFiltros_(f) {
+  if (!f || typeof f !== 'object') return null;
+  function lista(a) {
+    if (!Array.isArray(a)) return null;
+    var out = a.filter(function(x) { return typeof x === 'string' && x.length <= 200; }).slice(0, 3000);
+    return out.length ? out : null;
+  }
+  var out = { globais: {}, locais: {} };
+  ['ano', 'mes', 'neg', 'cli', 'uni', 'tipo'].forEach(function(d) {
+    var l = f.globais ? lista(f.globais[d]) : null;
+    if (l) out.globais[d] = l;
+  });
+  ['op', 'folha', 'inv', 'adm'].forEach(function(a) {
+    var loc = f.locais && f.locais[a] ? f.locais[a] : null;
+    if (!loc) return;
+    var o = {};
+    ['setor', 'det'].forEach(function(d) { var l = lista(loc[d]); if (l) o[d] = l; });
+    if (Object.keys(o).length) out.locais[a] = o;
+  });
+  if (JSON.stringify(out).length > 45000) return null;
+  return out;
+}
+
 function biFinConfigListar(cpf) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
   var alvo = normalizarCPF(cpf);
   var dados = biFinAbaConfigs_().getDataRange().getValues();
-  var atual = null, lista = [];
+  var atual = null, filtros = null, lista = [];
   for (var i = 1; i < dados.length; i++) {
     if (normalizarCPF(dados[i][0]) !== alvo) continue;
-    var cfg = null;
-    try { cfg = biFinValidarConfig_(JSON.parse(dados[i][2])); } catch (e) { cfg = null; }
-    if (!cfg) continue;
     var nome = String(dados[i][1] || '');
+    var bruto = null;
+    try { bruto = JSON.parse(dados[i][2]); } catch (e) { bruto = null; }
+    if (nome === '__FILTROS__') { filtros = biFinValidarFiltros_(bruto); continue; }
+    var cfg = biFinValidarConfig_(bruto);
+    if (!cfg) continue;
     if (nome === '__ATUAL__') atual = cfg;
     else lista.push({ nome: nome, config: cfg });
   }
   lista.sort(function(a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-  return { success: true, atual: atual, lista: lista };
+  return { success: true, atual: atual, filtros: filtros, lista: lista };
 }
 
 function biFinConfigSalvar(cpf, nome, config) {
@@ -6672,8 +6699,8 @@ function biFinConfigSalvar(cpf, nome, config) {
   nome = String(nome || '').replace(/\s+/g, ' ').trim();
   if (!nome) return { error: 'Dê um nome para a configuração.' };
   if (nome.length > 60) return { error: 'Use um nome com até 60 caracteres.' };
-  var cfg = biFinValidarConfig_(config);
-  if (!cfg) return { error: 'Configuração inválida.' };
+  var cfg = nome === '__FILTROS__' ? biFinValidarFiltros_(config) : biFinValidarConfig_(config);
+  if (!cfg) return { error: nome === '__FILTROS__' ? 'Filtros inválidos ou grandes demais para salvar.' : 'Configuração inválida.' };
   var alvo = normalizarCPF(cpf);
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);

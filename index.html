@@ -812,9 +812,9 @@
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-bi-financeiro" data-bs-toggle="modal" data-bs-target="#modalBiFinanceiro" onclick="prepararBiFinanceiro()">📊 BI Financeiro (Despesas × Provisionamento)</button>
         </div>
-        <!-- r140: B.I. Financeiro do Grupo (somente Diretor) — abre bi.html em nova aba -->
+        <!-- r140: B.I. Formula Code (somente Diretor) — abre bi.html em nova aba (r141: renomeado) -->
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
-            <button class="btn fc-btn-verde w-100 py-2 fw-bold hidden" id="btn-bi-grupo" onclick="abrirBiGrupo()">📈 B.I. Financeiro do Grupo</button>
+            <button class="btn fc-btn-verde w-100 py-2 fw-bold hidden" id="btn-bi-grupo" onclick="abrirBiGrupo()">📈 B.I. Formula Code</button>
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelProvisionamento" onclick="prepararRelProvisionamento()">📑 Relatório de Provisionamento</button>
@@ -3722,11 +3722,11 @@
         window.open(url, '_blank');
     }
 
-    // r140: B.I. Financeiro do Grupo (bi.html), mesmo padrao das outras telas em nova aba.
+    // r140: B.I. Formula Code (bi.html), mesmo padrao das outras telas em nova aba.
     function abrirBiGrupo() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'bi.html';
         const tok = window.tokenSessao || '';
-        if (!tok) { alert('Faça login novamente para abrir o B.I. Financeiro do Grupo.'); return; }
+        if (!tok) { alert('Faça login novamente para abrir o B.I. Formula Code.'); return; }
         const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
         window.open(url, '_blank');
     }
@@ -4429,7 +4429,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-25-r140';
+    const VERSAO_ESPERADA = '2026-09-25-r141';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
