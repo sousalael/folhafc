@@ -79,12 +79,12 @@
         .kpi-barra { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .kpi-barra .dica { font-size: .75rem; color: var(--fc-texto-suave); }
         .kpi-linha { display: flex; flex-wrap: nowrap; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; margin-bottom: 10px; }
-        .kpi-card { flex: 1 1 0; min-width: 150px; background: #fff; border-radius: 14px; padding: 11px 12px; box-shadow: 0 2px 12px rgba(0,0,0,.06); border-top: 4px solid var(--kpi-cor, #999); cursor: grab; user-select: none; position: relative; outline: none; transition: box-shadow .15s ease; }
+        .kpi-card { flex: 1 1 0; min-width: 135px; background: #fff; border-radius: 12px; padding: 9px 11px; box-shadow: 0 2px 12px rgba(0,0,0,.06); border-top: 4px solid var(--kpi-cor, #999); cursor: grab; user-select: none; position: relative; outline: none; transition: box-shadow .15s ease; }
         .kpi-card:focus-visible { box-shadow: 0 0 0 3px rgba(97,207,0,.55), 0 2px 12px rgba(0,0,0,.06); }
         .kpi-card.arrastando { cursor: grabbing; opacity: .85; box-shadow: 0 10px 26px rgba(0,43,80,.25); z-index: 5; }
-        .kpi-rotulo { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--fc-texto-suave); padding-right: 22px; }
-        .kpi-valor { font-size: 1.3rem; overflow: hidden; font-weight: 800; color: var(--fc-primaria); line-height: 1.2; margin-top: 4px; white-space: nowrap; }
-        .kpi-sub { font-size: .74rem; color: var(--fc-texto-suave); margin-top: 3px; line-height: 1.3; }
+        .kpi-rotulo { font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--fc-texto-suave); padding-right: 22px; }
+        .kpi-valor { font-size: 1.05rem; overflow: hidden; font-weight: 800; color: var(--fc-primaria); line-height: 1.2; margin-top: 4px; white-space: nowrap; }
+        .kpi-sub { font-size: .7rem; color: var(--fc-texto-suave); margin-top: 3px; line-height: 1.3; }
         .kpi-alca { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #9aa5b1; font-size: 13px; touch-action: none; cursor: grab; }
         .kpi-alca:hover { background: var(--fc-fundo); color: var(--fc-primaria); }
         .kpi-positivo { color: #3f8f00 !important; }
@@ -113,9 +113,28 @@
         @media (max-width: 1499.98px) { .grade-ro { grid-template-columns: minmax(0, 1fr); } }
         .grafico-caixa { position: relative; height: 340px; }
 
-        .filtros-locais { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)) minmax(0, 300px); gap: 12px; align-items: end; background: #fff; border: 1px solid var(--fc-borda); border-radius: 12px; padding: 12px 16px 2px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,43,80,0.06); }
-        @media (max-width: 767.98px) { .filtros-locais { grid-template-columns: minmax(0, 1fr); } }
-        .kpi-local { cursor: default; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.05); border: 1px solid var(--fc-borda); }
+        .filtros-locais { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)) repeat(2, minmax(0, 200px)); gap: 12px; align-items: end; background: #fff; border: 1px solid var(--fc-borda); border-radius: 12px; padding: 12px 16px 2px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,43,80,0.06); }
+        @media (max-width: 1199.98px) { .filtros-locais { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 575.98px) { .filtros-locais { grid-template-columns: minmax(0, 1fr); } }
+        .kpi-local { cursor: default; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.05); border: 1px solid var(--fc-borda); min-width: 0; }
+        .kpi-local .kpi-valor { font-size: 1.05rem; }
+        /* r142: barra que mostra o filtro feito clicando nas barras do grafico */
+        .barra-selecao { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: #f4fbee; border: 1px solid #cfe9b5; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; font-size: .86rem; color: var(--fc-primaria); }
+        .barra-selecao .dica-sel { font-size: .76rem; color: var(--fc-texto-suave); }
+        .tabela-bi tr.nivel-3 td:first-child { padding-left: 74px; color: #47535f; }
+        .tabela-bi tr.nivel-3 td { background: #f4f7fa; font-size: .8rem; }
+        .tabela-bi tr.linha-loja { cursor: help; }
+        .tabela-bi tr.linha-loja:hover td, .tabela-bi tr.linha-loja:focus td { background: #e9f3fb; }
+        .tabela-bi tr.linha-loja:focus { outline: 2px solid var(--fc-acao); outline-offset: -2px; }
+        /* r142: caixa com as observacoes (coluna Obs) da loja */
+        .dica-obs { position: fixed; z-index: 900; max-width: 420px; background: #fff; border: 1px solid var(--fc-borda); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,43,80,.22); padding: 10px 12px; font-size: .8rem; pointer-events: none; }
+        .dica-obs h4 { font-size: .8rem; font-weight: 700; color: var(--fc-primaria); margin: 0 0 6px; }
+        .dica-obs ul { list-style: none; margin: 0; padding: 0; }
+        .dica-obs li { display: flex; gap: 10px; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eef1f5; }
+        .dica-obs li:last-child { border-bottom: none; }
+        .dica-obs .txt { color: #1f2b38; }
+        .dica-obs .meta { color: var(--fc-texto-suave); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .dica-obs .mais { color: var(--fc-texto-suave); margin-top: 4px; }
 
         /* Controles de drill do grafico de periodo */
         .grupo-nivel .btn { font-size: .78rem; padding: 4px 10px; }
@@ -173,6 +192,8 @@
             </div>
         </div>
     </div>
+
+    <div class="dica-obs hidden" id="dica-obs" role="tooltip"></div>
 
     <div class="carregando" id="carregando">
         <div class="spinner-border" role="status"></div>
@@ -236,6 +257,7 @@
                 <div class="sr-only" aria-live="polite" id="aviso-leitor"></div>
 
                 <nav class="bi-abas" role="tablist" id="bi-abas"></nav>
+                <div class="barra-selecao hidden" id="barra-selecao" aria-live="polite"></div>
 
                 <div id="conteudo-aba"></div>
             </main>
@@ -319,6 +341,18 @@ function prepararBase(res) {
             db.uniChave.push(db.chaves.cli[r[2]] + '|' + db.chaves.loja[r[3]]);
         }
         db.uni[i] = u;
+    }
+    db.mapaUni = mapaUni;
+    // r142: observacoes (coluna Obs) — [mes, neg, cli, loja, tipo, conta, setor, det, obs, custo]
+    const O = res.obs || [];
+    db.obsDic = res.obsDic || [];
+    db.obs = { n: O.length, mes: new Int32Array(O.length), neg: new Int32Array(O.length), cli: new Int32Array(O.length),
+               loja: new Int32Array(O.length), tipo: new Int32Array(O.length), conta: new Int32Array(O.length),
+               setor: new Int32Array(O.length), det: new Int32Array(O.length), txt: new Int32Array(O.length), custo: new Float64Array(O.length) };
+    for (let i = 0; i < O.length; i++) {
+        const r = O[i];
+        db.obs.mes[i] = r[0]; db.obs.neg[i] = r[1]; db.obs.cli[i] = r[2]; db.obs.loja[i] = r[3]; db.obs.tipo[i] = r[4];
+        db.obs.conta[i] = r[5]; db.obs.setor[i] = r[6]; db.obs.det[i] = r[7]; db.obs.txt[i] = r[8]; db.obs.custo[i] = r[9] || 0;
     }
     // Papel de cada conta
     const papel = nomes => { const s = new Set(nomes); return db.chaves.conta.map(k => s.has(k)); };
@@ -407,8 +441,9 @@ function calcularTotais(db, linhas, escopoCusto) {
 
 // Crescimento YoY: faturamento do periodo filtrado x mesmos meses do ano anterior,
 // com os mesmos filtros de negocio/cliente/unidade/tipo.
-function calcularYoY(db, cascata, fatAtual) {
-    const mesesAtuais = cascata.efetivo.mes ? Array.from(cascata.efetivo.mes) : cascata.opcoes.mes.slice();
+// r142: mesesOverride = meses escolhidos clicando nas barras (quando houver)
+function calcularYoY(db, cascata, fatAtual, mesesOverride) {
+    const mesesAtuais = mesesOverride ? Array.from(mesesOverride) : cascata.efetivo.mes ? Array.from(cascata.efetivo.mes) : cascata.opcoes.mes.slice();
     const idxPorTexto = {};
     db.meses.forEach((m, i) => { idxPorTexto[m] = i; });
     const anteriores = new Set();
@@ -438,7 +473,82 @@ function calcularYoY(db, cascata, fatAtual) {
     };
 }
 
-// Periodos para o grafico de faturamento (drill: ano > semestre > trimestre > mes)
+// ---------- r142: selecao por clique nas barras ----------
+// Chaves de periodo escolhidas -> conjunto de meses (indices) presentes nas linhas
+function mesesDasChaves(db, linhas, nivel, chaves) {
+    if (!chaves || !chaves.size) return null;
+    const out = new Set();
+    for (let j = 0; j < linhas.length; j++) {
+        const m = db.mes[linhas[j]];
+        if (!out.has(m) && chaves.has(chavePeriodo(db.meses[m], nivel))) out.add(m);
+    }
+    return out.size ? out : null;
+}
+function filtrarPorMeses(db, linhas, meses) {
+    if (!meses) return linhas;
+    return linhas.filter(i => meses.has(db.mes[i]));
+}
+// Crescimento YoY de cada coluna: mesmos meses do ano anterior, com os mesmos
+// filtros de negocio/cliente/unidade/tipo
+function yoyPorPeriodo(db, cascata, linhas, nivel) {
+    const ef = cascata.efetivo;
+    const fatMes = new Map();
+    for (let i = 0; i < db.n; i++) {
+        if (!db.ehFat[db.conta[i]]) continue;
+        if (ef.neg && !ef.neg.has(db.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(db.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(db.uni[i])) continue;
+        if (ef.tipo && !ef.tipo.has(db.tipo[i])) continue;
+        fatMes.set(db.mes[i], (fatMes.get(db.mes[i]) || 0) + db.fat[i]);
+    }
+    const idxPorTexto = {};
+    db.meses.forEach((m, i) => { idxPorTexto[m] = i; });
+    const baldes = new Map();
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (!db.ehFat[db.conta[i]]) continue;
+        const k = chavePeriodo(db.meses[db.mes[i]], nivel);
+        let b = baldes.get(k);
+        if (!b) { b = { atual: 0, meses: new Set() }; baldes.set(k, b); }
+        b.atual += db.fat[i]; b.meses.add(db.mes[i]);
+    }
+    const out = new Map();
+    baldes.forEach((b, k) => {
+        let ant = 0;
+        b.meses.forEach(m => {
+            const t = db.meses[m];
+            const mi = idxPorTexto[(Number(t.slice(0, 4)) - 1) + t.slice(4)];
+            if (mi !== undefined) ant += fatMes.get(mi) || 0;
+        });
+        out.set(k, ant > 0.005 ? (b.atual - ant) / ant : null);
+    });
+    return out;
+}
+// Observacoes de uma loja (Detalhamento do Custo), respeitando todos os filtros ativos
+function obsDaLoja(db, cascata, mesesSel, localEf, conta, setor, cli, loja, limite) {
+    const O = db.obs, ef = cascata.efetivo, uni = db.mapaUni[cli + '|' + loja];
+    const porTexto = new Map();
+    for (let i = 0; i < O.n; i++) {
+        if (O.conta[i] !== conta || O.setor[i] !== setor || O.cli[i] !== cli || O.loja[i] !== loja) continue;
+        const m = O.mes[i];
+        if (mesesSel && !mesesSel.has(m)) continue;
+        if (ef.ano && !ef.ano.has(db.anoDoMes[m])) continue;
+        if (ef.mes && !ef.mes.has(m)) continue;
+        if (ef.neg && !ef.neg.has(O.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(O.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(uni)) continue;
+        if (ef.tipo && !ef.tipo.has(O.tipo[i])) continue;
+        if (localEf && localEf.det && !localEf.det.has(O.det[i])) continue;
+        let t = porTexto.get(O.txt[i]);
+        if (!t) { t = { texto: db.obsDic[O.txt[i]], valor: 0, ultimo: '' }; porTexto.set(O.txt[i], t); }
+        t.valor += O.custo[i];
+        if (db.meses[m] > t.ultimo) t.ultimo = db.meses[m];
+    }
+    const lista = Array.from(porTexto.values()).sort((a, b) => b.ultimo.localeCompare(a.ultimo) || b.valor - a.valor);
+    return { itens: lista.slice(0, limite || 15), resto: Math.max(0, lista.length - (limite || 15)) };
+}
+
+// Periodos para o grafico de faturamento (ano > semestre > trimestre > mes)
 const NIVEIS_PERIODO = ['Ano', 'Semestre', 'Trimestre', 'Mês'];
 function chavePeriodo(yyyymm, nivel) {
     const a = yyyymm.slice(0, 4), m = Number(yyyymm.slice(5, 7));
@@ -502,10 +612,15 @@ function arvoreCusto(db, linhas, papel) {
         let a = raiz.get(db.conta[i]);
         if (!a) { a = { id: db.conta[i], custo: 0, filhos: new Map(), porUni: new Map() }; raiz.set(db.conta[i], a); }
         let b = a.filhos.get(db.setor[i]);
-        if (!b) { b = { id: db.setor[i], custo: 0, porUni: new Map() }; a.filhos.set(db.setor[i], b); }
-        a.custo += v; b.custo += v; total += v;
+        if (!b) { b = { id: db.setor[i], custo: 0, porUni: new Map(), filhos: new Map() }; a.filhos.set(db.setor[i], b); }
+        // r142: Cliente e Unidade (loja) abaixo do setor
+        let c = b.filhos.get(db.cli[i]);
+        if (!c) { c = { id: db.cli[i], custo: 0, porUni: new Map(), filhos: new Map() }; b.filhos.set(db.cli[i], c); }
+        let d = c.filhos.get(db.loja[i]);
+        if (!d) { d = { id: db.loja[i], custo: 0, porUni: new Map() }; c.filhos.set(db.loja[i], d); }
+        a.custo += v; b.custo += v; c.custo += v; d.custo += v; total += v;
         const u = db.uni[i];
-        somaUni(a.porUni, u, v); somaUni(b.porUni, u, v); somaUni(porUniTotal, u, v);
+        somaUni(a.porUni, u, v); somaUni(b.porUni, u, v); somaUni(c.porUni, u, v); somaUni(d.porUni, u, v); somaUni(porUniTotal, u, v);
     }
     return { raiz: raiz, total: total, porUni: porUniTotal };
 }
@@ -645,7 +760,9 @@ const estado = {
     filtrosMexidos: false,
     cards: { ordem: CARDS_PADRAO.slice(), visiveis: CARDS_PADRAO.slice() },
     configs: [],
-    periodo: { nivel: 0, foco: null, pilha: [] },
+    periodo: { nivel: 0 },
+    selecao: {},          // r142: barras clicadas por aba (so enquanto a tela esta aberta)
+    mesesPresentes: null,
     abertosRO: new Set(),
     abertosCusto: {},
     graficos: {}
@@ -910,15 +1027,68 @@ function recalcular() {
     });
     desenharCards();
     desenharAba();
+    desenharBarraSelecao();
 }
 
 // ---------------- Cards KPI ----------------
 function valoresCards() {
     const db = estado.db, casc = estado.cascata;
     const escopo = estado.aba === 'ro' ? 'oper' : 'total';
-    const t = calcularTotais(db, casc.linhas, escopo);
-    const y = calcularYoY(db, casc, t.fat);
+    const sel = mesesSelecionados();   // r142: cards seguem as barras clicadas
+    const t = calcularTotais(db, filtrarPorMeses(db, casc.linhas, sel), escopo);
+    const y = calcularYoY(db, casc, t.fat, sel);
     return { t: t, y: y, escopo: escopo };
+}
+
+// ---------------- r142: selecao por clique nas barras ----------------
+function nivelSelecao() { return estado.aba === 'ro' ? estado.periodo.nivel : 3; }
+function mesesSelecionados() {
+    const db = estado.db, casc = estado.cascata;
+    const chaves = estado.selecao[estado.aba];
+    if (!db || !casc || !chaves || !chaves.size) return null;
+    return mesesDasChaves(db, casc.linhas, nivelSelecao(), chaves);
+}
+function linhasAtivas() { return filtrarPorMeses(estado.db, estado.cascata.linhas, mesesSelecionados()); }
+function cliqueSelecao(chave, evento) {
+    const atual = estado.selecao[estado.aba] || new Set();
+    const somar = evento && (evento.ctrlKey || evento.metaKey);
+    let nova;
+    if (chave === null) nova = new Set();
+    else if (somar) { nova = new Set(atual); if (nova.has(chave)) nova.delete(chave); else nova.add(chave); }
+    else nova = (atual.size === 1 && atual.has(chave)) ? new Set() : new Set([chave]);
+    estado.selecao[estado.aba] = nova;
+    aplicarSelecao();
+}
+function limparSelecao() { estado.selecao[estado.aba] = new Set(); aplicarSelecao(); }
+function aplicarSelecao() {
+    desenharCards();
+    desenharBarraSelecao();
+    if (estado.aba === 'ro') {
+        if (estado.graficos.periodo) estado.graficos.periodo.update('none');
+        atualizarDependentesRO();
+    } else {
+        if (estado.graficos.custo) estado.graficos.custo.update('none');
+        atualizarDependentesFin(ABAS.find(a => a.id === estado.aba));
+    }
+}
+function desenharBarraSelecao() {
+    const barra = document.getElementById('barra-selecao');
+    const chaves = estado.selecao[estado.aba];
+    const ativo = !!(chaves && chaves.size && mesesSelecionados());
+    barra.classList.toggle('hidden', !ativo);
+    if (!ativo) { barra.innerHTML = ''; return; }
+    const nivel = nivelSelecao();
+    const rot = Array.from(chaves).sort().map(k => rotuloPeriodo(k, nivel));
+    barra.innerHTML = '<span>Filtrado pelo gráfico: <b>' + esc(rot.join(', ')) + '</b></span>' +
+        '<span class="dica-sel">Ctrl + clique soma ou tira barras.</span>' +
+        '<button type="button" class="btn btn-sm btn-fc-contorno ms-auto" onclick="limparSelecao()">✕ Limpar seleção</button>';
+}
+// Cor das barras: as nao escolhidas ficam apagadas enquanto houver selecao
+function corBarraSelecao(chave, cor, apagada) {
+    if (chave === undefined) return cor;   // legenda do grafico
+    const chaves = estado.selecao[estado.aba];
+    if (!chaves || !chaves.size) return cor;
+    return chaves.has(chave) ? cor : apagada;
 }
 function desenharCards() {
     const { t, y, escopo } = valoresCards();
@@ -932,7 +1102,7 @@ function desenharCards() {
         unid:   { valor: fmtNum.format(t.unidades), sub: 'Cliente + loja com faturamento' },
         yoy:    {
             valor: y.yoy === null ? '—' : (y.yoy > 0 ? '▲ ' : y.yoy < 0 ? '▼ ' : '') + pct(Math.abs(y.yoy)),
-            sub: y.yoy === null ? 'Sem faturamento no mesmo período do ano anterior' : 'vs ' + brl(y.fatAnterior) + ' em ' + periodoTexto(y.mesesAnteriores),
+            sub: y.yoy === null ? 'Sem faturamento no mesmo período do ano anterior' : 'Comparado a ' + brl(y.fatAnterior) + ' em ' + periodoTexto(y.mesesAnteriores),
             classe: y.yoy === null ? '' : (y.yoy >= 0 ? 'kpi-positivo' : 'kpi-negativo'),
             cor: y.yoy !== null && y.yoy < 0 ? '#c0392b' : '#61CF00'
         }
@@ -945,7 +1115,7 @@ function desenharCards() {
                '<span class="kpi-alca" aria-hidden="true" title="Arrastar">⠿</span>' +
                '<div class="kpi-rotulo">' + esc(c.rotulo) + '</div>' +
                '<div class="kpi-valor ' + (d.classe || '') + '">' + esc(d.valor) + '</div>' +
-               (id === 'yoy' ? '<div class="kpi-sub">' + esc(d.sub) + '</div>' : '') + '</div>';   // r141: subtitulo so no YoY
+               '</div>';   // r142: nenhum card do topo tem subtitulo (o texto segue no aria-label)
     }).join('') || '<div class="aviso-vazio w-100">Nenhum card exibido. Use ⚙ Cards para escolher.</div>';
     if (focado) { const el = linha.querySelector('[data-card="' + focado + '"]'); if (el) el.focus(); }
     ajustarValoresCards();
@@ -954,11 +1124,11 @@ function desenharCards() {
 // (todos os cards ficam com o mesmo tamanho de fonte, o do que precisou do menor)
 function ajustarValoresCards() {
     const els = Array.from(document.querySelectorAll('#kpi-linha .kpi-valor'));
-    let menor = 20.8;
+    let menor = 16.8;   // r142: tipografia menor nos cards
     els.forEach(el => {
-        let tam = 20.8;
+        let tam = 16.8;
         el.style.fontSize = tam + 'px';
-        while (el.scrollWidth > el.clientWidth + 1 && tam > 12) { tam -= 0.8; el.style.fontSize = tam + 'px'; }
+        while (el.scrollWidth > el.clientWidth + 1 && tam > 11) { tam -= 0.8; el.style.fontSize = tam + 'px'; }
         menor = Math.min(menor, tam);
     });
     els.forEach(el => { el.style.fontSize = menor + 'px'; });
@@ -1163,6 +1333,7 @@ function trocarAba(id) {
     estado.aba = id;
     desenharCards();
     desenharAba();
+    desenharBarraSelecao();
 }
 function marcarAbaAtiva() {
     ABAS.forEach(a => {
@@ -1220,9 +1391,10 @@ const pluginRotulos = {
                 if (tEx) {
                     ctx.save();
                     ctx.font = '700 11px system-ui, -apple-system, sans-serif';
-                    ctx.fillStyle = '#002B50';
+                    ctx.fillStyle = ds.fcRotulo.corExterno ? ds.fcRotulo.corExterno(v, i) : '#002B50';
                     const w = ctx.measureText(tEx).width;
-                    if (p.width >= w + 2) {
+                    // r142: o rotulo de cima pode ocupar o vao entre as colunas antes de precisar girar
+                    if (p.width / 0.72 - 4 >= w) {
                         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
                         ctx.fillText(tEx, p.x, topo - 3);
                     } else {
@@ -1259,11 +1431,12 @@ const pluginFaixaUnidades = {
         const passo = (ca.right - ca.left) / vals.length;
         const larg = Math.max.apply(null, vals.map(v => ctx.measureText(String(v)).width));
         const vertical = passo < larg + 3;
+        const fonteVertical = passo < 10 ? 7.5 : 9;   // r142: muitos meses na tela
         vals.forEach((v, i) => {
             const px = x.getPixelForValue(i);
             if (vertical) {
                 ctx.save(); ctx.translate(px, y0 + h / 2); ctx.rotate(-Math.PI / 2);
-                ctx.font = '700 9px system-ui, -apple-system, sans-serif';
+                ctx.font = '700 ' + fonteVertical + 'px system-ui, -apple-system, sans-serif';
                 ctx.fillText(String(v), 0, 0); ctx.restore();
             } else ctx.fillText(String(v), px, y0 + h / 2);
         });
@@ -1284,16 +1457,15 @@ const pluginPctPilha = {
         const ctx = chart.ctx, fat = opts.fat, y = chart.scales.y;
         ctx.save();
         ctx.font = '700 10.5px system-ui, -apple-system, sans-serif';
-        ctx.lineWidth = 3; ctx.lineJoin = 'round';
-        ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.fillStyle = '#051323';
+        ctx.fillStyle = '#ffffff';   // r142: fonte branca, sem sombreamento
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const escrever = (txt, px, centro, largura, altura) => {
             const w = ctx.measureText(txt).width;
             if (largura >= w + 2 && altura >= 13) {
-                ctx.strokeText(txt, px, centro); ctx.fillText(txt, px, centro);
+                ctx.fillText(txt, px, centro);
             } else if (altura >= w + 4 && largura >= 8) {
                 ctx.save(); ctx.translate(px, centro); ctx.rotate(-Math.PI / 2);
-                ctx.strokeText(txt, 0, 0); ctx.fillText(txt, 0, 0); ctx.restore();
+                ctx.fillText(txt, 0, 0); ctx.restore();
             }
         };
         const barras = [];
@@ -1332,90 +1504,39 @@ function eixoMoeda() {
 }
 
 // ---------------- Aba: Resultado Operacional ----------------
+// r142: sem subtitulos; periodo por botoes (Ano/Semestre/Trimestre/Mes); clique na
+// coluna filtra a tela (Ctrl + clique soma); rotulo acima da coluna = Crescimento YoY.
 function desenharResultadoOperacional() {
     const alvo = document.getElementById('conteudo-aba');
     alvo.innerHTML =
         '<div class="grade-ro">' +
           '<section class="bi-painel">' +
-            '<div class="painel-cabeca"><h3>Faturamento por período</h3>' +
+            '<div class="painel-cabeca mb-2"><h3>Faturamento por período</h3>' +
               '<div class="btn-group grupo-nivel" role="group" aria-label="Ver por" id="grupo-nivel">' +
                 NIVEIS_PERIODO.map((n, i) => '<button type="button" class="btn btn-outline-secondary" data-nivel="' + i + '">' + n + '</button>').join('') +
               '</div></div>' +
-            '<div class="d-flex align-items-center gap-2"><div class="trilha flex-grow-1" id="trilha-periodo"></div>' +
-              '<button class="btn btn-sm btn-fc-contorno hidden" id="btn-subir">↑ Subir nível</button></div>' +
-            '<div class="explica">Clique numa coluna para detalhar o período. Rótulo dentro: valor. Acima: participação no total exibido.</div>' +
-            '<div class="grafico-caixa"><canvas id="gr-periodo" aria-label="Gráfico de faturamento por período" role="img"></canvas></div>' +
+            '<div class="grafico-caixa" id="cx-periodo"></div>' +
           '</section>' +
           '<section class="bi-painel">' +
-            '<h3>Resultado por negócio</h3>' +
-            '<div class="explica">Custo = Pessoal, Desp. Op. e Desp. Tec. Lucro = Faturamento − Custo − Impostos. Participação sobre o faturamento filtrado.</div>' +
+            '<h3 class="mb-2">Resultado por negócio</h3>' +
             '<div class="tabela-rolagem" id="tab-negocio"></div>' +
           '</section>' +
         '</div>' +
         '<section class="bi-painel">' +
-          '<div class="painel-cabeca"><h3>Detalhamento por negócio, cliente e loja</h3>' +
+          '<div class="painel-cabeca mb-2"><h3>Detalhamento por negócio, cliente e loja</h3>' +
             '<div class="d-flex gap-2"><button class="btn btn-sm btn-fc-contorno" id="btn-expandir-ro">Expandir tudo</button>' +
             '<button class="btn btn-sm btn-fc-contorno" id="btn-recolher-ro">Recolher tudo</button></div></div>' +
-          '<div class="explica">Clique em ▸ para abrir o nível de baixo.</div>' +
           '<div class="tabela-rolagem tabela-alta" id="tab-drill-ro"></div>' +
         '</section>';
 
-    const db = estado.db, linhas = estado.cascata.linhas;
-    desenharGraficoPeriodo();
     document.getElementById('grupo-nivel').addEventListener('click', e => {
         const b = e.target.closest('[data-nivel]');
         if (!b) return;
-        estado.periodo = { nivel: Number(b.dataset.nivel), foco: null, pilha: [] };
+        estado.periodo.nivel = Number(b.dataset.nivel);
+        estado.selecao.ro = new Set();   // chaves de outro nivel nao valem mais
         desenharGraficoPeriodo();
+        aplicarSelecao();
     });
-    document.getElementById('btn-subir').addEventListener('click', () => {
-        const ant = estado.periodo.pilha.pop();
-        if (ant) { estado.periodo.nivel = ant.nivel; estado.periodo.foco = ant.foco; }
-        desenharGraficoPeriodo();
-    });
-
-    // Tabela por negocio
-    const arv = arvoreResultado(db, linhas);
-    const totFat = arv.total.fat;
-    const negs = Array.from(arv.raiz.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo);
-    const linhaTab = (nome, x, classe, semBarra) => {
-        const lucro = x.fat - x.custo - x.imp;
-        const part = totFat ? x.fat / totFat : null;
-        return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' +
-            '<td class="num">' + num(x.fat) + '</td><td class="num">' + num(x.custo) + '</td>' +
-            '<td class="num' + classeValor(lucro) + '">' + num(lucro) + '</td>' +
-            '<td class="num' + classeValor(lucro) + '">' + (x.fat ? pct(lucro / x.fat) : '—') + '</td>' +
-            '<td class="num">' + pct(part) + (part && !semBarra ? '<span class="barra-part" style="width:' + Math.max(2, Math.round(part * 60)) + 'px"></span>' : '') + '</td></tr>';
-    };
-    const cab = '<thead><tr><th>__PRIMEIRA__</th><th class="num">Faturamento (R$)</th><th class="num">Custo (R$)</th><th class="num">Lucro (R$)</th><th class="num">Margem (%)</th><th class="num">Participação (%)</th></tr></thead>';
-    document.getElementById('tab-negocio').innerHTML = negs.length
-        ? '<table class="tabela-bi">' + cab.replace('__PRIMEIRA__', 'Negócio') + '<tbody>' +
-          negs.map(n => linhaTab(esc(db.dic.neg[n.id]), n, '', true)).join('') + linhaTab('Total', arv.total, 'total', true) + '</tbody></table>'
-        : '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
-
-    // Tabela com drill Negocio > Cliente > Loja
-    const desenharDrill = () => {
-        const ab = estado.abertosRO;
-        const partes = [];
-        const botao = (chave, aberto, nome) => '<button class="btn-drill" data-chave="' + chave + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
-        negs.forEach(n => {
-            const kN = 'n' + n.id, abN = ab.has(kN), nomeN = db.dic.neg[n.id];
-            partes.push(linhaTab(botao(kN, abN, nomeN) + esc(nomeN), n, 'nivel-0'));
-            if (!abN) return;
-            Array.from(n.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(c => {
-                const kC = kN + 'c' + c.id, abC = ab.has(kC), nomeC = db.dic.cli[c.id];
-                partes.push(linhaTab(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-1'));
-                if (!abC) return;
-                Array.from(c.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(l => {
-                    partes.push(linhaTab('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-2'));
-                });
-            });
-        });
-        document.getElementById('tab-drill-ro').innerHTML = negs.length
-            ? '<table class="tabela-bi">' + cab.replace('__PRIMEIRA__', 'Negócio / Cliente / Loja') + '<tbody>' + partes.join('') + linhaTab('Total', arv.total, 'total') + '</tbody></table>'
-            : '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
-    };
-    desenharDrill();
     document.getElementById('tab-drill-ro').addEventListener('click', e => {
         const b = e.target.closest('.btn-drill');
         if (!b) return;
@@ -1423,74 +1544,128 @@ function desenharResultadoOperacional() {
         if (estado.abertosRO.has(k)) {
             Array.from(estado.abertosRO).forEach(x => { if (x === k || x.indexOf(k + 'c') === 0) estado.abertosRO.delete(x); });
         } else estado.abertosRO.add(k);
-        desenharDrill();
+        desenharDrillRO();
         const nb = document.querySelector('#tab-drill-ro .btn-drill[data-chave="' + k + '"]');
         if (nb) nb.focus();
     });
     document.getElementById('btn-expandir-ro').addEventListener('click', () => {
-        negs.forEach(n => { estado.abertosRO.add('n' + n.id); n.filhos.forEach(c => estado.abertosRO.add('n' + n.id + 'c' + c.id)); });
-        desenharDrill();
+        const r = estado.roAtual;
+        if (!r) return;
+        r.negs.forEach(n => { estado.abertosRO.add('n' + n.id); n.filhos.forEach(c => estado.abertosRO.add('n' + n.id + 'c' + c.id)); });
+        desenharDrillRO();
     });
-    document.getElementById('btn-recolher-ro').addEventListener('click', () => { estado.abertosRO.clear(); desenharDrill(); });
+    document.getElementById('btn-recolher-ro').addEventListener('click', () => { estado.abertosRO.clear(); desenharDrillRO(); });
+
+    desenharGraficoPeriodo();
+    atualizarDependentesRO();
 }
 
 function desenharGraficoPeriodo() {
-    const db = estado.db, per = estado.periodo;
-    const serie = faturamentoPorPeriodo(db, estado.cascata.linhas, per.nivel, per.foco);
-    document.querySelectorAll('#grupo-nivel [data-nivel]').forEach(b => b.classList.toggle('ativo', Number(b.dataset.nivel) === per.nivel && !per.foco));
-    const trilha = ['Todo o período'];
-    per.pilha.slice(1).forEach(p => trilha.push(rotuloPeriodo(p.foco, p.nivel - 1)));
-    if (per.foco) trilha.push(rotuloPeriodo(per.foco, per.nivel - 1));
-    document.getElementById('trilha-periodo').textContent = trilha.join(' › ') + ' — por ' + NIVEIS_PERIODO[per.nivel].toLowerCase() +
-        (serie.length ? '' : ' (sem faturamento para os filtros escolhidos)');
-    document.getElementById('btn-subir').classList.toggle('hidden', !per.pilha.length);
-    const total = serie.reduce((a, s) => a + s.valor, 0);
+    const db = estado.db, casc = estado.cascata, nivel = estado.periodo.nivel;
+    document.querySelectorAll('#grupo-nivel [data-nivel]').forEach(b => b.classList.toggle('ativo', Number(b.dataset.nivel) === nivel));
+    const serie = faturamentoPorPeriodo(db, casc.linhas, nivel, null);
+    const yoy = yoyPorPeriodo(db, casc, casc.linhas, nivel);
     if (estado.graficos.periodo) { estado.graficos.periodo.destroy(); delete estado.graficos.periodo; }
+    const cx = document.getElementById('cx-periodo');
+    if (!serie.length) { cx.innerHTML = '<div class="aviso-vazio">Sem faturamento para os filtros escolhidos.</div>'; return; }
+    cx.innerHTML = '<canvas id="gr-periodo" role="img" aria-label="Faturamento por período. Clique numa coluna para filtrar a tela; Ctrl mais clique soma colunas."></canvas>';
+    const chaves = serie.map(s => s.chave);
+    const textoYoY = i => { const v = yoy.get(chaves[i]); return v === null || v === undefined ? '' : (v >= 0 ? '▲ ' : '▼ ') + pct(Math.abs(v)); };
     estado.graficos.periodo = new Chart(document.getElementById('gr-periodo'), {
         type: 'bar',
         data: {
             labels: serie.map(s => s.rotulo),
             datasets: [{
-                label: 'Faturamento', data: serie.map(s => s.valor), backgroundColor: '#002B50', hoverBackgroundColor: '#0a3a68',
-                borderRadius: 4, maxBarThickness: 70,
-                fcRotulo: { interno: v => brlCurto(v), externo: v => (total ? pct(v / total) : '') }
+                label: 'Faturamento', data: serie.map(s => s.valor),
+                backgroundColor: c => corBarraSelecao(chaves[c.dataIndex], '#002B50', 'rgba(0,43,80,.22)'),
+                hoverBackgroundColor: '#0a3a68', borderRadius: 4, maxBarThickness: 70,
+                fcRotulo: {
+                    interno: v => brlCurto(v),
+                    externo: (v, i) => textoYoY(i),
+                    corExterno: (v, i) => { const y = yoy.get(chaves[i]); return y !== null && y !== undefined && y < 0 ? '#c0392b' : '#3f8f00'; }
+                }
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: c => brl(c.raw) + (total ? ' (' + pct(c.raw / total) + ')' : '') } }
+                tooltip: { callbacks: {
+                    label: c => { const y = yoy.get(chaves[c.dataIndex]); return brl(c.raw) + (y === null || y === undefined ? '' : ' (YoY ' + (y >= 0 ? '+' : '−') + pct(Math.abs(y)) + ')'); },
+                    footer: () => 'Clique filtra a tela. Ctrl + clique soma colunas.' } }
             },
-            scales: { y: eixoMoeda(), x: { grid: { display: false } } },
-            onClick: (evt, els) => {
-                if (!els.length || per.nivel >= 3) return;
-                const s = serie[els[0].index];
-                per.pilha.push({ nivel: per.nivel, foco: per.foco });
-                per.nivel += 1; per.foco = s.chave;
-                desenharGraficoPeriodo();
+            scales: { y: Object.assign(eixoMoeda(), { grace: '22%' }), x: { grid: { display: false } } },
+            onClick: (evt, els, chart) => {
+                const alvos = chart.getElementsAtEventForMode(evt.native || evt, 'index', { intersect: true }, false);
+                cliqueSelecao(alvos.length ? chaves[alvos[0].index] : null, evt.native || evt);
             },
-            onHover: (evt, els) => { evt.native.target.style.cursor = els.length && per.nivel < 3 ? 'pointer' : 'default'; }
+            onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; }
         }
     });
 }
 
-// ---------------- Abas financeiras ----------------
-// O esqueleto (filtros locais, caixas, tabelas) e montado uma vez por troca de
-// aba ou de filtro global. Mudar Setor/Detalhamento so refaz graficos e tabelas,
-// sem fechar o painel do filtro que esta sendo usado.
-function desenharAbaFinanceira(aba) {
+// Tabelas do Resultado Operacional (seguem os filtros globais e as colunas clicadas)
+function atualizarDependentesRO() {
     const db = estado.db;
+    const arv = arvoreResultado(db, linhasAtivas());
+    const negs = Array.from(arv.raiz.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo);
+    estado.roAtual = { arv: arv, negs: negs };
+    document.getElementById('tab-negocio').innerHTML = negs.length
+        ? '<table class="tabela-bi">' + cabecalhoRO('Negócio') + '<tbody>' +
+          negs.map(n => linhaRO(esc(db.dic.neg[n.id]), n, '', true)).join('') + linhaRO('Total', arv.total, 'total', true) + '</tbody></table>'
+        : '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
+    desenharDrillRO();
+}
+function cabecalhoRO(primeira) {
+    return '<thead><tr><th>' + primeira + '</th><th class="num">Faturamento (R$)</th><th class="num">Custo (R$)</th><th class="num">Lucro (R$)</th><th class="num">Margem (%)</th><th class="num">Participação (%)</th></tr></thead>';
+}
+function linhaRO(nome, x, classe, semBarra) {
+    const totFat = estado.roAtual.arv.total.fat;
+    const lucro = x.fat - x.custo - x.imp;
+    const part = totFat ? x.fat / totFat : null;
+    return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' +
+        '<td class="num">' + num(x.fat) + '</td><td class="num">' + num(x.custo) + '</td>' +
+        '<td class="num' + classeValor(lucro) + '">' + num(lucro) + '</td>' +
+        '<td class="num' + classeValor(lucro) + '">' + (x.fat ? pct(lucro / x.fat) : '—') + '</td>' +
+        '<td class="num">' + pct(part) + (part && !semBarra ? '<span class="barra-part" style="width:' + Math.max(2, Math.round(part * 60)) + 'px"></span>' : '') + '</td></tr>';
+}
+function desenharDrillRO() {
+    const db = estado.db, r = estado.roAtual, ab = estado.abertosRO;
+    const partes = [];
+    const botao = (chave, aberto, nome) => '<button class="btn-drill" data-chave="' + chave + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
+    r.negs.forEach(n => {
+        const kN = 'n' + n.id, abN = ab.has(kN), nomeN = db.dic.neg[n.id];
+        partes.push(linhaRO(botao(kN, abN, nomeN) + esc(nomeN), n, 'nivel-0'));
+        if (!abN) return;
+        Array.from(n.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(c => {
+            const kC = kN + 'c' + c.id, abC = ab.has(kC), nomeC = db.dic.cli[c.id];
+            partes.push(linhaRO(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-1'));
+            if (!abC) return;
+            Array.from(c.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(l => {
+                partes.push(linhaRO('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-2'));
+            });
+        });
+    });
+    document.getElementById('tab-drill-ro').innerHTML = r.negs.length
+        ? '<table class="tabela-bi">' + cabecalhoRO('Negócio / Cliente / Loja') + '<tbody>' + partes.join('') + linhaRO('Total', r.arv.total, 'total') + '</tbody></table>'
+        : '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
+}
+
+// ---------------- Abas financeiras ----------------
+// Esqueleto montado uma vez por troca de aba ou de filtro global.
+//  - Setor/Detalhamento: refazem o grafico de custo por mes e tudo o que depende dele.
+//  - Clique nas barras do grafico de custo por mes: filtra os demais elementos.
+function desenharAbaFinanceira(aba) {
     const loc = estado.locais[aba.id];
     const alvo = document.getElementById('conteudo-aba');
     alvo.innerHTML =
-        '<div class="filtros-locais"><div id="fl-setor"></div><div id="fl-det"></div><div id="fl-cpu"></div></div>' +
+        '<div class="filtros-locais"><div id="fl-setor"></div><div id="fl-det"></div><div id="fl-cxf"></div><div id="fl-cpu"></div></div>' +
         '<div class="grade-2">' +
           '<section class="bi-painel"><h3>Custo por mês e Custo × Faturamento</h3>' +
-            '<div class="explica">Colunas: custo do mês (valor dentro). Linha: custo ÷ faturamento do mês. Faixa verde: unidades atendidas no mês.</div>' +
+            '<div class="explica">Colunas: custo do mês. Linha: custo ÷ faturamento do mês. Faixa verde: unidades atendidas. Clique numa coluna para filtrar a tela (Ctrl + clique soma).</div>' +
             '<div class="grafico-caixa" id="cx-custo"></div></section>' +
           '<section class="bi-painel"><h3>Custo por setor e unidades atendidas</h3>' +
-            '<div class="explica" id="explica-pilha">Colunas empilhadas por setor. Rótulo: custo ÷ faturamento. Faixa verde: unidades atendidas no mês.</div>' +
+            '<div class="explica" id="explica-pilha"></div>' +
             '<div class="grafico-caixa" id="cx-pilha"></div></section>' +
         '</div>' +
         '<section class="bi-painel">' +
@@ -1507,17 +1682,28 @@ function desenharAbaFinanceira(aba) {
     criarFiltro('fl-det', 'l-det', 'Detalhamento', sel => { loc.det = sel ? new Set(sel) : null; salvarFiltros(); atualizarAbaFinanceira(aba); });
 
     const ab = estado.abertosCusto[aba.id];
-    document.getElementById('tab-custo').addEventListener('click', e => {
+    const tab = document.getElementById('tab-custo');
+    tab.addEventListener('click', e => {
         const b = e.target.closest('.btn-drill');
         if (!b) return;
         const k = b.dataset.chave;
-        if (ab.has(k)) ab.delete(k); else ab.add(k);
+        if (ab.has(k)) { Array.from(ab).forEach(x => { if (x === k || x.indexOf(k + '/') === 0) ab.delete(x); }); }
+        else ab.add(k);
         desenharTabelaCusto(aba);
         const nb = document.querySelector('#tab-custo .btn-drill[data-chave="' + k + '"]');
         if (nb) nb.focus();
     });
+    // Observacoes da loja: mouse, teclado (foco) e toque
+    tab.addEventListener('mouseover', e => { const tr = e.target.closest('tr.linha-loja'); if (tr) mostrarObs(tr, e.clientX, e.clientY); });
+    tab.addEventListener('mousemove', e => { if (e.target.closest('tr.linha-loja')) posicionarObs(e.clientX, e.clientY); });
+    tab.addEventListener('mouseout', e => { const tr = e.target.closest('tr.linha-loja'); if (tr && !tr.contains(e.relatedTarget)) esconderObs(); });
+    tab.addEventListener('focusin', e => { const tr = e.target.closest('tr.linha-loja'); if (tr) { const r = tr.getBoundingClientRect(); mostrarObs(tr, r.left + 40, r.bottom); } });
+    tab.addEventListener('focusout', () => esconderObs());
+    tab.addEventListener('scroll', () => esconderObs());
     document.getElementById('btn-expandir-c').addEventListener('click', () => {
-        (estado.finAtual ? estado.finAtual.contas : []).forEach(c => ab.add('c' + c.id));
+        const f = estado.finAtual;
+        if (!f) return;
+        f.contas.forEach(c => { ab.add('c' + c.id); c.filhos.forEach(s2 => ab.add('c' + c.id + '/s' + s2.id)); });
         desenharTabelaCusto(aba);
     });
     document.getElementById('btn-recolher-c').addEventListener('click', () => { ab.clear(); desenharTabelaCusto(aba); });
@@ -1525,66 +1711,97 @@ function desenharAbaFinanceira(aba) {
     atualizarAbaFinanceira(aba);
 }
 
+// Filtros locais mudaram (ou primeira montagem): refaz tudo da aba
 function atualizarAbaFinanceira(aba) {
     const db = estado.db;
     const papel = db.papelAba[aba.id];
     const linhasG = estado.cascata.linhas;
     const loc = estado.locais[aba.id];
-    // Linhas de custo da aba (antes dos filtros locais) — base das opcoes de Setor/Detalhamento
     const linhasCustoBase = linhasG.filter(i => papel.custo[db.conta[i]]);
     const cascLocal = aplicarCascata(db, ['setor', 'det'], loc, linhasCustoBase);
     ['setor', 'det'].forEach(dim => {
         const ef = cascLocal.efetivo[dim];
         definirOpcoesFiltro('l-' + dim, opcoesParaFiltro(db, dim, cascLocal.opcoes[dim]), ef ? Array.from(ef).map(v => chaveDim(db, dim, v)) : null);
     });
-    const fatTotal = faturamentoTotal(db, linhasG);
-    const linhasCusto = cascLocal.linhas;
+    estado.finCtx = { aba: aba.id, papel: papel, localEf: cascLocal.efetivo, linhasCusto: cascLocal.linhas };
+    desenharGraficoCustoMes(aba);
+    atualizarDependentesFin(aba);
+}
 
-    destruirGraficos();
-    // Com setor(es) escolhido(s) no filtro, cada um aparece separado (sem "Outros")
-    const setorEscolhido = !!cascLocal.efetivo.setor;
-    const s = seriesMensaisAba(db, linhasG, linhasCusto, papel, setorEscolhido ? Infinity : 8);
-    const faixa = { valores: s.unidades };
-    const tooltipUnidades = items => items.length ? 'Unidades atendidas: ' + s.unidades[items[0].dataIndex] : '';
-    const rotulos = s.meses.map(m => rotuloMes(db.meses[m]));
-    const cxCusto = document.getElementById('cx-custo'), cxPilha = document.getElementById('cx-pilha');
-    if (!s.meses.length) {
-        cxCusto.innerHTML = '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
-        cxPilha.innerHTML = '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
-    } else {
-        cxCusto.innerHTML = '<canvas id="gr-custo" role="img" aria-label="Custo por mês e percentual sobre o faturamento"></canvas>';
-        cxPilha.innerHTML = '<canvas id="gr-pilha" role="img" aria-label="Custo por setor e unidades atendidas por mês"></canvas>';
-        estado.graficos.custo = new Chart(document.getElementById('gr-custo'), {
-            type: 'bar',
-            data: {
-                labels: rotulos,
-                datasets: [
-                    { type: 'line', label: 'Custo × Faturamento', data: s.pct.map(v => v === null ? null : v * 100), yAxisID: 'y1',
-                      borderColor: '#E8872B', backgroundColor: '#E8872B', pointRadius: 3, tension: .25, spanGaps: true, order: 0 },
-                    { type: 'bar', label: 'Custo', data: s.custo, yAxisID: 'y', backgroundColor: '#002B50', borderRadius: 3, maxBarThickness: 48, order: 1,
-                      fcRotulo: { interno: v => brlCurto(v) } }
-                ]
+// Grafico da esquerda: todos os meses (e onde se clica para filtrar)
+function desenharGraficoCustoMes(aba) {
+    const db = estado.db, ctx = estado.finCtx;
+    const s = seriesMensaisAba(db, estado.cascata.linhas, ctx.linhasCusto, ctx.papel, 8);
+    if (estado.graficos.custo) { estado.graficos.custo.destroy(); delete estado.graficos.custo; }
+    const cx = document.getElementById('cx-custo');
+    if (!s.meses.length) { cx.innerHTML = '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>'; return; }
+    cx.innerHTML = '<canvas id="gr-custo" role="img" aria-label="Custo por mês e percentual sobre o faturamento. Clique numa coluna para filtrar a tela; Ctrl mais clique soma colunas."></canvas>';
+    const chaves = s.meses.map(m => db.meses[m]);
+    estado.graficos.custo = new Chart(document.getElementById('gr-custo'), {
+        type: 'bar',
+        data: {
+            labels: s.meses.map(m => rotuloMes(db.meses[m])),
+            datasets: [
+                { type: 'line', label: 'Custo × Faturamento', data: s.pct.map(v => v === null ? null : v * 100), yAxisID: 'y1',
+                  borderColor: '#E8872B', backgroundColor: '#E8872B', pointRadius: 3, tension: .25, spanGaps: true, order: 0 },
+                { type: 'bar', label: 'Custo', data: s.custo, yAxisID: 'y', borderRadius: 3, maxBarThickness: 48, order: 1,
+                  backgroundColor: c => corBarraSelecao(chaves[c.dataIndex], '#002B50', 'rgba(0,43,80,.22)'),
+                  fcRotulo: { interno: v => brlCurto(v) } }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom' }, fcFaixa: { valores: s.unidades },
+                tooltip: { callbacks: {
+                    label: c => c.dataset.yAxisID === 'y1'
+                        ? 'Custo × Faturamento: ' + (c.raw === null ? '—' : c.raw.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%')
+                        : 'Custo: ' + brl(c.raw),
+                    footer: items => items.length ? 'Unidades atendidas: ' + s.unidades[items[0].dataIndex] + '\nClique filtra a tela. Ctrl + clique soma colunas.' : '' } }
             },
-            options: {
-                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { position: 'bottom' }, fcFaixa: faixa, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1'
-                    ? 'Custo × Faturamento: ' + (c.raw === null ? '—' : c.raw.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%')
-                    : 'Custo: ' + brl(c.raw), footer: tooltipUnidades } } },
-                scales: {
-                    y: eixoMoeda(),
-                    y1: { position: 'right', beginAtZero: true, grace: '10%', grid: { drawOnChartArea: false }, ticks: { callback: v => v.toLocaleString('pt-BR') + '%' } },
-                    x: { grid: { display: false }, ticks: { padding: FAIXA_ESPACO } }
-                }
+            scales: {
+                y: eixoMoeda(),
+                y1: { position: 'right', beginAtZero: true, grace: '10%', grid: { drawOnChartArea: false }, ticks: { callback: v => v.toLocaleString('pt-BR') + '%' } },
+                x: { grid: { display: false }, ticks: { padding: FAIXA_ESPACO } }
+            },
+            onClick: (evt, els, chart) => {
+                const alvos = chart.getElementsAtEventForMode(evt.native || evt, 'index', { intersect: true }, false);
+                cliqueSelecao(alvos.length ? chaves[alvos[0].index] : null, evt.native || evt);
+            },
+            onHover: (evt, els, chart) => {
+                const alvos = chart.getElementsAtEventForMode(evt.native || evt, 'index', { intersect: true }, false);
+                evt.native.target.style.cursor = alvos.length ? 'pointer' : 'default';
             }
-        });
-        const temOutros = s.pilhas.some(p => p.setor === null);
-        document.getElementById('explica-pilha').textContent = 'Colunas empilhadas por setor' + (temOutros ? ' (os 8 maiores; os demais somados em “Outros”)' : '') +
-            (setorEscolhido ? '. Rótulo em cada setor escolhido: custo do setor ÷ faturamento do mês.' : '. Rótulo: custo total do mês ÷ faturamento do mês.') +
-            ' Faixa verde: unidades atendidas no mês.';
+        }
+    });
+}
+
+// Tudo o que segue as colunas clicadas: grafico empilhado, cards da aba, tabelas
+function atualizarDependentesFin(aba) {
+    const db = estado.db, ctx = estado.finCtx;
+    if (!ctx || ctx.aba !== aba.id) return;
+    const sel = mesesSelecionados();
+    const linhasG = filtrarPorMeses(db, estado.cascata.linhas, sel);
+    const linhasCusto = filtrarPorMeses(db, ctx.linhasCusto, sel);
+    const fatTotal = faturamentoTotal(db, linhasG);
+
+    // Grafico empilhado por setor
+    if (estado.graficos.pilha) { estado.graficos.pilha.destroy(); delete estado.graficos.pilha; }
+    const setorEscolhido = !!ctx.localEf.setor;
+    const s = seriesMensaisAba(db, linhasG, linhasCusto, ctx.papel, setorEscolhido ? Infinity : 8);
+    const cx = document.getElementById('cx-pilha');
+    const temOutros = s.pilhas.some(p => p.setor === null);
+    document.getElementById('explica-pilha').textContent = 'Colunas empilhadas por setor' + (temOutros ? ' (os 8 maiores; os demais em “Outros”)' : '') +
+        (setorEscolhido ? '. Rótulo em cada setor escolhido: custo do setor ÷ faturamento do mês.' : '. Rótulo: custo do mês ÷ faturamento do mês.') +
+        ' Faixa verde: unidades atendidas.';
+    if (!s.meses.length) {
+        cx.innerHTML = '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
+    } else {
+        cx.innerHTML = '<canvas id="gr-pilha" role="img" aria-label="Custo por setor e unidades atendidas por mês"></canvas>';
         estado.graficos.pilha = new Chart(document.getElementById('gr-pilha'), {
             type: 'bar',
             data: {
-                labels: rotulos,
+                labels: s.meses.map(m => rotuloMes(db.meses[m])),
                 datasets: s.pilhas.map((p, k) => ({
                     type: 'bar', label: p.setor === null ? 'Outros (' + p.qtdOutros + ' setores)' : db.dic.setor[p.setor], data: p.valores, yAxisID: 'y',
                     backgroundColor: p.setor === null ? COR_OUTROS : CORES_PILHA[k % CORES_PILHA.length], stack: 'custo', maxBarThickness: 48, order: 1
@@ -1592,12 +1809,14 @@ function atualizarAbaFinanceira(aba) {
             },
             options: {
                 responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                    fcFaixa: faixa,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    fcFaixa: { valores: s.unidades },
                     fcPctPilha: { modo: setorEscolhido ? 'setor' : 'mes', fat: s.fat },
                     tooltip: { callbacks: {
                         label: c => c.dataset.label + ': ' + brl(c.raw) + (s.fat[c.dataIndex] ? ' (' + pct(c.raw / s.fat[c.dataIndex]) + ' do faturamento)' : ''),
-                        footer: tooltipUnidades } } },
+                        footer: items => items.length ? 'Unidades atendidas: ' + s.unidades[items[0].dataIndex] : '' } }
+                },
                 scales: {
                     x: { stacked: true, grid: { display: false }, ticks: { padding: FAIXA_ESPACO } },
                     y: Object.assign(eixoMoeda(), { stacked: true })
@@ -1606,21 +1825,27 @@ function atualizarAbaFinanceira(aba) {
         });
     }
 
-    const arv = arvoreCusto(db, linhasCusto, papel);
+    // Arvore de custo e cards da aba
+    const arv = arvoreCusto(db, linhasCusto, ctx.papel);
     const atendidas = unidadesAtendidas(db, linhasG);
-    estado.finAtual = { aba: aba.id, arv: arv, fatTotal: fatTotal, atendidas: atendidas, contas: Array.from(arv.raiz.values()).sort((a, b) => b.custo - a.custo) };
+    estado.finAtual = { aba: aba.id, arv: arv, fatTotal: fatTotal, atendidas: atendidas, mesesSel: sel,
+                        contas: Array.from(arv.raiz.values()).sort((a, b) => b.custo - a.custo) };
+    document.getElementById('fl-cxf').innerHTML =
+        '<div class="kpi-card kpi-local" style="--kpi-cor:#002B50">' +
+        '<div class="kpi-rotulo">Custo × Faturamento</div>' +
+        '<div class="kpi-valor">' + (fatTotal ? esc(pct(arv.total / fatTotal)) : '—') + '</div></div>';
     const cpu = custoPorUnidade(arv.porUni, atendidas);
     document.getElementById('fl-cpu').innerHTML =
         '<div class="kpi-card kpi-local" style="--kpi-cor:#E8872B">' +
-        '<div class="kpi-rotulo">Custo por unidade atendida</div>' +
+        '<div class="kpi-rotulo">Custo por unidade</div>' +
         '<div class="kpi-valor">' + (cpu.valor === null ? '—' : esc(brl(cpu.valor))) + '</div>' +
         '<div class="kpi-sub">' + (cpu.qtd ? esc(fmtNum.format(cpu.qtd) + (cpu.qtd === 1 ? ' unidade com esse custo' : ' unidades com esse custo')) : 'Nenhuma unidade atendida com esse custo') + '</div></div>';
     document.getElementById('explica-tab-custo').textContent = 'Custo × Faturamento sobre o faturamento de ' + brl(fatTotal) +
-        ' (filtros globais). Participação sobre o custo total desta aba. Custo por unidade atendida: só conta as unidades que tiveram aquele custo.';
+        '. Participação sobre o custo total desta aba. Custo por unidade: só conta as unidades atendidas que tiveram aquele custo. Passe o mouse numa loja para ver as observações.';
     desenharTabelaCusto(aba);
 
     if (aba.receitas) {
-        const rec = receitasAdmin(db, linhasG, papel);
+        const rec = receitasAdmin(db, linhasG, ctx.papel);
         const itens = Array.from(rec.porConta.entries()).sort((a, b) => b[1] - a[1]);
         document.getElementById('tab-receitas').innerHTML = itens.length
             ? '<table class="tabela-bi"><thead><tr><th>Conta</th><th class="num">Valor (R$)</th></tr></thead><tbody>' +
@@ -1630,32 +1855,76 @@ function atualizarAbaFinanceira(aba) {
     }
 }
 
+// Detalhamento do Custo: Conta > Setor > Cliente > Unidade
 function desenharTabelaCusto(aba) {
     const db = estado.db, f = estado.finAtual;
     if (!f || f.aba !== aba.id) return;
+    esconderObs();
     const ab = estado.abertosCusto[aba.id];
-    const linhaC = (nome, v, classe, porUni) => {
-        const cpu = custoPorUnidade(porUni, f.atendidas);
-        return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' +
-            '<td class="num' + classeValor(v) + '">' + num(v) + '</td>' +
-            '<td class="num">' + (f.fatTotal ? pct(v / f.fatTotal) : '—') + '</td>' +
-            '<td class="num">' + (f.arv.total ? pct(v / f.arv.total) : '—') + '</td>' +
+    const linhaC = (nome, no, classe, extra) => {
+        const cpu = custoPorUnidade(no.porUni, f.atendidas);
+        return '<tr class="' + (classe || '') + '"' + (extra || '') + '><td>' + nome + '</td>' +
+            '<td class="num' + classeValor(no.custo) + '">' + num(no.custo) + '</td>' +
+            '<td class="num">' + (f.fatTotal ? pct(no.custo / f.fatTotal) : '—') + '</td>' +
+            '<td class="num">' + (f.arv.total ? pct(no.custo / f.arv.total) : '—') + '</td>' +
             '<td class="num">' + (cpu.valor === null ? '—' : num(cpu.valor)) + '</td></tr>';
     };
+    const botao = (k, aberto, nome) => '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
+    const porCusto = (a, b) => b.custo - a.custo;
     const partes = [];
     f.contas.forEach(c => {
-        const k = 'c' + c.id, aberto = ab.has(k), nome = db.dic.conta[c.id];
-        partes.push(linhaC('<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>' + esc(nome), c.custo, 'nivel-0', c.porUni));
-        if (!aberto) return;
-        Array.from(c.filhos.values()).sort((a, b) => b.custo - a.custo).forEach(s2 => {
-            partes.push(linhaC(esc(db.dic.setor[s2.id]), s2.custo, 'nivel-1', s2.porUni));
+        const kC = 'c' + c.id, abC = ab.has(kC), nomeC = db.dic.conta[c.id];
+        partes.push(linhaC(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-0'));
+        if (!abC) return;
+        Array.from(c.filhos.values()).sort(porCusto).forEach(s2 => {
+            const kS = kC + '/s' + s2.id, abS = ab.has(kS), nomeS = db.dic.setor[s2.id];
+            partes.push(linhaC(botao(kS, abS, nomeS) + esc(nomeS), s2, 'nivel-1'));
+            if (!abS) return;
+            Array.from(s2.filhos.values()).sort(porCusto).forEach(k => {
+                const kK = kS + '/k' + k.id, abK = ab.has(kK), nomeK = db.dic.cli[k.id];
+                partes.push(linhaC(botao(kK, abK, nomeK) + esc(nomeK), k, 'nivel-2'));
+                if (!abK) return;
+                Array.from(k.filhos.values()).sort(porCusto).forEach(l => {
+                    partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-3 linha-loja',
+                        ' tabindex="0" data-conta="' + c.id + '" data-setor="' + s2.id + '" data-cli="' + k.id + '" data-loja="' + l.id + '"'));
+                });
+            });
         });
     });
     document.getElementById('tab-custo').innerHTML = f.contas.length
-        ? '<table class="tabela-bi"><thead><tr><th>Conta / Setor</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th><th class="num">Participação no custo total (%)</th><th class="num">Custo por unidade atendida (R$)</th></tr></thead><tbody>' +
-          partes.join('') + linhaC('Total', f.arv.total, 'total', f.arv.porUni) + '</tbody></table>'
+        ? '<table class="tabela-bi"><thead><tr><th>Conta / Setor / Cliente / Unidade</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
+          '<th class="num">Participação no custo total (%)</th><th class="num">Custo por unidade (R$)</th></tr></thead><tbody>' +
+          partes.join('') + linhaC('Total', { custo: f.arv.total, porUni: f.arv.porUni }, 'total') + '</tbody></table>'
         : '<div class="aviso-vazio">Nenhum custo para os filtros escolhidos.</div>';
 }
+
+// ---------------- r142: observacoes da loja (coluna Obs) ----------------
+function mostrarObs(tr, x, y) {
+    const db = estado.db, f = estado.finAtual, ctx = estado.finCtx;
+    if (!f || !ctx) return;
+    const d = tr.dataset;
+    const r = obsDaLoja(db, estado.cascata, f.mesesSel, ctx.localEf, Number(d.conta), Number(d.setor), Number(d.cli), Number(d.loja), 15);
+    const caixa = document.getElementById('dica-obs');
+    const titulo = db.dic.loja[Number(d.loja)] + ' (' + db.dic.cli[Number(d.cli)] + ')';
+    caixa.innerHTML = '<h4>Observações — ' + esc(titulo) + '</h4>' +
+        (r.itens.length
+            ? '<ul>' + r.itens.map(o => '<li><span class="txt">' + esc(o.texto) + '</span><span class="meta">' + esc(rotuloMes(o.ultimo)) + ' — ' + esc(brl(o.valor)) + '</span></li>').join('') + '</ul>' +
+              (r.resto ? '<div class="mais">+' + fmtNum.format(r.resto) + (r.resto === 1 ? ' outra' : ' outras') + '</div>' : '')
+            : '<div class="mais">Sem observações para esta loja nos filtros escolhidos.</div>');
+    caixa.classList.remove('hidden');
+    posicionarObs(x, y);
+}
+function posicionarObs(x, y) {
+    const caixa = document.getElementById('dica-obs');
+    if (caixa.classList.contains('hidden')) return;
+    const w = caixa.offsetWidth, h = caixa.offsetHeight;
+    let left = x + 16, top = y + 14;
+    if (left + w > window.innerWidth - 8) left = Math.max(8, x - w - 16);
+    if (top + h > window.innerHeight - 8) top = Math.max(8, y - h - 14);
+    caixa.style.left = left + 'px';
+    caixa.style.top = top + 'px';
+}
+function esconderObs() { const c = document.getElementById('dica-obs'); if (c) c.classList.add('hidden'); }
 
 // ---------------- Inicio ----------------
 function iniciar() {

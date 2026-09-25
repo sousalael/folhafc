@@ -563,7 +563,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r141';
+const VERSAO_SCRIPT = '2026-09-25-r142';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6401,7 +6401,7 @@ const BI_FIN_ORIGEM_ID = '1NfiCCM0ANy5UQxRWQODl1Oh087C8hp10';
 const BI_FIN_ABA = 'Dados';
 const BI_FIN_CACHE_NOME = '__BI_FINANCEIRO_GRUPO_CACHE.json';
 const BI_FIN_PROP = 'BI_FIN_CACHE_META';
-const BI_FIN_FORMATO = 2;           // muda se o formato do JSON mudar (invalida o cache antigo)
+const BI_FIN_FORMATO = 3;           // muda se o formato do JSON mudar (invalida o cache antigo)
 const BI_FIN_ABA_CONFIGS = 'BI_Configs';
 
 // Exclusoes combinadas com a Diretoria (comparadas sem acento/maiuscula/espaco/ponto final)
@@ -6534,6 +6534,8 @@ function biFinConstruir_(fonte, mesAtual) {
       det: col(['Equipe / Descrição', 'Equipe/Descrição', 'Equipe / Descricao']), setor: col(['Setor']),
       custo: col(['Custo']), pago: col(['Pago por']), fat: col(['Faturamento']), imp: col(['Imposto'])
     };
+    // r142: coluna de observacoes (opcional — se nao existir, o B.I. segue sem ela)
+    var colObs = col(['Obs', 'Observações', 'Observacoes', 'Observação']);
     var faltando = Object.keys(C).filter(function(k) { return C[k] < 0; });
     if (faltando.length) return { error: 'Colunas não encontradas na aba Dados: ' + faltando.join(', ') + '.' };
 
@@ -6560,6 +6562,8 @@ function biFinConstruir_(fonte, mesAtual) {
     }
 
     var mesesIdx = {}, meses = [];
+    // r142: observacoes por lancamento (mostradas ao passar o mouse na loja, no Detalhamento do Custo)
+    var obsDic = [], obsIdx = {}, obsAgreg = {}, obsOrdem = [];
     var agreg = {}, ordemChaves = [];
     var usadas = 0;
     for (var r = 1; r < valores.length; r++) {
@@ -6587,6 +6591,19 @@ function biFinConstruir_(fonte, mesAtual) {
       if (!ag) { ag = agreg[chave] = { k: k, c: 0, f: 0, i: 0 }; ordemChaves.push(chave); }
       ag.c += custo; ag.f += fat; ag.i += imp;
       usadas++;
+
+      if (colObs >= 0) {
+        var textoObs = String(L[colObs] === null || L[colObs] === undefined ? '' : L[colObs]).replace(/\s+/g, ' ').trim();
+        if (textoObs) {
+          var chObs = biFinNorm_(textoObs);
+          var oi = obsIdx[chObs];
+          if (oi === undefined) { oi = obsDic.length; obsIdx[chObs] = oi; obsDic.push(textoObs.slice(0, 300)); }
+          var chaveObs = chave + '|' + oi;
+          var ao = obsAgreg[chaveObs];
+          if (!ao) { ao = obsAgreg[chaveObs] = { k: k.concat([oi]), c: 0 }; obsOrdem.push(chaveObs); }
+          ao.c += custo;
+        }
+      }
     }
 
     // Grafia final de cada nome: a mais usada
@@ -6618,7 +6635,11 @@ function biFinConstruir_(fonte, mesAtual) {
       campos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'custo', 'fat', 'imp'],
       meses: meses,
       dic: dic,
-      linhas: linhas
+      linhas: linhas,
+      // r142: [mes, neg, cli, loja, tipo, conta, setor, det, obs, custo] e o dicionario dos textos
+      obsCampos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'obs', 'custo'],
+      obsDic: obsDic,
+      obs: obsOrdem.map(function(ch) { var ao = obsAgreg[ch]; return ao.k.concat([r4(ao.c)]); })
     };
   } finally {
     if (tmpId) { try { DriveApp.getFileById(tmpId).setTrashed(true); } catch (e) {} }
