@@ -113,6 +113,12 @@ function doPost(e) {
     else if (action === 'performanceExportarPDF') { result = performanceExportarPDF(data, data.cpf); }
     else if (action === 'performanceSalvarApresentacao') { result = performanceSalvarApresentacao(data, data.cpf); }
 
+    // ── B.I. FINANCEIRO DO GRUPO — r140 ──
+    else if (action === 'biFinanceiroDados') { result = biFinanceiroDados(data.cpf, data.forcar === true); }
+    else if (action === 'biFinConfigListar') { result = biFinConfigListar(data.cpf); }
+    else if (action === 'biFinConfigSalvar') { result = biFinConfigSalvar(data.cpf, data.nome, data.config); }
+    else if (action === 'biFinConfigExcluir') { result = biFinConfigExcluir(data.cpf, data.nome); }
+
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
     // desatualizado em relacao ao index.html.
@@ -557,7 +563,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-23-r137';
+const VERSAO_SCRIPT = '2026-09-25-r140';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -583,7 +589,8 @@ function doGet(e) {
     'performanceAnalise', 'performanceGerarTexto', 'performanceExportarPDF', 'performanceSalvarApresentacao',
     'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance',
     'enviarPesquisaNps', 'listarProjetosAuditoria',
-    'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo'
+    'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo',
+    'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -6375,4 +6382,334 @@ function fcEmailsPorChave() {
     if (out[k] === undefined || t >= quando[k]) { out[k] = e; quando[k] = t; }
   }
   return out;
+}
+
+
+// =============================================================================
+// ############ r140: B.I. FINANCEIRO DO GRUPO (somente DIRETOR) ################
+// Fonte: aba "Dados" do arquivo __________CONTROLE FINANCEIRO F.G..xlsx (Drive).
+// O .xlsx continua sendo o arquivo de trabalho da Diretoria; aqui ele e
+// convertido numa copia temporaria do Google Planilhas so para leitura, que e
+// apagada logo em seguida. O resultado (ja com todas as exclusoes aplicadas e
+// resumido por Mes/Negocio/Cliente/Loja/Tipo op./Conta/Setor/Detalhamento) fica
+// guardado num arquivo JSON no Drive e so e refeito quando a planilha de origem
+// muda (ou quando o Diretor pede "Atualizar dados", ou quando vira o mes).
+// Nada neste bloco altera qualquer funcao existente do sistema.
+// =============================================================================
+
+const BI_FIN_ORIGEM_ID = '1NfiCCM0ANy5UQxRWQODl1Oh087C8hp10';
+const BI_FIN_ABA = 'Dados';
+const BI_FIN_CACHE_NOME = '__BI_FINANCEIRO_GRUPO_CACHE.json';
+const BI_FIN_PROP = 'BI_FIN_CACHE_META';
+const BI_FIN_FORMATO = 2;           // muda se o formato do JSON mudar (invalida o cache antigo)
+const BI_FIN_ABA_CONFIGS = 'BI_Configs';
+
+// Exclusoes combinadas com a Diretoria (comparadas sem acento/maiuscula/espaco/ponto final)
+const BI_FIN_EXC_CONTAS = ['ADIANTAMENTO', 'TRANSFERÊNCIA BANCOS', 'EMPRESTIMO INV', 'SALDO DEVEDOR',
+                           'SALDO PROVISIONAMENTO', 'RESSARCIMENTO', 'DEVOLUÇÃO EMPRÉSTIMO'];
+const BI_FIN_EXC_SETOR_DET = ['EMPRESTIMO INV.', 'SALDO DEVEDOR', 'SALDO PROVISIONAMENTO', 'TRANSFERÊNCIA BANCOS',
+                              'ADIANTAMENTO SÓCIOS', 'CARTÃO DE CRÉDITO', 'SAQUE'];
+const BI_FIN_EXC_PAGO_POR = ['DEVEDORES', 'ADIANTAMENTO', 'TR FC', 'TR FG', 'LAEL CREDITO'];
+
+function biFinNorm_(s) {
+  var t = String(s === null || s === undefined ? '' : s);
+  try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+  return t.toUpperCase().replace(/\s+/g, ' ').trim().replace(/\.+$/, '').trim();
+}
+
+function biFinNumero_(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  if (v === null || v === undefined || v === '') return 0;
+  var s = String(v).trim().replace(/[^\d,.\-]/g, '');
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  var n = Number(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Mes no formato yyyy-MM a partir da coluna "Mês" (Date ou texto)
+function biFinMes_(v, tz) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return Utilities.formatDate(new Date(v.getTime() + 12 * 3600 * 1000), tz, 'yyyy-MM');
+  }
+  var s = String(v || '').trim();
+  var m = s.match(/^(\d{4})-(\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2);
+  m = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (m) return m[2] + '-' + ('0' + m[1]).slice(-2);
+  return '';
+}
+
+function biFinanceiroDados(cpf, forcar) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+
+  var origem = DriveApp.getFileById(BI_FIN_ORIGEM_ID);
+  var fonte = origem.getLastUpdated().getTime();
+  var mesAtual = Utilities.formatDate(new Date(), 'America/Fortaleza', 'yyyy-MM');
+  var props = PropertiesService.getScriptProperties();
+
+  function lerMeta() {
+    try { return JSON.parse(props.getProperty(BI_FIN_PROP) || '{}'); } catch (e) { return {}; }
+  }
+  function tentarCache(meta) {
+    if (!meta || meta.fonte !== fonte || meta.mesAtual !== mesAtual || meta.formato !== BI_FIN_FORMATO || !meta.cacheId) return null;
+    try {
+      var obj = JSON.parse(DriveApp.getFileById(meta.cacheId).getBlob().getDataAsString());
+      obj.origemResposta = 'cache';
+      return obj;
+    } catch (e) { return null; }
+  }
+
+  if (!forcar) {
+    var doCache = tentarCache(lerMeta());
+    if (doCache) return doCache;
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(240000)) return { error: 'O B.I. já está sendo atualizado por outra pessoa. Tente de novo em 1 minuto.' };
+  try {
+    var metaAtual = lerMeta();
+    // Outra execucao pode ter terminado o processamento enquanto esperavamos a trava
+    if (!forcar || (metaAtual.processadoEm && (Date.now() - metaAtual.processadoEm) < 60000)) {
+      var c2 = tentarCache(metaAtual);
+      if (c2) return c2;
+    }
+    var resultado = biFinConstruir_(fonte, mesAtual);
+    if (resultado.error) return resultado;
+
+    var json = JSON.stringify(resultado);
+    var cacheId = metaAtual.cacheId || '';
+    var gravou = false;
+    if (cacheId) {
+      try { DriveApp.getFileById(cacheId).setContent(json); gravou = true; } catch (e) { gravou = false; }
+    }
+    if (!gravou) {
+      cacheId = DriveApp.createFile(BI_FIN_CACHE_NOME, json, MimeType.PLAIN_TEXT).getId();
+    }
+    props.setProperty(BI_FIN_PROP, JSON.stringify({
+      fonte: fonte, mesAtual: mesAtual, formato: BI_FIN_FORMATO, cacheId: cacheId, processadoEm: Date.now()
+    }));
+    resultado.origemResposta = 'processado';
+    return resultado;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function biFinConstruir_(fonte, mesAtual) {
+  var tmpId = null;
+  try {
+    var copia = Drive.Files.copy({
+      name: '__BI_FIN_TEMP_' + Date.now(),
+      mimeType: 'application/vnd.google-apps.spreadsheet'
+    }, BI_FIN_ORIGEM_ID);
+    tmpId = copia.id;
+
+    var ss = SpreadsheetApp.openById(tmpId);
+    var sh = ss.getSheetByName(BI_FIN_ABA);
+    if (!sh) {
+      var abas = ss.getSheets();
+      for (var a = 0; a < abas.length; a++) {
+        if (biFinNorm_(abas[a].getName()) === biFinNorm_(BI_FIN_ABA)) { sh = abas[a]; break; }
+      }
+    }
+    if (!sh) return { error: 'A aba "' + BI_FIN_ABA + '" não foi encontrada na planilha de controle financeiro.' };
+    var tz = ss.getSpreadsheetTimeZone() || 'America/Fortaleza';
+    var valores = sh.getDataRange().getValues();
+    if (valores.length < 2) return { error: 'A aba "' + BI_FIN_ABA + '" está vazia.' };
+
+    // Localiza as colunas pelo nome do cabecalho
+    var cab = valores[0].map(biFinNorm_);
+    function col(nomes) {
+      for (var i = 0; i < nomes.length; i++) {
+        var p = cab.indexOf(biFinNorm_(nomes[i]));
+        if (p >= 0) return p;
+      }
+      return -1;
+    }
+    var C = {
+      mes: col(['Mês', 'Mes']), neg: col(['Divisão', 'Divisao']), cli: col(['Cliente']), loja: col(['Loja']),
+      conta: col(['Conta']), tipo: col(['Tipo op.', 'Tipo op', 'Tipo de operação']),
+      det: col(['Equipe / Descrição', 'Equipe/Descrição', 'Equipe / Descricao']), setor: col(['Setor']),
+      custo: col(['Custo']), pago: col(['Pago por']), fat: col(['Faturamento']), imp: col(['Imposto'])
+    };
+    var faltando = Object.keys(C).filter(function(k) { return C[k] < 0; });
+    if (faltando.length) return { error: 'Colunas não encontradas na aba Dados: ' + faltando.join(', ') + '.' };
+
+    var excConta = {}, excSetor = {}, excPago = {};
+    BI_FIN_EXC_CONTAS.forEach(function(x) { excConta[biFinNorm_(x)] = 1; });
+    BI_FIN_EXC_SETOR_DET.forEach(function(x) { excSetor[biFinNorm_(x)] = 1; });
+    BI_FIN_EXC_PAGO_POR.forEach(function(x) { excPago[biFinNorm_(x)] = 1; });
+
+    // Dicionarios: cada nome vira um numero; grafia exibida = a mais frequente
+    var dims = ['neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det'];
+    var dic = {}, idx = {}, grafias = {};
+    dims.forEach(function(d) { dic[d] = []; idx[d] = {}; grafias[d] = []; });
+    function codigo(d, bruto) {
+      var original = String(bruto === null || bruto === undefined ? '' : bruto).replace(/\s+/g, ' ').trim();
+      var chave = biFinNorm_(original);
+      if (!chave) { chave = '(VAZIO)'; original = '(sem informação)'; }
+      var i = idx[d][chave];
+      if (i === undefined) {
+        i = dic[d].length; idx[d][chave] = i; dic[d].push(original); grafias[d].push({});
+      }
+      var g = grafias[d][i];
+      g[original] = (g[original] || 0) + 1;
+      return i;
+    }
+
+    var mesesIdx = {}, meses = [];
+    var agreg = {}, ordemChaves = [];
+    var usadas = 0;
+    for (var r = 1; r < valores.length; r++) {
+      var L = valores[r];
+      var mes = biFinMes_(L[C.mes], tz);
+      if (!mes) continue;
+      if (Number(mes.slice(0, 4)) <= 2021) continue;       // 2021 fora da analise
+      if (mes > mesAtual) continue;                         // meses futuros ocultos
+      if (excConta[biFinNorm_(L[C.conta])]) continue;
+      if (excSetor[biFinNorm_(L[C.setor])] || excSetor[biFinNorm_(L[C.det])]) continue;
+      if (excPago[biFinNorm_(L[C.pago])]) continue;
+
+      var custo = biFinNumero_(L[C.custo]);
+      var fat = biFinNumero_(L[C.fat]);
+      var imp = biFinNumero_(L[C.imp]);
+      if (!custo && !fat && !imp) continue;
+
+      var mi = mesesIdx[mes];
+      if (mi === undefined) { mi = meses.length; mesesIdx[mes] = mi; meses.push(mes); }
+      var k = [mi, codigo('neg', L[C.neg]), codigo('cli', L[C.cli]), codigo('loja', L[C.loja]),
+               codigo('tipo', L[C.tipo]), codigo('conta', L[C.conta]), codigo('setor', L[C.setor]),
+               codigo('det', L[C.det])];
+      var chave = k.join('|');
+      var ag = agreg[chave];
+      if (!ag) { ag = agreg[chave] = { k: k, c: 0, f: 0, i: 0 }; ordemChaves.push(chave); }
+      ag.c += custo; ag.f += fat; ag.i += imp;
+      usadas++;
+    }
+
+    // Grafia final de cada nome: a mais usada
+    dims.forEach(function(d) {
+      for (var i = 0; i < dic[d].length; i++) {
+        var melhor = dic[d][i], qt = -1, g = grafias[d][i];
+        Object.keys(g).forEach(function(o) { if (g[o] > qt) { qt = g[o]; melhor = o; } });
+        dic[d][i] = melhor;
+      }
+    });
+
+    // 4 casas: a planilha tem valores com mais de 2 casas (ex.: 248,408); arredondar
+    // a 2 casas em cada grupo fazia os totais divergirem alguns centavos da planilha.
+    function r4(n) { return Math.round(n * 10000) / 10000; }
+    var linhas = ordemChaves.map(function(ch) {
+      var ag = agreg[ch];
+      return ag.k.concat([r4(ag.c), r4(ag.f), r4(ag.i)]);
+    });
+
+    return {
+      success: true,
+      versao: VERSAO_SCRIPT,
+      formato: BI_FIN_FORMATO,
+      fonteAtualizadaEm: new Date(fonte).toISOString(),
+      processadoEm: new Date().toISOString(),
+      mesAtual: mesAtual,
+      totalLinhasOrigem: valores.length - 1,
+      totalLinhasUsadas: usadas,
+      campos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'custo', 'fat', 'imp'],
+      meses: meses,
+      dic: dic,
+      linhas: linhas
+    };
+  } finally {
+    if (tmpId) { try { DriveApp.getFileById(tmpId).setTrashed(true); } catch (e) {} }
+  }
+}
+
+// ---------- Configuracoes de cards do B.I. (cada Diretor ve so as suas) ----------
+// Aba BI_Configs: CPF | Nome | Config (JSON) | Atualizado em
+// O nome reservado "__ATUAL__" guarda a ultima arrumacao usada (ordem e cards visiveis).
+const BI_FIN_CARDS_VALIDOS = ['fat', 'custo', 'imp', 'margem', 'unid', 'yoy'];
+
+function biFinAbaConfigs_() {
+  var ss = getPlanilha();
+  var sh = ss.getSheetByName(BI_FIN_ABA_CONFIGS);
+  if (!sh) {
+    sh = ss.insertSheet(BI_FIN_ABA_CONFIGS);
+    sh.getRange(1, 1, 1, 4).setValues([['CPF', 'Nome', 'Config', 'Atualizado em']]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function biFinValidarConfig_(cfg) {
+  if (!cfg || typeof cfg !== 'object') return null;
+  var ordem = Array.isArray(cfg.ordem) ? cfg.ordem.filter(function(x) { return BI_FIN_CARDS_VALIDOS.indexOf(x) >= 0; }) : [];
+  BI_FIN_CARDS_VALIDOS.forEach(function(x) { if (ordem.indexOf(x) < 0) ordem.push(x); });
+  var visiveis = Array.isArray(cfg.visiveis) ? cfg.visiveis.filter(function(x) { return BI_FIN_CARDS_VALIDOS.indexOf(x) >= 0; }) : BI_FIN_CARDS_VALIDOS.slice();
+  return { ordem: ordem, visiveis: visiveis };
+}
+
+function biFinConfigListar(cpf) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  var alvo = normalizarCPF(cpf);
+  var dados = biFinAbaConfigs_().getDataRange().getValues();
+  var atual = null, lista = [];
+  for (var i = 1; i < dados.length; i++) {
+    if (normalizarCPF(dados[i][0]) !== alvo) continue;
+    var cfg = null;
+    try { cfg = biFinValidarConfig_(JSON.parse(dados[i][2])); } catch (e) { cfg = null; }
+    if (!cfg) continue;
+    var nome = String(dados[i][1] || '');
+    if (nome === '__ATUAL__') atual = cfg;
+    else lista.push({ nome: nome, config: cfg });
+  }
+  lista.sort(function(a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  return { success: true, atual: atual, lista: lista };
+}
+
+function biFinConfigSalvar(cpf, nome, config) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  nome = String(nome || '').replace(/\s+/g, ' ').trim();
+  if (!nome) return { error: 'Dê um nome para a configuração.' };
+  if (nome.length > 60) return { error: 'Use um nome com até 60 caracteres.' };
+  var cfg = biFinValidarConfig_(config);
+  if (!cfg) return { error: 'Configuração inválida.' };
+  var alvo = normalizarCPF(cpf);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = biFinAbaConfigs_();
+    var dados = sh.getDataRange().getValues();
+    for (var i = 1; i < dados.length; i++) {
+      if (normalizarCPF(dados[i][0]) === alvo && String(dados[i][1]) === nome) {
+        sh.getRange(i + 1, 3, 1, 2).setValues([[JSON.stringify(cfg), new Date()]]);
+        return { success: true, nome: nome, config: cfg };
+      }
+    }
+    sh.appendRow([alvo, nome, JSON.stringify(cfg), new Date()]);
+    return { success: true, nome: nome, config: cfg };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function biFinConfigExcluir(cpf, nome) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  nome = String(nome || '').trim();
+  var alvo = normalizarCPF(cpf);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = biFinAbaConfigs_();
+    var dados = sh.getDataRange().getValues();
+    for (var i = dados.length - 1; i >= 1; i--) {
+      if (normalizarCPF(dados[i][0]) === alvo && String(dados[i][1]) === nome) {
+        sh.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { error: 'Configuração não encontrada.' };
+  } finally {
+    lock.releaseLock();
+  }
 }

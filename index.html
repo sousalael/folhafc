@@ -812,6 +812,10 @@
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-bi-financeiro" data-bs-toggle="modal" data-bs-target="#modalBiFinanceiro" onclick="prepararBiFinanceiro()">📊 BI Financeiro (Despesas × Provisionamento)</button>
         </div>
+        <!-- r140: B.I. Financeiro do Grupo (somente Diretor) — abre bi.html em nova aba -->
+        <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+            <button class="btn fc-btn-verde w-100 py-2 fw-bold hidden" id="btn-bi-grupo" onclick="abrirBiGrupo()">📈 B.I. Financeiro do Grupo</button>
+        </div>
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelProvisionamento" onclick="prepararRelProvisionamento()">📑 Relatório de Provisionamento</button>
         </div>
@@ -3718,6 +3722,15 @@
         window.open(url, '_blank');
     }
 
+    // r140: B.I. Financeiro do Grupo (bi.html), mesmo padrao das outras telas em nova aba.
+    function abrirBiGrupo() {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'bi.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir o B.I. Financeiro do Grupo.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
+        window.open(url, '_blank');
+    }
+
     function abrirRevisaoLancamentos() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'revisao.html';
         const tok = window.tokenSessao || '';
@@ -4416,7 +4429,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-09-23-r137';
+    const VERSAO_ESPERADA = '2026-09-25-r140';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4495,6 +4508,8 @@
             if (areaDir) areaDir.classList.toggle('hidden', !ehDiretor);
             const btnBiFin = document.getElementById('btn-bi-financeiro');
             if (btnBiFin) btnBiFin.classList.toggle('hidden', !ehDiretor);
+            const btnBiGrupo = document.getElementById('btn-bi-grupo');   // r140
+            if (btnBiGrupo) btnBiGrupo.classList.toggle('hidden', !ehDiretor);
             const btnRelAdto = document.getElementById('btn-rel-adiantamento');
             if (btnRelAdto) btnRelAdto.classList.toggle('hidden', !ehDiretor);
             const areaRelVis = document.getElementById('area-relatorio-visual');
