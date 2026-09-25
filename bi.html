@@ -180,6 +180,16 @@
         .carregando .txt { color: var(--fc-primaria); font-weight: 700; }
         .carregando .sub { color: var(--fc-texto-suave); font-size: .85rem; max-width: 420px; }
 
+        /* r145: tela de liberacao do B.I. */
+        .liberacao { max-width: 440px; margin: 40px auto; text-align: center; padding: 28px 26px; }
+        .liberacao h2 { font-size: 1.15rem; font-weight: 700; color: var(--fc-primaria); margin: 6px 0 8px; }
+        .liberacao .lib-icone { font-size: 2rem; }
+        .liberacao .lib-txt { font-size: .88rem; color: var(--fc-texto-suave); margin-bottom: 16px; }
+        .liberacao .form-label { display: block; text-align: left; color: var(--fc-primaria); font-size: .85rem; }
+        .lib-input { text-align: center; font-size: 1.6rem; font-weight: 700; letter-spacing: 8px; }
+        .lib-msg { margin-top: 12px; font-size: .86rem; min-height: 1.2em; }
+        .lib-msg.erro { color: #c0392b; }
+        .lib-msg.ok { color: #3f8f00; }
         .sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -203,6 +213,23 @@
         <div class="spinner-border" role="status"></div>
         <div class="txt" id="carregando-txt">Carregando dados da planilha…</div>
         <div class="sub">Depois de qualquer alteração na planilha de controle financeiro, a primeira abertura pode levar até 1 minuto. As próximas são rápidas.</div>
+    </div>
+
+    <!-- r145: liberacao do B.I. por codigo no e-mail (vale ate o fim do dia neste navegador) -->
+    <div class="bi-wrap" id="area-liberacao" style="display:none;">
+        <div class="bi-painel liberacao">
+            <div class="lib-icone" aria-hidden="true">🔒</div>
+            <h2>Confirme seu acesso ao B.I.</h2>
+            <p class="lib-txt" id="lib-txt">Para abrir o B.I., enviaremos um código de 6 dígitos para o seu e-mail cadastrado. Depois de confirmado, o B.I. fica liberado neste navegador até o fim do dia.</p>
+            <button type="button" class="btn btn-verde px-4" id="btn-lib-enviar" onclick="enviarCodigoBI()">Enviar código</button>
+            <div class="hidden" id="lib-etapa-codigo">
+                <label for="lib-input" class="form-label fw-semibold mt-2">Código recebido</label>
+                <input type="text" class="form-control lib-input" id="lib-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
+                <button type="button" class="btn btn-fc w-100 mt-3" id="btn-lib-confirmar" onclick="confirmarCodigoBI()">Confirmar</button>
+                <button type="button" class="btn btn-link btn-sm mt-2" id="btn-lib-reenviar" onclick="enviarCodigoBI()">Reenviar código</button>
+            </div>
+            <div class="lib-msg" id="lib-msg" role="alert"></div>
+        </div>
     </div>
 
     <div class="bi-wrap" id="area-erro" style="display:none;">
@@ -808,8 +835,72 @@ const estado = {
 };
 ABAS.forEach(a => { if (a.contas) { estado.locais[a.id] = { setor: null, det: null }; estado.abertosCusto[a.id] = new Set(); } });
 
+// ---------------- r145: liberacao do B.I. por codigo no e-mail ----------------
+const CHAVE_LIB = 'fcBiLiberacao_' + cpfLogado;
+let tokenBI = '';
+let dadosIniciados = false;
+function lerLiberacaoLocal() {
+    try {
+        const l = JSON.parse(localStorage.getItem(CHAVE_LIB) || 'null');
+        if (l && l.tokenBI && Number(l.expiraEm) > Date.now()) return l.tokenBI;
+    } catch (e) {}
+    return '';
+}
+function mostrarLiberacao(msg) {
+    document.getElementById('carregando').style.display = 'none';
+    document.getElementById('area-bi').style.display = 'none';
+    document.getElementById('area-erro').style.display = 'none';
+    document.getElementById('area-liberacao').style.display = '';
+    document.getElementById('info-dados').textContent = '';
+    document.getElementById('lib-etapa-codigo').classList.add('hidden');
+    document.getElementById('btn-lib-enviar').classList.remove('hidden');
+    document.getElementById('lib-input').value = '';
+    msgLiberacao(msg || '', 'erro');
+}
+function msgLiberacao(t, tipo) {
+    const m = document.getElementById('lib-msg');
+    m.textContent = t;
+    m.className = 'lib-msg' + (tipo ? ' ' + tipo : '');
+}
+function bloquearBI(msg) {
+    tokenBI = '';
+    try { localStorage.removeItem(CHAVE_LIB); } catch (e) {}
+    mostrarLiberacao(msg);
+}
+async function enviarCodigoBI() {
+    const b1 = document.getElementById('btn-lib-enviar'), b2 = document.getElementById('btn-lib-reenviar');
+    b1.disabled = true; b2.disabled = true;
+    msgLiberacao('Enviando código…');
+    try {
+        const res = await chamar({ action: 'biSolicitarCodigo', cpf: cpfLogado });
+        document.getElementById('btn-lib-enviar').classList.add('hidden');
+        document.getElementById('lib-etapa-codigo').classList.remove('hidden');
+        msgLiberacao('Código enviado para ' + (res.emailMascarado || 'o seu e-mail') + '. Ele vale 10 minutos.', 'ok');
+        const inp = document.getElementById('lib-input');
+        inp.value = '';
+        inp.focus();
+    } catch (e) { msgLiberacao(e.message, 'erro'); }
+    finally { b1.disabled = false; b2.disabled = false; }
+}
+async function confirmarCodigoBI() {
+    const codigo = document.getElementById('lib-input').value.replace(/\D/g, '');
+    if (codigo.length !== 6) { msgLiberacao('Digite os 6 números do código.', 'erro'); return; }
+    const b = document.getElementById('btn-lib-confirmar');
+    b.disabled = true;
+    msgLiberacao('Confirmando…');
+    try {
+        const res = await chamar({ action: 'biValidarCodigo', cpf: cpfLogado, codigo: codigo });
+        tokenBI = res.tokenBI;
+        try { localStorage.setItem(CHAVE_LIB, JSON.stringify({ tokenBI: res.tokenBI, expiraEm: res.expiraEm })); } catch (e) {}
+        document.getElementById('area-liberacao').style.display = 'none';
+        iniciarDados();
+    } catch (e) { msgLiberacao(e.message, 'erro'); }
+    finally { b.disabled = false; }
+}
+
 async function chamar(payload, timeoutMs) {
     payload.token = tokenSessao;
+    payload.tokenBI = tokenBI;   // r145
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs || 60000);
     try {
@@ -818,6 +909,12 @@ async function chamar(payload, timeoutMs) {
         let res;
         try { res = JSON.parse(txt); } catch (e) { throw new Error('Resposta inválida do servidor.'); }
         if (res && res.error === 'SESSAO_INVALIDA') throw new Error('Sua sessão expirou. Volte ao Sistema de Gestão, entre novamente e abra o B.I. pelo botão.');
+        if (res && res.error === 'BI_BLOQUEADO') {   // r145: liberacao do dia venceu ou nao existe
+            bloquearBI('Sua liberação do B.I. venceu. Solicite um novo código.');
+            const erro = new Error('Confirme o acesso ao B.I. com o código enviado ao seu e-mail.');
+            erro.biBloqueado = true;
+            throw erro;
+        }
         if (!res || res.error) throw new Error(res && res.error ? res.error : 'Erro desconhecido.');
         return res;
     } catch (e) {
@@ -861,7 +958,8 @@ async function atualizarDados(forcar, silencioso) {
         }
         mostrarInfoDados();
     } catch (e) {
-        if (!estado.db) mostrarErro(e.message);
+        if (e.biBloqueado) { /* tela de liberacao ja exibida */ }
+        else if (!estado.db) mostrarErro(e.message);
         else if (!silencioso) alert(e.message);
     } finally {
         carregandoAgora = false;
@@ -1978,11 +2076,20 @@ function iniciar() {
     }
     montarFiltrosGlobais();
     montarAbas();
+    document.getElementById('lib-input').addEventListener('keydown', e => { if (e.key === 'Enter') confirmarCodigoBI(); });
+    // r145: sem a liberacao do dia neste navegador, pede o codigo antes de carregar qualquer dado
+    tokenBI = lerLiberacaoLocal();
+    if (tokenBI) iniciarDados();
+    else mostrarLiberacao();
+}
+function iniciarDados() {
+    if (dadosIniciados) { atualizarDados(false); return; }
+    dadosIniciados = true;
     carregarFiltrosLocais();   // r141: volta com os ultimos filtros usados
     carregarConfigsCards();
     atualizarDados(false);
     // Atualizacao automatica a cada 30 minutos (so recarrega a tela se a planilha mudou)
-    setInterval(() => { if (!document.hidden) atualizarDados(false, true); }, 30 * 60 * 1000);
+    setInterval(() => { if (!document.hidden && tokenBI) atualizarDados(false, true); }, 30 * 60 * 1000);
 }
 iniciar();
 </script>

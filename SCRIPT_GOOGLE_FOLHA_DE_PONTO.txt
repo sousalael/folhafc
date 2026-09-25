@@ -24,6 +24,18 @@ function doPost(e) {
       data.cpf = cpfDaSessao;
     }
 
+    // ############ r145: TRAVA DO B.I. (codigo por e-mail, vale ate o fim do dia) ############
+    // Alem da sessao do sistema, as acoes de dados do B.I. exigem a liberacao do dia
+    // (tokenBI), emitida so depois do codigo enviado ao e-mail do Diretor.
+    if (typeof BI_ACOES_PROTEGIDAS !== 'undefined' && BI_ACOES_PROTEGIDAS.indexOf(action) !== -1) {
+      if (!biLiberacaoValida(data.cpf, data.tokenBI)) {
+        return ContentService.createTextOutput(JSON.stringify({
+          error: 'BI_BLOQUEADO',
+          mensagem: 'Confirme o acesso ao B.I. com o código enviado ao seu e-mail.'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     if (action === 'getProjetos') { result = getProjetos(); }
     else if (action === 'verificarSupervisor') { result = verificarSupervisor(data.cpf, data.projeto); }
     else if (action === 'getListaPresencas') { result = getListaPresencas(data.projeto); }
@@ -118,6 +130,10 @@ function doPost(e) {
     else if (action === 'biFinConfigListar') { result = biFinConfigListar(data.cpf); }
     else if (action === 'biFinConfigSalvar') { result = biFinConfigSalvar(data.cpf, data.nome, data.config); }
     else if (action === 'biFinConfigExcluir') { result = biFinConfigExcluir(data.cpf, data.nome); }
+    // ── r145: liberacao do B.I. por codigo no e-mail ──
+    else if (action === 'biSolicitarCodigo') { result = biSolicitarCodigo(data.cpf); }
+    else if (action === 'biValidarCodigo') { result = biValidarCodigo(data.cpf, data.codigo); }
+    else if (action === 'biVerificarLiberacao') { result = { success: true, liberado: biLiberacaoValida(data.cpf, data.tokenBI) }; }
 
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
@@ -563,7 +579,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r144';
+const VERSAO_SCRIPT = '2026-09-25-r145';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6762,4 +6778,108 @@ function biFinConfigExcluir(cpf, nome) {
   } finally {
     lock.releaseLock();
   }
+}
+
+
+// =============================================================================
+// ############ r145: LIBERACAO DO B.I. POR CODIGO NO E-MAIL #####################
+// Camada extra so para o B.I.: depois do login no sistema, o Diretor recebe um
+// codigo de 6 digitos no e-mail cadastrado (mesmo mecanismo da recuperacao de
+// senha: 10 minutos, ate 5 tentativas). O codigo gera uma liberacao que vale ate
+// 23h59 do dia (fuso America/Fortaleza) e fica guardada so no navegador em que
+// foi digitada. A liberacao fica nas propriedades do script (o cache do Google
+// guarda no maximo 6 horas). Nada aqui altera o login do sistema.
+// =============================================================================
+
+const BI_ACOES_PROTEGIDAS = ['biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir'];
+const BI_OTP_VALIDADE_SEG = 600;
+const BI_OTP_MAX_TENTATIVAS = 5;
+const BI_LIB_PREFIXO = 'BIAC_';
+
+function biFimDoDia_() {
+  var hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'yyyy-MM-dd');
+  return new Date(hoje + 'T23:59:59-03:00').getTime();
+}
+
+function biLiberacaoValida(cpf, tokenBI) {
+  if (!tokenBI || !cpf) return false;
+  var bruto = PropertiesService.getScriptProperties().getProperty(BI_LIB_PREFIXO + String(tokenBI));
+  if (!bruto) return false;
+  try {
+    var lib = JSON.parse(bruto);
+    return lib.cpf === normalizarCPF(cpf) && Date.now() <= lib.exp;
+  } catch (e) { return false; }
+}
+
+// Apaga liberacoes vencidas (dias anteriores)
+function biLimparLiberacoes_() {
+  var props = PropertiesService.getScriptProperties();
+  var todas = props.getProperties();
+  var agora = Date.now();
+  Object.keys(todas).forEach(function(k) {
+    if (k.indexOf(BI_LIB_PREFIXO) !== 0) return;
+    try { if (JSON.parse(todas[k]).exp < agora) props.deleteProperty(k); }
+    catch (e) { props.deleteProperty(k); }
+  });
+}
+
+function biSolicitarCodigo(cpf) {
+  var cpfLimpo = normalizarCPF(cpf);
+  if (getPerfilPorCPF(cpfLimpo) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  var email = getEmailPorCPF(cpfLimpo);
+  if (!email || email.indexOf('@') === -1) {
+    return { error: 'Não há e-mail válido cadastrado para este CPF na aba Colaboradores.' };
+  }
+  var codigo = String(Math.floor(100000 + Math.random() * 900000));
+  CacheService.getScriptCache().put('otpbi_' + cpfLimpo, JSON.stringify({ codigo: codigo, tentativas: 0 }), BI_OTP_VALIDADE_SEG);
+  var nome = getNomePorCPF(cpfLimpo);
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: 'Código de acesso - B.I. Formula Code',
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:480px">' +
+                '<p>Olá, <strong>' + nome + '</strong>.</p>' +
+                '<p>Seu código de acesso ao B.I. Formula Code é:</p>' +
+                '<p style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#002B50">' + codigo + '</p>' +
+                '<p style="color:#666">Válido por 10 minutos. Depois de confirmado, o B.I. fica liberado neste navegador até o fim do dia. ' +
+                'Se você não solicitou este acesso, ignore este e-mail.</p>' +
+                '</div>'
+    });
+  } catch (e) {
+    return { error: 'Não foi possível enviar o e-mail: ' + e.toString() + ' (pode ser a cota diária de envios do Google).' };
+  }
+  return { success: true, emailMascarado: mascararEmail(email) };
+}
+
+function biValidarCodigo(cpf, codigo) {
+  var cpfLimpo = normalizarCPF(cpf);
+  if (getPerfilPorCPF(cpfLimpo) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  var cache = CacheService.getScriptCache();
+  var codigoLimpo = String(codigo || '').trim();
+
+  // Repeticao da mesma chamada (rede lenta): devolve a mesma liberacao
+  var chaveUsado = 'otpbiok_' + cpfLimpo + '_' + codigoLimpo;
+  var anterior = cache.get(chaveUsado);
+  if (anterior) return { success: true, tokenBI: anterior, expiraEm: biFimDoDia_(), reaproveitado: true };
+
+  var bruto = cache.get('otpbi_' + cpfLimpo);
+  if (!bruto) return { error: 'Código expirado ou inexistente. Solicite um novo código.' };
+  var dados;
+  try { dados = JSON.parse(bruto); } catch (e) { return { error: 'Código inválido. Solicite um novo.' }; }
+  if (dados.tentativas >= BI_OTP_MAX_TENTATIVAS) {
+    cache.remove('otpbi_' + cpfLimpo);
+    return { error: 'Número máximo de tentativas excedido. Solicite um novo código.' };
+  }
+  if (codigoLimpo !== dados.codigo) {
+    dados.tentativas++;
+    cache.put('otpbi_' + cpfLimpo, JSON.stringify(dados), BI_OTP_VALIDADE_SEG);
+    return { error: 'Código incorreto. Tentativas restantes: ' + (BI_OTP_MAX_TENTATIVAS - dados.tentativas) + '.' };
+  }
+  cache.remove('otpbi_' + cpfLimpo);
+  try { biLimparLiberacoes_(); } catch (e) {}
+  var tokenBI = Utilities.getUuid() + '-' + new Date().getTime();
+  var exp = biFimDoDia_();
+  PropertiesService.getScriptProperties().setProperty(BI_LIB_PREFIXO + tokenBI, JSON.stringify({ cpf: cpfLimpo, exp: exp }));
+  cache.put(chaveUsado, tokenBI, 60);
+  return { success: true, tokenBI: tokenBI, expiraEm: exp };
 }
