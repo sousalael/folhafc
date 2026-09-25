@@ -563,7 +563,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r142';
+const VERSAO_SCRIPT = '2026-09-25-r143';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6401,12 +6401,14 @@ const BI_FIN_ORIGEM_ID = '1NfiCCM0ANy5UQxRWQODl1Oh087C8hp10';
 const BI_FIN_ABA = 'Dados';
 const BI_FIN_CACHE_NOME = '__BI_FINANCEIRO_GRUPO_CACHE.json';
 const BI_FIN_PROP = 'BI_FIN_CACHE_META';
-const BI_FIN_FORMATO = 3;           // muda se o formato do JSON mudar (invalida o cache antigo)
+const BI_FIN_FORMATO = 4;           // muda se o formato do JSON mudar (invalida o cache antigo)
 const BI_FIN_ABA_CONFIGS = 'BI_Configs';
 
 // Exclusoes combinadas com a Diretoria (comparadas sem acento/maiuscula/espaco/ponto final)
-const BI_FIN_EXC_CONTAS = ['ADIANTAMENTO', 'TRANSFERÊNCIA BANCOS', 'EMPRESTIMO INV', 'SALDO DEVEDOR',
-                           'SALDO PROVISIONAMENTO', 'RESSARCIMENTO', 'DEVOLUÇÃO EMPRÉSTIMO'];
+// r143: so a conta ADIANTAMENTO sai de tudo. As contas TRANSFERÊNCIA BANCOS, EMPRESTIMO INV,
+// SALDO DEVEDOR, SALDO PROVISIONAMENTO, RESSARCIMENTO e DEVOLUÇÃO EMPRÉSTIMO passam a ser
+// enviadas, mas a tela so as usa nos cards principais (abas, graficos e tabelas continuam sem elas).
+const BI_FIN_EXC_CONTAS = ['ADIANTAMENTO'];
 const BI_FIN_EXC_SETOR_DET = ['EMPRESTIMO INV.', 'SALDO DEVEDOR', 'SALDO PROVISIONAMENTO', 'TRANSFERÊNCIA BANCOS',
                               'ADIANTAMENTO SÓCIOS', 'CARTÃO DE CRÉDITO', 'SAQUE'];
 const BI_FIN_EXC_PAGO_POR = ['DEVEDORES', 'ADIANTAMENTO', 'TR FC', 'TR FG', 'LAEL CREDITO'];

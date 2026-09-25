@@ -293,6 +293,9 @@ function normBI(s) {
 const CONTA_FAT = 'FATURAMENTO';
 const CONTAS_CUSTO_TOTAL = ['DESPESA OP', 'DESPESA TEC', 'PESSOAL', 'INVESTIMENTO', 'DESPESA ADM', 'DESPESA FIN', 'DOACAO', 'VIAGEM APAS'];
 const CONTAS_CUSTO_OPER = ['PESSOAL', 'DESPESA OP', 'DESPESA TEC'];
+// r143: contas que entram SO nos cards principais (acima das abas). Abas, graficos,
+// tabelas e listas de filtros continuam sem elas. A conta ADIANTAMENTO nao vem do servidor.
+const CONTAS_SO_CARDS = ['TRANSFERENCIA BANCOS', 'EMPRESTIMO INV', 'SALDO DEVEDOR', 'SALDO PROVISIONAMENTO', 'RESSARCIMENTO', 'DEVOLUCAO EMPRESTIMO'];
 
 const ABAS = [
     { id: 'ro', titulo: 'Resultado Operacional' },
@@ -359,6 +362,9 @@ function prepararBase(res) {
     db.ehFat = papel([CONTA_FAT]);
     db.ehCustoTotal = papel(CONTAS_CUSTO_TOTAL);
     db.ehCustoOper = papel(CONTAS_CUSTO_OPER);
+    db.soCards = papel(CONTAS_SO_CARDS);
+    db.linhasAnalise = [];
+    for (let i = 0; i < n; i++) if (!db.soCards[db.conta[i]]) db.linhasAnalise.push(i);
     db.papelAba = {};
     ABAS.forEach(a => {
         if (a.contas) db.papelAba[a.id] = { custo: papel(a.contas), receita: papel(a.receitas || []) };
@@ -417,7 +423,35 @@ function aplicarCascata(db, dims, intencao, linhasBase) {
     return { linhas: linhas, opcoes: opcoes, efetivo: efetivo };
 }
 
-function todasLinhas(db) { const a = new Array(db.n); for (let i = 0; i < db.n; i++) a[i] = i; return a; }
+// Linhas usadas nas abas e nos filtros (sem as contas que so entram nos cards principais)
+function todasLinhas(db) { return db.linhasAnalise.slice(); }
+
+// r143: cards principais — todas as contas vindas do servidor (so ADIANTAMENTO fica fora),
+// com os mesmos filtros globais e as barras clicadas
+function passaGlobais(db, ef, i) {
+    if (ef.ano && !ef.ano.has(db.ano[i])) return false;
+    if (ef.mes && !ef.mes.has(db.mes[i])) return false;
+    if (ef.neg && !ef.neg.has(db.neg[i])) return false;
+    if (ef.cli && !ef.cli.has(db.cli[i])) return false;
+    if (ef.uni && !ef.uni.has(db.uni[i])) return false;
+    if (ef.tipo && !ef.tipo.has(db.tipo[i])) return false;
+    return true;
+}
+function totaisCardsPrincipais(db, cascata, mesesSel) {
+    const ef = cascata.efetivo;
+    let fat = 0, custo = 0, imp = 0;
+    const fatUni = new Map();
+    for (let i = 0; i < db.n; i++) {
+        if (mesesSel && !mesesSel.has(db.mes[i])) continue;
+        if (!passaGlobais(db, ef, i)) continue;
+        fat += db.fat[i]; custo += db.custo[i]; imp += db.imp[i];
+        if (db.fat[i]) fatUni.set(db.uni[i], (fatUni.get(db.uni[i]) || 0) + db.fat[i]);
+    }
+    let unidades = 0;
+    fatUni.forEach(v => { if (v > 0.005) unidades++; });
+    const lucro = fat - custo - imp;
+    return { fat: fat, custo: custo, imp: imp, lucro: lucro, margem: fat ? lucro / fat : null, unidades: unidades };
+}
 
 // Totais dos cards. escopoCusto: 'oper' (3 contas) ou 'total' (8 contas)
 function calcularTotais(db, linhas, escopoCusto) {
@@ -442,7 +476,8 @@ function calcularTotais(db, linhas, escopoCusto) {
 // Crescimento YoY: faturamento do periodo filtrado x mesmos meses do ano anterior,
 // com os mesmos filtros de negocio/cliente/unidade/tipo.
 // r142: mesesOverride = meses escolhidos clicando nas barras (quando houver)
-function calcularYoY(db, cascata, fatAtual, mesesOverride) {
+// r143: todasContas = true usa o faturamento de todas as contas (cards principais)
+function calcularYoY(db, cascata, fatAtual, mesesOverride, todasContas) {
     const mesesAtuais = mesesOverride ? Array.from(mesesOverride) : cascata.efetivo.mes ? Array.from(cascata.efetivo.mes) : cascata.opcoes.mes.slice();
     const idxPorTexto = {};
     db.meses.forEach((m, i) => { idxPorTexto[m] = i; });
@@ -458,7 +493,7 @@ function calcularYoY(db, cascata, fatAtual, mesesOverride) {
     let fatAnt = 0;
     for (let i = 0; i < db.n; i++) {
         if (!anteriores.has(db.mes[i])) continue;
-        if (!db.ehFat[db.conta[i]]) continue;
+        if (!todasContas && !db.ehFat[db.conta[i]]) continue;
         if (ef.neg && !ef.neg.has(db.neg[i])) continue;
         if (ef.cli && !ef.cli.has(db.cli[i])) continue;
         if (ef.uni && !ef.uni.has(db.uni[i])) continue;
@@ -1035,8 +1070,8 @@ function valoresCards() {
     const db = estado.db, casc = estado.cascata;
     const escopo = estado.aba === 'ro' ? 'oper' : 'total';
     const sel = mesesSelecionados();   // r142: cards seguem as barras clicadas
-    const t = calcularTotais(db, filtrarPorMeses(db, casc.linhas, sel), escopo);
-    const y = calcularYoY(db, casc, t.fat, sel);
+    const t = totaisCardsPrincipais(db, casc, sel);   // r143: todas as contas, exceto ADIANTAMENTO
+    const y = calcularYoY(db, casc, t.fat, sel, true);
     return { t: t, y: y, escopo: escopo };
 }
 
@@ -1095,8 +1130,8 @@ function desenharCards() {
     const linha = document.getElementById('kpi-linha');
     const visiveis = estado.cards.ordem.filter(id => estado.cards.visiveis.indexOf(id) >= 0);
     const dados = {
-        fat:    { valor: brl(t.fat), sub: 'Conta FATURAMENTO' },
-        custo:  { valor: brl(t.custo), sub: escopo === 'oper' ? 'Pessoal, Desp. Op. e Desp. Tec.' : 'Todas as contas de custo' },
+        fat:    { valor: brl(t.fat), sub: 'Todas as contas, exceto Adiantamento' },
+        custo:  { valor: brl(t.custo), sub: 'Todas as contas, exceto Adiantamento' },
         imp:    { valor: brl(t.imp), sub: 'Coluna Imposto' },
         margem: { valor: pct(t.margem), sub: 'Lucro ' + brl(t.lucro), classe: t.margem !== null && t.margem < 0 ? 'kpi-negativo' : '' },
         unid:   { valor: fmtNum.format(t.unidades), sub: 'Cliente + loja com faturamento' },
