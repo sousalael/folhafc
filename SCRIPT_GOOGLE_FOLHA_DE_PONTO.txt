@@ -133,6 +133,7 @@ function doPost(e) {
     // ── r145: liberacao do B.I. por codigo no e-mail ──
     else if (action === 'biSolicitarCodigo') { result = biSolicitarCodigo(data.cpf); }
     else if (action === 'biValidarCodigo') { result = biValidarCodigo(data.cpf, data.codigo); }
+    else if (action === 'biGerarAnalise') { result = biGerarAnalise(data.cpf, data.pacote, data.correcao); }
     else if (action === 'biVerificarLiberacao') { result = { success: true, liberado: biLiberacaoValida(data.cpf, data.tokenBI) }; }
 
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
@@ -579,7 +580,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r145';
+const VERSAO_SCRIPT = '2026-09-25-r146';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6791,7 +6792,7 @@ function biFinConfigExcluir(cpf, nome) {
 // guarda no maximo 6 horas). Nada aqui altera o login do sistema.
 // =============================================================================
 
-const BI_ACOES_PROTEGIDAS = ['biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir'];
+const BI_ACOES_PROTEGIDAS = ['biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir', 'biGerarAnalise'];
 const BI_OTP_VALIDADE_SEG = 600;
 const BI_OTP_MAX_TENTATIVAS = 5;
 const BI_LIB_PREFIXO = 'BIAC_';
@@ -6882,4 +6883,56 @@ function biValidarCodigo(cpf, codigo) {
   PropertiesService.getScriptProperties().setProperty(BI_LIB_PREFIXO + tokenBI, JSON.stringify({ cpf: cpfLimpo, exp: exp }));
   cache.put(chaveUsado, tokenBI, 60);
   return { success: true, tokenBI: tokenBI, expiraEm: exp };
+}
+
+
+// =============================================================================
+// ############ r146: ANALISE ECONOMICO-FINANCEIRA DO B.I. (IA) ##################
+// A tela calcula todos os numeros (com os filtros aplicados) e manda um pacote
+// ja formatado. Aqui so se pede para a IA interpretar e escrever. A tela confere
+// cada valor em R$ e % do texto contra o pacote; se houver numero que nao veio
+// dos dados, pede de novo (com "correcao") e, persistindo, usa texto automatico.
+// Nada e salvo no Drive.
+// =============================================================================
+function biChamarIA_(prompt, sistema, maxTokens) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
+  if (!apiKey) throw new Error('Chave da API Claude não configurada (CLAUDE_API_KEY).');
+  var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post', contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: maxTokens || 8000, system: sistema,
+                              messages: [{ role: 'user', content: prompt }] }),
+    muteHttpExceptions: true
+  });
+  var json = JSON.parse(resp.getContentText());
+  if (json.error) throw new Error('Claude API: ' + json.error.message);
+  return json.content.map(function(c) { return c.text || ''; }).join('');
+}
+
+function biGerarAnalise(cpf, pacote, correcao) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
+  if (!pacote || typeof pacote !== 'object') return { error: 'Dados da análise ausentes.' };
+  var sistema = [
+    'Você é um analista econômico-financeiro sênior da Formula Code (serviços de inventário em redes de varejo).',
+    'Escreva uma análise econômico-financeira detalhada, coerente e objetiva, em português do Brasil, com base EXCLUSIVAMENTE no JSON recebido.',
+    'REGRAS OBRIGATÓRIAS:',
+    '1. Use somente valores que estão no JSON, copiados EXATAMENTE como aparecem (ex.: "R$ 1.234,56", "12,3%"). Não calcule, não some, não arredonde, não converta (nunca escreva "1,2 milhão" ou "R$ 1,2 mi").',
+    '2. Não invente causas nem fatos externos (mercado, sazonalidade, clima, concorrência, inflação, contratos, pessoas). Quando os dados mostram um efeito mas não o motivo, diga claramente que os dados não mostram o motivo.',
+    '3. Concentre a análise nos MAIORES fatores de variação (os de maior valor absoluto), explicando quanto cada um contribuiu, comparando com o mesmo período do ano anterior e com o período imediatamente anterior. Use a decomposição volume (unidades atendidas) x valor por unidade quando existir.',
+    '4. Se existir "comparacao_negocios", compare os negócios entre si (tamanho, margem ou custo sobre faturamento, e variações).',
+    '5. Recomendações: apenas as que decorrem diretamente de um dado apresentado. Cada recomendação deve citar, no campo "base", o dado exato que a justifica. Nada genérico, nada que dependa de informação ausente.',
+    '6. Se uma comparação estiver indisponível no JSON, diga isso e não a estime.',
+    '7. Tom técnico, frases claras, sem emojis, sem markdown, sem listas com hífen dentro dos parágrafos.',
+    'Responda SOMENTE com JSON válido neste formato:',
+    '{"titulo": "texto", "resumo": ["parágrafo", "..."], "secoes": [{"titulo": "texto", "paragrafos": ["parágrafo", "..."]}], "recomendacoes": [{"acao": "texto", "base": "dado que justifica"}]}',
+    'Use de 4 a 7 seções (por exemplo: resultado do período, comparação com o ano anterior, comparação com o período anterior, principais fatores, composição, comparação entre negócios quando houver).'
+  ].join('\n');
+  var prompt = 'Dados da análise (JSON):\n' + JSON.stringify(pacote);
+  if (correcao) prompt += '\n\nATENÇÃO: a resposta anterior usou valores que NÃO estão no JSON: ' + String(correcao).slice(0, 800) +
+                          '. Reescreva usando apenas valores copiados exatamente do JSON.';
+  try {
+    return { success: true, texto: biChamarIA_(prompt, sistema, 8000) };
+  } catch (e) {
+    return { error: 'Não foi possível gerar a análise com a IA: ' + e.message };
+  }
 }

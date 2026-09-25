@@ -190,6 +190,21 @@
         .lib-msg { margin-top: 12px; font-size: .86rem; min-height: 1.2em; }
         .lib-msg.erro { color: #c0392b; }
         .lib-msg.ok { color: #3f8f00; }
+        /* r146: analise economico-financeira */
+        .barra-analise { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
+        .painel-analise { position: fixed; inset: 0; z-index: 950; background: rgba(5,19,35,.55); display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
+        .analise-caixa { background: #fff; border-radius: 14px; width: 100%; max-width: 980px; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+        .analise-topo { display: flex; align-items: center; gap: 10px; background: var(--fc-escuro); color: #fff; border-radius: 14px 14px 0 0; padding: 14px 18px; }
+        .analise-topo h3 { font-size: 1.05rem; font-weight: 700; margin: 0; flex: 1; }
+        .btn-fechar-analise { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; border-radius: 8px; width: 32px; height: 32px; }
+        .analise-botoes { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--fc-borda); }
+        .analise-corpo { padding: 18px 22px 26px; font-size: .92rem; line-height: 1.55; }
+        .analise-corpo h4.tit-analise { font-size: 1.1rem; font-weight: 700; color: var(--fc-primaria); margin: 6px 0 12px; }
+        .analise-corpo h5 { font-size: .98rem; font-weight: 700; color: var(--fc-primaria); margin: 18px 0 6px; }
+        .meta-analise { font-size: .8rem; color: var(--fc-texto-suave); background: var(--fc-fundo); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+        .alerta-analise { background: #fff7ec; border: 1px solid #f2c894; color: #8a5a1c; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: .85rem; }
+        .rec-analise li { margin-bottom: 8px; }
+        .rec-analise li span { color: var(--fc-texto-suave); font-size: .86rem; }
         .sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -208,6 +223,22 @@
     </div>
 
     <div class="dica-obs hidden" id="dica-obs" role="tooltip"></div>
+
+    <!-- r146: painel da analise economico-financeira -->
+    <div class="painel-analise hidden" id="painel-analise" role="dialog" aria-modal="true" aria-labelledby="analise-titulo">
+        <div class="analise-caixa">
+            <div class="analise-topo">
+                <h3 id="analise-titulo">Análise econômico-financeira</h3>
+                <button type="button" class="btn-fechar-analise" onclick="fecharAnalise()" aria-label="Fechar">✕</button>
+            </div>
+            <div class="analise-botoes">
+                <button type="button" class="btn btn-sm btn-fc btn-exp-analise" id="btn-exp-pdf" onclick="exportarPDFTexto()" disabled>⬇ PDF (texto)</button>
+                <button type="button" class="btn btn-sm btn-fc btn-exp-analise" id="btn-exp-pptx" onclick="exportarPPTX()" disabled>⬇ Apresentação PPTX</button>
+                <button type="button" class="btn btn-sm btn-fc btn-exp-analise" id="btn-exp-pdfap" onclick="exportarPDFApresentacao()" disabled>⬇ Apresentação PDF</button>
+            </div>
+            <div class="analise-corpo" id="analise-corpo"></div>
+        </div>
+    </div>
 
     <div class="carregando" id="carregando">
         <div class="spinner-border" role="status"></div>
@@ -775,6 +806,172 @@ function receitasAdmin(db, linhas, papel) {
         total += v;
     }
     return { porConta: porConta, total: total };
+}
+
+// ---------- r146: fatos para a analise economico-financeira ----------
+// Tudo o que a analise diz sai daqui: numeros calculados pelo proprio B.I. com
+// os filtros da tela. A IA so recebe estes valores ja formatados.
+function somarMesTexto(t, delta) {
+    let a = Number(t.slice(0, 4)), m = Number(t.slice(5, 7)) - 1 + delta;
+    a += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return a + '-' + String(m + 1).padStart(2, '0');
+}
+function idxMesTexto(db, t) {
+    if (!db.idxMes) { db.idxMes = {}; db.meses.forEach((m, i) => { db.idxMes[m] = i; }); }
+    return db.idxMes[t];
+}
+// Meses do periodo analisado (os que aparecem na tela depois de todos os filtros)
+function mesesDoContexto(db, linhas) {
+    const s = new Set();
+    for (let j = 0; j < linhas.length; j++) s.add(db.meses[db.mes[linhas[j]]]);
+    return Array.from(s).sort();
+}
+// Mesmos meses do ano anterior / periodo imediatamente anterior de mesma duracao
+function periodosComparacao(meses) {
+    if (!meses.length) return { yoy: [], anterior: [] };
+    const ini = meses[0], fim = meses[meses.length - 1];
+    let span = 0; for (let t = ini; t <= fim; t = somarMesTexto(t, 1)) span++;
+    const anterior = [];
+    for (let k = span; k >= 1; k--) anterior.push(somarMesTexto(ini, -k));
+    return { yoy: meses.map(t => somarMesTexto(t, -12)), anterior: anterior, span: span };
+}
+// Linhas de um conjunto de meses com os mesmos filtros de negocio/cliente/unidade/tipo
+// (e Setor/Detalhamento nas abas financeiras, que so valem para as linhas de custo da aba)
+function linhasDoPeriodo(db, ctx, mesesTexto) {
+    const alvo = new Set();
+    mesesTexto.forEach(t => { const i = idxMesTexto(db, t); if (i !== undefined) alvo.add(i); });
+    const ef = ctx.efetivo, loc = ctx.localEf, papel = ctx.papel;
+    const out = [];
+    const L = db.linhasAnalise;
+    for (let j = 0; j < L.length; j++) {
+        const i = L[j];
+        if (!alvo.has(db.mes[i])) continue;
+        if (ef.neg && !ef.neg.has(db.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(db.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(db.uni[i])) continue;
+        if (ef.tipo && !ef.tipo.has(db.tipo[i])) continue;
+        if (papel && loc && papel.custo[db.conta[i]]) {
+            if (loc.setor && !loc.setor.has(db.setor[i])) continue;
+            if (loc.det && !loc.det.has(db.det[i])) continue;
+        }
+        out.push(i);
+    }
+    return { linhas: out, mesesComDados: alvo.size };
+}
+// Agregados de um periodo, no escopo da aba
+function medirPeriodo(db, ctx, linhas) {
+    const ehCusto = ctx.aba === 'ro' ? db.ehCustoOper : ctx.papel.custo;
+    const m = { fat: 0, custo: 0, imp: 0, conta: new Map(), setor: new Map(), cliente: new Map(), negocio: new Map(),
+                unidade: new Map(), det: new Map(), mensal: new Map(), fatUni: new Map(), custoUni: new Map(), receitas: new Map() };
+    const soma = (mapa, k, campo, v) => { let x = mapa.get(k); if (!x) { x = { fat: 0, custo: 0, imp: 0 }; mapa.set(k, x); } x[campo] += v; };
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j], c = db.conta[i];
+        const mesT = db.meses[db.mes[i]];
+        if (db.ehFat[c]) {
+            const f = db.fat[i];
+            m.fat += f; m.imp += db.imp[i];
+            soma(m.cliente, db.cli[i], 'fat', f); soma(m.negocio, db.neg[i], 'fat', f);
+            soma(m.negocio, db.neg[i], 'imp', db.imp[i]); soma(m.cliente, db.cli[i], 'imp', db.imp[i]);
+            soma(m.mensal, mesT, 'fat', f); soma(m.mensal, mesT, 'imp', db.imp[i]);
+            m.fatUni.set(db.uni[i], (m.fatUni.get(db.uni[i]) || 0) + f);
+            soma(m.unidade, db.uni[i], 'fat', f);
+        }
+        if (ehCusto[c]) {
+            const v = db.custo[i];
+            m.custo += v;
+            soma(m.conta, c, 'custo', v); soma(m.setor, db.setor[i], 'custo', v); soma(m.cliente, db.cli[i], 'custo', v);
+            soma(m.negocio, db.neg[i], 'custo', v); soma(m.unidade, db.uni[i], 'custo', v); soma(m.det, db.det[i], 'custo', v);
+            soma(m.mensal, mesT, 'custo', v);
+            m.custoUni.set(db.uni[i], (m.custoUni.get(db.uni[i]) || 0) + v);
+        }
+        if (ctx.papel && ctx.papel.receita && ctx.papel.receita[c]) {
+            m.receitas.set(c, (m.receitas.get(c) || 0) + db.fat[i] - db.custo[i]);
+        }
+    }
+    const atend = new Set();
+    m.fatUni.forEach((v, u) => { if (v > 0.005) atend.add(u); });
+    m.unidades = atend.size;
+    // Custo por unidade: so as unidades atendidas que tiveram o custo (mesma regra da tela)
+    let sc = 0, qc = 0;
+    m.custoUni.forEach((v, u) => { if (atend.has(u) && Math.abs(v) > 0.005) { sc += v; qc++; } });
+    m.custoPorUnidade = qc ? sc / qc : null; m.unidadesComCusto = qc;
+    m.lucro = m.fat - m.custo - m.imp;
+    m.margem = m.fat ? m.lucro / m.fat : null;
+    m.custoFat = m.fat ? m.custo / m.fat : null;
+    m.fatPorUnidade = m.unidades ? m.fat / m.unidades : null;
+    return m;
+}
+// Variacao item a item entre dois periodos, ordenada pelo tamanho do efeito
+function variacoesItens(atual, base, campo, nomeDe, limite) {
+    const chaves = new Set([...atual.keys(), ...base.keys()]);
+    const lista = [];
+    chaves.forEach(k => {
+        const a = (atual.get(k) || {})[campo] || 0, b = (base.get(k) || {})[campo] || 0;
+        const d = a - b;
+        if (Math.abs(d) < 0.005) return;
+        lista.push({ nome: nomeDe(k), atual: a, base: b, delta: d, pct: b ? d / Math.abs(b) : null });
+    });
+    lista.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    return lista.slice(0, limite || 8);
+}
+// Efeito volume x valor por unidade: delta = (U1-U0)*v0 + (v1-v0)*U1
+function efeitoVolumeValor(total1, u1, total0, u0) {
+    if (!u0 || !u1) return null;
+    const v0 = total0 / u0, v1 = total1 / u1;
+    return { volume: (u1 - u0) * v0, valor: (v1 - v0) * u1, v0: v0, v1: v1 };
+}
+function montarFatosAnalise(db, ctx) {
+    const meses = mesesDoContexto(db, ctx.linhasAtuais);
+    if (!meses.length) return null;
+    const comp = periodosComparacao(meses);
+    const atual = medirPeriodo(db, ctx, ctx.linhasAtuais);
+    const pY = linhasDoPeriodo(db, ctx, comp.yoy), pA = linhasDoPeriodo(db, ctx, comp.anterior);
+    const yoy = pY.mesesComDados ? medirPeriodo(db, ctx, pY.linhas) : null;
+    const ant = pA.mesesComDados ? medirPeriodo(db, ctx, pA.linhas) : null;
+    const nome = {
+        conta: k => db.dic.conta[k], setor: k => db.dic.setor[k], cliente: k => db.dic.cli[k], negocio: k => db.dic.neg[k],
+        unidade: k => db.dic.loja[db.uniLoja[k]] + ' (' + db.dic.cli[db.uniCli[k]] + ')', det: k => db.dic.det[k]
+    };
+    const campoFoco = ctx.aba === 'ro' ? 'fat' : 'custo';
+    const dims = ctx.aba === 'ro' ? ['negocio', 'cliente', 'unidade', 'conta', 'setor'] : ['conta', 'setor', 'det', 'cliente', 'unidade'];
+    const fatores = base => {
+        if (!base) return null;
+        const out = {};
+        dims.forEach(d => {
+            out[d] = { custo: variacoesItens(atual[d], base[d], 'custo', nome[d], 8) };
+            if (ctx.aba === 'ro' && (d === 'negocio' || d === 'cliente' || d === 'unidade')) out[d].fat = variacoesItens(atual[d], base[d], 'fat', nome[d], 8);
+        });
+        out.volume = ctx.aba === 'ro'
+            ? efeitoVolumeValor(atual.fat, atual.unidades, base.fat, base.unidades)
+            : efeitoVolumeValor(atual.custo, atual.unidades, base.custo, base.unidades);
+        return out;
+    };
+    const composicao = (mapa, campo, total, nomeFn, lim) => Array.from(mapa.entries())
+        .map(([k, v]) => ({ nome: nomeFn(k), valor: v[campo], part: total ? v[campo] / total : null }))
+        .filter(x => Math.abs(x.valor) > 0.005).sort((a, b) => b.valor - a.valor).slice(0, lim || 10);
+    const negociosSel = ctx.efetivo.neg && ctx.efetivo.neg.size >= 2;
+    const porNegocio = negociosSel ? Array.from(ctx.efetivo.neg).map(n => {
+        const a = atual.negocio.get(n) || { fat: 0, custo: 0, imp: 0 };
+        const y = yoy ? (yoy.negocio.get(n) || { fat: 0, custo: 0, imp: 0 }) : null;
+        const p = ant ? (ant.negocio.get(n) || { fat: 0, custo: 0, imp: 0 }) : null;
+        const lucro = x => x.fat - x.custo - x.imp;
+        return { nome: db.dic.neg[n], atual: a, lucro: lucro(a), margem: a.fat ? lucro(a) / a.fat : null, custoFat: a.fat ? a.custo / a.fat : null,
+                 yoy: y ? { fat: y.fat, custo: y.custo, lucro: lucro(y) } : null, ant: p ? { fat: p.fat, custo: p.custo, lucro: lucro(p) } : null };
+    }).sort((a, b) => (campoFoco === 'fat' ? b.atual.fat - a.atual.fat : b.atual.custo - a.atual.custo)) : null;
+    return {
+        aba: ctx.aba, meses: meses, comp: comp, atual: atual, yoy: yoy, ant: ant,
+        mesesYoYComDados: pY.mesesComDados, mesesAntComDados: pA.mesesComDados,
+        fatoresYoY: fatores(yoy), fatoresAnt: fatores(ant),
+        composicao: {
+            setor: composicao(atual.setor, 'custo', atual.custo, nome.setor, 10),
+            conta: composicao(atual.conta, 'custo', atual.custo, nome.conta, 10),
+            cliente: composicao(atual.cliente, campoFoco, atual[campoFoco], nome.cliente, 10),
+            negocio: composicao(atual.negocio, campoFoco, atual[campoFoco], nome.negocio, 10)
+        },
+        mensal: meses.map(t => { const x = atual.mensal.get(t) || { fat: 0, custo: 0, imp: 0 }; return { mes: t, fat: x.fat, custo: x.custo, imp: x.imp }; }),
+        receitas: Array.from(atual.receitas.entries()).map(([c, v]) => ({ nome: db.dic.conta[c], valor: v })),
+        porNegocio: porNegocio
+    };
 }
 
 // ---------------------------------------------------------------------
@@ -1640,12 +1837,15 @@ function eixoMoeda() {
     return { beginAtZero: true, grace: '14%', ticks: { callback: v => brlCurto(v) }, grid: { color: '#eef1f5' } };
 }
 
+// r146: botao da analise no topo de cada aba
+const BARRA_ANALISE = '<div class="barra-analise"><button type="button" class="btn btn-sm btn-verde" onclick="abrirAnalise()">📝 Gerar análise</button></div>';
+
 // ---------------- Aba: Resultado Operacional ----------------
 // r142: sem subtitulos; periodo por botoes (Ano/Semestre/Trimestre/Mes); clique na
 // coluna filtra a tela (Ctrl + clique soma); rotulo acima da coluna = Crescimento YoY.
 function desenharResultadoOperacional() {
     const alvo = document.getElementById('conteudo-aba');
-    alvo.innerHTML =
+    alvo.innerHTML = BARRA_ANALISE +
         '<div class="grade-ro">' +
           '<section class="bi-painel">' +
             '<div class="painel-cabeca mb-2"><h3>Faturamento por período</h3>' +
@@ -1795,7 +1995,7 @@ function desenharDrillRO() {
 function desenharAbaFinanceira(aba) {
     const loc = estado.locais[aba.id];
     const alvo = document.getElementById('conteudo-aba');
-    alvo.innerHTML =
+    alvo.innerHTML = BARRA_ANALISE +
         '<div class="filtros-locais"><div id="fl-setor"></div><div id="fl-det"></div><div id="fl-custo"></div><div id="fl-cxf"></div><div id="fl-cpu"></div></div>' +
         '<div class="grade-2">' +
           '<section class="bi-painel"><h3>Custo por mês e Custo × Faturamento</h3>' +
@@ -2067,6 +2267,642 @@ function posicionarObs(x, y) {
     caixa.style.top = top + 'px';
 }
 function esconderObs() { const c = document.getElementById('dica-obs'); if (c) c.classList.add('hidden'); }
+
+// =====================================================================
+// r146: ANALISE ECONOMICO-FINANCEIRA (botao "Gerar analise" em cada aba)
+// =====================================================================
+const LIBS_EXPORT = {
+    jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    autotable: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+    pptx: 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+};
+const libsCarregadas = {};
+function carregarLib(nome) {
+    if (libsCarregadas[nome]) return libsCarregadas[nome];
+    libsCarregadas[nome] = new Promise((ok, erro) => {
+        const sc = document.createElement('script');
+        sc.src = LIBS_EXPORT[nome]; sc.onload = ok;
+        sc.onerror = () => { delete libsCarregadas[nome]; erro(new Error('Não foi possível carregar a biblioteca de exportação. Verifique a internet.')); };
+        document.head.appendChild(sc);
+    });
+    return libsCarregadas[nome];
+}
+
+// ---------- Descricao dos filtros aplicados ----------
+function textoFiltrosAtuais() {
+    const db = estado.db, ef = estado.cascata.efetivo, partes = [];
+    const lista = (dim, rot) => {
+        const s = ef[dim];
+        if (!s) return;
+        const nomes = Array.from(s).map(v => rotuloDim(db, dim, v)).sort();
+        partes.push(rot + ': ' + (nomes.length > 6 ? nomes.slice(0, 6).join(', ') + ' e mais ' + (nomes.length - 6) : nomes.join(', ')));
+    };
+    lista('ano', 'Ano'); lista('mes', 'Mês'); lista('neg', 'Negócio'); lista('cli', 'Cliente'); lista('uni', 'Unidade'); lista('tipo', 'Tipo de operação');
+    if (estado.aba !== 'ro' && estado.finCtx) {
+        const le = estado.finCtx.localEf;
+        ['setor', 'det'].forEach(d => {
+            if (!le[d]) return;
+            const nomes = Array.from(le[d]).map(v => rotuloDim(db, d, v)).sort();
+            partes.push((d === 'setor' ? 'Setor' : 'Detalhamento') + ': ' + (nomes.length > 6 ? nomes.slice(0, 6).join(', ') + ' e mais ' + (nomes.length - 6) : nomes.join(', ')));
+        });
+    }
+    const chaves = estado.selecao[estado.aba];
+    if (chaves && chaves.size && mesesSelecionados()) partes.push('Selecionado no gráfico: ' + Array.from(chaves).sort().map(k => rotuloPeriodo(k, nivelSelecao())).join(', '));
+    return partes.length ? partes.join(' | ') : 'Sem filtros (todo o período disponível)';
+}
+
+// ---------- Pacote para a IA (so valores formatados) e lista de valores permitidos ----------
+function normNumero(t) { return String(t).replace(/[^\d,]/g, ''); }
+function montarPacoteIA(fatos, abaDef, filtrosTxt) {
+    const perm = new Set();
+    const R = v => { const t = brl(v); perm.add(normNumero(t)); return t; };
+    const P = v => { if (v === null || v === undefined || !isFinite(v)) return 'indisponível'; const t = pct(v); perm.add(normNumero(t)); return t; };
+    const PP = v => { if (v === null || v === undefined || !isFinite(v)) return 'indisponível'; const t = (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' p.p.'; perm.add(normNumero(t)); return t; };
+    const I = v => fmtNum.format(v || 0);
+    const ro = fatos.aba === 'ro';
+    const rotP = lista => lista.length ? periodoTexto(lista) : 'indisponível';
+    const indicadores = [];
+    const ind = (nome, campo, tipo) => {
+        const a = fatos.atual[campo], y = fatos.yoy ? fatos.yoy[campo] : null, p = fatos.ant ? fatos.ant[campo] : null;
+        const f = tipo === 'p' ? P : tipo === 'i' ? I : R;
+        const varr = b => (b === null || b === undefined || a === null) ? 'indisponível'
+            : tipo === 'p' ? PP(a - b) : tipo === 'i' ? (a - b >= 0 ? '+' : '') + I(a - b) : R(a - b) + (b ? ' (' + P((a - b) / Math.abs(b)) + ')' : '');
+        indicadores.push({ indicador: nome, atual: f(a), ano_anterior: y === null ? 'indisponível' : f(y), variacao_ano_anterior: varr(y),
+                           periodo_anterior: p === null ? 'indisponível' : f(p), variacao_periodo_anterior: varr(p) });
+    };
+    if (ro) {
+        ind('Faturamento', 'fat'); ind('Custo operacional (Pessoal, Desp. Op., Desp. Tec.)', 'custo'); ind('Imposto', 'imp');
+        ind('Lucro (Faturamento - Custo - Imposto)', 'lucro'); ind('Margem', 'margem', 'p'); ind('Unidades atendidas', 'unidades', 'i');
+        ind('Faturamento por unidade atendida', 'fatPorUnidade');
+    } else {
+        ind('Custo da aba', 'custo'); ind('Faturamento (base de comparação)', 'fat'); ind('Custo × Faturamento', 'custoFat', 'p');
+        ind('Unidades atendidas', 'unidades', 'i'); ind('Custo por unidade (unidades atendidas com esse custo)', 'custoPorUnidade');
+    }
+    const fatoresFmt = fx => {
+        if (!fx) return 'indisponível (sem dados no período de comparação)';
+        const out = {};
+        Object.keys(fx).forEach(d => {
+            if (d === 'volume') return;
+            ['fat', 'custo'].forEach(c => {
+                const lista = fx[d][c];
+                if (!lista || !lista.length) return;
+                out[(c === 'fat' ? 'faturamento_por_' : 'custo_por_') + d] = lista.map(x => ({
+                    item: x.nome, atual: R(x.atual), comparacao: R(x.base), variacao: R(x.delta), variacao_pct: x.pct === null ? 'novo (sem valor na comparação)' : P(x.pct)
+                }));
+            });
+        });
+        if (fx.volume) out.decomposicao_volume_valor = {
+            explicacao: ro ? 'Variação do faturamento separada em efeito volume (mudança no número de unidades atendidas) e efeito valor (mudança no faturamento por unidade)'
+                           : 'Variação do custo separada em efeito volume (mudança no número de unidades atendidas) e efeito valor (mudança no custo por unidade atendida)',
+            efeito_volume: R(fx.volume.volume), efeito_valor_por_unidade: R(fx.volume.valor),
+            valor_por_unidade_comparacao: R(fx.volume.v0), valor_por_unidade_atual: R(fx.volume.v1)
+        };
+        return out;
+    };
+    const pacote = {
+        aba: abaDef.titulo,
+        foco: ro ? 'Resultado operacional: faturamento, custo operacional, imposto, lucro e margem' : 'Custo da aba e sua relação com o faturamento',
+        filtros_aplicados: filtrosTxt,
+        periodo_analisado: rotP(fatos.meses) + ' (' + fatos.meses.length + (fatos.meses.length === 1 ? ' mês com dados)' : ' meses com dados)'),
+        periodo_ano_anterior: fatos.yoy ? rotP(fatos.comp.yoy) : 'indisponível (sem dados)',
+        periodo_imediatamente_anterior: fatos.ant ? rotP(fatos.comp.anterior) : 'indisponível (sem dados)',
+        indicadores: indicadores,
+        observacao_comparacoes: fatos.comp.yoy.join() === fatos.comp.anterior.join()
+            ? 'Neste recorte o período imediatamente anterior coincide com o mesmo período do ano anterior (12 meses seguidos); as duas comparações são a mesma.' : 'As duas comparações usam períodos diferentes.',
+        fatores_vs_ano_anterior: fatoresFmt(fatos.fatoresYoY),
+        fatores_vs_periodo_anterior: fatoresFmt(fatos.fatoresAnt),
+        composicao_atual: {
+            por_conta: fatos.composicao.conta.map(x => ({ item: x.nome, valor: R(x.valor), participacao: P(x.part) })),
+            por_setor: fatos.composicao.setor.map(x => ({ item: x.nome, valor: R(x.valor), participacao: P(x.part) })),
+            ['principais_clientes_por_' + (ro ? 'faturamento' : 'custo')]: fatos.composicao.cliente.map(x => ({ item: x.nome, valor: R(x.valor), participacao: P(x.part) }))
+        },
+        evolucao_mensal: fatos.mensal.map(m => ro
+            ? { mes: rotuloMes(m.mes), faturamento: R(m.fat), custo: R(m.custo), lucro: R(m.fat - m.custo - m.imp) }
+            : { mes: rotuloMes(m.mes), custo: R(m.custo), faturamento: R(m.fat), custo_sobre_faturamento: m.fat ? P(m.custo / m.fat) : 'sem faturamento' })
+    };
+    if (ro) pacote.composicao_atual.por_negocio = fatos.composicao.negocio.map(x => ({ item: x.nome, valor: R(x.valor), participacao: P(x.part) }));
+    if (fatos.receitas && fatos.receitas.length) pacote.receitas_separadas_nao_entram_no_custo = fatos.receitas.map(x => ({ conta: x.nome, valor: R(x.valor) }));
+    if (fatos.porNegocio) pacote.comparacao_negocios = fatos.porNegocio.map(n => ({
+        negocio: n.nome, faturamento: R(n.atual.fat), custo: R(n.atual.custo), lucro: R(n.lucro), margem: P(n.margem), custo_sobre_faturamento: P(n.custoFat),
+        faturamento_ano_anterior: n.yoy ? R(n.yoy.fat) : 'indisponível', custo_ano_anterior: n.yoy ? R(n.yoy.custo) : 'indisponível',
+        faturamento_periodo_anterior: n.ant ? R(n.ant.fat) : 'indisponível', custo_periodo_anterior: n.ant ? R(n.ant.custo) : 'indisponível'
+    }));
+    return { pacote: pacote, permitidos: perm };
+}
+
+// Confere cada valor em R$ e % do texto contra os valores do pacote
+function valoresInvalidos(analise, permitidos) {
+    const textos = [];
+    const add = t => { if (t) textos.push(String(t)); };
+    add(analise.titulo); (analise.resumo || []).forEach(add);
+    (analise.secoes || []).forEach(s => { add(s.titulo); (s.paragrafos || []).forEach(add); });
+    (analise.recomendacoes || []).forEach(r => { add(r.acao); add(r.base); });
+    const tudo = textos.join(' \n ');
+    const achados = (tudo.match(/R\$\s?[−-]?\s?[\d.]+(?:,\d+)?/g) || []).concat(tudo.match(/[−-]?\d[\d.]*(?:,\d+)?\s?(?:%|p\.p\.)/g) || []);
+    const ruins = [];
+    achados.forEach(a => { const n = normNumero(a); if (n && !permitidos.has(n) && ruins.indexOf(a) < 0) ruins.push(a.trim()); });
+    return ruins;
+}
+function lerJSONIA(txt) {
+    let t = String(txt || '').replace(/```json|```/g, '').trim();
+    const i = t.indexOf('{'), j = t.lastIndexOf('}');
+    if (i < 0 || j < 0) throw new Error('A IA não devolveu a análise no formato esperado.');
+    const o = JSON.parse(t.slice(i, j + 1));
+    if (!Array.isArray(o.resumo) || !Array.isArray(o.secoes)) throw new Error('A IA não devolveu a análise no formato esperado.');
+    o.recomendacoes = Array.isArray(o.recomendacoes) ? o.recomendacoes : [];
+    return o;
+}
+
+// ---------- Texto automatico (contingencia): so frases montadas com os dados ----------
+function analiseAutomatica(pc) {
+    const ro = /Resultado/.test(pc.foco);
+    const ind = nome => pc.indicadores.find(x => x.indicador.indexOf(nome) === 0);
+    const resumo = [], secoes = [], rec = [];
+    const principal = ro ? ind('Faturamento') : ind('Custo da aba');
+    resumo.push('No período ' + pc.periodo_analisado + ', ' + (ro ? 'o faturamento foi de ' : 'o custo da aba foi de ') + principal.atual +
+        '. Na comparação com o mesmo período do ano anterior (' + pc.periodo_ano_anterior + '), a variação foi de ' + principal.variacao_ano_anterior +
+        '; na comparação com o período imediatamente anterior (' + pc.periodo_imediatamente_anterior + '), de ' + principal.variacao_periodo_anterior + '.');
+    if (ro) {
+        const l = ind('Lucro'), m = ind('Margem');
+        resumo.push('O lucro foi de ' + l.atual + ', com margem de ' + m.atual + ' (variação de ' + m.variacao_ano_anterior + ' em relação ao ano anterior e de ' + m.variacao_periodo_anterior + ' em relação ao período anterior).');
+    } else {
+        const cf = ind('Custo × Faturamento');
+        resumo.push('O custo representou ' + cf.atual + ' do faturamento (variação de ' + cf.variacao_ano_anterior + ' em relação ao ano anterior e de ' + cf.variacao_periodo_anterior + ' em relação ao período anterior).');
+    }
+    secoes.push({ titulo: 'Indicadores do período', paragrafos: pc.indicadores.map(x => x.indicador + ': ' + x.atual + ' no período; ' + x.ano_anterior +
+        ' no mesmo período do ano anterior (variação ' + x.variacao_ano_anterior + '); ' + x.periodo_anterior + ' no período anterior (variação ' + x.variacao_periodo_anterior + ').') });
+    const fatoresSecao = (titulo, fx) => {
+        if (typeof fx === 'string') { secoes.push({ titulo: titulo, paragrafos: ['Comparação ' + fx + '.'] }); return; }
+        const pars = [];
+        if (fx.decomposicao_volume_valor) { const d = fx.decomposicao_volume_valor; pars.push(d.explicacao + ': efeito volume de ' + d.efeito_volume + ' e efeito valor por unidade de ' + d.efeito_valor_por_unidade + ' (valor por unidade passou de ' + d.valor_por_unidade_comparacao + ' para ' + d.valor_por_unidade_atual + ').'); }
+        Object.keys(fx).filter(k => k !== 'decomposicao_volume_valor').forEach(k => {
+            const top = fx[k].slice(0, 3);
+            if (!top.length) return;
+            pars.push('Maiores variações de ' + nomeLegivel(k) + ': ' + top.map(x => x.item + ' (' + x.comparacao + ' para ' + x.atual + ', variação de ' + x.variacao + ')').join('; ') + '.');
+        });
+        secoes.push({ titulo: titulo, paragrafos: pars.length ? pars : ['Sem variações relevantes.'] });
+    };
+    fatoresSecao('Principais fatores em relação ao mesmo período do ano anterior', pc.fatores_vs_ano_anterior);
+    fatoresSecao('Principais fatores em relação ao período imediatamente anterior', pc.fatores_vs_periodo_anterior);
+    const comp = pc.composicao_atual;
+    secoes.push({ titulo: 'Composição do período', paragrafos: Object.keys(comp).filter(k => comp[k].length).map(k =>
+        nomeLegivel(k).replace(/^por /, 'Por ') + ': ' + comp[k].slice(0, 5).map(x => x.item + ' ' + x.valor + ' (' + x.participacao + ')').join('; ') + '.') });
+    if (pc.comparacao_negocios) secoes.push({ titulo: 'Comparação entre negócios', paragrafos: pc.comparacao_negocios.map(n =>
+        n.negocio + ': faturamento ' + n.faturamento + ', custo ' + n.custo + ', lucro ' + n.lucro + ', margem ' + n.margem + ', custo sobre faturamento ' + n.custo_sobre_faturamento + '.') });
+    const fx = typeof pc.fatores_vs_ano_anterior === 'object' ? pc.fatores_vs_ano_anterior : (typeof pc.fatores_vs_periodo_anterior === 'object' ? pc.fatores_vs_periodo_anterior : null);
+    if (fx) {
+        const chave = ro ? Object.keys(fx).find(k => k.indexOf('faturamento_por_cliente') === 0) : Object.keys(fx).find(k => k.indexOf('custo_por_setor') === 0);
+        (fx[chave] || []).filter(x => ro ? /^-/.test(x.variacao) : !/^-/.test(x.variacao)).slice(0, 3).forEach(x => rec.push({
+            acao: (ro ? 'Acompanhar o faturamento de ' : 'Revisar o custo de ') + x.item,
+            base: (ro ? 'Faturamento passou de ' : 'Custo passou de ') + x.comparacao + ' para ' + x.atual + ' (variação de ' + x.variacao + ').'
+        }));
+    }
+    return { titulo: 'Análise econômico-financeira — ' + pc.aba, resumo: resumo, secoes: secoes, recomendacoes: rec };
+}
+
+// ---------- Painel da analise ----------
+let analiseAtual = null;
+function contextoAnaliseAtual() {
+    const db = estado.db, abaDef = ABAS.find(a => a.id === estado.aba);
+    const sel = mesesSelecionados();
+    if (estado.aba === 'ro') {
+        return { abaDef: abaDef, ctx: { aba: 'ro', papel: null, efetivo: estado.cascata.efetivo, localEf: null,
+                 linhasAtuais: filtrarPorMeses(db, estado.cascata.linhas, sel) } };
+    }
+    const fc = estado.finCtx;
+    // Linhas atuais: faturamento com filtros globais + custo da aba com filtros locais, e as barras clicadas
+    const base = filtrarPorMeses(db, estado.cascata.linhas, sel).filter(i => {
+        if (!fc.papel.custo[db.conta[i]]) return true;
+        if (fc.localEf.setor && !fc.localEf.setor.has(db.setor[i])) return false;
+        if (fc.localEf.det && !fc.localEf.det.has(db.det[i])) return false;
+        return true;
+    });
+    return { abaDef: abaDef, ctx: { aba: estado.aba, papel: fc.papel, efetivo: estado.cascata.efetivo, localEf: fc.localEf, linhasAtuais: base } };
+}
+async function abrirAnalise() {
+    const painel = document.getElementById('painel-analise');
+    const corpo = document.getElementById('analise-corpo');
+    const { abaDef, ctx } = contextoAnaliseAtual();
+    const fatos = montarFatosAnalise(estado.db, ctx);
+    painel.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('analise-titulo').textContent = 'Análise econômico-financeira — ' + abaDef.titulo;
+    document.querySelectorAll('.btn-exp-analise').forEach(b => { b.disabled = true; });
+    if (!fatos) { corpo.innerHTML = '<div class="aviso-vazio">Não há dados para os filtros escolhidos.</div>'; return; }
+    const filtrosTxt = textoFiltrosAtuais();
+    const { pacote, permitidos } = montarPacoteIA(fatos, abaDef, filtrosTxt);
+    corpo.innerHTML = '<div class="estado-msg"><div class="spinner-border" style="color:var(--fc-primaria)"></div><div class="mt-2 fw-bold" style="color:var(--fc-primaria)">Gerando a análise…</div>' +
+        '<div class="small text-muted">Os números já foram calculados pelo B.I.; a IA está escrevendo o texto. Pode levar até 1 minuto.</div></div>';
+    let analise = null, origem = 'ia', aviso = '';
+    try {
+        let res = await chamar({ action: 'biGerarAnalise', cpf: cpfLogado, pacote: pacote }, 180000);
+        analise = lerJSONIA(res.texto);
+        let ruins = valoresInvalidos(analise, permitidos);
+        if (ruins.length) {
+            res = await chamar({ action: 'biGerarAnalise', cpf: cpfLogado, pacote: pacote, correcao: ruins.join(', ') }, 180000);
+            analise = lerJSONIA(res.texto);
+            ruins = valoresInvalidos(analise, permitidos);
+            if (ruins.length) { origem = 'automatica'; aviso = 'A IA usou valores que não estão nos dados (' + ruins.slice(0, 5).join(', ') + '). Para não arriscar, esta é a análise automática montada só com os números do B.I.'; }
+        }
+    } catch (e) {
+        if (e.biBloqueado) { fecharAnalise(); return; }
+        origem = 'automatica'; aviso = 'A IA não respondeu (' + e.message + '). Esta é a análise automática montada só com os números do B.I.';
+    }
+    if (origem === 'automatica') analise = analiseAutomatica(pacote);
+    analiseAtual = { analise: analise, pacote: pacote, fatos: fatos, abaDef: abaDef, filtros: filtrosTxt, origem: origem, aviso: aviso, geradoEm: new Date() };
+    desenharAnalise();
+    document.querySelectorAll('.btn-exp-analise').forEach(b => { b.disabled = false; });
+}
+function fecharAnalise() {
+    document.getElementById('painel-analise').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+function tabelaIndicadoresHTML(pc) {
+    return '<table class="tabela-bi"><thead><tr><th>Indicador</th><th class="num">Período</th><th class="num">Ano anterior</th><th class="num">Variação</th><th class="num">Período anterior</th><th class="num">Variação</th></tr></thead><tbody>' +
+        pc.indicadores.map(x => '<tr><td>' + esc(x.indicador) + '</td><td class="num">' + esc(x.atual) + '</td><td class="num">' + esc(x.ano_anterior) + '</td><td class="num">' + esc(x.variacao_ano_anterior) +
+            '</td><td class="num">' + esc(x.periodo_anterior) + '</td><td class="num">' + esc(x.variacao_periodo_anterior) + '</td></tr>').join('') + '</tbody></table>';
+}
+function desenharAnalise() {
+    const a = analiseAtual, an = a.analise, pc = a.pacote;
+    document.getElementById('analise-corpo').innerHTML =
+        (a.aviso ? '<div class="alerta-analise">' + esc(a.aviso) + '</div>' : '') +
+        '<div class="meta-analise"><b>Período:</b> ' + esc(pc.periodo_analisado) + '<br><b>Comparações:</b> ano anterior ' + esc(pc.periodo_ano_anterior) +
+        '; período anterior ' + esc(pc.periodo_imediatamente_anterior) + (/coincide/.test(pc.observacao_comparacoes) ? ' (neste recorte são o mesmo período)' : '') +
+        '<br><b>Filtros:</b> ' + esc(a.filtros) + '</div>' +
+        '<h4 class="tit-analise">' + esc(an.titulo || 'Análise') + '</h4>' +
+        '<div class="tabela-rolagem mb-3">' + tabelaIndicadoresHTML(pc) + '</div>' +
+        '<h5>Resumo</h5>' + an.resumo.map(p => '<p>' + esc(p) + '</p>').join('') +
+        an.secoes.map(s => '<h5>' + esc(s.titulo) + '</h5>' + (s.paragrafos || []).map(p => '<p>' + esc(p) + '</p>').join('')).join('') +
+        (an.recomendacoes.length ? '<h5>Recomendações</h5><ol class="rec-analise">' + an.recomendacoes.map(r => '<li><b>' + esc(r.acao) + '</b><br><span>Base: ' + esc(r.base) + '</span></li>').join('') + '</ol>' : '');
+}
+
+// ---------- Graficos para exportacao (alta resolucao, sem animacao) ----------
+function imagemGrafico(config, largura, altura) {
+    const cv = document.createElement('canvas');
+    cv.width = largura; cv.height = altura;
+    cv.style.width = largura + 'px'; cv.style.height = altura + 'px';
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + largura + 'px;height:' + altura + 'px';
+    holder.appendChild(cv); document.body.appendChild(holder);
+    config.options = Object.assign({}, config.options, { responsive: false, animation: false, devicePixelRatio: 2 });
+    const tamAnterior = Chart.defaults.font.size;
+    Chart.defaults.font.size = 17;   // fontes legiveis quando a imagem e reduzida na pagina/slide
+    let url;
+    try { const ch = new Chart(cv, config); url = ch.toBase64Image('image/png', 1); ch.destroy(); }
+    finally { Chart.defaults.font.size = tamAnterior; holder.remove(); }
+    return { url: url, w: largura, h: altura };
+}
+// Graficos que estao na tela (mesma aparencia, em alta resolucao)
+function imagensGraficosTela() {
+    const out = [];
+    const titulos = { periodo: 'Faturamento por período', custo: 'Custo por mês e Custo × Faturamento', pilha: 'Custo por setor e unidades atendidas' };
+    ['periodo', 'custo', 'pilha'].forEach(k => {
+        const g = estado.graficos[k];
+        if (!g) return;
+        const dpr = g.options.devicePixelRatio;
+        g.options.devicePixelRatio = 3; g.resize();
+        out.push({ titulo: titulos[k], url: g.toBase64Image('image/png', 1), w: g.width, h: g.height });
+        g.options.devicePixelRatio = dpr; g.resize();
+    });
+    return out;
+}
+function graficosAnalise(a) {
+    const f = a.fatos, ro = f.aba === 'ro', out = [];
+    const nomesP = ['Período analisado', 'Mesmo período do ano anterior', 'Período anterior'];
+    const cores = ['#002B50', '#7fa6c9', '#E8872B'];
+    const metricas = ro ? [['Faturamento', 'fat'], ['Custo operacional', 'custo'], ['Imposto', 'imp'], ['Lucro', 'lucro']] : [['Custo da aba', 'custo'], ['Faturamento', 'fat']];
+    const per = [f.atual, f.yoy, f.ant];
+    out.push({ titulo: 'Comparação entre períodos', img: imagemGrafico({
+        type: 'bar',
+        data: { labels: metricas.map(m => m[0]), datasets: per.map((p, k) => ({ label: nomesP[k], data: metricas.map(m => p ? p[m[1]] : null), backgroundColor: cores[k], borderRadius: 3 })) },
+        options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 18 } } }, tooltip: { enabled: false } },
+                   scales: { y: eixoMoeda(), x: { grid: { display: false }, ticks: { font: { size: 18 } } } } }
+    }, 1400, 640) });
+    const fatorGrafico = (fx, titulo) => {
+        if (!fx) return;
+        const dim = ro ? fx.cliente.fat : fx.setor.custo;
+        const itens = (dim || []).slice(0, 8);
+        if (!itens.length) return;
+        out.push({ titulo: titulo, img: imagemGrafico({
+            type: 'bar',
+            data: { labels: itens.map(x => x.nome.length > 28 ? x.nome.slice(0, 27) + '…' : x.nome),
+                    datasets: [{ label: 'Variação', data: itens.map(x => x.delta), borderRadius: 3,
+                                 backgroundColor: itens.map(x => (ro ? x.delta >= 0 : x.delta <= 0) ? '#61CF00' : '#c0392b') }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                       scales: { x: { ticks: { callback: v => brlCurto(v), font: { size: 17 } }, grid: { color: '#eef1f5' } }, y: { ticks: { font: { size: 17 } }, grid: { display: false } } } }
+        }, 1400, 640) });
+    };
+    fatorGrafico(f.fatoresYoY, (ro ? 'Maiores variações de faturamento por cliente' : 'Maiores variações de custo por setor') + ' — vs mesmo período do ano anterior');
+    fatorGrafico(f.fatoresAnt, (ro ? 'Maiores variações de faturamento por cliente' : 'Maiores variações de custo por setor') + ' — vs período anterior');
+    if (f.porNegocio) out.push({ titulo: 'Comparação entre negócios', img: imagemGrafico({
+        type: 'bar',
+        data: { labels: f.porNegocio.map(n => n.nome), datasets: [
+            { label: 'Faturamento', data: f.porNegocio.map(n => n.atual.fat), backgroundColor: '#002B50', borderRadius: 3 },
+            { label: ro ? 'Custo operacional' : 'Custo da aba', data: f.porNegocio.map(n => n.atual.custo), backgroundColor: '#E8872B', borderRadius: 3 },
+            { label: 'Lucro', data: f.porNegocio.map(n => n.lucro), backgroundColor: '#61CF00', borderRadius: 3 }] },
+        options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 18 } } }, tooltip: { enabled: false } },
+                   scales: { y: eixoMoeda(), x: { grid: { display: false }, ticks: { font: { size: 18 } } } } }
+    }, 1400, 640) });
+    return out;
+}
+// Nomes legiveis para os titulos gerados a partir das chaves internas
+function nomeLegivel(k) {
+    return k.replace(/_/g, ' ').replace(/\bnegocio\b/g, 'negócio').replace(/\bdet\b/g, 'detalhamento')
+            .replace(/\bcomposicao\b/g, 'composição').replace(/\bpor conta\b/g, 'por conta').replace(/^por /, 'por ');
+}
+// Tabelas para exportacao
+function tabelasAnalise(a) {
+    const pc = a.pacote, out = [];
+    out.push({ titulo: 'Indicadores', cab: ['Indicador', 'Período', 'Ano anterior', 'Variação', 'Período anterior', 'Variação'],
+               linhas: pc.indicadores.map(x => [x.indicador, x.atual, x.ano_anterior, x.variacao_ano_anterior, x.periodo_anterior, x.variacao_periodo_anterior]) });
+    const fxTab = (fx, rotulo) => {
+        if (typeof fx !== 'object') return;
+        Object.keys(fx).filter(k => k !== 'decomposicao_volume_valor').slice(0, 4).forEach(k => {
+            if (!fx[k].length) return;
+            out.push({ titulo: 'Maiores variações de ' + nomeLegivel(k) + ' — ' + rotulo, cab: ['Item', 'Comparação', 'Período', 'Variação', 'Variação %'],
+                       linhas: fx[k].map(x => [x.item, x.comparacao, x.atual, x.variacao, x.variacao_pct]) });
+        });
+        if (fx.decomposicao_volume_valor) {
+            const d = fx.decomposicao_volume_valor;
+            out.push({ titulo: 'Efeito volume × valor por unidade — ' + rotulo, cab: ['Componente', 'Valor'],
+                       linhas: [['Efeito volume (unidades atendidas)', d.efeito_volume], ['Efeito valor por unidade', d.efeito_valor_por_unidade],
+                                ['Valor por unidade na comparação', d.valor_por_unidade_comparacao], ['Valor por unidade no período', d.valor_por_unidade_atual]] });
+        }
+    };
+    fxTab(pc.fatores_vs_ano_anterior, 'vs ano anterior');
+    fxTab(pc.fatores_vs_periodo_anterior, 'vs período anterior');
+    Object.keys(pc.composicao_atual).forEach(k => {
+        const l = pc.composicao_atual[k];
+        if (l.length) out.push({ titulo: 'Composição ' + nomeLegivel(k), cab: ['Item', 'Valor', 'Participação'], linhas: l.map(x => [x.item, x.valor, x.participacao]) });
+    });
+    if (pc.comparacao_negocios) out.push({ titulo: 'Comparação entre negócios', cab: ['Negócio', 'Faturamento', 'Custo', 'Lucro', 'Margem', 'Custo/Fat.'],
+        linhas: pc.comparacao_negocios.map(n => [n.negocio, n.faturamento, n.custo, n.lucro, n.margem, n.custo_sobre_faturamento]) });
+    if (pc.receitas_separadas_nao_entram_no_custo) out.push({ titulo: 'Receitas administrativas e financeiras (não entram no custo)', cab: ['Conta', 'Valor'],
+        linhas: pc.receitas_separadas_nao_entram_no_custo.map(x => [x.conta, x.valor]) });
+    const cabM = /Resultado/.test(pc.foco) ? ['Mês', 'Faturamento', 'Custo', 'Lucro'] : ['Mês', 'Custo', 'Faturamento', 'Custo/Fat.'];
+    out.push({ titulo: 'Evolução mensal', cab: cabM, linhas: pc.evolucao_mensal.map(m => Object.keys(m).map(k => m[k])) });
+    return out;
+}
+function logoInfo() {
+    const img = document.querySelector('.rel-topo img');
+    return { url: img.src, razao: img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 4 };
+}
+function nomeArquivoAnalise(ext, prefixo) {
+    const a = analiseAtual;
+    const aba = a.abaDef.titulo.replace(/×/g, 'x').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_');
+    const per = a.fatos.meses[0] + (a.fatos.meses.length > 1 ? '_a_' + a.fatos.meses[a.fatos.meses.length - 1] : '');
+    return prefixo + '_' + aba + '_' + per + '.' + ext;
+}
+function dataGeracao() { const d = analiseAtual.geradoEm; return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+
+// A fonte padrao do PDF nao tem o sinal "−" (U+2212) nem espacos especiais: troca antes de escrever
+function sanearPDF(t) { return String(t === null || t === undefined ? '' : t).replace(/\u2212/g, '-').replace(/[\u202F\u2007]/g, ' '); }
+function prepararDocPDF(doc) {
+    const txt = doc.text.bind(doc), quebra = doc.splitTextToSize.bind(doc), tab = doc.autoTable.bind(doc);
+    doc.text = (t, ...r) => txt(Array.isArray(t) ? t.map(sanearPDF) : sanearPDF(t), ...r);
+    doc.splitTextToSize = (t, ...r) => quebra(sanearPDF(t), ...r);
+    doc.getTextWidth = (w => t => w(sanearPDF(t)))(doc.getTextWidth.bind(doc));
+    doc.autoTable = o => tab(Object.assign({}, o, { head: (o.head || []).map(l => l.map(sanearPDF)), body: (o.body || []).map(l => l.map(sanearPDF)) }));
+    return doc;
+}
+
+// ---------- PDF de texto (A4) ----------
+async function exportarPDFTexto() {
+    const btn = document.getElementById('btn-exp-pdf'); btn.disabled = true;
+    try {
+        await carregarLib('jspdf'); await carregarLib('autotable');
+        const { jsPDF } = window.jspdf;
+        const a = analiseAtual, an = a.analise, doc = prepararDocPDF(new jsPDF({ unit: 'mm', format: 'a4' }));
+        const W = 210, H = 297, M = 18, LW = W - 2 * M;
+        const logo = logoInfo();
+        let y = 0;
+        // Cabecalho com a tarja escura e a logomarca (padrao do sistema)
+        doc.setFillColor(5, 19, 35); doc.rect(0, 0, W, 30, 'F');
+        doc.addImage(logo.url, 'PNG', M, 8, 14 * logo.razao > 60 ? 60 : 14 * logo.razao, 14 * logo.razao > 60 ? 60 / logo.razao : 14);
+        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+        doc.text('B.I. Formula Code', W - M, 14, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Análise econômico-financeira', W - M, 20, { align: 'right' });
+        y = 40;
+        const novaPaginaSe = h => { if (y + h > H - 18) { doc.addPage(); y = 20; } };
+        const titulo = (t, tam) => { novaPaginaSe(14); doc.setFont('helvetica', 'bold'); doc.setFontSize(tam || 12.5); doc.setTextColor(0, 43, 80);
+            const l = doc.splitTextToSize(t, LW); doc.text(l, M, y); y += l.length * (tam ? tam * 0.45 : 5.6) + 2; };
+        const paragrafo = (t, cor) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, cor || [31, 43, 56]);
+            doc.splitTextToSize(t, LW).forEach(l => { novaPaginaSe(5.2); doc.text(l, M, y); y += 5; }); y += 2.5; };
+        titulo(an.titulo || ('Análise econômico-financeira — ' + a.abaDef.titulo), 15);
+        doc.setFontSize(8.8); doc.setTextColor(107, 123, 141); doc.setFont('helvetica', 'normal');
+        [ 'Período: ' + a.pacote.periodo_analisado, 'Comparações: ano anterior ' + a.pacote.periodo_ano_anterior + '; período anterior ' + a.pacote.periodo_imediatamente_anterior,
+          'Filtros: ' + a.filtros, 'Gerado em ' + dataGeracao() + (a.origem === 'automatica' ? ' (análise automática, sem IA)' : '') ]
+          .forEach(t => doc.splitTextToSize(t, LW).forEach(l => { novaPaginaSe(4.5); doc.text(l, M, y); y += 4.3; }));
+        y += 4;
+        const tabs = tabelasAnalise(a);
+        const tabela = t => {
+            novaPaginaSe(20);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(0, 43, 80); doc.text(t.titulo, M, y); y += 2.5;
+            doc.autoTable({ startY: y, head: [t.cab], body: t.linhas, margin: { left: M, right: M }, theme: 'grid',
+                styles: { font: 'helvetica', fontSize: t.cab.length > 4 ? 7.6 : 8.2, cellPadding: 1.5, textColor: [31, 43, 56], lineColor: [230, 234, 240], lineWidth: 0.2 },
+                headStyles: { fillColor: [0, 43, 80], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [247, 249, 252] },
+                // 1a coluna com largura fixa; as de valores dividem o resto por igual (valores nao quebram no meio)
+                columnStyles: Object.fromEntries(t.cab.map((c, i) => [i, i === 0
+                    ? { halign: 'left', cellWidth: t.cab.length > 4 ? 44 : 70 }
+                    : { halign: 'right', cellWidth: (LW - (t.cab.length > 4 ? 44 : 70)) / (t.cab.length - 1) }])) });
+            y = doc.lastAutoTable.finalY + 7;
+        };
+        tabela(tabs[0]);
+        titulo('Resumo'); an.resumo.forEach(p => paragrafo(p));
+        const imgs = graficosAnalise(a);
+        const grafico = g => { const h = LW * g.img.h / g.img.w; novaPaginaSe(h + 10);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(0, 43, 80); doc.text(g.titulo, M, y); y += 3;
+            doc.addImage(g.img.url, 'PNG', M, y, LW, h); y += h + 7; };
+        if (imgs[0]) grafico(imgs[0]);
+        an.secoes.forEach(s => { titulo(s.titulo); (s.paragrafos || []).forEach(p => paragrafo(p)); });
+        imgs.slice(1).forEach(grafico);
+        if (an.recomendacoes.length) {
+            titulo('Recomendações');
+            an.recomendacoes.forEach((r, i) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(31, 43, 56);
+                doc.splitTextToSize((i + 1) + '. ' + r.acao, LW).forEach(l => { novaPaginaSe(5.2); doc.text(l, M, y); y += 5; });
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 123, 141);
+                doc.splitTextToSize('Base: ' + r.base, LW - 5).forEach(l => { novaPaginaSe(4.8); doc.text(l, M + 5, y); y += 4.6; }); y += 2.5; });
+        }
+        titulo('Tabelas de apoio');
+        tabs.slice(1).forEach(tabela);
+        const telas = imagensGraficosTela();
+        if (telas.length) { titulo('Gráficos da tela'); telas.forEach(g => grafico({ titulo: g.titulo, img: g })); }
+        const n = doc.getNumberOfPages();
+        for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150, 160, 170); doc.setFont('helvetica', 'normal');
+            doc.text('B.I. Formula Code — ' + a.abaDef.titulo, M, H - 8); doc.text('Página ' + i + ' de ' + n, W - M, H - 8, { align: 'right' }); }
+        doc.save(nomeArquivoAnalise('pdf', 'Analise'));
+    } catch (e) { alert(e.message); }
+    finally { btn.disabled = false; }
+}
+
+// ---------- Apresentacao (16:9): mesmo roteiro para PPTX e PDF ----------
+// Area util: 13,333 x 7,5 pol, margens de 0,5 pol; conteudo entre y=1,15 e y=7,0
+function roteiroApresentacao(a) {
+    const an = a.analise, slides = [];
+    slides.push({ tipo: 'capa' });
+    const tabs = tabelasAnalise(a);
+    slides.push({ titulo: 'Indicadores do período', tabela: tabs[0] });
+    const blocosTexto = (titulo, paragrafos) => {
+        // ~1.100 caracteres por slide (fonte 14): divide sem cortar paragrafo quando possivel
+        let atual = [], tam = 0, parte = 0;
+        const fechar = () => { if (atual.length) { slides.push({ titulo: titulo + (parte ? ' (continuação)' : ''), textos: atual }); parte++; atual = []; tam = 0; } };
+        paragrafos.forEach(p => {
+            if (tam + p.length > 1100 && atual.length) fechar();
+            if (p.length > 1100) { const partes = p.match(/[^.!?]+[.!?]+\s*|.+$/g) || [p]; let buf = '';
+                partes.forEach(fr => { if ((buf + fr).length > 1100) { atual.push(buf.trim()); fechar(); buf = ''; } buf += fr; });
+                if (buf.trim()) { atual.push(buf.trim()); tam += buf.length; } }
+            else { atual.push(p); tam += p.length; }
+        });
+        fechar();
+    };
+    blocosTexto('Resumo', an.resumo);
+    const imgs = graficosAnalise(a);
+    if (imgs[0]) slides.push({ titulo: imgs[0].titulo, imagem: imgs[0].img });
+    an.secoes.forEach(s => blocosTexto(s.titulo, s.paragrafos || []));
+    imgs.slice(1).forEach(g => slides.push({ titulo: g.titulo, imagem: g.img }));
+    tabs.slice(1).forEach(t => {
+        for (let i = 0; i < t.linhas.length; i += 11) slides.push({ titulo: t.titulo + (i ? ' (continuação)' : ''), tabela: { cab: t.cab, linhas: t.linhas.slice(i, i + 11) } });
+    });
+    imagensGraficosTela().forEach(g => slides.push({ titulo: g.titulo + ' (tela)', imagem: g }));
+    if (an.recomendacoes.length) {
+        for (let i = 0; i < an.recomendacoes.length; i += 4) slides.push({ titulo: 'Recomendações' + (i ? ' (continuação)' : ''), recomendacoes: an.recomendacoes.slice(i, i + 4), inicio: i });
+    }
+    return slides;
+}
+function caixaImagem(img, x, y, w, h) {
+    const r = img.w / img.h;
+    let lw = w, lh = w / r;
+    if (lh > h) { lh = h; lw = h * r; }
+    return { x: x + (w - lw) / 2, y: y + (h - lh) / 2, w: lw, h: lh };
+}
+async function exportarPPTX() {
+    const btn = document.getElementById('btn-exp-pptx'); btn.disabled = true;
+    try {
+        await carregarLib('pptx');
+        const a = analiseAtual, pres = new PptxGenJS(), logo = logoInfo();
+        pres.layout = 'LAYOUT_WIDE';
+        const W = 13.333, M = 0.5, LW = W - 2 * M;
+        const cab = (s, titulo) => {
+            s.background = { color: 'FFFFFF' };
+            s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: W, h: 0.85, fill: { color: '051323' }, line: { color: '051323' } });
+            s.addImage({ data: logo.url, x: M, y: 0.18, h: 0.5, w: 0.5 * logo.razao });
+            s.addText(titulo, { x: M + 0.5 * logo.razao + 0.3, y: 0.12, w: LW - 0.5 * logo.razao - 0.3, h: 0.62, fontFace: 'Calibri', fontSize: 20, bold: true, color: 'FFFFFF', valign: 'middle', fit: 'shrink' });
+            s.addText('B.I. Formula Code — ' + a.abaDef.titulo + '  |  ' + a.pacote.periodo_analisado, { x: M, y: 7.08, w: LW, h: 0.3, fontFace: 'Calibri', fontSize: 9, color: '8A99A8' });
+        };
+        roteiroApresentacao(a).forEach(sl => {
+            const s = pres.addSlide();
+            if (sl.tipo === 'capa') {
+                s.background = { color: '051323' };
+                s.addImage({ data: logo.url, x: M, y: 0.7, h: 0.9, w: 0.9 * logo.razao });
+                s.addText('Análise econômico-financeira', { x: M, y: 2.3, w: LW, h: 0.9, fontFace: 'Calibri', fontSize: 36, bold: true, color: 'FFFFFF' });
+                s.addText(a.abaDef.titulo, { x: M, y: 3.2, w: LW, h: 0.6, fontFace: 'Calibri', fontSize: 22, color: '61CF00', bold: true });
+                s.addText([
+                    { text: 'Período: ' + a.pacote.periodo_analisado, options: { breakLine: true } },
+                    { text: 'Comparações: ano anterior ' + a.pacote.periodo_ano_anterior + '; período anterior ' + a.pacote.periodo_imediatamente_anterior, options: { breakLine: true } },
+                    { text: 'Filtros: ' + a.filtros, options: { breakLine: true } },
+                    { text: 'Gerado em ' + dataGeracao() + (a.origem === 'automatica' ? ' (análise automática, sem IA)' : '') }
+                ], { x: M, y: 4.1, w: LW, h: 2.4, fontFace: 'Calibri', fontSize: 13, color: 'C9D4DF', valign: 'top', fit: 'shrink' });
+                return;
+            }
+            cab(s, sl.titulo);
+            if (sl.textos) {
+                s.addText(sl.textos.map((t, i) => ({ text: t, options: { breakLine: i < sl.textos.length - 1, paraSpaceAfter: 10 } })),
+                    { x: M, y: 1.15, w: LW, h: 5.8, fontFace: 'Calibri', fontSize: 14, color: '1F2B38', valign: 'top', fit: 'shrink', lineSpacingMultiple: 1.1 });
+            } else if (sl.imagem) {
+                const c = caixaImagem(sl.imagem, M, 1.15, LW, 5.8);
+                s.addImage({ data: sl.imagem.url, x: c.x, y: c.y, w: c.w, h: c.h });
+            } else if (sl.tabela) {
+                const t = sl.tabela, n = t.cab.length;
+                const col0 = n > 3 ? 3.6 : 5;
+                const colW = [col0].concat(Array(n - 1).fill((LW - col0) / (n - 1)));
+                const linhas = [t.cab.map(c => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: '002B50' }, align: 'center' } }))]
+                    .concat(t.linhas.map((l, r) => l.map((v, i) => ({ text: String(v), options: { align: i ? 'right' : 'left', fill: { color: r % 2 ? 'F7F9FC' : 'FFFFFF' } } }))));
+                s.addTable(linhas, { x: M, y: 1.2, w: LW, colW: colW, fontFace: 'Calibri', fontSize: 11, color: '1F2B38', border: { type: 'solid', pt: 0.5, color: 'E6EAF0' }, rowH: 0.42, valign: 'middle' });
+            } else if (sl.recomendacoes) {
+                let y = 1.2;
+                sl.recomendacoes.forEach((r, i) => {
+                    s.addShape(pres.ShapeType.rect, { x: M, y: y, w: 0.08, h: 1.2, fill: { color: '61CF00' }, line: { color: '61CF00' } });
+                    s.addText([{ text: (sl.inicio + i + 1) + '. ' + r.acao, options: { bold: true, fontSize: 14, color: '002B50', breakLine: true } },
+                               { text: 'Base: ' + r.base, options: { fontSize: 11.5, color: '5C6B7A' } }],
+                        { x: M + 0.2, y: y, w: LW - 0.2, h: 1.25, fontFace: 'Calibri', valign: 'top', fit: 'shrink' });
+                    y += 1.42;
+                });
+            }
+        });
+        await pres.writeFile({ fileName: nomeArquivoAnalise('pptx', 'Apresentacao') });
+    } catch (e) { alert(e.message); }
+    finally { btn.disabled = false; }
+}
+async function exportarPDFApresentacao() {
+    const btn = document.getElementById('btn-exp-pdfap'); btn.disabled = true;
+    try {
+        await carregarLib('jspdf'); await carregarLib('autotable');
+        const { jsPDF } = window.jspdf;
+        const a = analiseAtual, logo = logoInfo();
+        const W = 13.333, H = 7.5, M = 0.5, LW = W - 2 * M;
+        const doc = prepararDocPDF(new jsPDF({ unit: 'in', format: [W, H], orientation: 'landscape' }));
+        const cab = titulo => {
+            doc.setFillColor(5, 19, 35); doc.rect(0, 0, W, 0.85, 'F');
+            doc.addImage(logo.url, 'PNG', M, 0.18, 0.5 * logo.razao, 0.5);
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+            let tam = 20; doc.setFontSize(tam);
+            const larg = LW - 0.5 * logo.razao - 0.3;
+            while (doc.getTextWidth(titulo) > larg && tam > 12) { tam -= 1; doc.setFontSize(tam); }
+            doc.text(titulo, M + 0.5 * logo.razao + 0.3, 0.52);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(138, 153, 168);
+            doc.text('B.I. Formula Code — ' + a.abaDef.titulo + '  |  ' + a.pacote.periodo_analisado, M, 7.25);
+        };
+        roteiroApresentacao(a).forEach((sl, idx) => {
+            if (idx) doc.addPage([W, H], 'landscape');
+            if (sl.tipo === 'capa') {
+                doc.setFillColor(5, 19, 35); doc.rect(0, 0, W, H, 'F');
+                doc.addImage(logo.url, 'PNG', M, 0.7, 0.9 * logo.razao, 0.9);
+                doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(36); doc.text('Análise econômico-financeira', M, 2.9);
+                doc.setTextColor(97, 207, 0); doc.setFontSize(22); doc.text(a.abaDef.titulo, M, 3.6);
+                doc.setTextColor(201, 212, 223); doc.setFont('helvetica', 'normal'); doc.setFontSize(13);
+                let y = 4.35;
+                ['Período: ' + a.pacote.periodo_analisado, 'Comparações: ano anterior ' + a.pacote.periodo_ano_anterior + '; período anterior ' + a.pacote.periodo_imediatamente_anterior,
+                 'Filtros: ' + a.filtros, 'Gerado em ' + dataGeracao() + (a.origem === 'automatica' ? ' (análise automática, sem IA)' : '')]
+                 .forEach(t => doc.splitTextToSize(t, LW).forEach(l => { if (y < 6.9) { doc.text(l, M, y); y += 0.26; } }));
+                return;
+            }
+            cab(sl.titulo);
+            if (sl.textos) {
+                let tam = 14, linhas;
+                const montar = () => { doc.setFontSize(tam); linhas = []; sl.textos.forEach((t, i) => { linhas = linhas.concat(doc.splitTextToSize(t, LW)); if (i < sl.textos.length - 1) linhas.push(''); }); };
+                doc.setFont('helvetica', 'normal'); montar();
+                while (linhas.length * tam * 1.25 / 72 > 5.8 && tam > 10) { tam -= 0.5; montar(); }
+                doc.setTextColor(31, 43, 56);
+                let y = 1.3;
+                linhas.forEach(l => { doc.text(l, M, y); y += tam * 1.25 / 72; });
+            } else if (sl.imagem) {
+                const c = caixaImagem(sl.imagem, M, 1.15, LW, 5.8);
+                doc.addImage(sl.imagem.url, 'PNG', c.x, c.y, c.w, c.h);
+            } else if (sl.tabela) {
+                const t = sl.tabela;
+                doc.autoTable({ startY: 1.2, head: [t.cab], body: t.linhas, margin: { left: M, right: M }, theme: 'grid', tableWidth: LW,
+                    styles: { font: 'helvetica', fontSize: 11, cellPadding: 0.07, textColor: [31, 43, 56], lineColor: [230, 234, 240], lineWidth: 0.007, minCellHeight: 0.38, valign: 'middle' },
+                    headStyles: { fillColor: [0, 43, 80], textColor: 255, fontStyle: 'bold', halign: 'center' },
+                    alternateRowStyles: { fillColor: [247, 249, 252] },
+                    columnStyles: Object.fromEntries(t.cab.map((c, i) => [i, { halign: i === 0 ? 'left' : 'right' }])) });
+            } else if (sl.recomendacoes) {
+                let y = 1.2;
+                sl.recomendacoes.forEach((r, i) => {
+                    doc.setFillColor(97, 207, 0); doc.rect(M, y, 0.08, 1.2, 'F');
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(0, 43, 80);
+                    let yy = y + 0.25;
+                    doc.splitTextToSize((sl.inicio + i + 1) + '. ' + r.acao, LW - 0.2).slice(0, 2).forEach(l => { doc.text(l, M + 0.2, yy); yy += 0.24; });
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(11.5); doc.setTextColor(92, 107, 122);
+                    doc.splitTextToSize('Base: ' + r.base, LW - 0.2).slice(0, 3).forEach(l => { doc.text(l, M + 0.2, yy); yy += 0.2; });
+                    y += 1.42;
+                });
+            }
+        });
+        doc.save(nomeArquivoAnalise('pdf', 'Apresentacao'));
+    } catch (e) { alert(e.message); }
+    finally { btn.disabled = false; }
+}
 
 // ---------------- Inicio ----------------
 function iniciar() {
