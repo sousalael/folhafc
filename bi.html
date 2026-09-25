@@ -113,11 +113,15 @@
         @media (max-width: 1499.98px) { .grade-ro { grid-template-columns: minmax(0, 1fr); } }
         .grafico-caixa { position: relative; height: 340px; }
 
-        .filtros-locais { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)) repeat(2, minmax(0, 200px)); gap: 12px; align-items: end; background: #fff; border: 1px solid var(--fc-borda); border-radius: 12px; padding: 12px 16px 2px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,43,80,0.06); }
+        .filtros-locais { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)) minmax(0, 170px) minmax(0, 190px) minmax(0, 220px); gap: 12px; align-items: end; background: #fff; border: 1px solid var(--fc-borda); border-radius: 12px; padding: 12px 16px 2px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,43,80,0.06); }
+        @media (max-width: 1399.98px) { .filtros-locais { grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(3, minmax(0, 1fr)); } }
         @media (max-width: 1199.98px) { .filtros-locais { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 575.98px) { .filtros-locais { grid-template-columns: minmax(0, 1fr); } }
         .kpi-local { cursor: default; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.05); border: 1px solid var(--fc-borda); min-width: 0; }
         .kpi-local .kpi-valor { font-size: 1.05rem; }
+        /* r144: cards da aba com a mesma altura, sem quebrar o titulo */
+        .kpi-local { min-height: 78px; }
+        .kpi-local .kpi-rotulo, .kpi-local .kpi-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 0; }
         /* r142: barra que mostra o filtro feito clicando nas barras do grafico */
         .barra-selecao { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: #f4fbee; border: 1px solid #cfe9b5; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; font-size: .86rem; color: var(--fc-primaria); }
         .barra-selecao .dica-sel { font-size: .76rem; color: var(--fc-texto-suave); }
@@ -1694,7 +1698,7 @@ function desenharAbaFinanceira(aba) {
     const loc = estado.locais[aba.id];
     const alvo = document.getElementById('conteudo-aba');
     alvo.innerHTML =
-        '<div class="filtros-locais"><div id="fl-setor"></div><div id="fl-det"></div><div id="fl-cxf"></div><div id="fl-cpu"></div></div>' +
+        '<div class="filtros-locais"><div id="fl-setor"></div><div id="fl-det"></div><div id="fl-custo"></div><div id="fl-cxf"></div><div id="fl-cpu"></div></div>' +
         '<div class="grade-2">' +
           '<section class="bi-painel"><h3>Custo por mês e Custo × Faturamento</h3>' +
             '<div class="explica">Colunas: custo do mês. Linha: custo ÷ faturamento do mês. Faixa verde: unidades atendidas. Clique numa coluna para filtrar a tela (Ctrl + clique soma).</div>' +
@@ -1865,6 +1869,11 @@ function atualizarDependentesFin(aba) {
     const atendidas = unidadesAtendidas(db, linhasG);
     estado.finAtual = { aba: aba.id, arv: arv, fatTotal: fatTotal, atendidas: atendidas, mesesSel: sel,
                         contas: Array.from(arv.raiz.values()).sort((a, b) => b.custo - a.custo) };
+    // r144: total do custo exibido na aba (depois de Setor/Detalhamento e das barras clicadas)
+    document.getElementById('fl-custo').innerHTML =
+        '<div class="kpi-card kpi-local" style="--kpi-cor:#E8872B">' +
+        '<div class="kpi-rotulo">Custo</div>' +
+        '<div class="kpi-valor' + classeValor(arv.total) + '">' + esc(brl(arv.total)) + '</div></div>';
     document.getElementById('fl-cxf').innerHTML =
         '<div class="kpi-card kpi-local" style="--kpi-cor:#002B50">' +
         '<div class="kpi-rotulo">Custo × Faturamento</div>' +
