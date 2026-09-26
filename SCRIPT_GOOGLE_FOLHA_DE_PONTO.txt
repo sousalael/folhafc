@@ -580,7 +580,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-25-r146';
+const VERSAO_SCRIPT = '2026-09-26-r147';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6418,7 +6418,7 @@ const BI_FIN_ORIGEM_ID = '1NfiCCM0ANy5UQxRWQODl1Oh087C8hp10';
 const BI_FIN_ABA = 'Dados';
 const BI_FIN_CACHE_NOME = '__BI_FINANCEIRO_GRUPO_CACHE.json';
 const BI_FIN_PROP = 'BI_FIN_CACHE_META';
-const BI_FIN_FORMATO = 4;           // muda se o formato do JSON mudar (invalida o cache antigo)
+const BI_FIN_FORMATO = 5;           // muda se o formato do JSON mudar (invalida o cache antigo)
 const BI_FIN_ABA_CONFIGS = 'BI_Configs';
 
 // Exclusoes combinadas com a Diretoria (comparadas sem acento/maiuscula/espaco/ponto final)
@@ -6555,6 +6555,8 @@ function biFinConstruir_(fonte, mesAtual) {
     };
     // r142: coluna de observacoes (opcional — se nao existir, o B.I. segue sem ela)
     var colObs = col(['Obs', 'Observações', 'Observacoes', 'Observação']);
+    // r147: dia da operacao na loja (coluna "Data Operação") — opcional
+    var colDataOp = col(['Data Operação', 'Data Operacao', 'Data da Operação']);
     var faltando = Object.keys(C).filter(function(k) { return C[k] < 0; });
     if (faltando.length) return { error: 'Colunas não encontradas na aba Dados: ' + faltando.join(', ') + '.' };
 
@@ -6564,7 +6566,7 @@ function biFinConstruir_(fonte, mesAtual) {
     BI_FIN_EXC_PAGO_POR.forEach(function(x) { excPago[biFinNorm_(x)] = 1; });
 
     // Dicionarios: cada nome vira um numero; grafia exibida = a mais frequente
-    var dims = ['neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det'];
+    var dims = ['neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'pago'];
     var dic = {}, idx = {}, grafias = {};
     dims.forEach(function(d) { dic[d] = []; idx[d] = {}; grafias[d] = []; });
     function codigo(d, bruto) {
@@ -6583,6 +6585,9 @@ function biFinConstruir_(fonte, mesAtual) {
     var mesesIdx = {}, meses = [];
     // r142: observacoes por lancamento (mostradas ao passar o mouse na loja, no Detalhamento do Custo)
     var obsDic = [], obsIdx = {}, obsAgreg = {}, obsOrdem = [];
+    // r147: possiveis duplicidades — lancamentos de custo identicos (mesma data da operacao,
+    // cliente, loja, conta, setor, detalhamento e valor). So da para achar aqui, antes de agrupar.
+    var dupMapa = {}, dupOrdem = [];
     var agreg = {}, ordemChaves = [];
     var usadas = 0;
     for (var r = 1; r < valores.length; r++) {
@@ -6605,9 +6610,23 @@ function biFinConstruir_(fonte, mesAtual) {
       var k = [mi, codigo('neg', L[C.neg]), codigo('cli', L[C.cli]), codigo('loja', L[C.loja]),
                codigo('tipo', L[C.tipo]), codigo('conta', L[C.conta]), codigo('setor', L[C.setor]),
                codigo('det', L[C.det])];
-      var chave = k.join('|');
+      // r147: dia da operacao e quem pagou entram na chave (vao no fim da linha: indices 11 e 12)
+      var dia = 0, dataOp = '';
+      if (colDataOp >= 0 && L[colDataOp] instanceof Date && !isNaN(L[colDataOp].getTime())) {
+        dataOp = Utilities.formatDate(new Date(L[colDataOp].getTime() + 12 * 3600 * 1000), tz, 'yyyy-MM-dd');
+        dia = Number(dataOp.slice(8, 10)) || 0;
+      }
+      var pagoIdx = codigo('pago', L[C.pago]);
+      var chave = k.join('|') + '|' + dia + '|' + pagoIdx;
       var ag = agreg[chave];
-      if (!ag) { ag = agreg[chave] = { k: k, c: 0, f: 0, i: 0 }; ordemChaves.push(chave); }
+      if (!ag) { ag = agreg[chave] = { k: k, dia: dia, pago: pagoIdx, c: 0, f: 0, i: 0 }; ordemChaves.push(chave); }
+      if (custo && biFinNorm_(L[C.conta]) !== 'FATURAMENTO' && dataOp) {
+        // data completa da operacao (em alguns lancamentos ela cai num mes diferente da coluna Mes)
+        var chDup = [dataOp, k[2], k[3], k[5], k[6], k[7], Math.round(custo * 100)].join('|');
+        var du = dupMapa[chDup];
+        if (!du) { du = dupMapa[chDup] = { l: [mi, dataOp, k[1], k[2], k[3], k[4], k[5], k[6], k[7], Math.round(custo * 100) / 100, 0, pagoIdx] }; dupOrdem.push(chDup); }
+        du.l[10]++;
+      }
       ag.c += custo; ag.f += fat; ag.i += imp;
       usadas++;
 
@@ -6639,7 +6658,7 @@ function biFinConstruir_(fonte, mesAtual) {
     function r4(n) { return Math.round(n * 10000) / 10000; }
     var linhas = ordemChaves.map(function(ch) {
       var ag = agreg[ch];
-      return ag.k.concat([r4(ag.c), r4(ag.f), r4(ag.i)]);
+      return ag.k.concat([r4(ag.c), r4(ag.f), r4(ag.i), ag.dia, ag.pago]);
     });
 
     return {
@@ -6651,14 +6670,16 @@ function biFinConstruir_(fonte, mesAtual) {
       mesAtual: mesAtual,
       totalLinhasOrigem: valores.length - 1,
       totalLinhasUsadas: usadas,
-      campos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'custo', 'fat', 'imp'],
+      campos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'custo', 'fat', 'imp', 'dia', 'pago'],
       meses: meses,
       dic: dic,
       linhas: linhas,
       // r142: [mes, neg, cli, loja, tipo, conta, setor, det, obs, custo] e o dicionario dos textos
       obsCampos: ['mes', 'neg', 'cli', 'loja', 'tipo', 'conta', 'setor', 'det', 'obs', 'custo'],
       obsDic: obsDic,
-      obs: obsOrdem.map(function(ch) { var ao = obsAgreg[ch]; return ao.k.concat([r4(ao.c)]); })
+      obs: obsOrdem.map(function(ch) { var ao = obsAgreg[ch]; return ao.k.concat([r4(ao.c)]); }),
+      // r147: [mes, data da operacao (yyyy-MM-dd), neg, cli, loja, tipo, conta, setor, det, valor, quantidade, pago] — so grupos com 2+ lancamentos
+      duplicidades: dupOrdem.map(function(ch) { return dupMapa[ch].l; }).filter(function(l) { return l[10] > 1; })
     };
   } finally {
     if (tmpId) { try { DriveApp.getFileById(tmpId).setTrashed(true); } catch (e) {} }

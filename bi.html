@@ -190,6 +190,16 @@
         .lib-msg { margin-top: 12px; font-size: .86rem; min-height: 1.2em; }
         .lib-msg.erro { color: #c0392b; }
         .lib-msg.ok { color: #3f8f00; }
+        /* r147: novas abas */
+        .cards-aba { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+        @media (max-width: 991.98px) { .cards-aba { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 575.98px) { .cards-aba { grid-template-columns: minmax(0, 1fr); } }
+        .cards-aba .kpi-local { margin-bottom: 0; }
+        .tabela-dre td { vertical-align: top; }
+        .pct-dre { display: block; font-size: .7rem; color: var(--fc-texto-suave); font-weight: 400; }
+        .tabela-bi tr.linha-clicavel { cursor: pointer; }
+        .tabela-bi tr.linha-clicavel:hover td { background: #e9f3fb; }
+        .tabela-bi tr.selecionada td { background: #eaf6de; font-weight: 600; }
         /* r146: analise economico-financeira */
         .barra-analise { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
         .painel-analise { position: fixed; inset: 0; z-index: 950; background: rgba(5,19,35,.55); display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
@@ -364,7 +374,11 @@ const ABAS = [
     { id: 'op', titulo: 'Operacional × Faturamento', contas: ['DESPESA OP', 'DESPESA TEC'] },
     { id: 'folha', titulo: 'Folha × Faturamento', contas: ['PESSOAL'] },
     { id: 'inv', titulo: 'Investimento × Faturamento', contas: ['INVESTIMENTO'] },
-    { id: 'adm', titulo: 'Admin × Faturamento', contas: ['DESPESA ADM', 'DOACAO', 'VIAGEM APAS', 'DESPESA FIN'], receitas: ['RECEITA ADM', 'RECEITAS FINANCEIRAS'] }
+    { id: 'adm', titulo: 'Admin × Faturamento', contas: ['DESPESA ADM', 'DOACAO', 'VIAGEM APAS', 'DESPESA FIN'], receitas: ['RECEITA ADM', 'RECEITAS FINANCEIRAS'] },
+    // r147: novas abas (regra dos cards principais: todas as contas, exceto ADIANTAMENTO)
+    { id: 'ops', titulo: 'Margem por Operação', nova: true },
+    { id: 'dre', titulo: 'DRE Gerencial', nova: true },
+    { id: 'vaz', titulo: 'Diagnóstico de Vazamentos', nova: true }
 ];
 
 const DIMS_GLOBAIS = ['ano', 'mes', 'neg', 'cli', 'uni', 'tipo'];
@@ -431,6 +445,7 @@ function prepararBase(res) {
     ABAS.forEach(a => {
         if (a.contas) db.papelAba[a.id] = { custo: papel(a.contas), receita: papel(a.receitas || []) };
     });
+    prepararNovas(db, res);   // r147
     return db;
 }
 
@@ -972,6 +987,183 @@ function montarFatosAnalise(db, ctx) {
         receitas: Array.from(atual.receitas.entries()).map(([c, v]) => ({ nome: db.dic.conta[c], valor: v })),
         porNegocio: porNegocio
     };
+}
+
+// ---------- r147: motor das abas Margem por Operação, DRE Gerencial e Diagnóstico de Vazamentos ----------
+// Regra das novas abas: a mesma dos cards principais (todas as contas, exceto ADIANTAMENTO).
+const CAMADAS_DRE = [
+    ['PESSOAL', 'Pessoal'], ['DESPESA OP', 'Despesa Operacional'], ['DESPESA TEC', 'Despesa Técnica'], ['DESPESA ADM', 'Despesa Administrativa'],
+    ['DESPESA FIN', 'Despesa Financeira'], ['DOACAO', 'Doação'], ['VIAGEM APAS', 'Viagem APAS'], ['INVESTIMENTO', 'Investimento']
+];
+function prepararNovas(db, res) {
+    const L = res.linhas || [];
+    db.dia = new Int32Array(db.n); db.pago = new Int32Array(db.n);
+    for (let i = 0; i < db.n; i++) { db.dia[i] = L[i][11] || 0; db.pago[i] = L[i][12] || 0; }
+    db.dic.pago = db.dic.pago || [];
+    db.camada = db.chaves.conta.map(k => CAMADAS_DRE.findIndex(c => c[0] === k));   // -1 = fora das 8 contas
+    db.contaFatIdx = db.chaves.conta.indexOf('FATURAMENTO');
+    // Clientes que ja faturaram em algum momento (os demais sao "estrutura": DESPESA ADMINISTRATIVA, INVESTIMENTO...)
+    db.cliFatura = new Set(); db.uniMesComFat = new Set();
+    for (let i = 0; i < db.n; i++) {
+        if (db.conta[i] === db.contaFatIdx && db.fat[i] > 0.005) { db.cliFatura.add(db.cli[i]); db.uniMesComFat.add(db.uni[i] + '|' + db.mes[i]); }
+    }
+    db.dup = (res.duplicidades || []).map(l => ({ mes: l[0], data: l[1], neg: l[2], cli: l[3], loja: l[4], tipo: l[5], conta: l[6], setor: l[7], det: l[8],
+        valor: l[9], qtd: l[10], pago: l[11], uni: db.mapaUni[l[3] + '|' + l[4]] }));
+}
+// Linhas das novas abas: todas as contas vindas do servidor; mesesIdx (Set) substitui o filtro de periodo
+function linhasTodasContas(db, ef, mesesIdx) {
+    const out = [];
+    for (let i = 0; i < db.n; i++) {
+        if (mesesIdx) {
+            if (!mesesIdx.has(db.mes[i])) continue;
+            if (ef.neg && !ef.neg.has(db.neg[i])) continue;
+            if (ef.cli && !ef.cli.has(db.cli[i])) continue;
+            if (ef.uni && !ef.uni.has(db.uni[i])) continue;
+            if (ef.tipo && !ef.tipo.has(db.tipo[i])) continue;
+        } else if (!passaGlobais(db, ef, i)) continue;
+        out.push(i);
+    }
+    return out;
+}
+// ---- DRE ----
+function novaDRE() { return { fat: 0, imp: 0, camadas: CAMADAS_DRE.map(() => 0), outras: 0, estrutura: 0 }; }
+function fecharDRE(x) {
+    x.custo8 = x.camadas.reduce((a, b) => a + b, 0);
+    x.ll = x.fat - x.imp - x.custo8;
+    x.margem = x.fat ? x.ll / x.fat : null;
+    x.resultadoTotal = x.ll + x.outras;
+    return x;
+}
+function calcularDRE(db, linhas) {
+    const tot = novaDRE(), porNeg = new Map(), mensal = new Map();
+    const pega = (m, k) => { let x = m.get(k); if (!x) { x = novaDRE(); m.set(k, x); } return x; };
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j], c = db.conta[i], cam = db.camada[c];
+        const alvos = [tot, pega(porNeg, db.neg[i]), pega(mensal, db.mes[i])];
+        alvos.forEach(x => {
+            x.imp += db.imp[i];
+            if (c === db.contaFatIdx) { x.fat += db.fat[i]; x.outras -= db.custo[i]; }
+            else if (cam >= 0) { x.camadas[cam] += db.custo[i]; if (!db.cliFatura.has(db.cli[i])) x.estrutura += db.custo[i]; x.outras += db.fat[i]; }
+            else x.outras += db.fat[i] - db.custo[i];
+        });
+    }
+    fecharDRE(tot); porNeg.forEach(fecharDRE); mensal.forEach(fecharDRE);
+    return { total: tot, porNeg: porNeg, mensal: mensal };
+}
+// ---- Operacoes (cliente + loja + dia com faturamento) ----
+function calcularOperacoes(db, linhas) {
+    const ops = new Map();
+    let custoGeral = 0;
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (db.conta[i] !== db.contaFatIdx || db.fat[i] <= 0 || !db.dia[i]) continue;
+        const k = db.uni[i] + '|' + db.mes[i] + '|' + db.dia[i];
+        let o = ops.get(k);
+        if (!o) { o = { uni: db.uni[i], cli: db.cli[i], loja: db.loja[i], neg: db.neg[i], mes: db.mes[i], dia: db.dia[i], fat: 0, custo: 0, pessoal: 0,
+                        tipos: new Map(), pessoas: new Map(), contas: new Map() }; ops.set(k, o); }
+        o.fat += db.fat[i];
+        o.tipos.set(db.tipo[i], (o.tipos.get(db.tipo[i]) || 0) + db.fat[i]);
+    }
+    let custoLigado = 0;
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (db.conta[i] === db.contaFatIdx || !db.custo[i]) continue;
+        custoGeral += db.custo[i];
+        const o = ops.get(db.uni[i] + '|' + db.mes[i] + '|' + db.dia[i]);
+        if (!o) continue;
+        o.custo += db.custo[i]; custoLigado += db.custo[i];
+        o.contas.set(db.conta[i], (o.contas.get(db.conta[i]) || 0) + db.custo[i]);
+        if (db.chaves.conta[db.conta[i]] === 'PESSOAL') { o.pessoal += db.custo[i]; o.pessoas.set(db.det[i], (o.pessoas.get(db.det[i]) || 0) + db.custo[i]); }
+    }
+    const lista = Array.from(ops.values());
+    let fat = 0, custo = 0, pessoal = 0, pessoasOp = 0, prejuizo = 0;
+    lista.forEach(o => {
+        o.margem = o.fat - o.custo; o.margemPct = o.fat ? o.margem / o.fat : null;
+        o.tipo = Array.from(o.tipos.entries()).sort((a, b) => b[1] - a[1])[0][0];
+        o.qtdPessoas = o.pessoas.size; o.custoPessoa = o.qtdPessoas ? o.pessoal / o.qtdPessoas : null;
+        fat += o.fat; custo += o.custo; pessoal += o.pessoal; pessoasOp += o.qtdPessoas;
+        if (o.margem < 0) prejuizo++;
+    });
+    return { lista: lista, qtd: lista.length, fat: fat, custo: custo, margem: fat - custo, margemPct: fat ? (fat - custo) / fat : null,
+             prejuizo: prejuizo, custoPorPessoa: pessoasOp ? pessoal / pessoasOp : null, pessoasOp: pessoasOp,
+             custoGeral: custoGeral, custoLigado: custoLigado, pctLigado: custoGeral ? custoLigado / custoGeral : null };
+}
+const FAIXAS_MARGEM = [[-Infinity, 0, 'Prejuízo'], [0, .1, '0–10%'], [.1, .2, '10–20%'], [.2, .3, '20–30%'], [.3, .4, '30–40%'], [.4, .5, '40–50%'], [.5, Infinity, '50% ou mais']];
+function faixaMargem(p) { return FAIXAS_MARGEM.findIndex(f => p >= f[0] && p < f[1]); }
+// ---- Vazamentos ----
+function custoSemFaturamento(db, linhas) {
+    const grupos = new Map(); let total = 0;
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (db.conta[i] === db.contaFatIdx || !db.custo[i]) continue;
+        if (!db.cliFatura.has(db.cli[i])) continue;                       // estrutura fica na DRE
+        if (db.uniMesComFat.has(db.uni[i] + '|' + db.mes[i])) continue;   // houve faturamento na loja no mes
+        const k = db.uni[i] + '|' + db.mes[i];
+        let g = grupos.get(k);
+        if (!g) { g = { uni: db.uni[i], cli: db.cli[i], loja: db.loja[i], mes: db.mes[i], custo: 0, contas: new Map() }; grupos.set(k, g); }
+        g.custo += db.custo[i]; total += db.custo[i];
+        g.contas.set(db.conta[i], (g.contas.get(db.conta[i]) || 0) + db.custo[i]);
+    }
+    return { lista: Array.from(grupos.values()).sort((a, b) => b.custo - a.custo), total: total };
+}
+function duplicidadesFiltradas(db, ef, mesesIdx) {
+    const lista = db.dup.filter(d => {
+        if (mesesIdx) { if (!mesesIdx.has(d.mes)) return false; }
+        else { if (ef.ano && !ef.ano.has(db.anoDoMes[d.mes])) return false; if (ef.mes && !ef.mes.has(d.mes)) return false; }
+        if (ef.neg && !ef.neg.has(d.neg)) return false;
+        if (ef.cli && !ef.cli.has(d.cli)) return false;
+        if (ef.uni && !ef.uni.has(d.uni)) return false;
+        if (ef.tipo && !ef.tipo.has(d.tipo)) return false;
+        return true;
+    });
+    lista.forEach(d => { d.excedente = d.valor * (d.qtd - 1); });
+    lista.sort((a, b) => Math.abs(b.excedente) - Math.abs(a.excedente));
+    return { lista: lista, excedente: lista.reduce((a, d) => a + d.excedente, 0) };
+}
+function custoPorPagador(db, linhas) {
+    const m = new Map(); let total = 0;
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (db.conta[i] === db.contaFatIdx || !db.custo[i]) continue;
+        m.set(db.pago[i], (m.get(db.pago[i]) || 0) + db.custo[i]); total += db.custo[i];
+    }
+    return { lista: Array.from(m.entries()).map(([p, v]) => ({ pago: p, valor: v, part: total ? v / total : null })).sort((a, b) => b.valor - a.valor), total: total };
+}
+// Meses fora do padrao: custo do setor no mes acima de media + 2 desvios dos 12 meses anteriores
+// (minimo 6 meses de historico). O historico ignora o filtro de periodo; so os meses do periodo filtrado sao marcados.
+function mesesForaDoPadrao(db, ef, mesesAlvo) {
+    const porSetor = new Map();
+    for (let i = 0; i < db.n; i++) {
+        if (db.conta[i] === db.contaFatIdx || !db.custo[i]) continue;
+        if (ef.neg && !ef.neg.has(db.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(db.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(db.uni[i])) continue;
+        if (ef.tipo && !ef.tipo.has(db.tipo[i])) continue;
+        let s = porSetor.get(db.setor[i]);
+        if (!s) { s = new Map(); porSetor.set(db.setor[i], s); }
+        const t = db.meses[db.mes[i]];
+        s.set(t, (s.get(t) || 0) + db.custo[i]);
+    }
+    const achados = [], series = new Map();
+    porSetor.forEach((mapa, setor) => {
+        const ts = Array.from(mapa.keys()).sort();
+        const serie = [];
+        for (let t = ts[0]; t <= ts[ts.length - 1]; t = somarMesTexto(t, 1)) serie.push({ mes: t, valor: mapa.get(t) || 0 });
+        for (let k = 0; k < serie.length; k++) {
+            const hist = serie.slice(Math.max(0, k - 12), k);
+            if (hist.length < 6) continue;
+            const media = hist.reduce((a, x) => a + x.valor, 0) / hist.length;
+            const dp = Math.sqrt(hist.reduce((a, x) => a + (x.valor - media) * (x.valor - media), 0) / (hist.length - 1));
+            serie[k].media = media; serie[k].limite = media + 2 * dp;
+            if (dp > 0 && serie[k].valor > serie[k].limite) {
+                serie[k].fora = true;
+                if (mesesAlvo.has(serie[k].mes)) achados.push({ setor: setor, mes: serie[k].mes, valor: serie[k].valor, media: media, limite: serie[k].limite, excesso: serie[k].valor - media });
+            }
+        }
+        series.set(setor, serie);
+    });
+    achados.sort((a, b) => b.excesso - a.excesso);
+    return { lista: achados, series: series };
 }
 
 // ---------------------------------------------------------------------
@@ -1685,8 +1877,10 @@ function destruirGraficos() {
 function desenharAba() {
     marcarAbaAtiva();
     destruirGraficos();
+    const abaDef = ABAS.find(a => a.id === estado.aba);
     if (estado.aba === 'ro') desenharResultadoOperacional();
-    else desenharAbaFinanceira(ABAS.find(a => a.id === estado.aba));
+    else if (abaDef.nova) desenharAbaNova(abaDef);   // r147
+    else desenharAbaFinanceira(abaDef);
 }
 
 // ---------------- Rotulos dentro/fora das barras (plugin do Chart.js) ----------------
@@ -2415,6 +2609,7 @@ function lerJSONIA(txt) {
 
 // ---------- Texto automatico (contingencia): so frases montadas com os dados ----------
 function analiseAutomatica(pc) {
+    if (pc.tipoAba === 'nova') return analiseAutomaticaNova(pc);   // r147
     const ro = /Resultado/.test(pc.foco);
     const ind = nome => pc.indicadores.find(x => x.indicador.indexOf(nome) === 0);
     const resumo = [], secoes = [], rec = [];
@@ -2460,6 +2655,25 @@ function analiseAutomatica(pc) {
     return { titulo: 'Análise econômico-financeira — ' + pc.aba, resumo: resumo, secoes: secoes, recomendacoes: rec };
 }
 
+// r147: texto automatico das novas abas (so frases com os valores do pacote)
+function analiseAutomaticaNova(pc) {
+    const secoes = [], rec = [];
+    const i0 = pc.indicadores[0];
+    const resumo = ['No período ' + pc.periodo_analisado + ', ' + i0.indicador.toLowerCase() + ' foi de ' + i0.atual + '. Em relação ao mesmo período do ano anterior (' + pc.periodo_ano_anterior +
+        '), a variação foi de ' + i0.variacao_ano_anterior + '; em relação ao período imediatamente anterior (' + pc.periodo_imediatamente_anterior + '), de ' + i0.variacao_periodo_anterior + '.'];
+    secoes.push({ titulo: 'Indicadores do período', paragrafos: pc.indicadores.map(x => x.indicador + ': ' + x.atual + ' no período; ' + x.ano_anterior + ' no mesmo período do ano anterior (variação ' +
+        x.variacao_ano_anterior + '); ' + x.periodo_anterior + ' no período anterior (variação ' + x.variacao_periodo_anterior + ').') });
+    [['Principais variações em relação ao mesmo período do ano anterior', pc.fatores_vs_ano_anterior], ['Principais variações em relação ao período imediatamente anterior', pc.fatores_vs_periodo_anterior]].forEach(([tit, fx]) => {
+        if (typeof fx === 'string') { secoes.push({ titulo: tit, paragrafos: ['Comparação ' + fx + '.'] }); return; }
+        secoes.push({ titulo: tit, paragrafos: Object.keys(fx).map(k => 'Maiores variações de ' + nomeLegivel(k) + ': ' + fx[k].slice(0, 3).map(x => x.item + ' (' + x.comparacao + ' para ' + x.atual + ', variação de ' + x.variacao + ')').join('; ') + '.') });
+    });
+    secoes.push({ titulo: 'Composição do período', paragrafos: Object.keys(pc.composicao_atual).map(k => nomeLegivel(k).replace(/^./, c => c.toUpperCase()) + ': ' +
+        pc.composicao_atual[k].slice(0, 5).map(x => x.item + ' ' + x.valor + ' (' + x.participacao + ')').join('; ') + '.') });
+    const comp = pc.composicao_atual, k0 = Object.keys(comp)[0];
+    if (k0) comp[k0].slice(0, 3).forEach(x => rec.push({ acao: 'Conferir ' + x.item + ' em ' + nomeLegivel(k0), base: nomeLegivel(k0).replace(/^./, c => c.toUpperCase()) + ': ' + x.item + ' com ' + x.valor + ' (' + x.participacao + ').' }));
+    return { titulo: 'Análise — ' + pc.aba, resumo: resumo, secoes: secoes, recomendacoes: rec };
+}
+
 // ---------- Painel da analise ----------
 let analiseAtual = null;
 function contextoAnaliseAtual() {
@@ -2482,15 +2696,23 @@ function contextoAnaliseAtual() {
 async function abrirAnalise() {
     const painel = document.getElementById('painel-analise');
     const corpo = document.getElementById('analise-corpo');
-    const { abaDef, ctx } = contextoAnaliseAtual();
-    const fatos = montarFatosAnalise(estado.db, ctx);
+    const abaNova = ABAS.find(a => a.id === estado.aba);
+    let abaDef, fatos, pacoteNova = null;
+    if (abaNova.nova) {   // r147
+        abaDef = abaNova;
+        pacoteNova = montarPacoteNova(abaDef, textoFiltrosAtuais());
+        fatos = pacoteNova ? pacoteNova.fatos : null;
+    } else {
+        const c = contextoAnaliseAtual();
+        abaDef = c.abaDef; fatos = montarFatosAnalise(estado.db, c.ctx);
+    }
     painel.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     document.getElementById('analise-titulo').textContent = 'Análise econômico-financeira — ' + abaDef.titulo;
     document.querySelectorAll('.btn-exp-analise').forEach(b => { b.disabled = true; });
     if (!fatos) { corpo.innerHTML = '<div class="aviso-vazio">Não há dados para os filtros escolhidos.</div>'; return; }
     const filtrosTxt = textoFiltrosAtuais();
-    const { pacote, permitidos } = montarPacoteIA(fatos, abaDef, filtrosTxt);
+    const { pacote, permitidos } = pacoteNova ? pacoteNova : montarPacoteIA(fatos, abaDef, filtrosTxt);
     corpo.innerHTML = '<div class="estado-msg"><div class="spinner-border" style="color:var(--fc-primaria)"></div><div class="mt-2 fw-bold" style="color:var(--fc-primaria)">Gerando a análise…</div>' +
         '<div class="small text-muted">Os números já foram calculados pelo B.I.; a IA está escrevendo o texto. Pode levar até 1 minuto.</div></div>';
     let analise = null, origem = 'ia', aviso = '';
@@ -2509,7 +2731,7 @@ async function abrirAnalise() {
         origem = 'automatica'; aviso = 'A IA não respondeu (' + e.message + '). Esta é a análise automática montada só com os números do B.I.';
     }
     if (origem === 'automatica') analise = analiseAutomatica(pacote);
-    analiseAtual = { analise: analise, pacote: pacote, fatos: fatos, abaDef: abaDef, filtros: filtrosTxt, origem: origem, aviso: aviso, geradoEm: new Date() };
+    analiseAtual = { analise: analise, pacote: pacote, fatos: fatos, abaDef: abaDef, filtros: filtrosTxt, origem: origem, aviso: aviso, geradoEm: new Date(), graf: pacoteNova ? pacoteNova.graf : null };
     desenharAnalise();
     document.querySelectorAll('.btn-exp-analise').forEach(b => { b.disabled = false; });
 }
@@ -2555,8 +2777,10 @@ function imagemGrafico(config, largura, altura) {
 // Graficos que estao na tela (mesma aparencia, em alta resolucao)
 function imagensGraficosTela() {
     const out = [];
-    const titulos = { periodo: 'Faturamento por período', custo: 'Custo por mês e Custo × Faturamento', pilha: 'Custo por setor e unidades atendidas' };
-    ['periodo', 'custo', 'pilha'].forEach(k => {
+    const titulos = { periodo: 'Faturamento por período', custo: 'Custo por mês e Custo × Faturamento', pilha: 'Custo por setor e unidades atendidas',
+        opsFaixa: 'Operações por faixa de margem direta', opsTipo: 'Margem direta por tipo de operação', dreCascata: 'Do faturamento ao lucro líquido',
+        dreMensal: 'Lucro líquido mês a mês', vazPagador: 'Quem desembolsa', vazPadrao: 'Meses fora do padrão' };
+    Object.keys(titulos).forEach(k => {
         const g = estado.graficos[k];
         if (!g) return;
         const dpr = g.options.devicePixelRatio;
@@ -2567,6 +2791,7 @@ function imagensGraficosTela() {
     return out;
 }
 function graficosAnalise(a) {
+    if (a.graf) return graficosGenericos(a);   // r147: novas abas
     const f = a.fatos, ro = f.aba === 'ro', out = [];
     const nomesP = ['Período analisado', 'Mesmo período do ano anterior', 'Período anterior'];
     const cores = ['#002B50', '#7fa6c9', '#E8872B'];
@@ -2639,7 +2864,7 @@ function tabelasAnalise(a) {
         linhas: pc.comparacao_negocios.map(n => [n.negocio, n.faturamento, n.custo, n.lucro, n.margem, n.custo_sobre_faturamento]) });
     if (pc.receitas_separadas_nao_entram_no_custo) out.push({ titulo: 'Receitas administrativas e financeiras (não entram no custo)', cab: ['Conta', 'Valor'],
         linhas: pc.receitas_separadas_nao_entram_no_custo.map(x => [x.conta, x.valor]) });
-    const cabM = /Resultado/.test(pc.foco) ? ['Mês', 'Faturamento', 'Custo', 'Lucro'] : ['Mês', 'Custo', 'Faturamento', 'Custo/Fat.'];
+    const cabM = pc.cabMensal || (/Resultado/.test(pc.foco) ? ['Mês', 'Faturamento', 'Custo', 'Lucro'] : ['Mês', 'Custo', 'Faturamento', 'Custo/Fat.']);
     out.push({ titulo: 'Evolução mensal', cab: cabM, linhas: pc.evolucao_mensal.map(m => Object.keys(m).map(k => m[k])) });
     return out;
 }
@@ -2904,6 +3129,409 @@ async function exportarPDFApresentacao() {
     finally { btn.disabled = false; }
 }
 
+// =====================================================================
+// r147: ABAS MARGEM POR OPERACAO, DRE GERENCIAL E DIAGNOSTICO DE VAZAMENTOS
+// Seguem os filtros globais e a regra dos cards principais (todas as contas,
+// exceto ADIANTAMENTO). O clique nas barras das abas antigas nao se aplica aqui.
+// =====================================================================
+function cardAba(rotulo, valor, sub, cor, classeValor2) {
+    return '<div class="kpi-card kpi-local" style="--kpi-cor:' + cor + '"><div class="kpi-rotulo" title="' + esc(rotulo) + '">' + esc(rotulo) + '</div>' +
+        '<div class="kpi-valor ' + (classeValor2 || '') + '">' + esc(valor) + '</div>' + (sub ? '<div class="kpi-sub" title="' + esc(sub) + '">' + esc(sub) + '</div>' : '') + '</div>';
+}
+function dataOperacaoTexto(db, mes, dia) { const t = db.meses[mes]; return String(dia).padStart(2, '0') + '/' + t.slice(5, 7) + '/' + t.slice(0, 4); }
+function esqueletoNova(titEsq, titDir, explicaEsq, explicaDir) {
+    return BARRA_ANALISE + '<div class="cards-aba" id="cards-aba"></div>' +
+        '<div class="grade-2">' +
+          '<section class="bi-painel"><h3>' + titEsq + '</h3><div class="explica">' + explicaEsq + '</div><div class="grafico-caixa" id="cx-nova-esq"></div></section>' +
+          '<section class="bi-painel"><h3>' + titDir + '</h3><div class="explica" id="explica-nova-dir">' + explicaDir + '</div><div class="grafico-caixa" id="cx-nova-dir"></div></section>' +
+        '</div>';
+}
+function canvasEm(idCaixa, idCanvas, rotulo) {
+    const cx = document.getElementById(idCaixa);
+    cx.innerHTML = '<canvas id="' + idCanvas + '" role="img" aria-label="' + esc(rotulo) + '"></canvas>';
+    return document.getElementById(idCanvas);
+}
+function desenharAbaNova(aba) {
+    if (aba.id === 'ops') desenharAbaOperacoes();
+    else if (aba.id === 'dre') desenharAbaDRE();
+    else desenharAbaVazamentos();
+}
+
+// ---------------- Margem por Operação ----------------
+function desenharAbaOperacoes() {
+    const db = estado.db, L = linhasTodasContas(db, estado.cascata.efetivo, null);
+    const op = calcularOperacoes(db, L);
+    estado.opsAtual = op;
+    if (estado.opsFaixa === undefined) estado.opsFaixa = null;
+    estado.opsLimite = 150;
+    const alvo = document.getElementById('conteudo-aba');
+    alvo.innerHTML = esqueletoNova('Operações por faixa de margem direta', 'Margem direta por tipo de operação',
+        'Operação = cliente + loja + dia com faturamento. Margem direta = faturamento − custos lançados na mesma loja e dia. Clique numa faixa para filtrar a tabela.',
+        'Faturamento e custo direto por tipo de operação (os 8 maiores); linha: margem direta.') +
+        '<section class="bi-painel"><div class="painel-cabeca"><h3>Operações</h3><span class="small text-muted" id="ops-info"></span></div>' +
+        '<div class="explica">Ordenadas da pior para a melhor margem. Clique em ▸ para ver as pessoas e o custo de cada uma.</div>' +
+        '<div class="tabela-rolagem tabela-alta" id="tab-ops"></div></section>';
+    document.getElementById('cards-aba').innerHTML =
+        cardAba('Operações', fmtNum.format(op.qtd), 'Custo ligado a operações: ' + pct(op.pctLigado) + ' do custo', '#002B50') +
+        cardAba('Margem direta', pct(op.margemPct), brl(op.margem), '#61CF00', op.margem < 0 ? 'kpi-negativo' : '') +
+        cardAba('Operações no prejuízo', fmtNum.format(op.prejuizo), 'de ' + fmtNum.format(op.qtd) + ' operações', '#c0392b') +
+        cardAba('Custo direto por pessoa', op.custoPorPessoa === null ? '—' : brl(op.custoPorPessoa), 'Pessoal ÷ pessoas por operação', '#E8872B');
+    if (!op.qtd) {
+        document.getElementById('cx-nova-esq').innerHTML = document.getElementById('cx-nova-dir').innerHTML = '<div class="aviso-vazio">Nenhuma operação nos filtros escolhidos.</div>';
+        document.getElementById('tab-ops').innerHTML = '';
+        return;
+    }
+    // Faixas de margem
+    const cont = FAIXAS_MARGEM.map(() => 0);
+    op.lista.forEach(o => { const k = faixaMargem(o.margemPct); if (k >= 0) cont[k]++; });
+    const corFaixa = k => k === 0 ? '#c0392b' : '#002B50';
+    estado.graficos.opsFaixa = new Chart(canvasEm('cx-nova-esq', 'gr-ops-faixa', 'Operações por faixa de margem direta'), {
+        type: 'bar',
+        data: { labels: FAIXAS_MARGEM.map(f => f[2]), datasets: [{ label: 'Operações', data: cont, borderRadius: 4, maxBarThickness: 60,
+            backgroundColor: c => (estado.opsFaixa === null || estado.opsFaixa === c.dataIndex) ? corFaixa(c.dataIndex) : 'rgba(0,43,80,.2)',
+            fcRotulo: { externo: v => fmtNum.format(v) + ' (' + pct(v / op.qtd) + ')' } }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+                   tooltip: { callbacks: { label: c => c.raw + ' operações', footer: () => 'Clique para filtrar a tabela.' } } },
+                   scales: { y: { beginAtZero: true, grace: '15%', ticks: { precision: 0, callback: v => fmtNum.format(v) } }, x: { grid: { display: false } } },
+                   onClick: (evt, els, chart) => {
+                       const a = chart.getElementsAtEventForMode(evt.native || evt, 'index', { intersect: true }, false);
+                       const k = a.length ? a[0].index : null;
+                       estado.opsFaixa = (k === null || estado.opsFaixa === k) ? null : k;
+                       chart.update('none'); estado.opsLimite = 150; desenharTabelaOps();
+                   } }
+    });
+    // Por tipo de operacao
+    const porTipo = new Map();
+    op.lista.forEach(o => { let t = porTipo.get(o.tipo); if (!t) { t = { fat: 0, custo: 0 }; porTipo.set(o.tipo, t); } t.fat += o.fat; t.custo += o.custo; });
+    const tipos = Array.from(porTipo.entries()).sort((a, b) => b[1].fat - a[1].fat).slice(0, 8);
+    estado.graficos.opsTipo = new Chart(canvasEm('cx-nova-dir', 'gr-ops-tipo', 'Margem direta por tipo de operação'), {
+        type: 'bar',
+        data: { labels: tipos.map(t => db.dic.tipo[t[0]]), datasets: [
+            { type: 'line', label: 'Margem direta', data: tipos.map(t => t[1].fat ? (t[1].fat - t[1].custo) / t[1].fat * 100 : null), yAxisID: 'y1', borderColor: '#61CF00', backgroundColor: '#61CF00', pointRadius: 4, order: 0 },
+            { label: 'Faturamento', data: tipos.map(t => t[1].fat), backgroundColor: '#002B50', borderRadius: 3, order: 1 },
+            { label: 'Custo direto', data: tipos.map(t => t[1].custo), backgroundColor: '#E8872B', borderRadius: 3, order: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                   plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? 'Margem direta: ' + (c.raw === null ? '—' : c.raw.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%') : c.dataset.label + ': ' + brl(c.raw) } } },
+                   scales: { y: eixoMoeda(), y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v.toLocaleString('pt-BR') + '%' } }, x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 30 } } } }
+    });
+    estado.opsAbertas = new Set();
+    const tab = document.getElementById('tab-ops');
+    tab.addEventListener('click', e => {
+        const b = e.target.closest('.btn-drill');
+        if (b) { const k = b.dataset.chave; if (estado.opsAbertas.has(k)) estado.opsAbertas.delete(k); else estado.opsAbertas.add(k); desenharTabelaOps(); return; }
+        if (e.target.closest('#ops-mais')) { estado.opsLimite += 150; desenharTabelaOps(); }
+    });
+    desenharTabelaOps();
+}
+function desenharTabelaOps() {
+    const db = estado.db, op = estado.opsAtual;
+    let lista = op.lista.slice().sort((a, b) => (a.margemPct === null ? 1 : a.margemPct) - (b.margemPct === null ? 1 : b.margemPct) || a.margem - b.margem);
+    if (estado.opsFaixa !== null) lista = lista.filter(o => faixaMargem(o.margemPct) === estado.opsFaixa);
+    document.getElementById('ops-info').textContent = fmtNum.format(lista.length) + ' operações' + (estado.opsFaixa !== null ? ' na faixa ' + FAIXAS_MARGEM[estado.opsFaixa][2] : '');
+    const partes = [];
+    lista.slice(0, estado.opsLimite).forEach(o => {
+        const k = o.uni + '|' + o.mes + '|' + o.dia, aberto = estado.opsAbertas.has(k);
+        partes.push('<tr class="nivel-0"><td>' + (o.qtdPessoas ? '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="Pessoas da operação">' + (aberto ? '▾' : '▸') + '</button>' : '<span class="espaco-drill"></span>') +
+            dataOperacaoTexto(db, o.mes, o.dia) + '</td><td>' + esc(db.dic.cli[o.cli]) + '</td><td>' + esc(db.dic.loja[o.loja]) + '</td><td>' + esc(db.dic.tipo[o.tipo]) + '</td>' +
+            '<td class="num">' + num(o.fat) + '</td><td class="num">' + num(o.custo) + '</td><td class="num' + classeValor(o.margem) + '">' + num(o.margem) + '</td>' +
+            '<td class="num' + classeValor(o.margem) + '">' + pct(o.margemPct) + '</td><td class="num">' + o.qtdPessoas + '</td><td class="num">' + (o.custoPessoa === null ? '—' : num(o.custoPessoa)) + '</td></tr>');
+        if (aberto) Array.from(o.pessoas.entries()).sort((a, b) => b[1] - a[1]).forEach(([p, v]) => {
+            partes.push('<tr class="nivel-1"><td colspan="4">' + esc(db.dic.det[p]) + '</td><td></td><td class="num">' + num(v) + '</td><td colspan="4"></td></tr>');
+        });
+    });
+    document.getElementById('tab-ops').innerHTML = lista.length
+        ? '<table class="tabela-bi"><thead><tr><th>Data da operação</th><th>Cliente</th><th>Loja</th><th>Tipo</th><th class="num">Faturamento (R$)</th><th class="num">Custo direto (R$)</th>' +
+          '<th class="num">Margem (R$)</th><th class="num">Margem (%)</th><th class="num">Pessoas</th><th class="num">Custo por pessoa (R$)</th></tr></thead><tbody>' + partes.join('') + '</tbody></table>' +
+          (lista.length > estado.opsLimite ? '<div class="text-center my-2"><button class="btn btn-sm btn-fc-contorno" id="ops-mais">Mostrar mais 150 (de ' + fmtNum.format(lista.length) + ')</button></div>' : '')
+        : '<div class="aviso-vazio">Nenhuma operação nesta faixa.</div>';
+}
+
+// ---------------- DRE Gerencial ----------------
+function desenharAbaDRE() {
+    const db = estado.db, L = linhasTodasContas(db, estado.cascata.efetivo, null);
+    const d = calcularDRE(db, L), t = d.total;
+    const alvo = document.getElementById('conteudo-aba');
+    alvo.innerHTML = esqueletoNova('Do faturamento ao lucro líquido', 'Lucro líquido mês a mês',
+        'Lucro Líquido = Faturamento − Imposto − Pessoal − Desp. Op. − Desp. Tec. − Desp. Adm. − Desp. Fin. − Doação − Viagem APAS − Investimento.',
+        'Colunas: lucro líquido do mês. Linha: margem líquida (eixo à direita).') +
+        '<section class="bi-painel"><h3>DRE por negócio</h3><div class="explica">Cada célula mostra o valor e, abaixo, o percentual sobre o faturamento do negócio. ' +
+        '“Estrutura sem receita ligada” = custos lançados em clientes que nunca faturaram (ex.: DESPESA ADMINISTRATIVA, INVESTIMENTO).</div>' +
+        '<div class="tabela-rolagem" id="tab-dre"></div></section>';
+    document.getElementById('cards-aba').innerHTML =
+        cardAba('Faturamento', brl(t.fat), '', '#61CF00') +
+        cardAba('Lucro líquido', brl(t.ll), '', '#002B50', t.ll < 0 ? 'kpi-negativo' : '') +
+        cardAba('Margem líquida', pct(t.margem), '', '#0a3a68', t.margem !== null && t.margem < 0 ? 'kpi-negativo' : '') +
+        cardAba('Estrutura sem receita ligada', brl(t.estrutura), t.custo8 ? pct(t.estrutura / t.custo8) + ' do custo' : '', '#E8872B');
+    if (!t.fat && !t.custo8) {
+        document.getElementById('cx-nova-esq').innerHTML = document.getElementById('cx-nova-dir').innerHTML = '<div class="aviso-vazio">Nenhum lançamento nos filtros escolhidos.</div>';
+        document.getElementById('tab-dre').innerHTML = '';
+        return;
+    }
+    // Cascata
+    const rot = ['Faturamento', 'Imposto'], barras = [[0, t.fat]], vals = [t.fat, -t.imp], cores = ['#61CF00', '#E8872B'];
+    let corre = t.fat - t.imp; barras.push([t.fat, corre]);
+    CAMADAS_DRE.forEach((c, k) => { const v = t.camadas[k]; if (Math.abs(v) < 0.005) return; rot.push(c[1]); barras.push([corre, corre - v]); vals.push(-v); cores.push('#E8872B'); corre -= v; });
+    rot.push('Lucro líquido'); barras.push([0, t.ll]); vals.push(t.ll); cores.push(t.ll < 0 ? '#c0392b' : '#002B50');
+    estado.graficos.dreCascata = new Chart(canvasEm('cx-nova-esq', 'gr-dre-cascata', 'Cascata do faturamento ao lucro líquido'), {
+        type: 'bar',
+        data: { labels: rot, datasets: [{ label: 'Valor', data: barras, backgroundColor: cores, borderRadius: 3, maxBarThickness: 56,
+            fcRotulo: { externo: (v, i) => brlCurto(vals[i]) } }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(vals[c.dataIndex]) + (t.fat ? ' (' + pct(Math.abs(vals[c.dataIndex]) / t.fat) + ' do faturamento)' : '') } } },
+                   scales: { y: Object.assign(eixoMoeda(), { grace: '45%' }), x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 40, font: { size: 10 } } } } }
+    });
+    // Mensal
+    const meses = Array.from(d.mensal.keys()).sort((a, b) => db.meses[a].localeCompare(db.meses[b]));
+    estado.graficos.dreMensal = new Chart(canvasEm('cx-nova-dir', 'gr-dre-mensal', 'Lucro líquido mês a mês'), {
+        type: 'bar',
+        data: { labels: meses.map(m => rotuloMes(db.meses[m])), datasets: [
+            { type: 'line', label: 'Margem líquida', data: meses.map(m => { const x = d.mensal.get(m); return x.margem === null ? null : x.margem * 100; }), yAxisID: 'y1', borderColor: '#E8872B', backgroundColor: '#E8872B', pointRadius: 3, tension: .25, spanGaps: true, order: 0 },
+            { label: 'Lucro líquido', data: meses.map(m => d.mensal.get(m).ll), backgroundColor: meses.map(m => d.mensal.get(m).ll < 0 ? '#c0392b' : '#002B50'), borderRadius: 3, maxBarThickness: 44, order: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                   plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? 'Margem líquida: ' + (c.raw === null ? '—' : c.raw.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%') : 'Lucro líquido: ' + brl(c.raw) } } },
+                   scales: { y: Object.assign(eixoMoeda(), { beginAtZero: false }), y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v.toLocaleString('pt-BR') + '%' } }, x: { grid: { display: false } } } }
+    });
+    // DRE por negocio
+    const negs = Array.from(d.porNeg.entries()).sort((a, b) => b[1].fat - a[1].fat);
+    const colunas = negs.map(n => ({ nome: db.dic.neg[n[0]], x: n[1] })).concat([{ nome: 'Total', x: t, total: true }]);
+    const cel = (v, base, destaque) => '<td class="num' + classeValor(v) + (destaque ? ' fw-bold' : '') + '">' + num(v) + (base ? '<span class="pct-dre">' + pct(v / base) + '</span>' : '') + '</td>';
+    const linha = (rotulo, f, classe, semPct) => '<tr class="' + (classe || '') + '"><td>' + rotulo + '</td>' + colunas.map(c => cel(f(c.x), semPct ? 0 : c.x.fat, c.total)).join('') + '</tr>';
+    const linhas = [linha('Faturamento', x => x.fat, 'nivel-0', true), linha('(−) Imposto', x => -x.imp)];
+    CAMADAS_DRE.forEach((c, k) => { if (colunas.some(col => Math.abs(col.x.camadas[k]) > 0.005)) linhas.push(linha('(−) ' + c[1], x => -x.camadas[k])); });
+    linhas.push(linha('= Lucro líquido', x => x.ll, 'total'));
+    linhas.push('<tr><td>Margem líquida</td>' + colunas.map(c => '<td class="num' + classeValor(c.x.margem || 0) + '">' + pct(c.x.margem) + '</td>').join('') + '</tr>');
+    linhas.push(linha('dos custos: estrutura sem receita ligada', x => x.estrutura, 'nivel-2'));
+    linhas.push(linha('Outras contas (fora do lucro líquido)', x => x.outras, 'nivel-2', true));
+    linhas.push(linha('Resultado com todas as contas', x => x.resultadoTotal, 'nivel-0', true));
+    document.getElementById('tab-dre').innerHTML = '<table class="tabela-bi tabela-dre"><thead><tr><th>Linha</th>' + colunas.map(c => '<th class="num">' + esc(c.nome) + '</th>').join('') + '</tr></thead><tbody>' + linhas.join('') + '</tbody></table>' +
+        '<div class="small text-muted mt-2">“Outras contas” reúne Transferência Bancos, Empréstimo Inv, Ressarcimento, receitas administrativas e financeiras e o custo lançado na própria conta Faturamento. “Resultado com todas as contas” é o mesmo número dos cards do topo.</div>';
+}
+
+// ---------------- Diagnostico de Vazamentos ----------------
+function desenharAbaVazamentos() {
+    const db = estado.db, ef = estado.cascata.efetivo, L = linhasTodasContas(db, ef, null);
+    const sf = custoSemFaturamento(db, L), du = duplicidadesFiltradas(db, ef, null), pg = custoPorPagador(db, L);
+    const alvoMeses = new Set(mesesDoContexto(db, L)), fp = mesesForaDoPadrao(db, ef, alvoMeses);
+    estado.vazAtual = { sf: sf, du: du, pg: pg, fp: fp, alvoMeses: alvoMeses };
+    if (!estado.vazLista) estado.vazLista = 'sf';
+    estado.vazSetor = fp.lista.length ? fp.lista[0].setor : null;
+    estado.vazLimite = 200;
+    const alvo = document.getElementById('conteudo-aba');
+    alvo.innerHTML = esqueletoNova('Quem desembolsa', 'Meses fora do padrão',
+        'Custo por “Pago por” (quem desembolsou o valor). Os 12 maiores; os demais em “Outros”.',
+        'Custo do setor no mês comparado à média dos 12 meses anteriores; fora do padrão = acima da média + 2 desvios.') +
+        '<section class="bi-painel"><div class="painel-cabeca"><h3>Listas para conferência</h3>' +
+        '<div class="btn-group grupo-nivel" role="tablist" id="vaz-listas">' +
+          '<button class="btn btn-outline-secondary" data-lista="sf">Custo sem faturamento</button>' +
+          '<button class="btn btn-outline-secondary" data-lista="du">Possíveis duplicidades</button>' +
+          '<button class="btn btn-outline-secondary" data-lista="fp">Meses fora do padrão</button></div></div>' +
+        '<div class="explica" id="vaz-explica"></div><div class="tabela-rolagem tabela-alta" id="tab-vaz"></div></section>';
+    const maior = pg.lista[0];
+    document.getElementById('cards-aba').innerHTML =
+        cardAba('Custo sem faturamento', brl(sf.total), fmtNum.format(sf.lista.length) + ' loja(s)/mês de clientes que faturam', '#c0392b') +
+        cardAba('Possíveis duplicidades', brl(du.excedente), fmtNum.format(du.lista.length) + ' grupos de lançamentos idênticos', '#E8872B') +
+        cardAba('Meses fora do padrão', fmtNum.format(fp.lista.length), 'setor/mês acima da média + 2 desvios', '#0a3a68') +
+        cardAba('Maior pagador', maior ? db.dic.pago[maior.pago] : '—', maior ? pct(maior.part) + ' do custo' : '', '#002B50');
+    // Pagadores
+    const top = pg.lista.slice(0, 12), resto = pg.lista.slice(12).reduce((a, x) => a + x.valor, 0);
+    const rotP = top.map(x => db.dic.pago[x.pago]).concat(resto ? ['Outros'] : []), valP = top.map(x => x.valor).concat(resto ? [resto] : []);
+    if (valP.length) estado.graficos.vazPagador = new Chart(canvasEm('cx-nova-esq', 'gr-vaz-pagador', 'Custo por quem desembolsou'), {
+        type: 'bar',
+        data: { labels: rotP.map((r, k) => r + (pg.total ? '  (' + pct(valP[k] / pg.total) + ')' : '')), datasets: [{ label: 'Custo', data: valP, backgroundColor: '#002B50', borderRadius: 3 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.raw) + (pg.total ? ' (' + pct(c.raw / pg.total) + ')' : '') } } },
+                   scales: { x: { ticks: { callback: v => brlCurto(v) }, grid: { color: '#eef1f5' } }, y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } } } }
+    });
+    else document.getElementById('cx-nova-esq').innerHTML = '<div class="aviso-vazio">Nenhum custo nos filtros escolhidos.</div>';
+    desenharGraficoPadrao();
+    document.getElementById('vaz-listas').addEventListener('click', e => { const b = e.target.closest('[data-lista]'); if (b) { estado.vazLista = b.dataset.lista; estado.vazLimite = 200; desenharListaVaz(); } });
+    document.getElementById('tab-vaz').addEventListener('click', e => {
+        if (e.target.closest('#vaz-mais')) { estado.vazLimite += 200; desenharListaVaz(); return; }
+        const tr = e.target.closest('tr[data-setor]');
+        if (tr) { estado.vazSetor = Number(tr.dataset.setor); desenharGraficoPadrao(); desenharListaVaz(); }
+    });
+    desenharListaVaz();
+}
+function desenharGraficoPadrao() {
+    const db = estado.db, v = estado.vazAtual, setor = estado.vazSetor;
+    if (estado.graficos.vazPadrao) { estado.graficos.vazPadrao.destroy(); delete estado.graficos.vazPadrao; }
+    if (setor === null || !v.fp.series.get(setor)) { document.getElementById('cx-nova-dir').innerHTML = '<div class="aviso-vazio">Nenhum mês fora do padrão no período filtrado.</div>'; return; }
+    const meses = Array.from(v.alvoMeses).sort();
+    const ini = somarMesTexto(meses[0], -12), fim = meses[meses.length - 1];
+    const serie = v.fp.series.get(setor).filter(x => x.mes >= ini && x.mes <= fim);
+    document.getElementById('explica-nova-dir').textContent = 'Setor ' + db.dic.setor[setor] + ': custo do mês (linha azul), média dos 12 meses anteriores (tracejada) e limite média + 2 desvios (vermelha). Pontos vermelhos: fora do padrão. Clique numa linha da lista “Meses fora do padrão” para trocar o setor.';
+    estado.graficos.vazPadrao = new Chart(canvasEm('cx-nova-dir', 'gr-vaz-padrao', 'Meses fora do padrão do setor'), {
+        type: 'line',
+        data: { labels: serie.map(x => rotuloMes(x.mes)), datasets: [
+            { label: 'Custo do mês', data: serie.map(x => x.valor), borderColor: '#002B50', backgroundColor: '#002B50', tension: .2,
+              pointRadius: serie.map(x => x.fora && v.alvoMeses.has(x.mes) ? 6 : 2), pointBackgroundColor: serie.map(x => x.fora && v.alvoMeses.has(x.mes) ? '#c0392b' : '#002B50') },
+            { label: 'Média 12 meses', data: serie.map(x => x.media === undefined ? null : x.media), borderColor: '#7fa6c9', borderDash: [5, 4], pointRadius: 0, spanGaps: true },
+            { label: 'Limite (média + 2 desvios)', data: serie.map(x => x.limite === undefined ? null : x.limite), borderColor: '#c0392b', borderDash: [3, 3], pointRadius: 0, spanGaps: true }] },
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                   plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.raw === null ? '—' : brl(c.raw)) } } },
+                   scales: { y: eixoMoeda(), x: { grid: { display: false } } } }
+    });
+}
+function desenharListaVaz() {
+    const db = estado.db, v = estado.vazAtual, lim = estado.vazLimite, qual = estado.vazLista;
+    document.querySelectorAll('#vaz-listas [data-lista]').forEach(b => b.classList.toggle('ativo', b.dataset.lista === qual));
+    let cab = '', linhas = [], total = 0, explica = '';
+    if (qual === 'sf') {
+        explica = 'Custos em loja e mês sem nenhum faturamento na mesma loja, só de clientes que faturam (a estrutura aparece na DRE). O faturamento é conferido em todo o histórico, não só no recorte filtrado.';
+        cab = '<th>Cliente</th><th>Loja</th><th>Mês</th><th class="num">Custo (R$)</th><th>Contas</th>';
+        total = v.sf.lista.length;
+        linhas = v.sf.lista.slice(0, lim).map(g => '<tr><td>' + esc(db.dic.cli[g.cli]) + '</td><td>' + esc(db.dic.loja[g.loja]) + '</td><td>' + rotuloMes(db.meses[g.mes]) + '</td><td class="num' + classeValor(g.custo) + '">' + num(g.custo) +
+            '</td><td class="small">' + esc(Array.from(g.contas.entries()).sort((a, b) => b[1] - a[1]).map(([c, x]) => db.dic.conta[c] + ' ' + num(x)).join('; ')) + '</td></tr>');
+    } else if (qual === 'du') {
+        explica = 'Lançamentos de custo idênticos: mesma data da operação, cliente, loja, conta, setor, detalhamento e valor. Podem ser legítimos; a lista serve para conferência. Excedente = valor × (quantidade − 1).';
+        cab = '<th>Data</th><th>Cliente</th><th>Loja</th><th>Conta</th><th>Setor</th><th>Detalhamento</th><th>Pago por</th><th class="num">Valor (R$)</th><th class="num">Qtd.</th><th class="num">Excedente (R$)</th>';
+        total = v.du.lista.length;
+        linhas = v.du.lista.slice(0, lim).map(d => '<tr><td>' + d.data.split('-').reverse().join('/') + '</td><td>' + esc(db.dic.cli[d.cli]) + '</td><td>' + esc(db.dic.loja[d.loja]) + '</td><td>' + esc(db.dic.conta[d.conta]) +
+            '</td><td>' + esc(db.dic.setor[d.setor]) + '</td><td>' + esc(db.dic.det[d.det]) + '</td><td>' + esc(db.dic.pago[d.pago] || '') + '</td><td class="num">' + num(d.valor) + '</td><td class="num">' + d.qtd +
+            '</td><td class="num' + classeValor(d.excedente) + '">' + num(d.excedente) + '</td></tr>');
+    } else {
+        explica = 'Setor e mês com custo acima da média + 2 desvios dos 12 meses anteriores (mínimo de 6 meses de histórico). Clique numa linha para ver o setor no gráfico.';
+        cab = '<th>Setor</th><th>Mês</th><th class="num">Custo do mês (R$)</th><th class="num">Média 12 meses (R$)</th><th class="num">Limite (R$)</th><th class="num">Acima da média (R$)</th>';
+        total = v.fp.lista.length;
+        linhas = v.fp.lista.slice(0, lim).map(x => '<tr data-setor="' + x.setor + '" class="linha-clicavel' + (x.setor === estado.vazSetor ? ' selecionada' : '') + '"><td>' + esc(db.dic.setor[x.setor]) + '</td><td>' + rotuloMes(x.mes) +
+            '</td><td class="num">' + num(x.valor) + '</td><td class="num">' + num(x.media) + '</td><td class="num">' + num(x.limite) + '</td><td class="num">' + num(x.excesso) + '</td></tr>');
+    }
+    document.getElementById('vaz-explica').textContent = explica;
+    document.getElementById('tab-vaz').innerHTML = total
+        ? '<table class="tabela-bi"><thead><tr>' + cab + '</tr></thead><tbody>' + linhas.join('') + '</tbody></table>' +
+          (total > lim ? '<div class="text-center my-2"><button class="btn btn-sm btn-fc-contorno" id="vaz-mais">Mostrar mais 200 (de ' + fmtNum.format(total) + ')</button></div>' : '')
+        : '<div class="aviso-vazio">Nada encontrado nos filtros escolhidos.</div>';
+}
+
+// ---------------- Analise das novas abas (mesmo fluxo do botao "Gerar analise") ----------------
+function metricasNova(abaId, db, ef, linhas, mesesTexto) {
+    const ind = [], listas = {}, mensal = [];
+    const mapaNome = () => new Map();
+    const soma = (m, k, v) => m.set(k, (m.get(k) || 0) + v);
+    if (abaId === 'dre') {
+        const d = calcularDRE(db, linhas), t = d.total;
+        ind.push({ nome: 'Faturamento', v: t.fat }, { nome: 'Imposto', v: t.imp });
+        CAMADAS_DRE.forEach((c, k) => ind.push({ nome: c[1], v: t.camadas[k] }));
+        ind.push({ nome: 'Lucro líquido', v: t.ll }, { nome: 'Margem líquida', v: t.margem, tipo: 'p' }, { nome: 'Estrutura sem receita ligada', v: t.estrutura });
+        listas.lucro_liquido_por_negocio = mapaNome(); d.porNeg.forEach((x, n) => listas.lucro_liquido_por_negocio.set(db.dic.neg[n], x.ll));
+        listas.custo_por_conta = mapaNome(); CAMADAS_DRE.forEach((c, k) => listas.custo_por_conta.set(c[1], t.camadas[k]));
+        listas.custo_por_setor = mapaNome();
+        linhas.forEach(i => { if (db.camada[db.conta[i]] >= 0) soma(listas.custo_por_setor, db.dic.setor[db.setor[i]], db.custo[i]); });
+        Array.from(d.mensal.keys()).sort((a, b) => db.meses[a].localeCompare(db.meses[b])).forEach(m => { const x = d.mensal.get(m); mensal.push({ mes: db.meses[m], faturamento: x.fat, custo: x.custo8, lucro_liquido: x.ll }); });
+    } else if (abaId === 'ops') {
+        const o = calcularOperacoes(db, linhas);
+        ind.push({ nome: 'Operações', v: o.qtd, tipo: 'i' }, { nome: 'Faturamento das operações', v: o.fat }, { nome: 'Custo direto das operações', v: o.custo },
+                 { nome: 'Margem direta', v: o.margem }, { nome: 'Margem direta (%)', v: o.margemPct, tipo: 'p' }, { nome: 'Operações no prejuízo', v: o.prejuizo, tipo: 'i' },
+                 { nome: 'Custo direto por pessoa', v: o.custoPorPessoa }, { nome: 'Custo ligado a operações (% do custo)', v: o.pctLigado, tipo: 'p' });
+        listas.margem_direta_por_cliente = mapaNome(); listas.custo_direto_por_tipo_de_operacao = mapaNome(); listas.custo_direto_por_pessoa = mapaNome();
+        const porMes = new Map();
+        o.lista.forEach(x => {
+            soma(listas.margem_direta_por_cliente, db.dic.cli[x.cli], x.margem);
+            soma(listas.custo_direto_por_tipo_de_operacao, db.dic.tipo[x.tipo], x.custo);
+            x.pessoas.forEach((v, p) => soma(listas.custo_direto_por_pessoa, db.dic.det[p], v));
+            let pm = porMes.get(x.mes); if (!pm) { pm = { ops: 0, fat: 0, custo: 0 }; porMes.set(x.mes, pm); } pm.ops++; pm.fat += x.fat; pm.custo += x.custo;
+        });
+        Array.from(porMes.keys()).sort((a, b) => db.meses[a].localeCompare(db.meses[b])).forEach(m => { const x = porMes.get(m); mensal.push({ mes: db.meses[m], operacoes: x.ops, faturamento: x.fat, custo_direto: x.custo }); });
+    } else {
+        const sf = custoSemFaturamento(db, linhas), idxMeses = new Set(mesesTexto.map(t => idxMesTexto(db, t)).filter(x => x !== undefined));
+        const du = duplicidadesFiltradas(db, ef, idxMeses), pg = custoPorPagador(db, linhas), fp = mesesForaDoPadrao(db, ef, new Set(mesesTexto));
+        ind.push({ nome: 'Custo total', v: pg.total }, { nome: 'Custo sem faturamento', v: sf.total }, { nome: 'Excedente de possíveis duplicidades', v: du.excedente },
+                 { nome: 'Meses fora do padrão', v: fp.lista.length, tipo: 'i' });
+        listas.custo_sem_faturamento_por_cliente = mapaNome(); sf.lista.forEach(g => soma(listas.custo_sem_faturamento_por_cliente, db.dic.cli[g.cli], g.custo));
+        listas.custo_por_pagador = mapaNome(); pg.lista.forEach(x => listas.custo_por_pagador.set(db.dic.pago[x.pago], x.valor));
+        listas.excesso_fora_do_padrao_por_setor = mapaNome(); fp.lista.forEach(x => soma(listas.excesso_fora_do_padrao_por_setor, db.dic.setor[x.setor], x.excesso));
+        const porMes = new Map();
+        linhas.forEach(i => { if (db.conta[i] !== db.contaFatIdx && db.custo[i]) soma(porMes, db.mes[i], db.custo[i]); });
+        const sfMes = new Map(); sf.lista.forEach(g => soma(sfMes, g.mes, g.custo));
+        Array.from(porMes.keys()).sort((a, b) => db.meses[a].localeCompare(db.meses[b])).forEach(m => mensal.push({ mes: db.meses[m], custo: porMes.get(m), custo_sem_faturamento: sfMes.get(m) || 0 }));
+    }
+    return { ind: ind, listas: listas, mensal: mensal };
+}
+function montarPacoteNova(abaDef, filtrosTxt) {
+    const db = estado.db, ef = estado.cascata.efetivo;
+    const L = linhasTodasContas(db, ef, null);
+    const meses = mesesDoContexto(db, L);
+    if (!meses.length) return null;
+    const comp = periodosComparacao(meses);
+    const idx = lista => new Set(lista.map(t => idxMesTexto(db, t)).filter(x => x !== undefined));
+    const iY = idx(comp.yoy), iA = idx(comp.anterior);
+    const atual = metricasNova(abaDef.id, db, ef, L, meses);
+    const yoy = iY.size ? metricasNova(abaDef.id, db, ef, linhasTodasContas(db, ef, iY), comp.yoy) : null;
+    const ant = iA.size ? metricasNova(abaDef.id, db, ef, linhasTodasContas(db, ef, iA), comp.anterior) : null;
+    const perm = new Set();
+    const R = v => { const t = brl(v); perm.add(normNumero(t)); return t; };
+    const P = v => { if (v === null || v === undefined || !isFinite(v)) return 'indisponível'; const t = pct(v); perm.add(normNumero(t)); return t; };
+    const PP = v => { if (v === null || v === undefined || !isFinite(v)) return 'indisponível'; const t = (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' p.p.'; perm.add(normNumero(t)); return t; };
+    const I = v => fmtNum.format(v || 0);
+    const fmt = (x, tipo) => x === null || x === undefined ? 'indisponível' : tipo === 'p' ? P(x) : tipo === 'i' ? I(x) : R(x);
+    const indicadores = atual.ind.map((x, k) => {
+        const y = yoy ? yoy.ind[k].v : null, p = ant ? ant.ind[k].v : null;
+        const varr = b => (b === null || b === undefined || x.v === null) ? 'indisponível'
+            : x.tipo === 'p' ? PP(x.v - b) : x.tipo === 'i' ? (x.v - b >= 0 ? '+' : '') + I(x.v - b) : R(x.v - b) + (b ? ' (' + P((x.v - b) / Math.abs(b)) + ')' : '');
+        return { indicador: x.nome, atual: fmt(x.v, x.tipo), ano_anterior: yoy ? fmt(y, x.tipo) : 'indisponível', variacao_ano_anterior: yoy ? varr(y) : 'indisponível',
+                 periodo_anterior: ant ? fmt(p, x.tipo) : 'indisponível', variacao_periodo_anterior: ant ? varr(p) : 'indisponível' };
+    });
+    const paraMapa = m => { const o = new Map(); m.forEach((v, k) => o.set(k, { v: v })); return o; };
+    const fatores = base => {
+        if (!base) return 'indisponível (sem dados no período de comparação)';
+        const out = {};
+        Object.keys(atual.listas).forEach(k => {
+            const l = variacoesItens(paraMapa(atual.listas[k]), paraMapa(base.listas[k]), 'v', n => n, 8);
+            if (l.length) out[k] = l.map(x => ({ item: x.nome, atual: R(x.atual), comparacao: R(x.base), variacao: R(x.delta), variacao_pct: x.pct === null ? 'novo (sem valor na comparação)' : P(x.pct) }));
+        });
+        return out;
+    };
+    const composicao = {};
+    Object.keys(atual.listas).forEach(k => {
+        const arr = Array.from(atual.listas[k].entries()).filter(e => Math.abs(e[1]) > 0.005).sort((a, b) => b[1] - a[1]);
+        const tot = arr.reduce((a, e) => a + Math.abs(e[1]), 0);
+        if (arr.length) composicao[k] = arr.slice(0, 10).map(e => ({ item: e[0], valor: R(e[1]), participacao: tot ? P(Math.abs(e[1]) / tot) : 'indisponível' }));
+    });
+    const chavesM = atual.mensal.length ? Object.keys(atual.mensal[0]) : ['mes'];
+    const focos = { ops: 'Margem direta de cada operação (cliente + loja + dia com faturamento) e o custo lançado nela',
+                    dre: 'Demonstração gerencial do faturamento até o lucro líquido, por conta e por negócio',
+                    vaz: 'Pontos de atenção no custo: custo sem faturamento, possíveis duplicidades, quem desembolsa e meses fora do padrão' };
+    const pacote = {
+        tipoAba: 'nova', aba: abaDef.titulo, foco: focos[abaDef.id], filtros_aplicados: filtrosTxt,
+        regra_de_lancamentos: 'Todas as contas, exceto ADIANTAMENTO (mesma regra dos cards principais)',
+        periodo_analisado: periodoTexto(meses) + ' (' + meses.length + (meses.length === 1 ? ' mês com dados)' : ' meses com dados)'),
+        periodo_ano_anterior: yoy ? periodoTexto(comp.yoy) : 'indisponível (sem dados)',
+        periodo_imediatamente_anterior: ant ? periodoTexto(comp.anterior) : 'indisponível (sem dados)',
+        indicadores: indicadores,
+        observacao_comparacoes: comp.yoy.join() === comp.anterior.join() ? 'Neste recorte o período imediatamente anterior coincide com o mesmo período do ano anterior (12 meses seguidos); as duas comparações são a mesma.' : 'As duas comparações usam períodos diferentes.',
+        fatores_vs_ano_anterior: fatores(yoy), fatores_vs_periodo_anterior: fatores(ant),
+        composicao_atual: composicao,
+        evolucao_mensal: atual.mensal.map(m => { const o = { mes: rotuloMes(m.mes) }; chavesM.slice(1).forEach(k => { o[k] = /operacoes/.test(k) ? I(m[k]) : R(m[k]); }); return o; }),
+        cabMensal: ['Mês'].concat(chavesM.slice(1).map(k => nomeLegivel(k).replace(/^./, c => c.toUpperCase())))
+    };
+    // Dados crus para os graficos da exportacao
+    const monet = atual.ind.map((x, k) => ({ x: x, k: k })).filter(o => !o.x.tipo).slice(0, 4);
+    const graf = {
+        metricas: monet.map(o => ({ nome: o.x.nome, atual: o.x.v, yoy: yoy ? yoy.ind[o.k].v : null, ant: ant ? ant.ind[o.k].v : null })),
+        fatores: [['vs mesmo período do ano anterior', yoy], ['vs período anterior', ant]].filter(p => p[1]).map(([rot, base]) => {
+            const k = Object.keys(atual.listas)[0];
+            return { titulo: 'Maiores variações de ' + nomeLegivel(k) + ' — ' + rot, itens: variacoesItens(paraMapa(atual.listas[k]), paraMapa(base.listas[k]), 'v', n => n, 8) };
+        })
+    };
+    return { pacote: pacote, permitidos: perm, fatos: { meses: meses, aba: abaDef.id }, graf: graf };
+}
+function graficosGenericos(a) {
+    const g = a.graf, out = [];
+    const nomesP = ['Período analisado', 'Mesmo período do ano anterior', 'Período anterior'], cores = ['#002B50', '#7fa6c9', '#E8872B'];
+    if (g.metricas.length) out.push({ titulo: 'Comparação entre períodos', img: imagemGrafico({
+        type: 'bar',
+        data: { labels: g.metricas.map(m => m.nome), datasets: ['atual', 'yoy', 'ant'].map((c, k) => ({ label: nomesP[k], data: g.metricas.map(m => m[c]), backgroundColor: cores[k], borderRadius: 3 })) },
+        options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 18 } } }, tooltip: { enabled: false } }, scales: { y: eixoMoeda(), x: { grid: { display: false }, ticks: { font: { size: 18 } } } } }
+    }, 1400, 640) });
+    g.fatores.forEach(f => {
+        if (!f.itens.length) return;
+        out.push({ titulo: f.titulo, img: imagemGrafico({
+            type: 'bar',
+            data: { labels: f.itens.map(x => x.nome.length > 28 ? x.nome.slice(0, 27) + '…' : x.nome), datasets: [{ label: 'Variação', data: f.itens.map(x => x.delta), borderRadius: 3, backgroundColor: f.itens.map(x => x.delta >= 0 ? '#002B50' : '#E8872B') }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                       scales: { x: { ticks: { callback: v => brlCurto(v), font: { size: 17 } }, grid: { color: '#eef1f5' } }, y: { ticks: { font: { size: 17 } }, grid: { display: false } } } }
+        }, 1400, 640) });
+    });
+    return out;
+}
 // ---------------- Inicio ----------------
 function iniciar() {
     if (!tokenSessao || !cpfLogado) {
