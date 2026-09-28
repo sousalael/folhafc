@@ -14,11 +14,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
-:root{--fc-navy:#051323;--fc-navy-light:#0B2545;--fc-green:#00B74A;--fc-gl:#E8F8EF;--fc-gd:#009B3E;--fc-red:#D32F2F;--fc-rl:#FDEAEA;--fc-amb:#F57C00;--fc-al:#FFF3E0;--fc-blue:#1565C0;--fc-bl:#E3F2FD;--fc-bg:#f5f6f8;--fc-card:#fff;--fc-border:#e0e0e0;--fc-text:#333;--fc-muted:#888;--fc-light:#f5f5f5}
+:root{--fc-navy:#001528;--fc-navy-light:#0B2545;--fc-green:#00B74A;--fc-gl:#E8F8EF;--fc-gd:#009B3E;--fc-red:#D32F2F;--fc-rl:#FDEAEA;--fc-amb:#F57C00;--fc-al:#FFF3E0;--fc-blue:#1565C0;--fc-bl:#E3F2FD;--fc-bg:#f5f6f8;--fc-card:#fff;--fc-border:#e0e0e0;--fc-text:#333;--fc-muted:#888;--fc-light:#f5f5f5}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--fc-bg);color:var(--fc-text);font-size:14px;line-height:1.5}
 .app{max-width:1200px;margin:0 auto}
-.header{background:var(--fc-navy);padding:12px 24px;display:flex;align-items:center;gap:16px;width:calc(100% - 32px);max-width:1200px;margin:20px auto;border-radius:12px;box-shadow:0 6px 20px rgba(5,19,35,.3)}
+.header{background:var(--fc-navy);padding:12px 24px;display:flex;align-items:center;gap:16px;width:calc(100% - 32px);max-width:1200px;margin:20px auto;border-radius:12px;box-shadow:0 6px 20px rgba(0,21,40,.3)}
 .header img{height:40px}
 .header-right{margin-left:auto;text-align:right}
 .header-title{color:rgba(255,255,255,.95);font-size:14px;font-weight:600}
@@ -234,7 +234,7 @@ table.data-table tr:hover td{background:#eef6ff}
 </head>
 <body>
 <!-- ============ PROTECAO POR SESSAO (mesmo login do Folha de Ponto) ============ -->
-<div id="bloqueio-sessao" style="display:none;position:fixed;inset:0;background:#051323;color:#fff;z-index:99999;align-items:center;justify-content:center;text-align:center;padding:30px;font-family:system-ui,sans-serif;">
+<div id="bloqueio-sessao" style="display:none;position:fixed;inset:0;background:#001528;color:#fff;z-index:99999;align-items:center;justify-content:center;text-align:center;padding:30px;font-family:system-ui,sans-serif;">
   <div>
     <div style="font-size:1.4rem;font-weight:700;margin-bottom:10px;">🔒 Sessão não encontrada</div>
     <div style="opacity:.8;">Abra a Análise de Inventários pelo botão no Folha de Ponto.</div>
@@ -558,7 +558,7 @@ table.data-table tr:hover td{background:#eef6ff}
         return;
       }
       var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
-        '<thead><tr style="background:#051323;color:#fff;"><th style="padding:8px;text-align:left;">Cliente</th><th style="padding:8px;text-align:left;">Unidade</th><th style="padding:8px;text-align:left;">Data</th><th style="padding:8px;text-align:left;">Feito por</th><th style="padding:8px;text-align:left;">Quando</th><th style="padding:8px;">Ação</th></tr></thead><tbody>';
+        '<thead><tr style="background:#001528;color:#fff;"><th style="padding:8px;text-align:left;">Cliente</th><th style="padding:8px;text-align:left;">Unidade</th><th style="padding:8px;text-align:left;">Data</th><th style="padding:8px;text-align:left;">Feito por</th><th style="padding:8px;text-align:left;">Quando</th><th style="padding:8px;">Ação</th></tr></thead><tbody>';
       res.lista.forEach(function(a, idx){
         window._histCache = window._histCache || {};
         window._histCache[idx] = a;
@@ -632,10 +632,10 @@ table.data-table tr:hover td{background:#eef6ff}
 </script>
 
 <!-- Painel de historico (sobreposto) -->
-<div id="painel-historico" style="display:none;position:fixed;inset:0;background:rgba(5,19,35,.7);z-index:9998;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;">
+<div id="painel-historico" style="display:none;position:fixed;inset:0;background:rgba(0,21,40,.7);z-index:9998;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;">
   <div style="background:#fff;border-radius:12px;max-width:900px;width:100%;padding:24px;">
     <div style="display:flex;align-items:center;margin-bottom:16px;">
-      <div style="font-size:1.2rem;font-weight:700;color:#051323;">🗂️ Histórico de Análises</div>
+      <div style="font-size:1.2rem;font-weight:700;color:#001528;">🗂️ Histórico de Análises</div>
       <button onclick="fecharHistorico()" style="margin-left:auto;background:#eee;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600;">Fechar</button>
     </div>
     <div id="historico-corpo"></div>
