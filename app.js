@@ -520,7 +520,12 @@ function processAll(){
     setTimeout(function(){
       fill.style.width='50%';
       if(hasContagem){
-        State.results.ruptura=Engine.calcRuptura(State.rawData.contagem,hasVendas?State.rawData.vendas:[],State.rawData.cadastro,State.info.diasVenda);
+        /* r149: custo de referência para os valores de estoque (depósito/área de vendas) —
+           o mesmo custo já resolvido na Crítica, para os totais baterem com ela. */
+        var custoRefRuptura={};
+        Object.keys(custoMap).forEach(function(k){custoRefRuptura[k]=custoMap[k];});
+        if(State.results.critica){State.results.critica.items.forEach(function(it){if(it.custoUnit>0)custoRefRuptura[it.sku]=it.custoUnit;});}
+        State.results.ruptura=Engine.calcRuptura(State.rawData.contagem,hasVendas?State.rawData.vendas:[],State.rawData.cadastro,State.info.diasVenda,custoRefRuptura);
         avail.ruptura=true;
         carregarAnaliseIA('ruptura');
       }
@@ -804,8 +809,7 @@ function renderCritica(page){
   if(c.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Resultado por categoria</div>';
     html+=renderCatCards(c.categorias,[{label:'Acuracidade',key:'acuracidade',fmt:PCT,color:function(){return 'text-green';}},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
-    html+='<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:#D32F2F"></span>Faltas (R$)</span><span class="legend-item"><span class="legend-dot" style="background:#F57C00"></span>Sobras (R$)</span></div>';
-    html+='<div class="chart-wrap" style="height:'+Math.max(160,c.categorias.length*50)+'px"><canvas id="chartCritica"></canvas></div>';
+    html+='<div class="chart-wrap" style="height:'+Math.max(200,c.categorias.length*58+60)+'px"><canvas id="chartCritica"></canvas></div>';
   }
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar SKU ou descrição..." value="'+srch+'" onkeyup="App.filterCritica(this.value)">';
   html+='<span class="pill '+(fS==='all'?'active':'')+'" onclick="App.filterCriticaStatus(\'all\')">Todos</span><span class="pill '+(fS==='falta'?'active':'')+'" onclick="App.filterCriticaStatus(\'falta\')">Faltas</span><span class="pill '+(fS==='sobra'?'active':'')+'" onclick="App.filterCriticaStatus(\'sobra\')">Sobras</span><span class="pill '+(fS==='ok'?'active':'')+'" onclick="App.filterCriticaStatus(\'ok\')">Sem diverg.</span>';
@@ -814,7 +818,7 @@ function renderCritica(page){
   var th=[{label:'SKU',field:'sku'},{label:'Descrição',field:'descricao'},{label:'Categoria',field:'categoria'},{label:'Qtd sist.',align:'text-right',render:function(r){return NUMBR(r.qtdSistema);}},{label:'Qtd cont.',align:'text-right',render:function(r){return NUMBR(r.qtdContada);}},{label:'Dif. qtd',align:'text-right',render:function(r){return '<span class="'+(r.difQtd<0?'text-red':(r.difQtd>0?'text-green':'text-muted'))+'">'+NUMBR(r.difQtd)+'</span>';}},{label:'Dif. R$',align:'text-right',render:function(r){return '<span class="'+(r.difValor<0?'text-red':(r.difValor>0?'text-green':'text-muted'))+'">'+BRL(r.difValor)+'</span>';}},{label:'Status',align:'text-center',render:function(r){var cls=r.status==='Falta'?'badge-falta':(r.status==='Sobra'?'badge-sobra':'badge-ok');return '<span class="badge '+cls+'">'+r.status+'</span>';}}];
   html+=renderTable(p,th,filtered,page||1,100);
   p.innerHTML=html; renderFns['panel-critica']=renderCritica;
-  if(c.hasCategorias){destroyChart('chartCritica');var ctx=document.getElementById('chartCritica');if(ctx){State.charts.chartCritica=new Chart(ctx,{type:'bar',data:{labels:c.categorias.map(function(c){return c.nome;}),datasets:[{label:'Faltas',data:c.categorias.map(function(c){return Math.abs(c.faltaVal);}),backgroundColor:'#D32F2F',borderRadius:4,barPercentage:.65},{label:'Sobras',data:c.categorias.map(function(c){return c.sobraVal;}),backgroundColor:'#F57C00',borderRadius:4,barPercentage:.65}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:function(c){return c.dataset.backgroundColor;},font:{size:10,weight:'bold'},formatter:function(v){return 'R$ '+v.toLocaleString('pt-BR');}}},scales:{x:{grid:{color:'#f0f0f0'},ticks:{font:{size:10},callback:function(v){return 'R$ '+(v/1000).toFixed(0)+'k';}}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:80}}}});}}
+  if(c.hasCategorias){destroyChart('chartCritica');var ctx=document.getElementById('chartCritica');if(ctx){var cfgCr=Export.cfgCritica(c,12);cfgCr.options.responsive=true;State.charts.chartCritica=new Chart(ctx,cfgCr);}}
 }
 
 /* ===== 2. RUPTURA LOJA X DEPÓSITO ===== */
@@ -828,6 +832,12 @@ function renderRuptura(page){
   html+='<div class="metric"><div class="metric-label">SKUs em ruptura</div><div class="metric-value">'+NUM(r.totalRupturas)+'</div><div class="metric-detail">de '+NUM(r.totalComDeposito)+' com depósito</div></div>';
   html+='<div class="metric"><div class="metric-label">Ruptura curva A (fat.)</div><div class="metric-value text-red">'+PCT(r.taxaA)+'</div></div>';
   html+='<div class="metric"><div class="metric-label">Ruptura curva A (lucro)</div><div class="metric-value text-red">'+PCT(r.taxaALucro)+'</div></div>';
+  /* r149: valor do estoque por local */
+  if(r.valorDeposito!==undefined){
+    var totEst=(r.valorDeposito||0)+(r.valorLoja||0);
+    html+='<div class="metric"><div class="metric-label">Valor do estoque (depósito)</div><div class="metric-value" style="color:var(--fc-navy)">'+BRLi(r.valorDeposito)+'</div><div class="metric-detail">'+PCT(totEst?r.valorDeposito/totEst*100:0)+' do estoque contado</div></div>';
+    html+='<div class="metric"><div class="metric-label">Valor do estoque (área de vendas)</div><div class="metric-value text-green">'+BRLi(r.valorLoja)+'</div><div class="metric-detail">'+PCT(totEst?r.valorLoja/totEst*100:0)+' do estoque contado</div></div>';
+  }
   html+='</div>';
   if(r.rupturaA>0) html+='<div class="alert alert-danger"><i class="ti ti-alert-circle"></i><div><strong>'+NUM(r.rupturaA)+' itens curva A</strong> estão em ruptura — produtos de maior venda ausentes no salão</div></div>';
   if(r.hasCategorias){
@@ -889,13 +899,27 @@ function renderABC(page){
   var a=State.results.abc, p=$('panel-abc');
   var fC=p.dataset.filterCat||'all', srch=p.dataset.search||'';
   var filtered=a.items.filter(function(i){if(fC!=='all'&&(i.categoria||'Sem categoria')!==fC)return false;if(srch&&(i.sku+' '+i.descricao).toLowerCase().indexOf(srch.toLowerCase())<0)return false;return true;});
-  var html=analiseBoxHtml('abc',Engine.gerarAnaliseABC,a)+'<div class="metrics"><div class="metric"><div class="metric-label">Valor total em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div></div><div class="metric"><div class="metric-label">Faturamento 90 dias</div><div class="metric-value">'+BRLi(a.totalFat)+'</div></div><div class="metric"><div class="metric-label">Lucro 90 dias</div><div class="metric-value">'+BRLi(a.totalLucro)+'</div></div><div class="metric"><div class="metric-label">SKUs analisados</div><div class="metric-value">'+NUM(a.items.length)+'</div></div></div>';
+  /* r149: cards = valor total + valor do estoque por curva (C sem os itens sem giro) + Sem giro */
+  var vc=Export.valoresCurvasABC(a);
+  var html=analiseBoxHtml('abc',Engine.gerarAnaliseABC,a)+'<div class="metrics">';
+  html+='<div class="metric"><div class="metric-label">Valor total em estoque</div><div class="metric-value">'+BRLi(a.totalInvest)+'</div><div class="metric-detail">100% do estoque</div></div>';
+  [{k:'A',l:'Curva A',cor:'#001528'},{k:'B',l:'Curva B',cor:'#2E7D32'},{k:'C',l:'Curva C',cor:'var(--fc-amb)'},{k:'SG',l:'Sem giro',cor:'var(--fc-muted)'}].forEach(function(x){
+    html+='<div class="metric"><div class="metric-label">Estoque '+x.l+'</div><div class="metric-value" style="color:'+x.cor+'">'+BRLi(vc[x.k].v)+'</div><div class="metric-detail">'+PCT(vc[x.k].p)+' do valor do estoque</div></div>';
+  });
+  html+='</div>';
+  var sgA=a.semGiro||{invest:0,pctInvest:0},cgF=a.fatCg||a.fatC,cgL=a.lucCg||a.lucC;
+  function linhaBarra(cls,d,pctOutro,rotOutro){
+    var cor=cls==='A'?'red':(cls==='B'?'amber':'muted');
+    return '<div class="summary-row"><span class="summary-class text-'+cor+'" style="width:'+(cls==='Sem giro'?'62px':'24px')+'">'+cls+'</span><div class="bar-track"><div class="bar-fill" style="width:'+d.pctInvest+'%;background:var(--fc-navy);opacity:.7"></div></div><span class="summary-pct" style="width:190px">'+PCT(d.pctInvest)+' · '+BRLi(d.invest)+' estoque</span></div><div class="summary-row"><span class="summary-class" style="visibility:hidden;width:'+(cls==='Sem giro'?'62px':'24px')+'">'+cls+'</span><div class="bar-track"><div class="bar-fill" style="width:'+pctOutro+'%;background:var(--fc-green);opacity:.7"></div></div><span class="summary-pct" style="width:190px">'+PCT(pctOutro)+' '+rotOutro+'</span></div>';
+  }
   html+='<div class="summary-pair"><div class="summary-card"><div class="summary-header fat">Curva ABC por faturamento</div>';
-  [{c:'A',d:a.fatA},{c:'B',d:a.fatB},{c:'C',d:a.fatC}].forEach(function(x){html+='<div class="summary-row"><span class="summary-class text-'+(x.c==='A'?'red':(x.c==='B'?'amber':'muted'))+'">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctInvest+'%;background:var(--fc-navy);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctInvest)+' invest.</span></div><div class="summary-row"><span class="summary-class" style="visibility:hidden">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctFat+'%;background:var(--fc-green);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctFat)+' fat.</span></div>';});
+  [{c:'A',d:a.fatA},{c:'B',d:a.fatB},{c:'C',d:cgF}].forEach(function(x){html+=linhaBarra(x.c,x.d,x.d.pctFat,'fat.');});
+  html+=linhaBarra('Sem giro',sgA,0,'fat.');
   html+='</div><div class="summary-card"><div class="summary-header luc">Curva ABC por lucro</div>';
-  [{c:'A',d:a.lucA},{c:'B',d:a.lucB},{c:'C',d:a.lucC}].forEach(function(x){html+='<div class="summary-row"><span class="summary-class text-'+(x.c==='A'?'red':(x.c==='B'?'amber':'muted'))+'">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctInvest+'%;background:var(--fc-navy);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctInvest)+' invest.</span></div><div class="summary-row"><span class="summary-class" style="visibility:hidden">'+x.c+'</span><div class="bar-track"><div class="bar-fill" style="width:'+x.d.pctLuc+'%;background:var(--fc-green);opacity:.7"></div></div><span class="summary-pct">'+PCT(x.d.pctLuc)+' lucro</span></div>';});
+  [{c:'A',d:a.lucA},{c:'B',d:a.lucB},{c:'C',d:cgL}].forEach(function(x){html+=linhaBarra(x.c,x.d,x.d.pctLuc,'lucro');});
+  html+=linhaBarra('Sem giro',sgA,0,'lucro');
   html+='</div></div>';
-  if(a.fatC.pctInvest>a.fatC.pctFat+5) html+='<div class="alert alert-warning"><i class="ti ti-bulb"></i><div>Itens curva C consomem '+PCT(a.fatC.pctInvest)+' do capital investido mas geram apenas '+PCT(a.fatC.pctFat)+' da receita.</div></div>';
+  if(a.fatC.pctInvest>a.fatC.pctFat+5) html+='<div class="alert alert-warning"><i class="ti ti-bulb"></i><div>Itens curva C e sem giro consomem '+PCT(a.fatC.pctInvest)+' do capital investido mas geram apenas '+PCT(a.fatC.pctFat)+' da receita.</div></div>';
   if(a.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Investimento por categoria</div>';
     html+=renderCatCards(a.categorias,[{label:'SKUs',key:'total',fmt:NUM,color:function(){return '';}},{label:'Investimento',key:'investimento',fmt:BRLi,color:function(){return '';}},{label:'Faturamento',key:'faturamento',fmt:BRLi,color:function(){return 'text-green';}},{label:'Lucro',key:'lucro',fmt:BRLi,color:function(v){return v>=0?'text-green':'text-red';}},{label:'% do invest.',key:'pctInvest',fmt:PCT,color:function(){return '';}}]);
@@ -950,21 +974,10 @@ function renderComparativo(){
   html+='<div class="section-title" style="margin:0"><i class="ti ti-arrows-exchange"></i> Comparativo entre unidades</div>';
   html+='<div style="font-size:12px;color:var(--fc-muted);margin-top:4px">'+c.unidades.length+' unidades · '+State.info.cliente+' · '+State.info.dataInventario+'</div>';
   html+='</div>';
-  html+='<button class="btn-export btn-pdf" onclick="App.exportComparativoPDF()" style="margin:0"><i class="ti ti-file-text"></i> PDF</button>';
-  html+='<button class="btn-export" onclick="App.exportComparativoExcel()" style="margin:0 0 0 6px"><i class="ti ti-download"></i> Excel</button>';
+  html+='<div style="display:flex;gap:6px"><button class="btn-export btn-pdf" onclick="App.exportComparativoApresentacao()" style="margin:0"><i class="ti ti-presentation"></i> Apresentação (PPTX + PDF)</button>';
+  html+='<button class="btn-export" onclick="App.exportComparativoExcel()" style="margin:0"><i class="ti ti-download"></i> Excel</button></div>';
   html+='</div>';
-  /* SKU Overlap */
-  if(c.skuOverlap){
-    html+='<div class="comp-section"><div class="section-title"><i class="ti ti-chart-dots"></i> Sobreposição de SKUs</div>';
-    html+='<div class="comp-overlap">';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(c.skuOverlap.totalUnique)+'</div><div class="comp-overlap-label">SKUs únicos (total)</div></div>';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(c.skuOverlap.emComum)+'</div><div class="comp-overlap-label">SKUs em comum</div></div>';
-    html+='<div class="comp-overlap-card"><div class="comp-overlap-val" style="color:var(--fc-green)">'+PCT(c.skuOverlap.pctComum)+'</div><div class="comp-overlap-label">Sobreposição</div></div>';
-    c.skuOverlap.porUnidade.forEach(function(pu){
-      html+='<div class="comp-overlap-card"><div class="comp-overlap-val">'+NUM(pu.total)+'</div><div class="comp-overlap-label">'+pu.unidade+'</div></div>';
-    });
-    html+='</div></div>';
-  }
+  /* r149: cards de SKUs e Sobreposição removidos — a aba mostra só o Ranking por métrica */
   /* Ranking table */
   html+='<div class="comp-section"><div class="section-title"><i class="ti ti-trophy"></i> Ranking por métrica</div>';
   html+='<div class="table-wrap"><table class="comp-table"><thead><tr><th>Métrica</th>';
@@ -977,17 +990,13 @@ function renderComparativo(){
       if(r.melhor&&v.unidade===r.melhor)cls='comp-best';
       else if(r.pior&&v.unidade===r.pior)cls='comp-worst';
       else if(!r.melhor)cls='comp-info';
-      var fmtVal=v.valor;
-      if(r.fmt==='pct')fmtVal=PCT(v.valor);
-      else if(r.fmt==='brl')fmtVal=BRLi(v.valor);
-      else if(r.fmt==='num')fmtVal=NUM(v.valor);
-      html+='<td style="text-align:right" class="'+cls+'">'+fmtVal+'</td>';
+      html+='<td style="text-align:right;white-space:nowrap" class="'+cls+'">'+Export.fmtRank(r,v)+'</td>';
     });
     html+='</tr>';
   });
   html+='</tbody></table></div></div>';
   /* Legenda */
-  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura", a unidade mais próxima da faixa ideal é considerada melhor.</span></div>';
+  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura em dias", a unidade mais próxima da faixa ideal é considerada melhor. Ruptura e Sem giro são comparados pelo percentual sobre o valor do estoque; as curvas A, B e C são apenas informativas. A curva C não inclui os itens sem giro.</span></div>';
   $('panel-comparativo').innerHTML=html;
 }
 
@@ -1055,6 +1064,11 @@ window.App = {
       }catch(e){console.log('IA comparativo fallback:',e);}
     }
     Export.generateComparativoPDF(Comparativo, Units, info, iaTextos, LOGO_RELATORIO_DATA_URL);
+  },
+  exportComparativoApresentacao:function(){
+    if(!Comparativo){alert('Gere o comparativo primeiro.');return;}
+    var info={cliente:State.info.cliente,dataInventario:State.info.dataInventario,diasVenda:State.info.diasVenda};
+    Export.generateComparativoApresentacao(Comparativo,info,LOGO_RELATORIO_DATA_URL);
   },
   exportComparativoExcel:function(){
     if(!Comparativo){alert('Gere o comparativo primeiro.');return;}

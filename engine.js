@@ -148,8 +148,12 @@ var Engine = (function(){
   }
 
   /* ========== 2. RUPTURA ========== */
-  function calcRuptura(contagem, vendas90, cadastro, diasVenda){
+  /* r149: custoRef (opcional) = mapa SKU -> custo unitário já resolvido na Crítica (mesma
+     prioridade de custo do resto do sistema). Usado SÓ nos novos campos de valor de estoque
+     (depósito / área de vendas / ruptura em R$); os campos antigos não mudam. */
+  function calcRuptura(contagem, vendas90, cadastro, diasVenda, custoRef){
     diasVenda = diasVenda || 90;
+    custoRef = custoRef || {};
     var catMap={},descMap={};
     if(cadastro&&cadastro.length){cadastro.forEach(function(r){var s=String(r.sku||'').trim();if(s&&r.categoria)catMap[s]=r.categoria;if(s&&r.descricao)descMap[s]=r.descricao;});}
     if(vendas90&&vendas90.length){vendas90.forEach(function(r){var s=String(r.sku||'').trim();if(s&&r.categoria&&!catMap[s])catMap[s]=r.categoria;});}
@@ -193,6 +197,32 @@ var Engine = (function(){
     });
     calcABC(comDeposito,'valorVendido90');
     calcABC(comDeposito,'lucro90');
+    /* r149: valor do estoque por local (depósito x área de vendas) e valor das rupturas */
+    function custoEstoque(sku, it){
+      if(custoRef[sku] > 0) return custoRef[sku];
+      if(it.custoUnit > 0) return it.custoUnit;
+      var vv = vendasMap[sku];
+      if(vv && vv.qtdVendida > 0 && vv.custoVendido > 0) return round2(vv.custoVendido/vv.qtdVendida);
+      return 0;
+    }
+    var valorDeposito = 0, valorLoja = 0, estCat = {};
+    Object.keys(skuLocais).forEach(function(sku){
+      var it = skuLocais[sku];
+      var cu = custoEstoque(sku, it);
+      var vDep = it.deposito * cu, vLoja = it.loja * cu;
+      it.valorDepositoRef = round2(vDep);
+      valorDeposito += vDep; valorLoja += vLoja;
+      var vc = vendasMap[sku];
+      var cat = it.categoria || catMap[sku] || (vc && vc.categoria) || 'Sem categoria';
+      if(!estCat[cat]) estCat[cat] = {nome:cat, deposito:0, loja:0};
+      estCat[cat].deposito += vDep; estCat[cat].loja += vLoja;
+    });
+    var estoquePorCategoria = Object.keys(estCat).map(function(k){
+      var e = estCat[k]; return {nome:e.nome, deposito:round2(e.deposito), loja:round2(e.loja), total:round2(e.deposito+e.loja)};
+    }).sort(function(a,b){ return b.total - a.total; });
+    function valorRupt(cls){ return round2(rupturas.filter(function(i){return !cls || i.abc_valorVendido90===cls;}).reduce(function(s,i){return s+(i.valorDepositoRef||0);},0)); }
+    var valorEstoqueTotal = round2(valorDeposito + valorLoja);
+    var valorRuptura = valorRupt(null);
     // Sort rupturas: maior valor de estoque primeiro
     rupturas.sort(function(a,b){ return (b.valorEstoque||0)-(a.valorEstoque||0); });
     var ruptA=rupturas.filter(function(i){return i.abc_valorVendido90==='A'});
@@ -210,7 +240,12 @@ var Engine = (function(){
       rupturaC:rupturas.filter(function(i){return i.abc_valorVendido90==='C'}).length,
       taxaA:comDepA.length?round2(ruptA.length/comDepA.length*100):0,
       taxaALucro:(function(){var cA=comDeposito.filter(function(i){return i.abc_lucro90==='A'});var rA2=rupturas.filter(function(i){return i.abc_lucro90==='A'});return cA.length?round2(rA2.length/cA.length*100):0;})(),
-      comDepA:comDepA.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+      comDepA:comDepA.length, categorias:catList, hasCategorias:hasRealCategorias(catList),
+      /* r149 */
+      valorDeposito:round2(valorDeposito), valorLoja:round2(valorLoja), valorEstoqueTotal:valorEstoqueTotal,
+      valorRuptura:valorRuptura, valorRupturaA:valorRupt('A'), valorRupturaB:valorRupt('B'), valorRupturaC:valorRupt('C'),
+      pctValorRuptura:valorEstoqueTotal ? round2(valorRuptura/valorEstoqueTotal*100) : 0,
+      estoquePorCategoria:estoquePorCategoria};
   }
 
   /* ========== 3. DIAS DE ESTOQUE ========== */
@@ -328,6 +363,13 @@ var Engine = (function(){
     var totalInvest=items.reduce(function(s,i){return s+i.valorInvestido},0);
     var totalFat=items.reduce(function(s,i){return s+i.fat90},0);
     var totalLucro=items.reduce(function(s,i){return s+i.lucro90},0);
+    /* r149: "Sem giro" = item sem nenhuma venda no período. No ABC clássico ele cai na
+       curva C; os campos novos abaixo separam C (com giro) de Sem giro, para que
+       A + B + C + Sem giro = valor total do estoque. fatA/fatB/fatC antigos não mudam. */
+    items.forEach(function(it){ it.semGiro = !(it.qtdVendida90 > 0) && !(it.fat90 > 0); });
+    var semGiroItems = items.filter(function(i){ return i.semGiro; });
+    var invSemGiro = semGiroItems.reduce(function(s,i){return s+i.valorInvestido},0);
+    function aggCg(f,sf){ return items.filter(function(i){return i['abc_'+f]==='C' && !i.semGiro;}).reduce(function(s,i){return s+i[sf]},0); }
     var catList = groupByCategoria(items, function(g){
       var inv=g.items.reduce(function(s,i){return s+i.valorInvestido},0);
       var fat=g.items.reduce(function(s,i){return s+i.fat90},0);
@@ -341,6 +383,10 @@ var Engine = (function(){
       lucA:{invest:round2(agg('A','lucro90')),luc:round2(aggF('A','lucro90','lucro90')),pctInvest:totalInvest?round2(agg('A','lucro90')/totalInvest*100):0,pctLuc:totalLucro?round2(aggF('A','lucro90','lucro90')/totalLucro*100):0},
       lucB:{invest:round2(agg('B','lucro90')),luc:round2(aggF('B','lucro90','lucro90')),pctInvest:totalInvest?round2(agg('B','lucro90')/totalInvest*100):0,pctLuc:totalLucro?round2(aggF('B','lucro90','lucro90')/totalLucro*100):0},
       lucC:{invest:round2(agg('C','lucro90')),luc:round2(aggF('C','lucro90','lucro90')),pctInvest:totalInvest?round2(agg('C','lucro90')/totalInvest*100):0,pctLuc:totalLucro?round2(aggF('C','lucro90','lucro90')/totalLucro*100):0},
+      /* r149 */
+      fatCg:{invest:round2(aggCg('fat90','valorInvestido')),fat:round2(aggCg('fat90','fat90')),pctInvest:totalInvest?round2(aggCg('fat90','valorInvestido')/totalInvest*100):0,pctFat:totalFat?round2(aggCg('fat90','fat90')/totalFat*100):0},
+      lucCg:{invest:round2(aggCg('lucro90','valorInvestido')),luc:round2(aggCg('lucro90','lucro90')),pctInvest:totalInvest?round2(aggCg('lucro90','valorInvestido')/totalInvest*100):0,pctLuc:totalLucro?round2(aggCg('lucro90','lucro90')/totalLucro*100):0},
+      semGiro:{invest:round2(invSemGiro),count:semGiroItems.length,pctInvest:totalInvest?round2(invSemGiro/totalInvest*100):0},
       categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
@@ -464,6 +510,20 @@ var Engine = (function(){
         totalFaltas: r.critica ? r.critica.totalFaltas : null,
         totalSobras: r.critica ? r.critica.totalSobras : null,
         saldoLiquido: r.critica ? r.critica.saldoLiquido : null,
+        /* r149: ruptura em valor e estoque por local */
+        valorRuptura: (r.ruptura && r.ruptura.valorRuptura!==undefined) ? r.ruptura.valorRuptura : null,
+        pctValorRuptura: (r.ruptura && r.ruptura.pctValorRuptura!==undefined) ? r.ruptura.pctValorRuptura : null,
+        valorDeposito: (r.ruptura && r.ruptura.valorDeposito!==undefined) ? r.ruptura.valorDeposito : null,
+        valorLoja: (r.ruptura && r.ruptura.valorLoja!==undefined) ? r.ruptura.valorLoja : null,
+        /* r149: estoque por curva (C sem os itens sem giro) */
+        estA: r.abc ? r.abc.fatA.invest : null,
+        estB: r.abc ? r.abc.fatB.invest : null,
+        estC: (r.abc && r.abc.fatCg) ? r.abc.fatCg.invest : null,
+        estSemGiro: (r.abc && r.abc.semGiro) ? r.abc.semGiro.invest : null,
+        pctEstA: r.abc ? r.abc.fatA.pctInvest : null,
+        pctEstB: r.abc ? r.abc.fatB.pctInvest : null,
+        pctEstC: (r.abc && r.abc.fatCg) ? r.abc.fatCg.pctInvest : null,
+        pctEstSemGiro: (r.abc && r.abc.semGiro) ? r.abc.semGiro.pctInvest : null,
         /* Ruptura */
         taxaRuptura: r.ruptura ? r.ruptura.taxaRuptura : null,
         totalRupturas: r.ruptura ? r.ruptura.totalRupturas : null,
@@ -492,37 +552,39 @@ var Engine = (function(){
     comp.unidades = rows;
 
     /* Rankings por métrica */
+    /* r149: métricas definidas por Lael para o ranking.
+       fmt 'brl_pct' = valor em R$ + % (pctKey). rankBy 'pct' = melhor/pior pelo percentual
+       (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
-      {key:'acuracidade',   label:'Acuracidade (%)',          melhor:'max',      fmt:'pct'},
-      {key:'totalFaltas',   label:'Valor Faltas (R$)',        melhor:'min_abs',  fmt:'brl'},
-      {key:'saldoLiquido',  label:'Saldo Líquido (R$)',       melhor:'min_abs',  fmt:'brl'},
-      {key:'taxaRuptura',   label:'Taxa de Ruptura (%)',      melhor:'min',      fmt:'pct'},
-      {key:'totalRupturas', label:'Itens em Ruptura',         melhor:'min',      fmt:'num'},
-      {key:'rupturaA',      label:'Rupturas Curva A',         melhor:'min',      fmt:'num'},
-      {key:'coberturaGeral',label:'Cobertura (dias)',          melhor:'target30', fmt:'num'},
-      {key:'coberturaA',    label:'Cobertura Curva A (dias)',  melhor:'target15', fmt:'num'},
-      {key:'semGiro',       label:'Itens Sem Giro',           melhor:'min',      fmt:'num'},
-      {key:'valorExcesso',  label:'Valor em Excesso (R$)',    melhor:'min',      fmt:'brl'},
-      {key:'totalInvest',   label:'Valor Total Estoque (R$)', melhor:'info',     fmt:'brl'},
-      {key:'perdaFatDia',   label:'Perda Fat./Dia (R$)',      melhor:'min',      fmt:'brl'},
-      {key:'perdaMensal',   label:'Perda Mensal (R$)',        melhor:'min',      fmt:'brl'}
+      {key:'saldoLiquido',  label:'Valor Quebra (saldo entre perdas e sobras)',        melhor:'min_abs',  fmt:'brl'},
+      {key:'totalSobras',   label:'Valor Sobras',                            melhor:'min_abs',  fmt:'brl'},
+      {key:'totalFaltas',   label:'Valor Perdas',                            melhor:'min_abs',  fmt:'brl'},
+      {key:'valorRuptura',  label:'Ruptura Depósito x Loja',                 melhor:'min',      fmt:'brl_pct', pctKey:'pctValorRuptura', rankBy:'pct'},
+      {key:'coberturaGeral',label:'Cobertura em dias',                       melhor:'target30', fmt:'num'},
+      {key:'estA',          label:'Valor Estoque Curva A',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstA'},
+      {key:'estB',          label:'Valor Estoque Curva B',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstB'},
+      {key:'estC',          label:'Valor Estoque Curva C',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstC'},
+      {key:'estSemGiro',    label:'Valor Estoque Sem Giro',                  melhor:'min',      fmt:'brl_pct', pctKey:'pctEstSemGiro', rankBy:'pct'},
+      {key:'perdaFatDia',   label:'Perda Faturamento Projetado Diário',      melhor:'min',      fmt:'brl'},
+      {key:'perdaMensal',   label:'Perda Faturamento Projetado Mensal',      melhor:'min',      fmt:'brl'}
     ];
 
     metricasDefs.forEach(function(def){
-      var vals = rows.map(function(r){ return {unidade:r.unidade, valor:r[def.key]}; })
+      var vals = rows.map(function(r){ return {unidade:r.unidade, valor:r[def.key], pct:def.pctKey ? r[def.pctKey] : null}; })
         .filter(function(v){ return v.valor !== null && v.valor !== undefined; });
       if(vals.length < 2) return;
+      function rk(v){ return def.rankBy === 'pct' ? (v.pct||0) : v.valor; }
 
       var sorted;
       if(def.melhor === 'max'){
-        sorted = vals.slice().sort(function(a,b){ return b.valor - a.valor; });
+        sorted = vals.slice().sort(function(a,b){ return rk(b) - rk(a); });
       } else if(def.melhor === 'min_abs'){
-        sorted = vals.slice().sort(function(a,b){ return Math.abs(a.valor) - Math.abs(b.valor); });
+        sorted = vals.slice().sort(function(a,b){ return Math.abs(rk(a)) - Math.abs(rk(b)); });
       } else if(def.melhor === 'target30' || def.melhor === 'target15'){
         var alvo = def.melhor === 'target30' ? 23 : 10;
-        sorted = vals.slice().sort(function(a,b){ return Math.abs(a.valor-alvo) - Math.abs(b.valor-alvo); });
+        sorted = vals.slice().sort(function(a,b){ return Math.abs(rk(a)-alvo) - Math.abs(rk(b)-alvo); });
       } else {
-        sorted = vals.slice().sort(function(a,b){ return a.valor - b.valor; });
+        sorted = vals.slice().sort(function(a,b){ return rk(a) - rk(b); });
       }
 
       comp.rankings.push({
