@@ -306,6 +306,16 @@ function cfgCompDepLoja(comp,fs){
     options:{maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:_fonte(fs)}}},
       scales:{y:{stacked:true,beginAtZero:true,ticks:{font:_fonte(fs-2),callback:function(v){return BRLk(v);}},grid:{color:'#EEEEEE'}},x:{stacked:true,grid:{display:false},ticks:{font:_fonte(fs-1)}}}}};
 }
+function cfgCompPotencial(comp,fs){
+  fs=fs||12;
+  var us=_compUnid(comp,['potRuptura','potAltoRisco','potMedioRisco']);
+  var tots=us.map(function(u){return (u.potRuptura||0)+(u.potAltoRisco||0)+(u.potMedioRisco||0);});
+  var gt=function(i){return tots[i];};
+  var defs=[{k:'potRuptura',l:'Ruptura (0–2 dias)',c:COR.red,t:'#FFFFFF'},{k:'potAltoRisco',l:'Alto risco (3–5 dias)',c:COR.amb,t:'#FFFFFF'},{k:'potMedioRisco',l:'Médio risco (6–15 dias)',c:COR.yel,t:COR.navy}];
+  return {type:'bar',data:{labels:us.map(function(u,i){return [_cortar(u.unidade,26),'Total: '+BRLk(tots[i])+'/mês'];}),datasets:defs.map(function(d){return {label:d.l,data:us.map(function(u){return u[d.k]||0;}),backgroundColor:d.c,datalabels:_dlPilha(d.t,fs,gt)};})},
+    options:{maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:_fonte(fs)}}},
+      scales:{y:{stacked:true,beginAtZero:true,ticks:{font:_fonte(fs-2),callback:function(v){return BRLk(v);}},grid:{color:'#EEEEEE'},title:{display:true,text:'Faturamento mensal em risco',font:_fonte(fs-1)}},x:{stacked:true,grid:{display:false},ticks:{font:_fonte(fs-1)}}}}};
+}
 function cfgCompCurvas(comp,fs){
   fs=fs||12;
   var us=_compUnid(comp,['estA','estB','estC','estSemGiro']);
@@ -502,8 +512,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
     sec('Indicadores gerais');kpi(['PERDA FAT./DIA','PERDA LUCRO/DIA','PERDA MENSAL','SKUS EM RUPTURA'],[BRLi(p.totalPerdaFat),BRLi(p.totalPerdaLucro),BRLi(p.perdaMensal),NUM(p.totalSKUs)],[[211,47,47],[211,47,47],[211,47,47],[51,51,51]]);
     sec('Projeção de Perda');aT(['Curva','SKUs','Perda Fat./Dia','Perda Lucro/Dia','% Perda','Perda Mensal'],[['A',p.classA.count,BRLi(p.classA.perda),BRLi(p.classA.lucro),PCT(p.classA.pct),BRLi(p.classA.perda*30)],['B',p.classB.count,BRLi(p.classB.perda),BRLi(p.classB.lucro),PCT(p.classB.pct),BRLi(p.classB.perda*30)],['C',p.classC.count,BRLi(p.classC.perda),BRLi(p.classC.lucro),PCT(p.classC.pct),BRLi(p.classC.perda*30)]],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}});
     secImg('Gráfico — Valor do estoque e perda projetada por curva',chartPerda(p,data.critica,1000,380),68);
-    var pH2=['SKU','Descrição','Categoria','Perda Fat./Mês','Perda Lucro/Mês'],pO2={3:{halign:'right'},4:{halign:'right'}};
-    ['A','B','C'].forEach(function(cls){var it=p.items.filter(function(i){return i.abcFat===cls;}).sort(function(a,b){return b.perdaFatMes-a.perdaFatMes;});if(it.length){sec('Curva '+cls+' — '+it.length+' itens');aT(pH2,it.map(function(i){return[i.sku,i.descricao,i.categoria||'',BRL(i.perdaFatMes),BRL(i.perdaLucroMes)];}),pO2);}});
+    /* r150: a listagem dos produtos em ruptura fica só no Excel */
   }
   chk(12);doc.setFontSize(7);doc.setTextColor(150,150,150);
   doc.text('Nota: relatório baseado em dados processados em '+pd+'. Valores projetados são estimativas.',M,y);
@@ -1009,13 +1018,18 @@ function montarDeckComparativo(comp,info,logo){
 
   /* Página 2 — cartões Ruptura Depósito x Loja + gráfico depósito × loja */
   var s2=slideFaixa(deck,'Ruptura Depósito x Loja',sub,logo);
-  var yC=cartoesUnidades(s2,comp.unidades.map(function(u){return{titulo:u.unidade,valor:u.valorRuptura!==null&&u.valorRuptura!==undefined?BRLi(u.valorRuptura):'—',sub:u.pctValorRuptura!==null&&u.pctValorRuptura!==undefined?PCT(u.pctValorRuptura)+' do valor do estoque':'',cor:PAL.red};}),1.15,1.3);
+  /* r150: taxa de ruptura (mesmo cálculo da aba Ruptura) */
+  var yC=cartoesUnidades(s2,comp.unidades.map(function(u){var tem=u.taxaRuptura!==null&&u.taxaRuptura!==undefined;return{titulo:u.unidade,valor:tem?PCT(u.taxaRuptura):'—',sub:tem?NUM(u.totalRupturas)+' de '+NUM(u.totalComDeposito)+' SKUs com depósito':'',cor:PAL.red};}),1.15,1.3);
   imgGrafico(s2,cfgCompDepLoja(comp,12),SL.M,yC+0.12,SL.R-SL.M,SL.B-(yC+0.12));
 
   /* Página 3 — cartões Cobertura em dias + gráfico de estoque por curva */
   var s3=slideFaixa(deck,'Cobertura em dias e valor do estoque por curva',sub,logo);
   var yC3=cartoesUnidades(s3,comp.unidades.map(function(u){return{titulo:u.unidade,valor:u.coberturaGeral!==null&&u.coberturaGeral!==undefined?NUM(u.coberturaGeral)+' dias':'—',sub:'Cobertura em dias',cor:PAL.navy};}),1.15,1.3);
   imgGrafico(s3,cfgCompCurvas(comp,12),SL.M,yC3+0.12,SL.R-SL.M,SL.B-(yC3+0.12));
+
+  /* r150: Página 4 — potencial de venda perdida no mês por faixa de cobertura */
+  var s4=slideFaixa(deck,'Potencial de venda perdida no mês por faixa de cobertura',sub+'  ·  faturamento mensal dos itens de cada faixa',logo);
+  imgGrafico(s4,cfgCompPotencial(comp,12),SL.M,1.2,SL.R-SL.M,SL.B-1.2);
   return deck;
 }
 function generateComparativoApresentacao(comp,info,logo){

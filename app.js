@@ -996,7 +996,7 @@ function renderComparativo(){
   });
   html+='</tbody></table></div></div>';
   /* Legenda */
-  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura em dias", a unidade mais próxima da faixa ideal é considerada melhor. Ruptura e Sem giro são comparados pelo percentual sobre o valor do estoque; as curvas A, B e C são apenas informativas. A curva C não inclui os itens sem giro.</span></div>';
+  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura em dias", a unidade mais próxima da faixa ideal é considerada melhor. Acuracidade: melhor = mais próxima de 100%. Perda de Estoque: melhor = mais próxima de 0%. Ruptura Depósito x Loja = % dos SKUs com estoque no depósito que estão zerados na loja (mesmo cálculo da aba Ruptura). Sem giro é comparado pelo percentual sobre o valor do estoque; as curvas A, B e C são apenas informativas. A curva C não inclui os itens sem giro.</span></div>';
   $('panel-comparativo').innerHTML=html;
 }
 

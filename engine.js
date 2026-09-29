@@ -334,7 +334,11 @@ var Engine = (function(){
       var valEst=g.items.reduce(function(s,i){return s+i.valorEstoque},0);
       return {nome:g.nome, total:g.items.length, mediaCobertura:cob, semGiro:sg, criticos:cr, excessos:ex, valorEstoque:round2(valEst), destaque:cr+sg};
     });
-    return {items:items, coberturaGeral:coberturaGeral, coberturaA:coberturaA, coberturaB:coberturaB, coberturaC:coberturaC, semGiro:semGiro, ruptura:ruptura, altoRisco:altoRisco, medioRisco:medioRisco, coberturaIdeal:coberturaIdeal, excessos:excessos, valorExcesso:round2(valExcesso), total:items.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    /* r150: potencial de venda perdida no mês por faixa = faturamento mensal médio
+       (venda R$ do período ÷ dias de venda × 30) de todos os itens da faixa */
+    function potMes(fx){ return round2(items.filter(function(i){return i.faixa===fx;}).reduce(function(s,i){return s+(i.valorVendido90||0)/diasVenda*30;},0)); }
+    var potencialPerdaMensal = {ruptura:potMes('Ruptura'), altoRisco:potMes('Alto risco'), medioRisco:potMes('Médio risco')};
+    return {potencialPerdaMensal:potencialPerdaMensal, items:items, coberturaGeral:coberturaGeral, coberturaA:coberturaA, coberturaB:coberturaB, coberturaC:coberturaC, semGiro:semGiro, ruptura:ruptura, altoRisco:altoRisco, medioRisco:medioRisco, coberturaIdeal:coberturaIdeal, excessos:excessos, valorExcesso:round2(valExcesso), total:items.length, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== 4. INVESTIMENTO ABC ========== */
@@ -510,6 +514,12 @@ var Engine = (function(){
         totalFaltas: r.critica ? r.critica.totalFaltas : null,
         totalSobras: r.critica ? r.critica.totalSobras : null,
         saldoLiquido: r.critica ? r.critica.saldoLiquido : null,
+        /* r150 */
+        perdaEstoquePct: r.critica ? r.critica.perdaEstoquePct : null,
+        totalComDeposito: r.ruptura ? r.ruptura.totalComDeposito : null,
+        potRuptura: (r.dias && r.dias.potencialPerdaMensal) ? r.dias.potencialPerdaMensal.ruptura : null,
+        potAltoRisco: (r.dias && r.dias.potencialPerdaMensal) ? r.dias.potencialPerdaMensal.altoRisco : null,
+        potMedioRisco: (r.dias && r.dias.potencialPerdaMensal) ? r.dias.potencialPerdaMensal.medioRisco : null,
         /* r149: ruptura em valor e estoque por local */
         valorRuptura: (r.ruptura && r.ruptura.valorRuptura!==undefined) ? r.ruptura.valorRuptura : null,
         pctValorRuptura: (r.ruptura && r.ruptura.pctValorRuptura!==undefined) ? r.ruptura.pctValorRuptura : null,
@@ -556,17 +566,20 @@ var Engine = (function(){
        fmt 'brl_pct' = valor em R$ + % (pctKey). rankBy 'pct' = melhor/pior pelo percentual
        (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
-      {key:'saldoLiquido',  label:'Valor Quebra (saldo entre perdas e sobras)',        melhor:'min_abs',  fmt:'brl'},
-      {key:'totalSobras',   label:'Valor Sobras',                            melhor:'min_abs',  fmt:'brl'},
-      {key:'totalFaltas',   label:'Valor Perdas',                            melhor:'min_abs',  fmt:'brl'},
-      {key:'valorRuptura',  label:'Ruptura Depósito x Loja',                 melhor:'min',      fmt:'brl_pct', pctKey:'pctValorRuptura', rankBy:'pct'},
-      {key:'coberturaGeral',label:'Cobertura em dias',                       melhor:'target30', fmt:'num'},
-      {key:'estA',          label:'Valor Estoque Curva A',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstA'},
-      {key:'estB',          label:'Valor Estoque Curva B',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstB'},
-      {key:'estC',          label:'Valor Estoque Curva C',                   melhor:'info',     fmt:'brl_pct', pctKey:'pctEstC'},
-      {key:'estSemGiro',    label:'Valor Estoque Sem Giro',                  melhor:'min',      fmt:'brl_pct', pctKey:'pctEstSemGiro', rankBy:'pct'},
-      {key:'perdaFatDia',   label:'Perda Faturamento Projetado Diário',      melhor:'min',      fmt:'brl'},
-      {key:'perdaMensal',   label:'Perda Faturamento Projetado Mensal',      melhor:'min',      fmt:'brl'}
+      {key:'acuracidade',    label:'Acuracidade de estoque (%)',               melhor:'target100', fmt:'pct'},
+      {key:'saldoLiquido',   label:'Valor Quebra (saldo entre perdas e sobras)', melhor:'min_abs', fmt:'brl'},
+      {key:'totalSobras',    label:'Valor Sobras',                             melhor:'min_abs',   fmt:'brl'},
+      {key:'totalFaltas',    label:'Valor Perdas',                             melhor:'min_abs',   fmt:'brl'},
+      {key:'perdaEstoquePct',label:'Perda de Estoque (%)',                     melhor:'min_abs',   fmt:'pct'},
+      /* mesma taxa da aba Ruptura: SKUs com depósito e zerados na loja ÷ SKUs com depósito */
+      {key:'taxaRuptura',    label:'Ruptura Depósito x Loja (%)',              melhor:'min',       fmt:'pct'},
+      {key:'coberturaGeral', label:'Cobertura em dias',                        melhor:'target30',  fmt:'num'},
+      {key:'estA',           label:'Valor Estoque Curva A',                    melhor:'info',      fmt:'brl_pct', pctKey:'pctEstA'},
+      {key:'estB',           label:'Valor Estoque Curva B',                    melhor:'info',      fmt:'brl_pct', pctKey:'pctEstB'},
+      {key:'estC',           label:'Valor Estoque Curva C',                    melhor:'info',      fmt:'brl_pct', pctKey:'pctEstC'},
+      {key:'estSemGiro',     label:'Valor Estoque Sem Giro',                   melhor:'min',       fmt:'brl_pct', pctKey:'pctEstSemGiro', rankBy:'pct'},
+      {key:'perdaFatDia',    label:'Perda Faturamento Projetado Diário',       melhor:'min',       fmt:'brl'},
+      {key:'perdaMensal',    label:'Perda Faturamento Projetado Mensal',       melhor:'min',       fmt:'brl'}
     ];
 
     metricasDefs.forEach(function(def){
@@ -580,8 +593,8 @@ var Engine = (function(){
         sorted = vals.slice().sort(function(a,b){ return rk(b) - rk(a); });
       } else if(def.melhor === 'min_abs'){
         sorted = vals.slice().sort(function(a,b){ return Math.abs(rk(a)) - Math.abs(rk(b)); });
-      } else if(def.melhor === 'target30' || def.melhor === 'target15'){
-        var alvo = def.melhor === 'target30' ? 23 : 10;
+      } else if(def.melhor === 'target30' || def.melhor === 'target15' || def.melhor === 'target100'){
+        var alvo = def.melhor === 'target30' ? 23 : (def.melhor === 'target100' ? 100 : 10);
         sorted = vals.slice().sort(function(a,b){ return Math.abs(rk(a)-alvo) - Math.abs(rk(b)-alvo); });
       } else {
         sorted = vals.slice().sort(function(a,b){ return rk(a) - rk(b); });
