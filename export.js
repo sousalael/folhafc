@@ -447,16 +447,10 @@ function _generatePDFInternal(rt,data,pd,logo,info){
     kpi(['VALOR DAS FALTAS','VALOR DAS SOBRAS','SALDO LÍQUIDO'],[BRLi(c.totalFaltas),BRLi(c.totalSobras),BRLi(c.saldoLiquido)],[[211,47,47],[245,124,0],[211,47,47]]);
     var hCr=hCritica(c,150);secImg('Gráfico — Perdas × sobras'+(c.hasCategorias?' por categoria':'')+' (com saldo)',chartCritica(c,1000,Math.round(hCr*5.56)),hCr);
     if(c.hasCategorias){sec('Resultado por categoria');aTT(['Categoria','Acuracidade','Faltas (R$)','Sobras (R$)','Saldo (R$)'],c.categorias.map(function(x){return[x.nome,PCT(x.acuracidade),BRLi(x.faltaVal),BRLi(x.sobraVal),BRLi(x.saldo)];}),['TOTAL',PCT(c.acuracidade),BRLi(soma(c.categorias,function(x){return x.faltaVal;})),BRLi(soma(c.categorias,function(x){return x.sobraVal;})),BRLi(soma(c.categorias,function(x){return x.saldo;}))],{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}});}
-    var ct=top20Cat(c.items);var tO={2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'}};
-    ct.forEach(function(cat){
-      function totDiv(arr){return['TOTAL','',Q(soma(arr,function(i){return i.qtdSistema;})),Q(soma(arr,function(i){return i.qtdContada;})),Q(soma(arr,function(i){return i.difQtd;})),BRL(soma(arr,function(i){return i.difValor;}))];}
-      if(cat.faltas.length){sec('Top '+cat.faltas.length+' faltas — '+cat.nome);aTT(['SKU','Descrição','Qtd Sist','Qtd Contada','Dif. Qtd','Dif. R$'],cat.faltas.map(function(i){return[i.sku,i.descricao,i.qtdSistema,i.qtdContada,i.difQtd,BRL(i.difValor)];}),totDiv(cat.faltas),tO);}
-      if(cat.sobras.length){sec('Top '+cat.sobras.length+' sobras — '+cat.nome);aTT(['SKU','Descrição','Qtd Sist','Qtd Contada','Dif. Qtd','Dif. R$'],cat.sobras.map(function(i){return[i.sku,i.descricao,i.qtdSistema,i.qtdContada,i.difQtd,BRL(i.difValor)];}),totDiv(cat.sobras),tO);}
-      if(cat.zerados.length){sec('Top '+cat.zerados.length+' zerados — '+cat.nome);aTT(['SKU','Descrição','Qtd Sistema','Valor Perdido'],cat.zerados.map(function(i){return[i.sku,i.descricao,i.qtdSistema,BRL(i.qtdSistema*i.custoUnit)];}),['TOTAL','',Q(soma(cat.zerados,function(i){return i.qtdSistema;})),BRL(soma(cat.zerados,function(i){return i.qtdSistema*i.custoUnit;}))],{2:{halign:'right'},3:{halign:'right'}});}
-    });
+    /* r152: sem listagem de produtos no PDF (o Excel traz todos os itens); fica só o resumo por categoria acima */
   }
   else if(rt==='ruptura'){
-    var r=data.ruptura;var temVendas=r.items.some(function(i){return i.vendaMediaDia>0;});
+    var r=data.ruptura;
     ttl('Ruptura Loja x Depósito — Resumo executivo');
     var iaRup=window._iaResumos&&window._iaResumos.ruptura;
     sec('Análise');bloco(iaRup||Engine.gerarAnaliseRuptura(r,info));
@@ -466,26 +460,7 @@ function _generatePDFInternal(rt,data,pd,logo,info){
     if(r.valorDeposito!==undefined)kpi(['VALOR DO ESTOQUE (DEPÓSITO)','VALOR DO ESTOQUE (ÁREA DE VENDAS)','VALOR DO ESTOQUE EM RUPTURA'],[BRLi(r.valorDeposito),BRLi(r.valorLoja),BRLi(r.valorRuptura)+' ('+PCT(r.pctValorRuptura)+')'],[[0,21,40],[46,125,50],[211,47,47]]);
     secImg('Gráfico — Rupturas por curva ABC',chartRuptura(r,1000,380),68);
     if(r.valorDeposito!==undefined){var hEs=hRupturaEstoque(r,150);secImg('Gráfico — Valor do estoque: depósito (retaguarda) × área de vendas',chartRupturaEstoque(r,1000,Math.round(hEs*5.56)),hEs);}
-    if(temVendas){
-      /* r149: tabelas sem Venda média/dia e Faturamento médio/dia; curvas B e C completas */
-      var rH=['SKU','Descrição','Categoria','ABC Fat.','Qtd Dep.'],rO={3:{halign:'center'},4:{halign:'right'}};
-      function linhaR(i){return[i.sku,i.descricao,i.categoria||'',i.abc_valorVendido90||'C',i.deposito];}
-      var topA=r.items.filter(function(i){return i.abc_valorVendido90==='A';}).slice(0,30);
-      function totR(arr){return['TOTAL','','','',Q(soma(arr,function(i){return i.deposito;}))];}
-      if(topA.length){sec('Rupturas curva A — Top 30');aTT(rH,topA.map(linhaR),totR(topA),rO);}
-      ['B','C'].forEach(function(cl){
-        var itc=r.items.filter(function(i){return (i.abc_valorVendido90||'C')===cl;});
-        if(itc.length){sec('Rupturas curva '+cl+' — '+NUM(itc.length)+' itens');aTT(rH,itc.map(linhaR),totR(itc),rO);}
-      });
-    }else{
-      /* Sem vendas: listar por categoria com qtd depósito */
-      var catMap={};r.items.forEach(function(i){var c=i.categoria||'Sem categoria';if(!catMap[c])catMap[c]=[];catMap[c].push(i);});
-      Object.keys(catMap).sort().forEach(function(cat){
-        var itens=catMap[cat].sort(function(a,b){return b.deposito-a.deposito;});
-        sec(cat+' — '+itens.length+' itens em ruptura');
-        aTT(['SKU','Descrição','Qtd Depósito'],itens.map(function(i){return[i.sku,i.descricao,i.deposito];}),['TOTAL','',Q(soma(itens,function(i){return i.deposito;}))],{2:{halign:'right'}});
-      });
-    }
+    /* r152: sem listagem de produtos no PDF (o Excel traz todos os itens) */
   }
   else if(rt==='dias'){
     var d=data.dias,fv=fxV(d.items);ttl('Dias de estoque — Resumo executivo');
