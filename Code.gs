@@ -585,7 +585,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-02-r153';
+const VERSAO_SCRIPT = '2026-10-02-r154';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -6257,7 +6257,7 @@ function perfInfoGrupoHtml(lista, filtro, anterior) {
 function perfMontarCapaGrupo(lista, filtro, anterior) {
   var un = 0, an = 0;
   lista.forEach(function (c) { un += c.unidades; an += c.analises; });
-  var h = perfHeaderGrupoHtml('Análise de Performance<br>Grupo de Clientes') + perfInfoGrupoHtml(lista, filtro, anterior);
+  var h = perfHeaderGrupoHtml('Análise de Performance<br>' + perfEsc(lista.map(function (c) { return c.cliente; }).join(' · '))) + perfInfoGrupoHtml(lista, filtro, anterior);   // r154
   h += '<div style="padding:22px 26px 6px"><table><tr>'
     + perfCardHtml('Clientes', String(lista.length), 'no grupo', '#001528')
     + perfCardHtml('Unidades', String(un), 'avaliadas no período', '#001528')
@@ -6304,7 +6304,7 @@ function perfMontarComparativoClientes(lista, filtro, anterior, tg) {
 }
 
 function perfMontarHTMLGrupo(lista, filtro, anterior, textosPorCliente, tg) {
-  var h = perfHtmlAbertura('Análise de Performance — Grupo de Clientes');
+  var h = perfHtmlAbertura('Análise de Performance — ' + lista.map(function (c) { return c.cliente; }).join(' · '));   // r154
   h += perfMontarCapaGrupo(lista, filtro, anterior);
   lista.forEach(function (c) {
     h += '<div style="page-break-before:always">' + perfMontarCorpoCliente(c, filtro, anterior, textosPorCliente[c.cliente]) + '</div>';
@@ -6391,12 +6391,13 @@ function performanceSalvarApresentacaoGrupo(dados, cpf) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   r153 — COMPARATIVO INTERNO ENTRE UNIDADES (com ranking)
-   Material da Formula Code: unidades agrupadas por cliente (ranking dentro
-   de cada cliente), ranking geral das unidades e, com 2+ clientes, ranking
-   entre os clientes. Usa os mesmos filtros da aba Performance (inclusive o
-   filtro de unidades). Salvo no Drive em Performance_FC / Interno.
-   As exportações para o cliente (cliente e grupo) continuam sem ranking.
+   r153/r154 — COMPARATIVO ENTRE UNIDADES E CLIENTES (com ranking)
+   r154: "Cliente" no sistema = BANDEIRA. Várias bandeiras selecionadas =
+   um cliente que tem mais de uma bandeira; por isso o comparativo é
+   material PARA O CLIENTE, com o mesmo tom das análises individuais
+   (parceria, constatação, ações do próprio cliente), mantendo o ranking
+   das unidades e dos clientes e a comparação entre eles.
+   Salvo no Drive em Performance_FC / Comparativos.
    ═══════════════════════════════════════════════════════════════════ */
 function perfOrdenarPorNota(lista, campoNome) {
   return lista.slice().sort(function (a, b) {
@@ -6442,34 +6443,41 @@ function perfPosicao(lista, item) {
   return i === -1 ? '—' : (i + 1) + 'º';
 }
 
-var PERF_TEXTOS_INTERNO = ['resumo', 'ranking_unidades', 'entre_clientes', 'pontos_atencao', 'recomendacoes'];
+var PERF_TEXTOS_INTERNO = ['resumo', 'ranking_unidades', 'entre_clientes', 'pontos_positivos', 'oportunidades', 'sugestoes'];   // r154: mesmas seções de conclusão das análises do cliente
 
 function perfTextoInternoFallback(p) {
   var t = { por_cliente: {} };
   var un = p.rankUnidades.filter(function (u) { return u.geral !== null; });
-  t.resumo = ((p.filtro.de || p.filtro.ate) ? 'No período ' + perfPeriodoTxt(p.filtro) : 'Em todo o período registrado') + ', foram comparadas ' + p.unidades.length + ' unidade(s) de ' + p.clientes.length + ' cliente(s), com ' + p.analises + ' análise(s) concluída(s)'
-    + (p.mediaGeral !== null ? ' e nota média de ' + perfFmt(p.mediaGeral) + '/10 entre as unidades.' : '.');
+  t.resumo = ((p.filtro.de || p.filtro.ate) ? 'No período ' + perfPeriodoTxt(p.filtro) : 'Em todo o período registrado') + ', foram avaliadas ' + p.unidades.length + ' unidade(s)'
+    + (p.clientes.length > 1 ? ' de ' + p.clientes.length + ' bandeiras (' + p.clientes.map(function (c) { return c.cliente; }).join(', ') + ')' : ' de ' + p.clientes[0].cliente)
+    + ', em ' + p.analises + ' análise(s)' + (p.mediaGeral !== null ? ', com nota média de ' + perfFmt(p.mediaGeral) + '/10 entre as unidades.' : '.');
   t.ranking_unidades = un.length > 1
-    ? 'A unidade ' + un[0].unidade + ' (' + un[0].cliente + ') ocupa a 1ª posição, com ' + perfFmt(un[0].geral) + '/10; a última posição é de ' + un[un.length - 1].unidade + ' (' + un[un.length - 1].cliente + '), com ' + perfFmt(un[un.length - 1].geral) + '/10. A diferença entre o topo e a base é de ' + perfFmt(un[0].geral - un[un.length - 1].geral) + ' ponto(s).'
+    ? 'A unidade ' + un[0].unidade + (p.clientes.length > 1 ? ' (' + un[0].cliente + ')' : '') + ' ocupa a 1ª posição do ranking, com ' + perfFmt(un[0].geral) + '/10, e é a referência de boas práticas a ser replicada. '
+      + 'A maior oportunidade de evolução está em ' + un[un.length - 1].unidade + (p.clientes.length > 1 ? ' (' + un[un.length - 1].cliente + ')' : '') + ', com ' + perfFmt(un[un.length - 1].geral) + '/10.'
     : 'Apenas uma unidade com nota no período.';
   p.clientes.forEach(function (c) {
     var l = c.lista.filter(function (u) { return u.geral !== null; });
     t.por_cliente[c.cliente] = l.length > 1
-      ? 'Em ' + c.cliente + ', a melhor posição é de ' + l[0].unidade + ' (' + perfFmt(l[0].geral) + ') e a última de ' + l[l.length - 1].unidade + ' (' + perfFmt(l[l.length - 1].geral) + '); nota média do cliente: ' + perfFmt(c.geral) + '.'
+      ? 'Em ' + c.cliente + ', a 1ª posição é de ' + l[0].unidade + ' (' + perfFmt(l[0].geral) + ') e a maior oportunidade de evolução está em ' + l[l.length - 1].unidade + ' (' + perfFmt(l[l.length - 1].geral) + '); nota média: ' + perfFmt(c.geral) + '.'
       : (l.length ? 'Em ' + c.cliente + ', uma unidade com nota no período: ' + l[0].unidade + ' (' + perfFmt(l[0].geral) + ').' : '');
   });
   var cl = p.rankClientes.filter(function (c) { return c.geral !== null; });
   t.entre_clientes = cl.length > 1
-    ? 'Entre os clientes, ' + cl[0].cliente + ' lidera com nota média de ' + perfFmt(cl[0].geral) + '/10 e ' + cl[cl.length - 1].cliente + ' fica na última posição, com ' + perfFmt(cl[cl.length - 1].geral) + '/10.'
+    ? 'Entre as bandeiras, ' + cl[0].cliente + ' ocupa a 1ª posição, com nota média de ' + perfFmt(cl[0].geral) + '/10, referência para as demais; ' + cl[cl.length - 1].cliente + ' tem a maior oportunidade de evolução, com ' + perfFmt(cl[cl.length - 1].geral) + '/10.'
     : '';
-  var baixas = un.filter(function (u) { return u.geral < 6; }).map(function (u) { return u.unidade + ' (' + u.cliente + ')'; });
-  var volRuim = p.unidades.filter(function (u) { return u.volume !== null && u.volume < 6; }).map(function (u) { return u.unidade + ' (' + u.cliente + ')'; });
-  t.pontos_atencao = (baixas.length || volRuim.length)
-    ? [baixas.length ? 'Unidades abaixo de 6,0: ' + baixas.join(', ') + '.' : '', volRuim.length ? 'Volume de mercadoria acima do ideal em: ' + volRuim.join(', ') + '.' : ''].filter(Boolean).join(' ')
-    : 'Nenhuma unidade ficou abaixo de 6,0 e nenhuma apresentou volume acima do ideal no período.';
-  t.recomendacoes = (baixas.length || volRuim.length)
-    ? 'Priorizar o acompanhamento das unidades com menor nota, compartilhando com o cliente as práticas observadas nas unidades do topo do ranking' + (volRuim.length ? ' e reforçando a sugestão de reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário' : '') + '.'
-    : 'Usar as unidades do topo do ranking como referência de boas práticas nas conversas com os clientes.';
+  var bons = un.filter(function (u) { return u.geral >= 7.5; }).map(function (u) { return u.unidade; });
+  var baixas = un.filter(function (u) { return u.geral < 7.5; }).map(function (u) { return u.unidade; });
+  var volRuim = p.unidades.filter(function (u) { return u.volume !== null && u.volume < 6; }).map(function (u) { return u.unidade; });
+  var temMelhoria = baixas.length > 0 || volRuim.length > 0;
+  t.pontos_positivos = bons.length
+    ? 'As unidades ' + bons.join(', ') + ' apresentaram notas nas faixas Bom ou Excelente, indicando um ambiente bem preparado.'
+    : 'Nenhuma unidade atingiu a faixa Bom ou Excelente no período.';
+  t.oportunidades = temMelhoria
+    ? 'Há oportunidade de evolução' + (baixas.length ? ' nas unidades ' + baixas.join(', ') : '') + (volRuim.length ? (baixas.length ? ' e' : '') + ' no volume de mercadoria acima do ideal em ' + volRuim.join(', ') : '') + ', favorecendo a fluidez da operação e a assertividade da contagem.'
+    : 'Todas as unidades avaliadas ficaram nas faixas Bom ou Excelente.';
+  t.sugestoes = temMelhoria
+    ? 'Sugerimos considerar' + (volRuim.length ? ' reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário, e' : '') + ' replicar as práticas das unidades do topo do ranking nas demais.'
+    : 'Sugerimos manter e replicar o padrão de preparação observado como referência de boas práticas nas demais unidades.';
   return t;
 }
 
@@ -6489,9 +6497,11 @@ function perfGarantirTextosInterno(t, fb, p) {
 
 function perfMontarPromptInterno(p) {
   var linhas = [];
+  var varios = p.clientes.length > 1;
+  linhas.push('BANDEIRAS (clientes no sistema) DO MESMO CLIENTE: ' + p.clientes.map(function (c) { return c.cliente; }).join(', '));
   linhas.push('PERÍODO: ' + perfPeriodoTxt(p.filtro) + ' | TIPO DE AVALIAÇÃO: ' + perfTipoTxt(p.filtro));
   linhas.push('PERÍODO ANTERIOR DE MESMA DURAÇÃO: ' + (p.anterior ? perfDataBR(p.anterior.de) + ' a ' + perfDataBR(p.anterior.ate) : 'não disponível'));
-  linhas.push('CLIENTES: ' + p.clientes.length + ' | UNIDADES: ' + p.unidades.length + ' | ANÁLISES: ' + p.analises + ' | NOTA MÉDIA ENTRE AS UNIDADES: ' + perfFmt(p.mediaGeral));
+  linhas.push('UNIDADES: ' + p.unidades.length + ' | ANÁLISES: ' + p.analises + ' | NOTA MÉDIA ENTRE AS UNIDADES: ' + perfFmt(p.mediaGeral));
   linhas.push('');
   var linhaMet = function (o) {
     var l = [];
@@ -6505,39 +6515,46 @@ function perfMontarPromptInterno(p) {
     return l.join('; ');
   };
   p.clientes.forEach(function (c) {
-    linhas.push('=== CLIENTE: ' + c.cliente + ' — ' + linhaMet(c) + ' ===');
-    c.lista.forEach(function (u) { linhas.push('  ' + perfPosicao(c.lista, u) + ' no cliente / ' + perfPosicao(p.rankUnidades, u) + ' no geral — UNIDADE ' + u.unidade + ': ' + linhaMet(u) + ' (' + u.analises + ' análise(s))'); });
+    linhas.push('=== BANDEIRA: ' + c.cliente + ' — ' + linhaMet(c) + ' ===');
+    c.lista.forEach(function (u) { linhas.push('  ' + perfPosicao(c.lista, u) + ' na bandeira' + (varios ? ' / ' + perfPosicao(p.rankUnidades, u) + ' no geral' : '') + ' — UNIDADE ' + u.unidade + ': ' + linhaMet(u) + ' (' + u.analises + ' análise(s))'); });
     linhas.push('');
   });
-  if (p.clientes.length > 1) {
-    linhas.push('RANKING ENTRE CLIENTES: ' + p.rankClientes.map(function (c) { return perfPosicao(p.rankClientes, c) + ' ' + c.cliente + ' (' + perfFmt(c.geral) + ')'; }).join(' | '));
-  }
+  if (varios) linhas.push('RANKING ENTRE AS BANDEIRAS: ' + p.rankClientes.map(function (c) { return perfPosicao(p.rankClientes, c) + ' ' + c.cliente + ' (' + perfFmt(c.geral) + ')'; }).join(' | '));
   var temEquipe = p.unidades.some(function (u) { return u.equipe !== null; });
   var temVolume = p.unidades.some(function (u) { return u.volume !== null; });
   var temAnterior = p.unidades.some(function (u) { return u.variacao.geral !== null; });
-  var sys = 'Você é um analista sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
-    + 'Gere um COMPARATIVO INTERNO entre unidades de clientes, para a DIRETORIA DA FORMULA CODE, com base apenas nos dados fornecidos. REGRAS OBRIGATÓRIAS:\n'
-    + '1. Material de uso interno: PODE e DEVE usar ranking, posições e ordinais (1º, 2º, última posição), apontando com clareza o topo e a base.\n'
-    + '2. Tom profissional, objetivo e respeitoso. TERMOS PROIBIDOS: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado". Use "exige adequação" ou "ponto de atenção".\n'
-    + '3. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
-    + '4. A análise avalia exclusivamente a PREPARAÇÃO DO AMBIENTE feita pelo cliente. PROIBIDO dar a entender que a contagem feita pela Formula Code foi incorreta ou teve a qualidade afetada; nunca mencione recontagem.\n'
-    + '5. VOLUME (escala invertida): nota baixa = excesso de mercadoria (ruim). Quanto MAIOR o volume, PIOR para o inventário; volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo com boa organização. Nunca apresente volume alto como positivo.\n'
-    + '6. CRITÉRIOS N/A: os dados contêm APENAS o que foi avaliado. NUNCA mencione algo que não conste nos dados, nem como ausência. '
+  var sys = 'Você é um consultor sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
+    + 'Gere o COMPARATIVO ENTRE UNIDADES de um cliente' + (varios ? ' que tem mais de uma BANDEIRA (cada bandeira aparece como um cliente nos dados)' : '') + ', com base apenas nos dados fornecidos. '
+    + 'O texto será lido PELO CLIENTE (é um material externo). REGRAS OBRIGATÓRIAS:\n'
+    + '1. Tom consultivo, respeitoso e de parceria. Use "sugerimos considerar", "uma oportunidade seria". Nunca "o cliente deve", "é necessário".\n'
+    + '2. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
+    + '3. RANKING PERMITIDO, SEM EXPOR CULPADOS: este material traz o ranking das unidades' + (varios ? ' e das bandeiras' : '') + '. Você pode citar posições (1ª posição, 2ª posição). A unidade do topo é a referência de boas práticas a ser replicada. Para as posições de baixo, diga "maior oportunidade de evolução" — NUNCA "pior", "última colocada", "a mais fraca", "lanterna" nem trate unidade alguma como culpada.\n'
+    + '4. TOM DE CONSTATAÇÃO: descreva as condições encontradas no período avaliado — nunca como preparação para algo futuro. Nada de "preparada para a operação", "prontos para prosseguir".\n'
+    + '5. A preparação do ambiente é SEMPRE responsabilidade do cliente, nunca da equipe FC. TODA ação recomendada é uma ação do próprio CLIENTE, executada internamente por ele — nunca visita, reunião, orientação ou comunicação promovida pela Formula Code.\n'
+    + '6. VOLUME (escala invertida): nota baixa = excesso de mercadoria (ruim), nota alta = volume ideal (bom). Quanto MAIOR o volume, PIOR para o inventário; volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo com boa organização — boa organização não compensa volume excessivo. Diga "volume acima do ideal" ou "volume adequado"; nunca apresente volume alto como positivo.\n'
+    + '7. Quando o volume acima do ideal for citado como oportunidade, a ação recomendada é o cliente reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário.\n'
+    + '8. PROIBIDO dar a entender que a contagem feita pela Formula Code foi incorreta ou teve a qualidade afetada. A análise avalia exclusivamente a PREPARAÇÃO DO AMBIENTE feita pelo cliente. Nunca recomende recontagem nem mencione "recontagem".\n'
+    + '9. TERMOS PROIBIDOS: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado", e absolutismos como "impossível", "nunca" ou "totalmente". Use "exige adequação" ou "ponto de atenção".\n'
+    + '10. REENQUADRAMENTO CONSTRUTIVO: exponha ajustes como oportunidade de ganho (fluidez da operação, assertividade da contagem, organização). Nunca use "compromete a velocidade de leitura dos coletores" nem "risco de recontagem" — use "pode impactar na fluidez da operação e na assertividade da contagem".\n'
+    + '11. PROIBIDO exigir "SKU único por pallet"; se falar de pallet, use "pallets com produtos organizados por código de barras".\n'
+    + '12. PROIBIDO recomendar que o cliente comunique, informe ou avise previamente a quem quer que seja sobre movimentações de mercadoria, espaço, volume ou layout entre a data da análise e a operação oficial.\n'
+    + '13. Suavize qualquer linguagem de prazo. Nunca soar como ameaça ou cobrança.\n'
+    + '14. CRITÉRIOS N/A: os dados contêm APENAS o que foi avaliado. NUNCA mencione algo que não conste nos dados, nem como ausência. '
     + (temEquipe ? 'Equipe de apoio: só cite a de quem tem nota [EQUIPE] nos dados.' : 'Nenhuma unidade teve equipe de apoio avaliada: é PROIBIDO mencionar equipe, equipe de apoio ou equipe de pesagem.') + '\n'
-    + '7. ' + (temVolume ? 'Inclua a leitura de volume quando relevante.' : 'Nenhuma unidade teve volume avaliado: não cite volume.') + '\n'
-    + '8. ' + (temAnterior ? 'Há variação vs período anterior: comente só de quem tem variação nos dados.' : 'NÃO há período anterior: não comente evolução.') + '\n'
-    + '9. Cite apenas números presentes nos dados (1 casa decimal). Não invente fatos, causas ou observações.\n'
-    + '10. PROIBIDO exigir "SKU único por pallet"; se falar de pallet, use "pallets com produtos organizados por código de barras". PROIBIDO sugerir que o cliente comunique/avise previamente movimentações de mercadoria entre a data da análise e a operação.\n'
-    + '11. "recomendacoes" são ações da FORMULA CODE na relação com os clientes (ex.: priorizar o acompanhamento de unidades da base do ranking, compartilhar com o cliente as práticas das unidades do topo, reforçar a sugestão de reduzir o abastecimento/recebimento com pelo menos 5 dias de antecedência quando houver volume acima do ideal). Nada de ameaça ou cobrança.\n'
-    + (p.farmacia ? '12. HÁ FARMÁCIAS: farmácia NÃO tem equipe de pesagem; é PROIBIDO mencionar "pesagem". Medicamentos isentos de prescrição = "MIPs" (nunca "OTC").\n' : '')
-    + '13. Texto direto e conciso: no máximo 450 palavras no total, sem repetir informações entre seções.\n';
+    + '15. Cite apenas números presentes nos dados (1 casa decimal). Não invente fatos, causas ou observações.\n'
+    + '16. ' + (temAnterior ? 'Há variação vs período anterior: comente de forma equilibrada, só de quem tem variação nos dados.' : 'NÃO há período anterior: não comente evolução nem variação.') + '\n'
+    + '17. ' + (temVolume ? 'Inclua a leitura de volume quando relevante (regra 6).' : 'Nenhuma unidade teve volume avaliado: não cite volume.') + '\n'
+    + '18. Se NENHUMA unidade tiver ponto de melhoria (todas Bom/Excelente), "oportunidades" diz isso de forma positiva em 1 frase e "sugestoes" contém APENAS uma recomendação: usar o padrão observado como referência de boas práticas, a ser mantido e replicado.\n'
+    + (p.farmacia ? '19b. FARMÁCIA: farmácia NÃO tem equipe de pesagem; é PROIBIDO mencionar "pesagem". Medicamentos isentos de prescrição = "MIPs" (nunca "OTC").\n' : '')
+    + '19. Chame o documento de "Comparativo entre Unidades" quando precisar citá-lo. Texto fluido, escrito por um humano, conciso: no máximo 450 palavras no total, sem repetir informações entre seções.\n';
   var usr = 'Gere um JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n{\n'
-    + '"resumo": "2-3 frases: cenário geral (nº de clientes e unidades, nota média), topo e base do ranking.",\n'
-    + '"ranking_unidades": "2-3 frases sobre o ranking geral das unidades: quem lidera, quem está na base, distância entre elas e padrões (retaguarda, área de vendas' + (temVolume ? ', organização, volume' : '') + ').",\n'
-    + '"por_cliente": { ' + p.clientes.map(function (c) { return JSON.stringify(c.cliente) + ': "1-2 frases sobre o ranking das unidades deste cliente"'; }).join(', ') + ' },\n'
-    + '"entre_clientes": "' + (p.clientes.length > 1 ? '2 frases comparando os clientes pelo ranking' : 'string vazia (só há um cliente)') + '",\n'
-    + '"pontos_atencao": "2 frases citando as unidades que exigem adequação e por quê.",\n'
-    + '"recomendacoes": "2 frases com ações da Formula Code (regra 11)."\n}\n\n'
+    + '"resumo": "2 frases: cenário geral (nº de unidades' + (varios ? ' e bandeiras' : '') + ', nota média), principal destaque e principal ponto de atenção.",\n'
+    + '"ranking_unidades": "2-3 frases sobre o ranking ' + (varios ? 'geral ' : '') + 'das unidades: a referência no topo, onde está a maior oportunidade de evolução e padrões em comum (retaguarda, área de vendas' + (temVolume ? ', organização, volume' : '') + ') — regra 3.",\n'
+    + '"por_cliente": { ' + p.clientes.map(function (c) { return JSON.stringify(c.cliente) + ': "1-2 frases sobre o ranking das unidades desta bandeira (regra 3)"'; }).join(', ') + ' },\n'
+    + '"entre_clientes": "' + (varios ? '2 frases comparando as bandeiras pelo ranking (regra 3)' : 'string vazia (há uma única bandeira)') + '",\n'
+    + '"pontos_positivos": "2 frases.",\n'
+    + '"oportunidades": "2 frases.",\n'
+    + '"sugestoes": "2 frases com ações do CLIENTE (regras 5, 7, 12, 13, 18)."\n}\n\n'
     + 'As chaves de "por_cliente" devem ser EXATAMENTE os nomes acima.\n\nDADOS:\n\n' + linhas.join('\n');
   return { system: sys, user: usr };
 }
@@ -6595,15 +6612,16 @@ function perfTabelaRankingHtml(lista, rankRef, cols, colNome, colExtra, total) {
 }
 
 function perfMontarHTMLInterno(p, t) {
-  var h = perfHtmlAbertura('Comparativo Interno entre Unidades');
-  h += perfHeaderGrupoHtml('Comparativo entre Unidades<br>Relatório interno · com ranking');
+  var nomesCli = p.clientes.map(function (c) { return c.cliente; }).join(' · ');
+  var h = perfHtmlAbertura('Comparativo entre Unidades — ' + nomesCli);
+  h += perfHeaderGrupoHtml('Comparativo entre Unidades<br>' + perfEsc(nomesCli));
   var estab = p.filtro.estab === 'FARMACIA' ? 'Farmácia' : (p.filtro.estab === 'SUPERMERCADO' ? 'Supermercado' : 'Todos os estabelecimentos');
   var cel = function (rot, val, w, pad) { return '<td style="padding:14px ' + (pad || 20) + 'px;background:#001528;color:#FFF;' + (w ? 'width:' + w + ';' : '') + '"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">' + rot + '</div><div style="font-size:12px;font-weight:700">' + val + '</div></td>'; };
   h += '<table><tr>' + cel('Clientes', perfEsc(p.clientes.map(function (c) { return c.cliente; }).join(' · ')), '40%', 32) + cel('Período (data da análise)', perfEsc(perfPeriodoTxt(p.filtro))) + '</tr>'
     + '<tr>' + cel('Tipo de avaliação', perfEsc(perfTipoTxt(p.filtro)), '', 32) + cel('Período anterior (comparação)', p.anterior ? perfEsc(perfDataBR(p.anterior.de) + ' a ' + perfDataBR(p.anterior.ate)) : 'não disponível') + '</tr>'
-    + '<tr>' + cel('Tipo de estabelecimento', estab, '', 32) + cel('Natureza', 'Relatório interno Formula Code, com ranking') + '</tr></table>';
+    + '<tr>' + cel('Tipo de estabelecimento', estab, '', 32) + cel('Conteúdo', 'Ranking das unidades' + (p.clientes.length > 1 ? ', ranking por cliente e comparação entre os clientes' : '')) + '</tr></table>';
   h += '<div style="padding:22px 26px 6px"><table><tr>'
-    + perfCardHtml('Clientes', String(p.clientes.length), 'comparados', '#001528')
+    + perfCardHtml('Clientes', String(p.clientes.length), p.clientes.length > 1 ? 'no comparativo' : 'cliente', '#001528')
     + perfCardHtml('Unidades', String(p.unidades.length), 'no ranking', '#001528')
     + perfCardHtml('Análises', String(p.analises), 'concluídas no período', '#5DC500')
     + perfCardHtml('Nota média', perfFmt(p.mediaGeral), 'média entre as unidades', perfCorNota(p.mediaGeral))
@@ -6633,8 +6651,9 @@ function perfMontarHTMLInterno(p, t) {
       + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota do cliente = média das notas das unidades.</div></div>';
   }
   h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Conclusão');
-  if (t.pontos_atencao) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ PONTOS DE ATENÇÃO</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.pontos_atencao) + '</p></div>';
-  if (t.recomendacoes) h += '<div style="background:#E3F2FD;border-left:4px solid #001528;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#001528;margin-bottom:6px">→ RECOMENDAÇÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.recomendacoes) + '</p></div>';
+  if (t.pontos_positivos) h += '<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.pontos_positivos) + '</p></div>';
+  if (t.oportunidades) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ OPORTUNIDADES DE MELHORIA</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.oportunidades) + '</p></div>';
+  if (t.sugestoes) h += '<div style="background:#E3F2FD;border-left:4px solid #001528;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#001528;margin-bottom:6px">→ SUGESTÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.sugestoes) + '</p></div>';
   h += '</div>';
   return h + perfHtmlRodape() + '</div></body></html>';
 }
@@ -6642,7 +6661,7 @@ function perfMontarHTMLInterno(p, t) {
 function perfNomeBaseInterno(filtro, clientes, nUn) {
   var nomes = perfNomeLimpo(clientes.map(function (c) { return c.cliente; }).join('+'));
   if (nomes.length > 60) nomes = nomes.substring(0, 60);
-  return 'Comparativo_Interno_' + nUn + 'unidades_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje()) + perfSufixoUnidades(filtro);
+  return 'Comparativo_Unidades_' + nUn + 'unidades_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje()) + perfSufixoUnidades(filtro);
 }
 
 /* ── DIRETOR: PDF do comparativo interno (HTML + PDF no Drive, pasta Performance_FC / Interno) ── */
@@ -6654,7 +6673,7 @@ function performanceExportarPDFInterno(dados, cpf) {
     if (p.erro) return { ok: false, erro: p.erro };
     var t = perfGarantirTextosInterno(d.textos || null, perfTextoInternoFallback(p), p);
     var html = perfMontarHTMLInterno(p, t);
-    var pasta = perfPastaCliente('Interno');
+    var pasta = perfPastaCliente('Comparativos');   // r154
     var base = perfNomeBaseInterno(p.filtro, p.clientes, p.unidades.length);
     [base + '.html', base + '.pdf'].forEach(function (n) {
       var ex = pasta.getFilesByName(n);
@@ -6682,7 +6701,7 @@ function performanceSalvarApresentacaoInterno(dados, cpf) {
     if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
     var p = perfPrepararInterno(d);
     if (p.erro) return { ok: false, erro: p.erro };
-    var pasta = perfPastaCliente('Interno');
+    var pasta = perfPastaCliente('Comparativos');   // r154
     var base = 'Apresentacao_' + perfNomeBaseInterno(p.filtro, p.clientes, p.unidades.length);
     var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
     [nomePptx, nomePdf].forEach(function (n) {
@@ -6788,9 +6807,10 @@ function performanceEnviarEmail(dados, cpf) {
     var titulo = fcLimparNome(d.titulo) || 'Análise de Performance';
     var periodo = fcLimparNome(d.periodoTxt);
     var assunto, abertura;
-    if (escopo === 'interno') {
+    if (escopo === 'interno') {   // r154: comparativo é material do cliente (mesmo tom das análises)
       assunto = 'Comparativo entre Unidades — ' + titulo;
-      abertura = 'Segue em anexo o <strong>Comparativo entre Unidades</strong> (com ranking) de <strong>' + perfEsc(titulo) + '</strong>' + (periodo ? ', referente ao período <strong>' + perfEsc(periodo) + '</strong>' : '') + '.';
+      abertura = 'Compartilhamos o <strong>Comparativo entre Unidades</strong> de <strong>' + perfEsc(titulo) + '</strong>' + (periodo ? ', referente ao período <strong>' + perfEsc(periodo) + '</strong>' : '') + '. '
+        + 'O material reúne as Análises de Preparação para Inventário do período, com o ranking das unidades, e destaca as boas práticas a serem replicadas e as oportunidades de evolução.';
     } else {
       assunto = 'Análise de Performance das Unidades — ' + titulo;
       abertura = 'Compartilhamos a <strong>Análise de Performance das Unidades</strong> de <strong>' + perfEsc(titulo) + '</strong>' + (periodo ? ', referente ao período <strong>' + perfEsc(periodo) + '</strong>' : '') + '. '

@@ -449,7 +449,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r153';
+const VERSAO = 'r154';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -3965,7 +3965,11 @@ async function pfExportarPPTX(silencioso) {   // r153: silencioso = usado pelo e
 }
 
 /* ═══════════════════════════════════════════════════════
-   r153 — COMPARATIVO INTERNO ENTRE UNIDADES (com ranking)
+   r153/r154 — COMPARATIVO ENTRE UNIDADES (com ranking)
+   r154: "Cliente" = BANDEIRA. Várias bandeiras = um cliente com mais de
+   uma bandeira; o comparativo é material PARA O CLIENTE, no mesmo tom
+   das análises individuais (as funções mantêm o nome "Interno" só por
+   compatibilidade com o servidor).
    Usa o resultado da busca atual (mesmos filtros, inclusive unidades).
    Unidades agrupadas por cliente (ranking dentro de cada cliente),
    ranking geral das unidades e, com 2+ clientes, ranking entre os
@@ -4031,10 +4035,10 @@ function pfHtmlInterno() {
   const cols = pfColsInterno(di.unidades);
   let h = `
     <div class="pf-bloco" id="pfInterno">
-      <h4>Comparativo entre unidades — relatório interno (com ranking)</h4>
-      <div class="pf-int-aviso">Material interno da Formula Code: traz ranking e dados de todos os clientes desta busca (${di.unidades.length} unidades de ${di.clientes.length} cliente${varios ? 's' : ''}). As exportações por cliente e do grupo continuam sem ranking.</div>
+      <h4>Comparativo entre unidades (com ranking)</h4>
+      <div class="pf-nota-tab" style="margin:0 0 10px">${di.unidades.length} unidades${varios ? ' de ' + di.clientes.length + ' clientes (' + esc(di.clientes.map(c => c.cliente).join(', ')) + ')' : ' de ' + esc(di.clientes[0].cliente)}. Material para o cliente, no mesmo tom das análises: ranking das unidades${varios ? ', ranking por cliente e comparação entre os clientes' : ''}.</div>
       <div class="pf-acoes" style="grid-template-columns:1fr 1fr">
-        <button type="button" class="pf-acao txt" onclick="pfGerarTextoInternoTela()">✨ Gerar análise interna</button>
+        <button type="button" class="pf-acao txt" onclick="pfGerarTextoInternoTela()">✨ Gerar análise em texto</button>
         <button type="button" class="pf-acao pdf" onclick="pfExportarInternoPDF()">📄 Exportar (PDF)</button>
         <button type="button" class="pf-acao ppt" onclick="pfExportarInternoPPTX()">🎬 Apresentação (PPTX + PDF)</button>
         <button type="button" class="pf-acao mail" onclick="pfEnviarEmail('interno')">✉️ Enviar por e-mail</button>
@@ -4050,7 +4054,7 @@ function pfHtmlInterno() {
   return h;
 }
 
-/* ── texto do comparativo interno ── */
+/* ── texto do comparativo entre unidades ── */
 function pfChaveInterno() { return JSON.stringify(pfEstado().aplicado) + '|interno'; }
 function pfPayloadInterno() {
   const p = pfEstado();
@@ -4067,14 +4071,15 @@ function pfHtmlTextoInterno() {
   return `
     ${ti.origem === 'contingencia' ? '<div class="pf-origem">Texto gerado pelo modelo de contingência (a IA não respondeu). Você pode exportar assim ou gerar novamente.</div>' : ''}
     <div class="pf-texto">${par(t.resumo)}${par(t.ranking_unidades)}${porCli}${par(t.entre_clientes)}
-      ${t.pontos_atencao ? `<div class="pf-caixa at"><h5>⚠ PONTOS DE ATENÇÃO</h5><p>${esc(t.pontos_atencao)}</p></div>` : ''}
-      ${t.recomendacoes ? `<div class="pf-caixa su"><h5>→ RECOMENDAÇÕES</h5><p>${esc(t.recomendacoes)}</p></div>` : ''}
+      ${t.pontos_positivos ? `<div class="pf-caixa ok"><h5>✓ PONTOS POSITIVOS</h5><p>${esc(t.pontos_positivos)}</p></div>` : ''}
+      ${t.oportunidades ? `<div class="pf-caixa at"><h5>⚠ OPORTUNIDADES DE MELHORIA</h5><p>${esc(t.oportunidades)}</p></div>` : ''}
+      ${t.sugestoes ? `<div class="pf-caixa su"><h5>→ SUGESTÕES</h5><p>${esc(t.sugestoes)}</p></div>` : ''}
     </div>`;
 }
 async function pfGarantirTextoInterno(forcar) {
   const p = pfEstado();
   if (!forcar && p.textosInterno && p.textosInterno.chave === pfChaveInterno()) return p.textosInterno.textos;
-  showLoading('Gerando a análise do comparativo interno...');
+  showLoading('Gerando a análise do comparativo entre unidades...');
   const r = await apiCall('performanceGerarTextoInterno', pfPayloadInterno());
   hideLoading();
   if (!r.ok) { toast('Erro ao gerar a análise: ' + (r.erro || 'falha'), 5000); return null; }
@@ -4093,20 +4098,20 @@ async function pfGerarTextoInternoTela() {
   if (t) pfAtualizarTextoInterno(true);
 }
 
-/* ── exportações do comparativo interno ── */
+/* ── exportações do comparativo entre unidades ── */
 async function pfExportarInternoPDF(silencioso) {
   const di = pfDadosInterno();
   if (di.unidades.length < 2) { toast('O comparativo precisa de pelo menos 2 unidades'); return null; }
   const t = await pfGarantirTextoInterno(false);
   if (!t) return null;
   pfAtualizarTextoInterno();
-  showLoading('Gerando o PDF do comparativo interno...');
+  showLoading('Gerando o PDF do comparativo entre unidades...');
   const r = await apiCall('performanceExportarPDFInterno', Object.assign(pfPayloadInterno(), { textos: t }));
   hideLoading();
   if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha'), 5000); return null; }
   pfArqGuardar(pfChaveArq('interno'), 'analise', r.pdfId || '');
   if (silencioso) return r;
-  pfModalLinks('Comparativo interno em PDF pronto', 'O comparativo entre <b>' + di.unidades.length + ' unidades</b> (com ranking) foi salvo no Drive (pasta Performance_FC / Interno).',
+  pfModalLinks('Comparativo em PDF pronto', 'O comparativo entre <b>' + di.unidades.length + ' unidades</b> (com ranking) foi salvo no Drive (pasta Performance_FC / Comparativos).',
     [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
   return r;
 }
@@ -4121,7 +4126,7 @@ async function pfExportarInternoPPTX(silencioso) {
   pfAtualizarTextoInterno();
   let b64;
   try {
-    showLoading('Montando a apresentação do comparativo interno...');
+    showLoading('Montando a apresentação do comparativo entre unidades...');
     b64 = await montarPptxPerformanceInterno(Object.assign(di, {
       textos: t, periodoTxt: pfPeriodoRotulo(p.aplicado), tipoTxt: pfTipoRotulo(p.aplicado),
       estabTxt: pfEstabRotulo(p.aplicado).replace(/^\S+\s/, ''), anterior: p.dados.periodoAnterior
@@ -4134,7 +4139,7 @@ async function pfExportarInternoPPTX(silencioso) {
   pfArqGuardar(pfChaveArq('interno'), 'apres', r.pdfId || '');
   if (silencioso) return r;
   pfModalLinks('Apresentação do comparativo pronta',
-    'A apresentação do comparativo entre <b>' + di.unidades.length + ' unidades</b> foi salva no Drive (pasta Performance_FC / Interno).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
+    'A apresentação do comparativo entre <b>' + di.unidades.length + ' unidades</b> foi salva no Drive (pasta Performance_FC / Comparativos).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
     [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
   return r;
 }
@@ -4212,7 +4217,7 @@ function pfRenderModalEnvio() {
     document.body.appendChild(m);
   }
   const arq = (pfEstado().arquivos || {})[e.chave] || {};
-  const nomeEscopo = e.escopo === 'interno' ? 'Comparativo entre unidades (com ranking)' : (e.escopo === 'grupo' ? 'Análise do grupo' : 'Análise de ' + e.titulo);
+  const nomeEscopo = e.escopo === 'interno' ? 'Comparativo entre unidades — ' + e.titulo : 'Análise de Performance — ' + e.titulo;
   const lista = e.emails.length
     ? e.emails.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="pfEnvMarcar(${i},this.checked)"><span>${esc(x.email)}${x.sub ? '<small>' + esc(x.sub) + '</small>' : ''}</span></label>`).join('')
     : '<div class="ms-vazio">Nenhum e-mail encontrado nas análises enviadas destas unidades. Adicione abaixo.</div>';
@@ -4223,7 +4228,6 @@ function pfRenderModalEnvio() {
       <div class="nps-modal-topo"><div class="nps-modal-linha"><div class="nps-modal-titulo">✉️ Enviar por e-mail</div><button type="button" class="nps-modal-x" aria-label="Fechar" onclick="pfFecharEnvio()">✕</button></div></div>
       <div class="nps-modal-corpo">
         <p style="font-size:13px;line-height:1.5;margin:0 0 10px;color:var(--text)"><b>${esc(nomeEscopo)}</b><br><span style="color:var(--text-light)">${esc(e.periodoTxt)}</span></p>
-        ${e.escopo === 'interno' ? '<div class="pf-int-aviso">Atenção: este relatório tem ranking e dados de todos os clientes listados (' + esc(e.titulo) + '). Confira os destinatários antes de enviar.</div>' : ''}
         <div class="pf-env-rot">Destinatários (${e.emails.filter(x => x.marcado).length} marcado(s))</div>
         <div class="pf-env-lista">${lista}</div>
         <div class="pf-env-add">
@@ -4450,7 +4454,7 @@ function montarPptxPerformanceInterno(g) {
         { text: 'Comparativo ', options: { color: 'FFFFFF', fontSize: 30, fontFace: 'Calibri', bold: true } },
         { text: 'entre Unidades', options: { color: GREEN, fontSize: 30, fontFace: 'Calibri', bold: true } }
       ], { x: 0.8, y: 0.7, w: 8.4, h: 1.1, isTextBox: true, margin: 0 });
-      sc.addText('Relatório interno Formula Code  ·  com ranking', { x: 0.8, y: 1.85, w: 8.4, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
+      sc.addText('Apresentação Executiva  ·  ranking das unidades', { x: 0.8, y: 1.85, w: 8.4, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
       sc.addText(g.periodoTxt || '', { x: 0.8, y: 2.4, w: 8.4, h: 0.3, fontSize: 13, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0 });
       const nomes = g.clientes.map(function(c) { return c.cliente + '  (' + c.unidades + ' unid.)'; }).join('\n');
       sc.addText(nomes, { x: 0.8, y: 2.8, w: 8.4, h: Math.min(1.25, pptMedirAltura(nomes, 8.4, 11, 1.2)), fontSize: 11, fontFace: 'Arial', color: 'FFFFFF', isTextBox: true, margin: 0, lineSpacingMultiple: 1.2, valign: 'top' });
@@ -4494,7 +4498,7 @@ function montarPptxPerformanceInterno(g) {
       }
 
       /* 6 — Conclusão */
-      const caixas = [['⚠ PONTOS DE ATENÇÃO', t.pontos_atencao, ORANGE], ['→ RECOMENDAÇÕES', t.recomendacoes, NAVY]].filter(function(c) { return c[1]; });
+      const caixas = [['✓ PONTOS POSITIVOS', t.pontos_positivos, '2E7D32'], ['! OPORTUNIDADES DE MELHORIA', t.oportunidades, ORANGE], ['→ SUGESTÕES', t.sugestoes, NAVY]].filter(function(c) { return c[1]; });
       if (caixas.length) {
         const alturas = caixas.map(function(c) { return 0.3 + pptMedirAltura(c[1], 8.6, 11, 1.3) + 0.15; });
         if (alturas.reduce(function(x, y) { return x + y; }, 0) <= PPT_Y_MAX - 1.4) {
@@ -5493,9 +5497,9 @@ function montarPptxPerformanceGrupo(g) {
         sc.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.04, fill:{ color: GREEN } });
         sc.addText([
           { text:'Análise de ', options:{ color:'FFFFFF', fontSize:30, fontFace:'Calibri', bold:true } },
-          { text:'Performance do Grupo', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
+          { text:'Performance das Unidades', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
         ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
-        sc.addText('Apresentação Executiva  ·  ' + g.itens.length + ' clientes', { x:0.8, y:1.85, w:8.4, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
+        sc.addText(pptTruncar('Apresentação Executiva  ·  ' + g.itens.map(function(it) { return it.cliente.cliente; }).join(' · '), 80), { x:0.8, y:1.85, w:8.4, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
         const nomes = g.itens.map(function(it, i) { return (i + 1) + '. ' + String(it.cliente.cliente || ''); }).join('\n');
         sc.addText(periodoTxt, { x:0.8, y:2.4, w:8.4, h:0.3, fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
         sc.addText(nomes, { x:0.8, y:2.8, w:8.4, h:Math.min(1.3, pptMedirAltura(nomes, 8.4, 11, 1.2)), fontSize:11, fontFace:'Arial', color:'FFFFFF', isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
