@@ -365,6 +365,25 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 .pf-carregando{opacity:.45;pointer-events:none}
 .pf-links{display:grid;gap:10px;margin-top:14px}
 .pf-links a,.pf-links button{display:block;text-align:center;text-decoration:none;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer}
+/* r153: comparativo interno (ranking) e envio por e-mail */
+.pf-acao.mail{background:#E8F5E9;color:#1B5E20}
+.pf-acao.int{background:#5DC500;color:var(--dark)}
+.pf-tab th.pf-pos,.pf-tab td.pf-pos{text-align:center;width:34px;color:var(--navy);font-weight:800}
+.pf-tab td.pf-cli{text-align:left;font-weight:500;color:var(--text-light);font-size:11px}
+.pf-tab td.pf-nome{text-align:left;font-weight:600;color:var(--navy);white-space:nowrap}
+.pf-tab td.pf-cli{white-space:nowrap}
+.pf-int-sub{font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 6px}
+.pf-int-aviso{font-size:11px;color:#9A5B12;background:#FFF3E0;border-radius:8px;padding:8px 10px;margin:0 0 10px;line-height:1.5}
+.pf-env-lista{border:1px solid var(--border);border-radius:10px;max-height:260px;overflow:auto;margin:6px 0 10px}
+.pf-env-item{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-bottom:1px solid #F1F3F5;font-size:13px;cursor:pointer}
+.pf-env-item:last-child{border-bottom:0}
+.pf-env-item input{width:auto;margin:3px 0 0;flex:none}
+.pf-env-item small{display:block;color:var(--text-light);font-size:10px;line-height:1.4;margin-top:2px}
+.pf-env-add{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px}
+.pf-env-add input{border:2px solid var(--border);border-radius:10px;padding:9px 10px;font-size:13px;font-family:inherit;min-width:0}
+.pf-env-add button{border:none;border-radius:10px;padding:9px 14px;font-weight:700;background:var(--navy);color:#fff;cursor:pointer}
+.pf-env-rot{font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.pf-env-anexos{font-size:12px;line-height:1.7;color:var(--text);background:var(--bg);border-radius:10px;padding:8px 12px;margin:6px 0 12px}
 @media(max-width:420px){.pf-grid{grid-template-columns:1fr}.pf-met{grid-template-columns:86px 1fr 28px}.aba-home{font-size:11px;padding:10px 4px;gap:4px}.aba-home .bi{display:none}}
 @media(prefers-reduced-motion:reduce){button.pf-card{transition:none}}
 
@@ -430,7 +449,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r152';
+const VERSAO = 'r153';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -440,6 +459,17 @@ const LOGO_DATA_URL = (document.querySelector('.app-header img') || {}).src || '
 // 176x44px, otimizada pro tamanho pequeno da tela, e ficava borrada
 // ampliada na capa/marca d'água do PPTX). Usada só na apresentação;
 // não mexe no logo do header do app.
+// r153: proporção real da logomarca (1274 x 318 px). Nas apresentações a logo é encaixada na caixa
+// disponível SEM alterar a proporção (reduz o tamanho se precisar; nunca achata).
+const LOGO_RAZAO = 1274 / 318;
+function pptLogo(s, x, y, wMax, hMax, alinhar) {
+  if (!LOGO_APRESENTACAO_DATA_URL) return;
+  let w = wMax, h = wMax / LOGO_RAZAO;
+  if (h > hMax) { h = hMax; w = hMax * LOGO_RAZAO; }
+  const dx = alinhar === 'direita' ? (wMax - w) : (alinhar === 'centro' ? (wMax - w) / 2 : 0);
+  const dy = (hMax - h) / 2;
+  try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: x + dx, y: y + dy, w: w, h: h }); } catch (e) {}
+}
 const LOGO_APRESENTACAO_DATA_URL = 'data:image/png;base64,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';
 
 /* ═══════════════════════════════════════════════════════
@@ -1007,7 +1037,7 @@ function mostrarAbaHome(aba) {
   if (!c) return;
   if (aba === 'hist') carregarHistoricoAba();
   else if (aba === 'perf') carregarPerformanceAba();
-  else if (aba === 'nps') { if (!state.npsDados && !state.npsCarregando) npsCarregarCards(); npsRenderAba(); }   // r130: só busca ao abrir a aba
+  else if (aba === 'nps') { if (!state.npsCarregando) npsCarregarCards(); npsRenderAba(); }   // r153: ao abrir a aba, sempre busca com os filtros atuais
   else c.innerHTML = htmlAbaPreenchimento();
 }
 
@@ -1761,9 +1791,9 @@ async function finalizarAvaliacao() {
    HISTÓRICO (r109: agora é a aba "Histórico" da tela inicial)
    ═══════════════════════════════════════════════════════ */
 function verHistorico(forcarBusca) {
+  // r153: abrir a aba Histórico já busca sozinho (carregarHistoricoAba), então não precisa buscar de novo aqui
   if ($('#abaConteudo')) mostrarAbaHome('hist');
   else renderTelaInicial('hist');
-  if (forcarBusca) histBuscar();   // r136: excluir/enviar/voltar-da-apresentação continuam atualizando sozinhos
 }
 
 
@@ -1878,6 +1908,7 @@ function histFiltrar(lista) {
 // escondendo os filtros atrás de "Carregando...".
 function carregarHistoricoAba() {
   histRenderTudo();
+  histBuscar();   // r153: ao abrir a aba, já busca com os filtros atuais
 }
 
 function histMudou(campo, valor) {
@@ -2235,7 +2266,7 @@ async function pfCarregarContagem() {
   const f = p.aplicado || p.filtro;
   const iv = pfIntervalo(f);
   const req = state.pfContagemReq = (state.pfContagemReq || 0) + 1;
-  const r = await apiCall('contarAnalisadasPerformance', { clientes: f.clientes, estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  const r = await apiCall('contarAnalisadasPerformance', { clientes: f.clientes, unidades: f.unidades || [], estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
   if (req !== state.pfContagemReq) return;
   if (r && r.ok && r.totais) { state.pfContagem = r.totais; state.pfContagemErro = false; }
   else { state.pfContagem = null; state.pfContagemErro = true; }
@@ -2788,7 +2819,7 @@ function montarPptxNps(t, dados) {
         s.background = { fill: 'FFFFFF' };
         s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.5, fill: { color: DARK } });
         s.addShape(pres.ShapeType.rect, { x: 0, y: 0.5, w: 10, h: 0.04, fill: { color: GREEN } });
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: 7.4, y: 0.07, w: 2.1, h: 0.36 }); } catch (e) {} }
+        pptLogo(s, 7.4, 0.07, 2.1, 0.36, 'direita');   // r153: sem achatar
       }
       let num = 0;
       function rotulo(s, texto) {
@@ -2812,7 +2843,7 @@ function montarPptxNps(t, dados) {
       ], { x: 0.8, y: 0.7, w: 8.4, h: 1.1, isTextBox: true, margin: 0 });
       s1.addText((t.subtitulo ? t.subtitulo + ' · ' : '') + 'Apresentação para a diretoria', { x: 0.8, y: 1.85, w: 8.4, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
       s1.addText(t.contexto, { x: 0.8, y: 2.45, w: 8.4, h: Math.min(1.2, pptMedirAltura(t.contexto, 8.4, 13, 1.1)), fontSize: 13, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, valign: 'top' });
-      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x: 3.2, y: 4.15, w: 3.6, h: 0.94 }); } catch (e) {} }
+      pptLogo(s1, 3.2, 4.15, 3.6, 0.94, 'centro');   // r153: sem achatar
 
       /* Indicadores */
       const s2 = pres.addSlide();
@@ -3411,7 +3442,7 @@ function pfDeltaCor(v) { return (v === null || v === undefined || v === 0) ? '#6
 
 const PF_ESTABS = [{ v: '', t: 'Todos os estabelecimentos' }, { v: 'SUPERMERCADO', t: '🛒 Supermercado' }, { v: 'FARMACIA', t: '💊 Farmácia' }];
 function pfEstabRotulo(f) { const t = PF_ESTABS.find(x => x.v === f.estab); return t && t.v ? t.t : ''; }
-function pfFiltroInicial() { return { clientes: [], estab: '', tipo: '', periodo: '90', de: '', ate: '' }; }
+function pfFiltroInicial() { return { clientes: [], unidades: [], estab: '', tipo: '', periodo: '90', de: '', ate: '' }; }
 function pfEstado() {
   if (!state.pf) state.pf = { filtro: pfFiltroInicial(), dados: null, aplicado: null, foco: '', textos: null, textosChave: '', origemTexto: '', req: 0 };
   return state.pf;
@@ -3442,20 +3473,34 @@ function pfOpcoesClientes(estab) {
     return !Array.isArray(tipos) || tipos.indexOf(estab) !== -1;
   }).map(x => ({ v: x, t: x }));
 }
+// r153: unidades dos clientes escolhidos (valor = "cliente\tunidade", pois nomes de unidade podem repetir entre clientes)
+function pfOpcoesUnidades(clientes) {
+  const mapa = state.unidadesConcluidas || state.unidades || {};
+  const varios = clientes.length > 1;
+  const out = [];
+  clientes.forEach(c => (mapa[c] || []).forEach(u => out.push({ v: c + '\t' + u, t: u, sub: varios ? c : '', rot: varios ? u + ' (' + c + ')' : u })));
+  return out;
+}
+const PF_MSG_UNID = 'Selecione ao menos 1 cliente para escolher unidades';
 function carregarPerformanceAba() {
   const c = $('#abaConteudo');
   if (!c) return;
   const p = pfEstado();
   const f = p.filtro;
+  if (!Array.isArray(f.unidades)) f.unidades = [];
   const opcoesCli = pfOpcoesClientes(f.estab);
   f.clientes = f.clientes.filter(x => opcoesCli.some(o => o.v === x));
-  const msCli = msHtml('pCli', { opcoes: opcoesCli, sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, msgVazio: 'Nenhum cliente com análise neste tipo de estabelecimento', cb: v => pfMudou('clientes', v) });
+  const msCli = msHtml('pCli', { opcoes: opcoesCli, sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', full: true, msgVazio: 'Nenhum cliente com análise neste tipo de estabelecimento', cb: v => pfMudouClientes(v) });
+  const opcoesUni = pfOpcoesUnidades(f.clientes);
+  f.unidades = f.unidades.filter(x => opcoesUni.some(o => o.v === x));
+  const msUni = msHtml('pUni', { opcoes: opcoesUni, sel: f.unidades, rotuloTodos: 'Todas as unidades', rotuloPlural: 'unidades', full: true, desabilitado: !f.clientes.length, msgVazio: PF_MSG_UNID, cb: v => pfMudou('unidades', v) });
   const btnsEstab = PF_ESTABS.map(x => `<button type="button" class="hist-tipo${f.estab === x.v ? ' ativo' : ''}" onclick="pfEscolherEstab('${x.v}')">${x.v ? x.t : 'Todos'}</button>`).join('');
   const optsPer = NPS_PERIODOS.map(x => `<option value="${x.v}"${x.v === f.periodo ? ' selected' : ''}>${x.t}</option>`).join('');
   const optsTipo = PF_TIPOS.map(x => `<option value="${esc(x.v)}"${x.v === f.tipo ? ' selected' : ''}>${x.t}</option>`).join('');
   c.innerHTML = `
     <div class="pf-filtros">
       ${msCli}
+      ${msUni}
       <div class="hist-tipos pf-full" id="pfEstabBtns" role="group" aria-label="Tipo de estabelecimento">${btnsEstab}</div>
       <select id="pfPeriodo" aria-label="Período (data da análise)" onchange="pfMudou('periodo',this.value)">${optsPer}</select>
       <select id="pfTipo" aria-label="Tipo de avaliação" onchange="pfMudou('tipo',this.value)">${optsTipo}</select>
@@ -3467,8 +3512,22 @@ function carregarPerformanceAba() {
       <button type="button" class="pf-btn-buscar" id="pfBtnBuscar" onclick="pfBuscar()">🔍 Buscar</button>
     </div>
     <div id="pfResultados"></div>`;
-  if (p.dados) pfRender();
-  else pfBuscar();   // primeira abertura: cards macro com o filtro padrão (últimos 90 dias)
+  if (p.dados) pfRender();   // mostra o último resultado enquanto a nova busca roda
+  pfBuscar();   // r153: ao abrir a aba, sempre busca com os filtros atuais
+}
+
+// r153: clientes mudaram → a lista de unidades acompanha; unidades de clientes desmarcados saem da seleção
+function pfMudouClientes(v) {
+  const p = pfEstado();
+  p.filtro.clientes = v;
+  pfRedesenharUnidades();
+  pfMarcarPendente();
+}
+function pfRedesenharUnidades() {
+  const f = pfEstado().filtro;
+  const opc = pfOpcoesUnidades(f.clientes);
+  if (MS.pUni) { msRedesenhar('pUni', opc, !f.clientes.length, PF_MSG_UNID); f.unidades = MS.pUni.sel.slice(); }
+  else f.unidades = (f.unidades || []).filter(x => opc.some(o => o.v === x));
 }
 
 // r129: tipo de estabelecimento em botões (como no Histórico); aplica na hora, sem precisar tocar em Buscar.
@@ -3486,6 +3545,7 @@ function pfEscolherEstab(v) {
     p.filtro.clientes = p.filtro.clientes.filter(x => opc.some(o => o.v === x));
   }
   if (p.filtro.clientes.length !== antes) toast('Clientes sem análise nesse tipo de estabelecimento saíram da seleção', 4000);
+  pfRedesenharUnidades();   // r153
   pfBuscar();
 }
 function pfMudou(campo, valor) {
@@ -3510,7 +3570,7 @@ async function pfBuscar() {
   const req = ++p.req;
   const box = $('#pfResultados');
   if (box) box.classList.add('pf-carregando');
-  const r = await apiCall('performanceAnalise', { clientes: f.clientes, estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  const r = await apiCall('performanceAnalise', { clientes: f.clientes, unidades: f.unidades || [], estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
   const boxAtual = $('#pfResultados');
   if (req !== p.req || state.abaHome !== 'perf' || !boxAtual) return;
   boxAtual.classList.remove('pf-carregando');
@@ -3538,7 +3598,7 @@ function pfRender() {
   if (!d.clientes.length) {
     const f = p.aplicado;
     box.innerHTML = '<div class="pf-vazio">Nenhuma análise concluída ' + (f.clientes.length ? 'de <b>' + esc(f.clientes.join(', ')) + '</b> ' : '') + (f.estab ? '(' + esc(pfEstabRotulo(f)) + ') ' : '') +
-      'em <b>' + esc(pfPeriodoRotulo(f)) + '</b>' + (f.tipo ? ' (' + esc(pfTipoRotulo(f)) + ')' : '') + '.<br>Ajuste o cliente, o período ou o tipo de avaliação e toque em Buscar.' +
+      'em <b>' + esc(pfPeriodoRotulo(f)) + '</b>' + (f.tipo ? ' (' + esc(pfTipoRotulo(f)) + ')' : '') + '.<br>Ajuste o cliente, a unidade, o período ou o tipo de avaliação e toque em Buscar.' +
       (f.periodo !== 'tudo' ? '<br><button type="button" class="pf-acao txt" style="display:inline-flex;margin-top:12px" onclick="pfBuscarTodoPeriodo()">Buscar em todo o período</button>' : '') + '</div>';
     return;
   }
@@ -3549,7 +3609,8 @@ function pfRender() {
 function pfHtmlPeriodoLinha() {
   const p = pfEstado();
   const ant = p.dados && p.dados.periodoAnterior;
-  return `Período (data da análise): <b>${esc(pfPeriodoRotulo(p.aplicado))}</b> · ${esc(pfTipoRotulo(p.aplicado))}${pfEstabRotulo(p.aplicado) ? ' · ' + esc(pfEstabRotulo(p.aplicado)) : ''} · comparado com ` +
+  const nUn = (p.aplicado.unidades || []).length;   // r153
+  return `Período (data da análise): <b>${esc(pfPeriodoRotulo(p.aplicado))}</b> · ${esc(pfTipoRotulo(p.aplicado))}${pfEstabRotulo(p.aplicado) ? ' · ' + esc(pfEstabRotulo(p.aplicado)) : ''}${nUn ? ' · <b>' + nUn + '</b> unidade(s) marcada(s) no filtro' : ''} · comparado com ` +
     (ant ? `<b>${npsDataBR(ant.de)} a ${npsDataBR(ant.ate)}</b> (período anterior de mesma duração)` : '<b>—</b> (sem período anterior para comparar)');
 }
 
@@ -3594,7 +3655,8 @@ function pfHtmlMacro(d) {
     <div class="pf-resumo-linha"><b>${t.clientes}</b> cliente(s) · <b>${t.unidades}</b> unidade(s) · <b>${t.analises}</b> análise(s) concluída(s).<br>${pfHtmlPeriodoLinha()}</div>
     ${pfHtmlExportarGrupo()}
     <div class="pf-grid">${cards}</div>
-    <div class="pf-nota-tab">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Toque num cliente para ver as unidades, a análise e exportar.</div>`;
+    <div class="pf-nota-tab">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Toque num cliente para ver as unidades, a análise e exportar.</div>
+    <div style="margin-top:14px">${pfHtmlInterno()}</div>`;
 }
 
 /* ── r131: exportação do GRUPO — os clientes selecionados num arquivo único (cliente 1, cliente 2... e a comparação entre eles) ── */
@@ -3619,13 +3681,14 @@ function pfHtmlExportarGrupo() {
       <div class="pf-acoes" style="margin-bottom:0">
         <button type="button" class="pf-acao pdf" onclick="pfExportarGrupoPDF()">📄 Exportar grupo (PDF)</button>
         <button type="button" class="pf-acao ppt" onclick="pfExportarGrupoPPTX()">🎬 Apresentação do grupo (PPTX + PDF)</button>
+        <button type="button" class="pf-acao mail" onclick="pfEnviarEmail('grupo')">✉️ Enviar ${lista.length > 1 ? 'o grupo ' : ''}por e-mail (análise + apresentação em PDF)</button>
       </div>
     </div>`;
 }
 function pfPayloadGrupo(lista) {
   const p = pfEstado();
   const iv = pfIntervalo(p.aplicado);
-  return { clientes: lista.map(c => c.cliente), estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
+  return { clientes: lista.map(c => c.cliente), unidades: p.aplicado.unidades || [], estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
 }
 // Gera (ou reaproveita) o texto de cada cliente, um após o outro, e a comparação entre eles. null = falhou.
 async function pfGarantirTextosGrupo(lista) {
@@ -3638,7 +3701,7 @@ async function pfGarantirTextosGrupo(lista) {
     const c = lista[i];
     if (p.textos && p.textosChave === JSON.stringify(p.aplicado) + '|' + c.cliente) { porCliente[c.cliente] = p.textos; continue; }   // já gerado ao abrir este cliente
     showLoading('Gerando a análise do cliente ' + (i + 1) + ' de ' + lista.length + ': ' + c.cliente + '...');
-    const r = await apiCall('performanceGerarTexto', { cliente: c.cliente, estab: base.estab, tipo: base.tipo, de: base.de, ate: base.ate });
+    const r = await apiCall('performanceGerarTexto', { cliente: c.cliente, unidades: base.unidades, estab: base.estab, tipo: base.tipo, de: base.de, ate: base.ate });
     if (!r.ok) { hideLoading(); toast('Erro ao gerar a análise de ' + c.cliente + ': ' + (r.erro || 'falha'), 5000); return null; }
     porCliente[c.cliente] = r.textos;
   }
@@ -3653,29 +3716,32 @@ async function pfGarantirTextosGrupo(lista) {
   p.textosGrupo = { chave, porCliente, grupo };
   return p.textosGrupo;
 }
-async function pfExportarGrupoPDF() {
+async function pfExportarGrupoPDF(silencioso) {   // r153: silencioso = usado pelo envio por e-mail
   const p = pfEstado();
   const lista = pfClientesDoGrupo();
-  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return; }
-  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); await pfExportarPDF(); return; }
+  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return null; }
+  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); return await pfExportarPDF(silencioso); }
   const t = await pfGarantirTextosGrupo(lista);
-  if (!t) return;
+  if (!t) return null;
   showLoading('Gerando o PDF único do grupo...');
   const r = await apiCall('performanceExportarPDFGrupo', Object.assign(pfPayloadGrupo(lista), { textos: t.porCliente, textosGrupo: t.grupo }));
   hideLoading();
-  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha'), 5000); return; }
+  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha'), 5000); return null; }
+  pfArqGuardar(pfChaveArq('grupo'), 'analise', r.pdfId || '');
+  if (silencioso) return r;
   pfModalLinks('Análise do grupo em PDF pronta', 'O arquivo único com <b>' + lista.length + ' clientes</b> (um após o outro e, no final, a comparação entre eles) foi salvo no Drive (pasta Performance_FC / Grupos).',
     [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
+  return r;
 }
-async function pfExportarGrupoPPTX() {
+async function pfExportarGrupoPPTX(silencioso) {   // r153: silencioso = usado pelo envio por e-mail
   const p = pfEstado();
   const lista = pfClientesDoGrupo();
-  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return; }
-  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); await pfExportarPPTX(); return; }
+  if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return null; }
+  if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); return await pfExportarPPTX(silencioso); }
   const disponivel = await aguardarPptxGenJS();
-  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return; }
+  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return null; }
   const t = await pfGarantirTextosGrupo(lista);
-  if (!t) return;
+  if (!t) return null;
   let b64;
   try {
     showLoading('Montando a apresentação do grupo...');
@@ -3683,14 +3749,17 @@ async function pfExportarGrupoPPTX() {
       periodoTxt: pfPeriodoRotulo(p.aplicado), tipoTxt: pfTipoRotulo(p.aplicado), estabTxt: pfEstabRotulo(p.aplicado).replace(/^\S+\s/, ''), anterior: p.dados.periodoAnterior,
       itens: lista.map(c => ({ cliente: c, textos: t.porCliente[c.cliente] })), textosGrupo: t.grupo
     });
-  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message, 5000); return; }
+  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message, 5000); return null; }
   showLoading('Salvando no Drive e convertendo em PDF...');
   const r = await apiCall('performanceSalvarApresentacaoGrupo', Object.assign(pfPayloadGrupo(lista), { pptxBase64: b64 }));
   hideLoading();
-  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha'), 5000); return; }
+  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha'), 5000); return null; }
+  pfArqGuardar(pfChaveArq('grupo'), 'apres', r.pdfId || '');
+  if (silencioso) return r;
   pfModalLinks('Apresentação do grupo pronta',
     'A apresentação com <b>' + lista.length + ' clientes</b> (um após o outro e, no final, a comparação entre eles) foi salva no Drive (pasta Performance_FC / Grupos).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
     [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
+  return r;
 }
 
 function pfAbrirCliente(i) {
@@ -3770,6 +3839,7 @@ function pfHtmlDetalhe(c) {
       <button type="button" class="pf-acao txt" onclick="pfGerarTextoTela()">✨ Gerar análise em texto</button>
       <button type="button" class="pf-acao pdf" onclick="pfExportarPDF()">📄 Exportar análise (PDF)</button>
       <button type="button" class="pf-acao ppt" onclick="pfExportarPPTX()">🎬 Apresentação com resumo executivo (PPTX + PDF)</button>
+      <button type="button" class="pf-acao mail" onclick="pfEnviarEmail('cliente')">✉️ Enviar por e-mail (análise + apresentação em PDF)</button>
     </div>
     <div class="pf-grid">${unidades}</div>
     ${tabComp}
@@ -3800,7 +3870,7 @@ function pfHtmlTexto(c) {
 function pfPayloadBase() {
   const p = pfEstado();
   const iv = pfIntervalo(p.aplicado);
-  return { cliente: p.foco, estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
+  return { cliente: p.foco, unidades: p.aplicado.unidades || [], estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
 }
 
 // Devolve os textos (gera se ainda não existem para este filtro). null = falhou.
@@ -3819,6 +3889,7 @@ async function pfGerarTextoTela() {
   const p = pfEstado();
   const t = await pfGarantirTexto(true);
   if (!t) return;
+  if (p.arquivos) delete p.arquivos[pfChaveArq('cliente')];   // r153: PDFs gerados com o texto antigo não são reaproveitados no envio
   const c = p.dados.clientes.find(x => x.cliente === p.foco);
   const el = $('#pfTexto');
   if (el && c) { el.innerHTML = pfHtmlTexto(c); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -3847,28 +3918,31 @@ function pfModalLinks(titulo, texto, links) {
   document.body.appendChild(m);
 }
 
-async function pfExportarPDF() {
+async function pfExportarPDF(silencioso) {   // r153: silencioso = usado pelo envio por e-mail (sem a janela de links)
   const p = pfEstado();
   const t = await pfGarantirTexto(false);
-  if (!t) return;
+  if (!t) return null;
   const c = p.dados.clientes.find(x => x.cliente === p.foco);
   const el = $('#pfTexto'); if (el && c) el.innerHTML = pfHtmlTexto(c);
   showLoading('Gerando o PDF da análise...');
   const r = await apiCall('performanceExportarPDF', Object.assign(pfPayloadBase(), { textos: t }));
   hideLoading();
-  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha')); return; }
+  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha')); return null; }
+  pfArqGuardar(pfChaveArq('cliente'), 'analise', r.pdfId || '');
+  if (silencioso) return r;
   pfModalLinks('Análise em PDF pronta', 'A análise de <b>' + esc(p.foco) + '</b> foi salva no Drive (pasta Performance_FC).',
     [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
+  return r;
 }
 
-async function pfExportarPPTX() {
+async function pfExportarPPTX(silencioso) {   // r153: silencioso = usado pelo envio por e-mail
   const p = pfEstado();
   const c = p.dados.clientes.find(x => x.cliente === p.foco);
-  if (!c) return;
+  if (!c) return null;
   const disponivel = await aguardarPptxGenJS();
-  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return; }
+  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return null; }
   const t = await pfGarantirTexto(false);
-  if (!t) return;
+  if (!t) return null;
   const el = $('#pfTexto'); if (el) el.innerHTML = pfHtmlTexto(c);
   let b64;
   try {
@@ -3877,14 +3951,572 @@ async function pfExportarPPTX() {
       cliente: c, textos: t, periodoTxt: pfPeriodoRotulo(p.aplicado), tipoTxt: pfTipoRotulo(p.aplicado),
       anterior: p.dados.periodoAnterior
     });
-  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message); return; }
+  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message); return null; }
   showLoading('Salvando no Drive e convertendo em PDF...');
   const r = await apiCall('performanceSalvarApresentacao', Object.assign(pfPayloadBase(), { pptxBase64: b64 }));
   hideLoading();
-  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha')); return; }
+  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha')); return null; }
+  pfArqGuardar(pfChaveArq('cliente'), 'apres', r.pdfId || '');
+  if (silencioso) return r;
   pfModalLinks('Apresentação pronta',
     'A apresentação de <b>' + esc(p.foco) + '</b> foi salva no Drive (pasta Performance_FC).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
     [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
+  return r;
+}
+
+/* ═══════════════════════════════════════════════════════
+   r153 — COMPARATIVO INTERNO ENTRE UNIDADES (com ranking)
+   Usa o resultado da busca atual (mesmos filtros, inclusive unidades).
+   Unidades agrupadas por cliente (ranking dentro de cada cliente),
+   ranking geral das unidades e, com 2+ clientes, ranking entre os
+   clientes. As exportações para o cliente continuam sem ranking.
+   ═══════════════════════════════════════════════════════ */
+function pfTemNota(o) { return o && o.geral !== null && o.geral !== undefined && !isNaN(o.geral); }
+function pfOrdenarNota(lista, campo) {
+  return lista.slice().sort((a, b) => {
+    const ta = pfTemNota(a), tb = pfTemNota(b);
+    if (!ta && !tb) return String(a[campo]).localeCompare(String(b[campo]));
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return (b.geral - a.geral) || String(a[campo]).localeCompare(String(b[campo]));
+  });
+}
+// posição (1º, 2º...) dentro da lista ordenada; quem não tem nota fica sem posição
+function pfPos(listaOrdenada, item) {
+  const com = listaOrdenada.filter(pfTemNota);
+  const i = com.indexOf(item);
+  return i === -1 ? '—' : (i + 1) + 'º';
+}
+// clientes do resultado: na ordem em que foram selecionados (sem seleção: ordem alfabética do servidor)
+function pfClientesInterno() {
+  const p = pfEstado();
+  if (!p.dados) return [];
+  const lista = p.dados.clientes.slice();
+  const sel = ((p.aplicado && p.aplicado.clientes) || []).map(fcChave);
+  if (sel.length) lista.sort((a, b) => sel.indexOf(fcChave(a.cliente)) - sel.indexOf(fcChave(b.cliente)));
+  return lista;
+}
+function pfDadosInterno() {
+  const clientes = pfClientesInterno();
+  const unidades = [];
+  clientes.forEach(c => c.lista.forEach(u => unidades.push(Object.assign({ cliente: c.cliente }, u))));
+  const com = unidades.filter(pfTemNota);
+  const media = com.length ? Math.round(com.reduce((s, u) => s + u.geral, 0) / com.length * 10) / 10 : null;
+  return {
+    clientes, unidades, mediaGeral: media,
+    rankUnidades: pfOrdenarNota(unidades, 'unidade'), rankClientes: pfOrdenarNota(clientes, 'cliente'),
+    analises: clientes.reduce((s, c) => s + c.analises, 0)
+  };
+}
+// colunas: Equipe, Organização e Volume só aparecem se alguém foi avaliado nelas (N/A nunca aparece)
+function pfColsInterno(lista) {
+  const tem = k => lista.some(o => o[k] !== null && o[k] !== undefined);
+  const cols = [['Geral', 'geral']];
+  if (tem('equipe')) cols.push(['Equipe', 'equipe']);
+  cols.push(['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']);
+  if (tem('organizacao')) cols.push(['Organização', 'organizacao']);
+  if (tem('volume')) cols.push(['Volume<br>(10 = ideal)', 'volume']);
+  return cols;
+}
+function pfTabRanking(lista, rankRef, cols, nome, comCliente, total) {
+  const cab = `<tr><th class="pf-pos">#</th><th style="text-align:left">${nome}</th>${comCliente ? '<th style="text-align:left">Cliente</th>' : ''}${cols.map(c => `<th>${c[0]}</th>`).join('')}<th>Variação<br>vs anterior</th></tr>`;
+  const linhas = lista.map(o => `<tr><td class="pf-pos">${pfPos(rankRef, o)}</td><td class="pf-nome">${esc(o[nome === 'Cliente' ? 'cliente' : 'unidade'])}</td>${comCliente ? `<td class="pf-cli">${esc(o.cliente)}</td>` : ''}${cols.map(c => pfCelula(o[c[1]])).join('')}<td style="color:${pfDeltaCor(o.variacao ? o.variacao.geral : null)}">${pfDeltaCurto(o.variacao ? o.variacao.geral : null)}</td></tr>`).join('');
+  const tot = total ? `<tr class="pf-total"><td class="pf-pos"></td><td class="pf-nome">${esc(total.rotulo)}</td>${comCliente ? '<td></td>' : ''}${cols.map(c => pfCelula(total.obj[c[1]])).join('')}<td style="color:${pfDeltaCor(total.obj.variacao.geral)}">${pfDeltaCurto(total.obj.variacao.geral)}</td></tr>` : '';
+  return `<div class="pf-rolagem"><table class="pf-tab"><thead>${cab}</thead><tbody>${linhas}${tot}</tbody></table></div>`;
+}
+function pfHtmlInterno() {
+  const di = pfDadosInterno();
+  if (di.unidades.length < 2) return '';
+  const varios = di.clientes.length > 1;
+  const cols = pfColsInterno(di.unidades);
+  let h = `
+    <div class="pf-bloco" id="pfInterno">
+      <h4>Comparativo entre unidades — relatório interno (com ranking)</h4>
+      <div class="pf-int-aviso">Material interno da Formula Code: traz ranking e dados de todos os clientes desta busca (${di.unidades.length} unidades de ${di.clientes.length} cliente${varios ? 's' : ''}). As exportações por cliente e do grupo continuam sem ranking.</div>
+      <div class="pf-acoes" style="grid-template-columns:1fr 1fr">
+        <button type="button" class="pf-acao txt" onclick="pfGerarTextoInternoTela()">✨ Gerar análise interna</button>
+        <button type="button" class="pf-acao pdf" onclick="pfExportarInternoPDF()">📄 Exportar (PDF)</button>
+        <button type="button" class="pf-acao ppt" onclick="pfExportarInternoPPTX()">🎬 Apresentação (PPTX + PDF)</button>
+        <button type="button" class="pf-acao mail" onclick="pfEnviarEmail('interno')">✉️ Enviar por e-mail</button>
+      </div>`;
+  if (varios) h += `<div class="pf-int-sub">Ranking geral das unidades</div>${pfTabRanking(di.rankUnidades, di.rankUnidades, cols, 'Unidade', true, null)}`;
+  di.clientes.forEach(c => {
+    h += `<div class="pf-int-sub">Cliente: ${esc(c.cliente)}</div>${pfTabRanking(c.lista, c.lista, cols, 'Unidade', false, { rotulo: 'Média do cliente', obj: c })}`;
+  });
+  if (varios) h += `<div class="pf-int-sub">Ranking entre clientes</div>${pfTabRanking(di.rankClientes, di.rankClientes, pfColsInterno(di.clientes), 'Cliente', false, null)}`;
+  h += `<div class="pf-nota-tab">Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.</div>
+      <div id="pfTextoInterno" style="margin-top:12px">${pfHtmlTextoInterno()}</div>
+    </div>`;
+  return h;
+}
+
+/* ── texto do comparativo interno ── */
+function pfChaveInterno() { return JSON.stringify(pfEstado().aplicado) + '|interno'; }
+function pfPayloadInterno() {
+  const p = pfEstado();
+  const iv = pfIntervalo(p.aplicado);
+  return { clientes: p.aplicado.clientes || [], unidades: p.aplicado.unidades || [], estab: p.aplicado.estab || '', tipo: p.aplicado.tipo, de: iv.de, ate: iv.ate };
+}
+function pfHtmlTextoInterno() {
+  const p = pfEstado();
+  const ti = p.textosInterno;
+  if (!ti || ti.chave !== pfChaveInterno()) return '';
+  const t = ti.textos;
+  const par = x => x ? `<p>${esc(x)}</p>` : '';
+  const porCli = pfClientesInterno().filter(c => t.por_cliente && t.por_cliente[c.cliente]).map(c => `<div class="pf-un"><b>${esc(c.cliente)}</b><p>${esc(t.por_cliente[c.cliente])}</p></div>`).join('');
+  return `
+    ${ti.origem === 'contingencia' ? '<div class="pf-origem">Texto gerado pelo modelo de contingência (a IA não respondeu). Você pode exportar assim ou gerar novamente.</div>' : ''}
+    <div class="pf-texto">${par(t.resumo)}${par(t.ranking_unidades)}${porCli}${par(t.entre_clientes)}
+      ${t.pontos_atencao ? `<div class="pf-caixa at"><h5>⚠ PONTOS DE ATENÇÃO</h5><p>${esc(t.pontos_atencao)}</p></div>` : ''}
+      ${t.recomendacoes ? `<div class="pf-caixa su"><h5>→ RECOMENDAÇÕES</h5><p>${esc(t.recomendacoes)}</p></div>` : ''}
+    </div>`;
+}
+async function pfGarantirTextoInterno(forcar) {
+  const p = pfEstado();
+  if (!forcar && p.textosInterno && p.textosInterno.chave === pfChaveInterno()) return p.textosInterno.textos;
+  showLoading('Gerando a análise do comparativo interno...');
+  const r = await apiCall('performanceGerarTextoInterno', pfPayloadInterno());
+  hideLoading();
+  if (!r.ok) { toast('Erro ao gerar a análise: ' + (r.erro || 'falha'), 5000); return null; }
+  p.textosInterno = { chave: pfChaveInterno(), textos: r.textos, origem: r.origem || '' };
+  if (p.arquivos) delete p.arquivos[pfChaveArq('interno')];   // arquivos gerados com o texto antigo não são reaproveitados
+  return r.textos;
+}
+function pfAtualizarTextoInterno(rolar) {
+  const el = $('#pfTextoInterno');
+  if (!el) return;
+  el.innerHTML = pfHtmlTextoInterno();
+  if (rolar) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function pfGerarTextoInternoTela() {
+  const t = await pfGarantirTextoInterno(true);
+  if (t) pfAtualizarTextoInterno(true);
+}
+
+/* ── exportações do comparativo interno ── */
+async function pfExportarInternoPDF(silencioso) {
+  const di = pfDadosInterno();
+  if (di.unidades.length < 2) { toast('O comparativo precisa de pelo menos 2 unidades'); return null; }
+  const t = await pfGarantirTextoInterno(false);
+  if (!t) return null;
+  pfAtualizarTextoInterno();
+  showLoading('Gerando o PDF do comparativo interno...');
+  const r = await apiCall('performanceExportarPDFInterno', Object.assign(pfPayloadInterno(), { textos: t }));
+  hideLoading();
+  if (!r.ok) { toast('Erro ao exportar: ' + (r.erro || 'falha'), 5000); return null; }
+  pfArqGuardar(pfChaveArq('interno'), 'analise', r.pdfId || '');
+  if (silencioso) return r;
+  pfModalLinks('Comparativo interno em PDF pronto', 'O comparativo entre <b>' + di.unidades.length + ' unidades</b> (com ranking) foi salvo no Drive (pasta Performance_FC / Interno).',
+    [{ href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' }, { href: r.linkHTML, rot: '🌐 Versão HTML', cor: '#E8EAF6', txt: 'var(--navy)' }]);
+  return r;
+}
+async function pfExportarInternoPPTX(silencioso) {
+  const p = pfEstado();
+  const di = pfDadosInterno();
+  if (di.unidades.length < 2) { toast('O comparativo precisa de pelo menos 2 unidades'); return null; }
+  const disponivel = await aguardarPptxGenJS();
+  if (!disponivel) { toast('Não foi possível carregar a biblioteca de apresentação. Verifique sua conexão e tente novamente.'); return null; }
+  const t = await pfGarantirTextoInterno(false);
+  if (!t) return null;
+  pfAtualizarTextoInterno();
+  let b64;
+  try {
+    showLoading('Montando a apresentação do comparativo interno...');
+    b64 = await montarPptxPerformanceInterno(Object.assign(di, {
+      textos: t, periodoTxt: pfPeriodoRotulo(p.aplicado), tipoTxt: pfTipoRotulo(p.aplicado),
+      estabTxt: pfEstabRotulo(p.aplicado).replace(/^\S+\s/, ''), anterior: p.dados.periodoAnterior
+    }));
+  } catch (e) { hideLoading(); toast('Erro ao montar a apresentação: ' + e.message, 5000); return null; }
+  showLoading('Salvando no Drive e convertendo em PDF...');
+  const r = await apiCall('performanceSalvarApresentacaoInterno', Object.assign(pfPayloadInterno(), { pptxBase64: b64 }));
+  hideLoading();
+  if (!r.ok) { toast('Erro ao salvar a apresentação: ' + (r.erro || 'falha'), 5000); return null; }
+  pfArqGuardar(pfChaveArq('interno'), 'apres', r.pdfId || '');
+  if (silencioso) return r;
+  pfModalLinks('Apresentação do comparativo pronta',
+    'A apresentação do comparativo entre <b>' + di.unidades.length + ' unidades</b> foi salva no Drive (pasta Performance_FC / Interno).' + (r.linkPDF ? '' : '<br><br><b>O PDF não pôde ser gerado</b>' + (r.erroPDF ? ' (' + esc(r.erroPDF) + ')' : '') + '. O PPTX está disponível.'),
+    [{ href: r.linkPPTX, rot: '📽️ Baixar o PPTX', cor: 'var(--orange)' }, r.linkPDF ? { href: r.linkPDF, rot: '📄 Abrir / baixar o PDF', cor: 'var(--navy)' } : { rot: 'PDF indisponível' }]);
+  return r;
+}
+
+/* ═══════════════════════════════════════════════════════
+   r153 — ENVIO POR E-MAIL (análise + apresentação em PDF)
+   Os arquivos já gerados para o MESMO recorte são reaproveitados; o que
+   faltar é gerado na hora. E-mails sugeridos = para onde as análises
+   individuais das unidades foram enviadas (qualquer data); a lista é
+   editável antes de enviar (desmarcar e adicionar).
+   ═══════════════════════════════════════════════════════ */
+function pfChaveArq(escopo) {
+  const p = pfEstado();
+  const ap = JSON.stringify(p.aplicado);
+  if (escopo === 'cliente') return 'cli|' + pfChaveTexto();
+  if (escopo === 'grupo') return 'grp|' + ap + '|' + pfClientesDoGrupo().map(c => c.cliente).join('|');
+  return 'int|' + ap;
+}
+function pfArqGuardar(chave, campo, id) {
+  const p = pfEstado();
+  if (!p.arquivos) p.arquivos = {};
+  const a = p.arquivos[chave] || (p.arquivos[chave] = {});
+  a[campo] = id || '';
+  if (campo === 'apres') a.apresTentada = true;
+}
+const PF_EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+async function pfEnviarEmail(escopo) {
+  const p = pfEstado();
+  if (!p.dados || !p.aplicado) return;
+  let ctx = null;
+  if (escopo === 'grupo') {
+    const lista = pfClientesDoGrupo();
+    if (!lista.length) { toast('Selecione ao menos 1 cliente e toque em Buscar'); return; }
+    if (lista.length === 1) { p.foco = lista[0].cliente; pfRender(); escopo = 'cliente'; }   // um cliente: o envio é o do cliente
+    else ctx = {
+      escopo, titulo: lista.map(c => c.cliente).join(', '),
+      pares: [].concat.apply([], lista.map(c => c.lista.map(u => c.cliente + '\t' + u.unidade))),
+      gerarAnalise: () => pfExportarGrupoPDF(true), gerarApres: () => pfExportarGrupoPPTX(true)
+    };
+  }
+  if (escopo === 'cliente') {
+    const c = p.dados.clientes.find(x => x.cliente === p.foco);
+    if (!c) return;
+    ctx = { escopo, titulo: c.cliente, pares: c.lista.map(u => c.cliente + '\t' + u.unidade), gerarAnalise: () => pfExportarPDF(true), gerarApres: () => pfExportarPPTX(true) };
+  }
+  if (escopo === 'interno') {
+    const di = pfDadosInterno();
+    if (di.unidades.length < 2) { toast('O comparativo precisa de pelo menos 2 unidades'); return; }
+    ctx = { escopo, titulo: di.clientes.map(c => c.cliente).join(', '), pares: di.unidades.map(u => u.cliente + '\t' + u.unidade), gerarAnalise: () => pfExportarInternoPDF(true), gerarApres: () => pfExportarInternoPPTX(true) };
+  }
+  if (!ctx) return;
+  ctx.chave = pfChaveArq(ctx.escopo);
+  ctx.periodoTxt = pfPeriodoRotulo(p.aplicado);
+  showLoading('Buscando os e-mails das análises enviadas...');
+  const r = await apiCall('performanceEmailsSugeridos', { pares: ctx.pares });
+  hideLoading();
+  if (!r.ok) toast('Não foi possível buscar os e-mails sugeridos: ' + (r.erro || 'falha') + '. Você pode digitá-los.', 5000);
+  ctx.emails = ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: 'Análises enviadas: ' + (e.unidades || []).join(', '), marcado: true }));
+  state.pfEnvio = ctx;
+  pfRenderModalEnvio();
+}
+
+function pfRenderModalEnvio() {
+  const e = state.pfEnvio;
+  if (!e) return;
+  let m = document.getElementById('pfModalEnvio');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'pfModalEnvio';
+    m.className = 'nps-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.addEventListener('click', ev => { if (ev.target === m) pfFecharEnvio(); });
+    document.body.appendChild(m);
+  }
+  const arq = (pfEstado().arquivos || {})[e.chave] || {};
+  const nomeEscopo = e.escopo === 'interno' ? 'Comparativo entre unidades (com ranking)' : (e.escopo === 'grupo' ? 'Análise do grupo' : 'Análise de ' + e.titulo);
+  const lista = e.emails.length
+    ? e.emails.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="pfEnvMarcar(${i},this.checked)"><span>${esc(x.email)}${x.sub ? '<small>' + esc(x.sub) + '</small>' : ''}</span></label>`).join('')
+    : '<div class="ms-vazio">Nenhum e-mail encontrado nas análises enviadas destas unidades. Adicione abaixo.</div>';
+  const stA = arq.analise ? 'já gerado — será reaproveitado' : 'será gerado agora';
+  const stP = arq.apres ? 'já gerado — será reaproveitado' : (arq.apresTentada ? 'não pôde ser gerado antes — será enviado só se for gerado agora' : 'será gerado agora (PPTX + PDF)');
+  m.innerHTML = `
+    <div class="nps-folha" style="max-width:520px">
+      <div class="nps-modal-topo"><div class="nps-modal-linha"><div class="nps-modal-titulo">✉️ Enviar por e-mail</div><button type="button" class="nps-modal-x" aria-label="Fechar" onclick="pfFecharEnvio()">✕</button></div></div>
+      <div class="nps-modal-corpo">
+        <p style="font-size:13px;line-height:1.5;margin:0 0 10px;color:var(--text)"><b>${esc(nomeEscopo)}</b><br><span style="color:var(--text-light)">${esc(e.periodoTxt)}</span></p>
+        ${e.escopo === 'interno' ? '<div class="pf-int-aviso">Atenção: este relatório tem ranking e dados de todos os clientes listados (' + esc(e.titulo) + '). Confira os destinatários antes de enviar.</div>' : ''}
+        <div class="pf-env-rot">Destinatários (${e.emails.filter(x => x.marcado).length} marcado(s))</div>
+        <div class="pf-env-lista">${lista}</div>
+        <div class="pf-env-add">
+          <input type="email" id="pfEnvNovo" placeholder="Adicionar e-mail (separe vários por vírgula)" aria-label="Adicionar e-mail" onkeydown="if(event.key==='Enter'){event.preventDefault();pfEnvAdicionar();}">
+          <button type="button" onclick="pfEnvAdicionar()">Adicionar</button>
+        </div>
+        <div class="pf-env-rot">Anexos</div>
+        <div class="pf-env-anexos">📄 Análise (PDF): ${stA}<br>🎬 Apresentação (PDF): ${stP}</div>
+        <div class="pf-links" style="margin-top:4px">
+          <button type="button" id="pfEnvBtn" style="background:var(--navy);color:#fff" onclick="pfEnvConfirmar()">Enviar</button>
+          <button type="button" style="background:#E2E8F0;color:var(--navy)" onclick="pfFecharEnvio()">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+}
+function pfFecharEnvio() {
+  const m = document.getElementById('pfModalEnvio');
+  if (m) m.remove();
+  state.pfEnvio = null;
+}
+function pfEnvMarcar(i, on) {
+  const e = state.pfEnvio;
+  if (!e || !e.emails[i]) return;
+  e.emails[i].marcado = !!on;
+  const rot = document.querySelector('#pfModalEnvio .pf-env-rot');
+  if (rot) rot.textContent = 'Destinatários (' + e.emails.filter(x => x.marcado).length + ' marcado(s))';
+}
+function pfEnvAdicionar() {
+  const e = state.pfEnvio;
+  const el = document.getElementById('pfEnvNovo');
+  if (!e || !el) return;
+  const partes = String(el.value || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (!partes.length) return;
+  const invalidos = partes.filter(x => !PF_EMAIL_RE.test(x));
+  if (invalidos.length) { toast('E-mail inválido: ' + invalidos.join(', '), 4000); return; }
+  partes.forEach(x => {
+    const ex = e.emails.find(y => y.email === x);
+    if (ex) ex.marcado = true;
+    else e.emails.push({ email: x, sub: 'Adicionado agora', marcado: true });
+  });
+  pfRenderModalEnvio();
+  const novo = document.getElementById('pfEnvNovo');
+  if (novo) novo.focus();
+}
+async function pfEnvConfirmar() {
+  const e = state.pfEnvio;
+  const p = pfEstado();
+  if (!e) return;
+  const pend = document.getElementById('pfEnvNovo');
+  if (pend && pend.value.trim()) { pfEnvAdicionar(); if (document.getElementById('pfEnvNovo') && document.getElementById('pfEnvNovo').value.trim()) return; }
+  const emails = e.emails.filter(x => x.marcado).map(x => x.email);
+  if (!emails.length) { toast('Marque ou adicione ao menos um e-mail'); return; }
+  let arq = (p.arquivos || {})[e.chave] || {};
+  if (!arq.analise) {
+    const r1 = await e.gerarAnalise();
+    if (!r1) return;
+    arq = p.arquivos[e.chave] || {};
+  }
+  if (!arq.apres && !arq.apresTentada) {
+    const r2 = await e.gerarApres();
+    if (!r2) return;
+    arq = p.arquivos[e.chave] || {};
+  }
+  if (!arq.analise) { toast('O PDF da análise não foi gerado. Tente novamente.', 5000); return; }
+  if (!arq.apres && !confirm('O PDF da apresentação não pôde ser gerado. Enviar só a análise em PDF?')) return;
+  showLoading('Enviando o e-mail...');
+  const r = await apiCall('performanceEnviarEmail', {
+    escopo: e.escopo, emails: emails, arquivos: [arq.analise, arq.apres].filter(Boolean),
+    titulo: String(e.titulo || '').substring(0, 150), periodoTxt: e.periodoTxt
+  });
+  hideLoading();
+  if (!r.ok) { toast('Erro ao enviar: ' + (r.erro || 'falha'), 6000); return; }
+  pfFecharEnvio();
+  toast('✅ ' + (r.mensagem || 'E-mail enviado'), 4000);
+}
+
+/* ═══════════════════════════════════════════════════════
+   r153 — APRESENTAÇÃO DO COMPARATIVO INTERNO (PPTX)
+   Mesmo estilo das apresentações de Performance (faixa navy, verde da
+   marca, margens de 0,5 pol, texto longo continua no slide seguinte).
+   ═══════════════════════════════════════════════════════ */
+function montarPptxPerformanceInterno(g) {
+  return new Promise(function(resolve, reject) {
+    try {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_16x9';
+      const NAVY = '001528', GREEN = '5DC500', DARK = '001528', ORANGE = 'E8872B', BODY = '556677', LABEL = '8899AA';
+      const t = g.textos || {};
+      const fmt = function(n) { return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(1).replace('.', ','); };
+      const corHex = function(n) {
+        if (n === null || n === undefined || isNaN(n)) return '9AA7B4';
+        if (n >= 9) return '2E7D32';
+        if (n >= 7.5) return GREEN;
+        if (n >= 6) return 'D4A017';
+        if (n >= 4) return ORANGE;
+        return 'E05252';
+      };
+      const bgHex = function(n) {
+        if (n === null || n === undefined || isNaN(n)) return 'F4F6F8';
+        if (n >= 9) return 'E8F5E9';
+        if (n >= 7.5) return 'EAF8E0';
+        if (n >= 6) return 'FFF8E1';
+        if (n >= 4) return 'FFF3E0';
+        return 'FDEAEA';
+      };
+      const deltaTxt = function(v) { return (v === null || v === undefined) ? '—' : (v === 0 ? '= 0,0' : (v > 0 ? '▲ +' : '▼ ') + fmt(v)); };
+      const deltaCor = function(v) { return (v === null || v === undefined || v === 0) ? '6B7B8D' : (v > 0 ? '2E7D32' : 'C0392B'); };
+      let numSecao = 0;
+      function fullBg(s) {
+        s.background = { fill: 'FFFFFF' };
+        s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.5, fill: { color: DARK } });
+        s.addShape(pres.ShapeType.rect, { x: 0, y: 0.5, w: 10, h: 0.04, fill: { color: GREEN } });
+        pptLogo(s, 7.4, 0.07, 2.1, 0.36, 'direita');
+      }
+      function rotuloFull(s, texto) {
+        numSecao++;
+        const n = numSecao < 10 ? '0' + numSecao : String(numSecao);
+        s.addText(n + ' / ' + texto, { x: 0.5, y: 0.1, w: 6.5, h: 0.3, fontSize: 9, fontFace: 'Arial', bold: true, color: GREEN, isTextBox: true, margin: 0, charSpacing: 3 });
+      }
+      function tituloFull(s, a, b) {
+        s.addText([{ text: a, options: { color: DARK } }, { text: b, options: { color: GREEN } }], { x: 0.5, y: 0.7, w: 9, h: 0.5, fontSize: pptTituloFs(a + b, 9, 22, 16), fontFace: 'Calibri', bold: true, isTextBox: true, margin: 0 });
+      }
+      function notaRodape(s, txt) {
+        s.addText(txt, { x: 0.5, y: 4.98, w: 9, h: 0.3, fontSize: 8, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, valign: 'top' });
+      }
+      function slideTextoFull(rot, a, b, texto) {
+        texto = String(texto || '').trim();
+        if (!texto) return;
+        const hMax = PPT_Y_MAX - 1.4;
+        let fs = pptFonteQueCabe(texto, 9, hMax, 13, 10.5, 1.35);
+        const partes = fs ? [texto] : pptDividirTexto(texto, 9, hMax, (fs = 11), 1.35);
+        partes.forEach(function(p, i) {
+          const s = pres.addSlide();
+          fullBg(s); rotuloFull(s, rot + (i > 0 ? ' (CONT.)' : '')); tituloFull(s, a, b + (i > 0 ? ' (cont.)' : ''));
+          s.addText(p, { x: 0.5, y: 1.4, w: 9, h: Math.min(hMax, pptMedirAltura(p, 9, fs, 1.35)), fontSize: fs, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35, valign: 'top' });
+        });
+      }
+      const pos = function(rank, item) { const com = rank.filter(pfTemNota); const i = com.indexOf(item); return i === -1 ? '—' : (i + 1) + 'º'; };
+      function cols(lista) {
+        const tem = function(k) { return lista.some(function(o) { return o[k] !== null && o[k] !== undefined; }); };
+        const c = [['Geral', 'geral']];
+        if (tem('equipe')) c.push(['Equipe', 'equipe']);
+        c.push(['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']);
+        if (tem('organizacao')) c.push(['Organização', 'organizacao']);
+        if (tem('volume')) c.push(['Volume', 'volume']);
+        return c;
+      }
+      // tabela de ranking (7 linhas por slide); total = linha de média no último slide
+      // texto curto (até ~0,9 pol) entra no mesmo slide, acima da tabela; texto longo vai num slide próprio antes
+      function tabelaRanking(rot, a, b, lista, rank, colsM, campoNome, comCliente, total, nota, texto) {
+        texto = String(texto || '').trim();
+        const hTxt = texto ? pptMedirAltura(texto, 9, 11, 1.3) : 0;
+        const txtJunto = texto && hTxt <= 0.9;
+        if (texto && !txtJunto) slideTextoFull(rot, a, b, texto);
+        // larguras: nome da unidade/cliente nunca fica espremido; as colunas de nota se ajustam ao espaço que sobra
+        const wPos = 0.45, wVar = 0.85, wCli = comCliente ? 1.5 : 0, wNomeMin = comCliente ? 1.9 : 2.4;
+        const wMet = Math.min(0.95, (9 - wPos - wVar - wCli - wNomeMin) / Math.max(1, colsM.length));
+        const colW = [wPos, 9 - wPos - wVar - wCli - wMet * colsM.length].concat(comCliente ? [wCli] : []).concat(colsM.map(function() { return wMet; })).concat([wVar]);
+        const curto = wMet < 0.85;
+        const ROT_CURTO = { 'Retaguarda': 'Retag.', 'Área de Vendas': 'Á. Vendas', 'Organização': 'Organiz.' };
+        const fsC = colsM.length > 5 ? 9 : 10;
+        let ini = 0, primeiro = true;
+        while (ini < lista.length) {
+          const yTab = (primeiro && txtJunto) ? 1.35 + hTxt + 0.1 : 1.35;
+          const POR = Math.max(3, Math.floor((4.9 - yTab) / 0.38) - 1);
+          const lote = lista.slice(ini, ini + POR);
+          const s = pres.addSlide();
+          fullBg(s); rotuloFull(s, rot); tituloFull(s, a, b + (ini > 0 ? ' (cont.)' : ''));
+          if (primeiro && txtJunto) s.addText(texto, { x: 0.5, y: 1.3, w: 9, h: hTxt, fontSize: 11, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3, valign: 'top' });
+          const nCabFixo = comCliente ? 3 : 2;
+          const cab = ['#', campoNome === 'cliente' ? 'Cliente' : 'Unidade'].concat(comCliente ? ['Cliente'] : []).concat(colsM.map(function(c) { return curto && ROT_CURTO[c[0]] ? ROT_CURTO[c[0]] : c[0]; })).concat(['Variação']).map(function(tx, i) {
+            return { text: tx, options: { bold: true, color: 'FFFFFF', fill: { color: NAVY }, fontSize: i >= nCabFixo ? fsC - 1.5 : fsC, fontFace: 'Arial', align: (i === 1 || (comCliente && i === 2)) ? 'left' : 'center', valign: 'middle' } };
+          });
+          const cel = function(v) { return { text: fmt(v), options: { bold: true, color: corHex(v), fill: { color: bgHex(v) }, fontSize: fsC + 0.5, fontFace: 'Arial', align: 'center', valign: 'middle' } }; };
+          const linhas = lote.map(function(o) {
+            return [{ text: pos(rank, o), options: { bold: true, color: NAVY, fontSize: fsC, fontFace: 'Arial', align: 'center', valign: 'middle' } },
+              { text: pptTruncar(o[campoNome], comCliente ? 26 : 34), options: { bold: true, color: NAVY, fontSize: fsC, fontFace: 'Arial', align: 'left', valign: 'middle' } }]
+              .concat(comCliente ? [{ text: pptTruncar(o.cliente, 20), options: { color: BODY, fontSize: fsC - 0.5, fontFace: 'Arial', align: 'left', valign: 'middle' } }] : [])
+              .concat(colsM.map(function(c) { return cel(o[c[1]]); }))
+              .concat([{ text: deltaTxt(o.variacao ? o.variacao.geral : null), options: { bold: true, color: deltaCor(o.variacao ? o.variacao.geral : null), fontSize: fsC, fontFace: 'Arial', align: 'center', valign: 'middle' } }]);
+          });
+          const ultimo = ini + POR >= lista.length;
+          if (total && ultimo) {
+            linhas.push([{ text: '', options: { fill: { color: 'F0F2F4' } } }, { text: total.rotulo, options: { bold: true, color: DARK, fill: { color: 'F0F2F4' }, fontSize: fsC, fontFace: 'Arial', align: 'left', valign: 'middle' } }]
+              .concat(comCliente ? [{ text: '', options: { fill: { color: 'F0F2F4' } } }] : [])
+              .concat(colsM.map(function(c) { return cel(total.obj[c[1]]); }))
+              .concat([{ text: deltaTxt(total.obj.variacao.geral), options: { bold: true, color: deltaCor(total.obj.variacao.geral), fill: { color: 'F0F2F4' }, fontSize: fsC, fontFace: 'Arial', align: 'center', valign: 'middle' } }]));
+          }
+          s.addTable([cab].concat(linhas), { x: 0.5, y: yTab, w: 9, colW: colW, rowH: 0.38, border: { type: 'solid', color: 'E2E8F0', pt: 0.75 } });
+          notaRodape(s, nota);
+          ini += POR; primeiro = false;
+        }
+      }
+      // gráfico de barras com posição (8 por slide), desenhado com formas
+      function barrasRanking(rot, a, b, rank, rotuloFn, nota) {
+        const com = rank.filter(pfTemNota);
+        for (let ini = 0; ini < com.length; ini += 8) {
+          const lote = com.slice(ini, ini + 8);
+          const s = pres.addSlide();
+          fullBg(s); rotuloFull(s, rot); tituloFull(s, a, b + (ini > 0 ? ' (cont.)' : ''));
+          const xNome = 0.5, wNome = 3.4, xTrilho = 4.05, wTrilho = 4.5, yIni = 1.45, passo = 0.42;
+          lote.forEach(function(o, i) {
+            const y = yIni + i * passo;
+            s.addText((ini + i + 1) + 'º  ' + pptTruncar(rotuloFn(o), 46), { x: xNome, y: y, w: wNome, h: 0.36, fontSize: 9.5, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, valign: 'middle', align: 'right' });
+            s.addShape(pres.ShapeType.rect, { x: xTrilho, y: y + 0.08, w: wTrilho, h: 0.2, fill: { color: 'EEF1F4' }, line: { color: 'EEF1F4', width: 0 } });
+            s.addShape(pres.ShapeType.rect, { x: xTrilho, y: y + 0.08, w: Math.max(0.04, wTrilho * o.geral / 10), h: 0.2, fill: { color: corHex(o.geral) }, line: { color: corHex(o.geral), width: 0 } });
+            s.addText(fmt(o.geral), { x: xTrilho + wTrilho + 0.1, y: y, w: 0.7, h: 0.36, fontSize: 11, fontFace: 'Arial', bold: true, color: DARK, isTextBox: true, margin: 0, valign: 'middle' });
+          });
+          const yEixo = yIni + lote.length * passo + 0.02;
+          [0, 5, 10].forEach(function(v) { s.addText(String(v), { x: xTrilho + wTrilho * v / 10 - 0.2, y: yEixo, w: 0.4, h: 0.2, fontSize: 8, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, align: 'center' }); });
+          notaRodape(s, nota);
+        }
+      }
+
+      const varios = g.clientes.length > 1;
+      const colsUn = cols(g.unidades);
+      const notaUn = 'Nota da unidade = média das análises do período · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).';
+
+      /* 1 — Capa */
+      const sc = pres.addSlide();
+      sc.background = { fill: DARK };
+      sc.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: GREEN } });
+      sc.addText([
+        { text: 'Comparativo ', options: { color: 'FFFFFF', fontSize: 30, fontFace: 'Calibri', bold: true } },
+        { text: 'entre Unidades', options: { color: GREEN, fontSize: 30, fontFace: 'Calibri', bold: true } }
+      ], { x: 0.8, y: 0.7, w: 8.4, h: 1.1, isTextBox: true, margin: 0 });
+      sc.addText('Relatório interno Formula Code  ·  com ranking', { x: 0.8, y: 1.85, w: 8.4, h: 0.4, fontSize: 16, fontFace: 'Calibri', color: GREEN, isTextBox: true, margin: 0 });
+      sc.addText(g.periodoTxt || '', { x: 0.8, y: 2.4, w: 8.4, h: 0.3, fontSize: 13, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0 });
+      const nomes = g.clientes.map(function(c) { return c.cliente + '  (' + c.unidades + ' unid.)'; }).join('\n');
+      sc.addText(nomes, { x: 0.8, y: 2.8, w: 8.4, h: Math.min(1.25, pptMedirAltura(nomes, 8.4, 11, 1.2)), fontSize: 11, fontFace: 'Arial', color: 'FFFFFF', isTextBox: true, margin: 0, lineSpacingMultiple: 1.2, valign: 'top' });
+      const extra = [g.tipoTxt, g.estabTxt].filter(Boolean).join('  ·  ');
+      if (extra) sc.addText(extra, { x: 0.8, y: 4.15, w: 5.2, h: 0.3, fontSize: 10, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0 });
+      pptLogo(sc, 6.1, 4.4, 3.4, 0.72, 'direita');
+
+      /* 2 — Indicadores + resumo */
+      const sk = pres.addSlide();
+      fullBg(sk); rotuloFull(sk, 'VISÃO GERAL'); tituloFull(sk, 'Visão ', 'Geral');
+      [['CLIENTES', String(g.clientes.length), NAVY], ['UNIDADES', String(g.unidades.length), NAVY], ['ANÁLISES', String(g.analises), GREEN], ['NOTA MÉDIA', fmt(g.mediaGeral), corHex(g.mediaGeral)]].forEach(function(k, i) {
+        const x = 0.5 + i * 2.3;
+        sk.addShape(pres.ShapeType.rect, { x: x, y: 1.35, w: 2.1, h: 1.0, fill: { color: 'F4F6F8' }, line: { color: 'F4F6F8', width: 0 } });
+        sk.addShape(pres.ShapeType.rect, { x: x, y: 1.35, w: 2.1, h: 0.05, fill: { color: k[2] } });
+        sk.addText(k[0], { x: x, y: 1.47, w: 2.1, h: 0.22, fontSize: 8, fontFace: 'Arial', bold: true, color: BODY, align: 'center', isTextBox: true, margin: 0, charSpacing: 1 });
+        sk.addText(k[1], { x: x, y: 1.7, w: 2.1, h: 0.55, fontSize: 26, fontFace: 'Calibri', bold: true, color: k[2] === NAVY ? DARK : k[2], align: 'center', isTextBox: true, margin: 0 });
+      });
+      const resumo = String(t.resumo || '').trim();
+      const hRes = PPT_Y_MAX - 2.65;
+      const fsRes = resumo ? pptFonteQueCabe(resumo, 9, hRes, 12, 10, 1.35) : 0;
+      if (resumo && fsRes) sk.addText(resumo, { x: 0.5, y: 2.65, w: 9, h: Math.min(hRes, pptMedirAltura(resumo, 9, fsRes, 1.35)), fontSize: fsRes, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35, valign: 'top' });
+      else if (resumo) slideTextoFull('RESUMO', 'Resumo', '', resumo);
+
+      /* 3 — Ranking geral das unidades (só com 2+ clientes; com 1 cliente é o mesmo ranking do cliente) */
+      if (varios) {
+        barrasRanking('RANKING GERAL DAS UNIDADES', 'Nota por ', 'Unidade', g.rankUnidades, function(o) { return o.unidade + ' · ' + o.cliente; }, 'Nota da unidade = média das análises do período (0 a 10).');
+        tabelaRanking('RANKING GERAL DAS UNIDADES', 'Ranking geral ', 'das Unidades', g.rankUnidades, g.rankUnidades, colsUn, 'unidade', true, null, notaUn, t.ranking_unidades);
+      }
+
+      /* 4 — Cada cliente: texto + ranking das suas unidades */
+      g.clientes.forEach(function(c) {
+        const txt = [varios ? '' : t.ranking_unidades, t.por_cliente ? t.por_cliente[c.cliente] : ''].filter(Boolean).join('\n\n');
+        if (!varios) barrasRanking('CLIENTE', pptTruncar(c.cliente, 40) + ' — ', 'Nota por unidade', c.lista, function(o) { return o.unidade; }, 'Nota da unidade = média das análises do período (0 a 10).');
+        tabelaRanking('CLIENTE', pptTruncar(c.cliente, 40) + ' — ', 'Ranking das unidades', c.lista, c.lista, colsUn, 'unidade', false, { rotulo: 'Média do cliente', obj: c }, notaUn, txt);
+      });
+
+      /* 5 — Ranking entre clientes */
+      if (varios) {
+        barrasRanking('RANKING ENTRE CLIENTES', 'Nota por ', 'Cliente', g.rankClientes, function(o) { return o.cliente; }, 'Nota do cliente = média das notas das unidades (0 a 10).');
+        tabelaRanking('RANKING ENTRE CLIENTES', 'Ranking entre ', 'Clientes', g.rankClientes, g.rankClientes, cols(g.clientes), 'cliente', false, null, 'Nota do cliente = média das unidades · "—" = não avaliado.', t.entre_clientes);
+      }
+
+      /* 6 — Conclusão */
+      const caixas = [['⚠ PONTOS DE ATENÇÃO', t.pontos_atencao, ORANGE], ['→ RECOMENDAÇÕES', t.recomendacoes, NAVY]].filter(function(c) { return c[1]; });
+      if (caixas.length) {
+        const alturas = caixas.map(function(c) { return 0.3 + pptMedirAltura(c[1], 8.6, 11, 1.3) + 0.15; });
+        if (alturas.reduce(function(x, y) { return x + y; }, 0) <= PPT_Y_MAX - 1.4) {
+          const sC = pres.addSlide();
+          fullBg(sC); rotuloFull(sC, 'CONCLUSÃO'); tituloFull(sC, 'Conclusão', '');
+          let y = 1.4;
+          caixas.forEach(function(c, i) {
+            sC.addShape(pres.ShapeType.rect, { x: 0.5, y: y, w: 0.06, h: alturas[i] - 0.1, fill: { color: c[2] } });
+            sC.addText(c[0], { x: 0.7, y: y, w: 8.6, h: 0.25, fontSize: 10, fontFace: 'Arial', bold: true, color: c[2], isTextBox: true, margin: 0 });
+            sC.addText(c[1], { x: 0.7, y: y + 0.28, w: 8.6, h: pptMedirAltura(c[1], 8.6, 11, 1.3), fontSize: 11, fontFace: 'Arial', color: BODY, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3, valign: 'top' });
+            y += alturas[i];
+          });
+        } else {
+          caixas.forEach(function(c) { slideTextoFull('CONCLUSÃO', c[0].replace(/^\S+\s/, ''), '', c[1]); });
+        }
+      }
+
+      pres.write('base64').then(resolve).catch(reject);
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 async function editarAuditoria(auditoriaId) {
@@ -4204,7 +4836,7 @@ function montarPptxApresentacao(prep, variante) {
 
       // r112: margens seguras (0,5 pol no painel e na base) — ver "LAYOUT DE SLIDES — MARGENS"
       function addLogo(s) {
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:PPT_PAINEL_X, y:4.5, w:PPT_PAINEL_W, h:0.635 }); } catch(e) {} }
+        pptLogo(s, PPT_PAINEL_X, 4.5, PPT_PAINEL_W, 0.635, 'esquerda');   // r153: sem achatar
       }
       function splitBg(s) {
         s.background = { fill:'FFFFFF' };
@@ -4302,7 +4934,7 @@ function montarPptxApresentacao(prep, variante) {
       s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
       const sub = (ident.cliente||'') + ' — ' + (ident.unidade||'') + '  ·  ' + (ident.data_auditoria||'');
       s1.addText(sub, { x:0.8, y:2.45, w:8.4, h:Math.min(1.2, pptMedirAltura(sub, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
-      if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
+      pptLogo(s1, 3.2, 4.15, 3.6, 0.94, 'centro');   // r153: sem achatar
 
       /* Slide 2 — Indicadores */
       const s2 = pres.addSlide();
@@ -4580,7 +5212,7 @@ function montarPptxPerformanceGrupo(g) {
       const deltaCor = function(v) { return (v === null || v === undefined || v === 0) ? '6B7B8D' : (v > 0 ? '2E7D32' : 'C0392B'); };
 
       function addLogo(s) {
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:PPT_PAINEL_X, y:4.5, w:PPT_PAINEL_W, h:0.635 }); } catch(e) {} }
+        pptLogo(s, PPT_PAINEL_X, 4.5, PPT_PAINEL_W, 0.635, 'esquerda');   // r153: sem achatar
       }
       function splitBg(s) {
         s.background = { fill:'FFFFFF' };
@@ -4610,7 +5242,7 @@ function montarPptxPerformanceGrupo(g) {
         s.background = { fill:'FFFFFF' };
         s.addShape(pres.ShapeType.rect, { x:0, y:0, w:10, h:0.5, fill:{ color: DARK } });
         s.addShape(pres.ShapeType.rect, { x:0, y:0.5, w:10, h:0.04, fill:{ color: GREEN } });
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:7.4, y:0.07, w:2.1, h:0.36 }); } catch(e) {} }
+        pptLogo(s, 7.4, 0.07, 2.1, 0.36, 'direita');   // r153: sem achatar
       }
       function rotuloFull(s, texto) {
         numSecao++;
@@ -4654,7 +5286,7 @@ function montarPptxPerformanceGrupo(g) {
         const subCapa = String(cli.cliente || '') + '  ·  ' + periodoTxt;
         s1.addText(subCapa, { x:0.8, y:2.45, w:8.4, h:Math.min(0.9, pptMedirAltura(subCapa, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
         if (prep.tipoTxt) s1.addText(prep.tipoTxt, { x:0.8, y:3.4, w:8.4, h:0.3, fontSize:11, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-        if (LOGO_APRESENTACAO_DATA_URL) { try { s1.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:3.2, y:4.15, w:3.6, h:0.94 }); } catch(e) {} }
+        pptLogo(s1, 3.2, 4.15, 3.6, 0.94, 'centro');   // r153: sem achatar
 
         /* 2 — Indicadores-chave */
         const s2 = pres.addSlide();
@@ -4869,7 +5501,7 @@ function montarPptxPerformanceGrupo(g) {
         sc.addText(nomes, { x:0.8, y:2.8, w:8.4, h:Math.min(1.3, pptMedirAltura(nomes, 8.4, 11, 1.2)), fontSize:11, fontFace:'Arial', color:'FFFFFF', isTextBox:true, margin:0, lineSpacingMultiple:1.2, valign:'top' });
         const extra = [g.tipoTxt, g.estabTxt].filter(Boolean).join('  ·  ');
         if (extra) sc.addText(extra, { x:0.8, y:4.15, w:5.5, h:0.3, fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0 });
-        if (LOGO_APRESENTACAO_DATA_URL) { try { sc.addImage({ data: LOGO_APRESENTACAO_DATA_URL, x:6.3, y:4.4, w:3.4, h:0.72 }); } catch(e) {} }
+        pptLogo(sc, 6.1, 4.4, 3.4, 0.72, 'direita');   // r153: sem achatar (termina na margem de 0,5 pol)
 
         // sumário: um cliente por linha
         const POR = 8;

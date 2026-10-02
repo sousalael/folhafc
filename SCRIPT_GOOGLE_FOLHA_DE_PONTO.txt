@@ -124,6 +124,11 @@ function doPost(e) {
     else if (action === 'performanceGerarTexto') { result = performanceGerarTexto(data, data.cpf); }
     else if (action === 'performanceExportarPDF') { result = performanceExportarPDF(data, data.cpf); }
     else if (action === 'performanceSalvarApresentacao') { result = performanceSalvarApresentacao(data, data.cpf); }
+    else if (action === 'performanceGerarTextoInterno') { result = performanceGerarTextoInterno(data, data.cpf); }   // r153
+    else if (action === 'performanceExportarPDFInterno') { result = performanceExportarPDFInterno(data, data.cpf); }   // r153
+    else if (action === 'performanceSalvarApresentacaoInterno') { result = performanceSalvarApresentacaoInterno(data, data.cpf); }   // r153
+    else if (action === 'performanceEmailsSugeridos') { result = performanceEmailsSugeridos(data, data.cpf); }   // r153
+    else if (action === 'performanceEnviarEmail') { result = performanceEnviarEmail(data, data.cpf); }   // r153
 
     // ── B.I. FINANCEIRO DO GRUPO — r140 ──
     else if (action === 'biFinanceiroDados') { result = biFinanceiroDados(data.cpf, data.forcar === true); }
@@ -580,7 +585,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-09-30-r152';
+const VERSAO_SCRIPT = '2026-10-02-r153';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -607,6 +612,8 @@ function doGet(e) {
     'diagnosticoDesempenho', 'excluirAvaliacaoEmAndamento', 'contarAnalisadasPerformance',
     'enviarPesquisaNps', 'listarProjetosAuditoria',
     'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo',
+    'performanceGerarTextoInterno', 'performanceExportarPDFInterno', 'performanceSalvarApresentacaoInterno',
+    'performanceEmailsSugeridos', 'performanceEnviarEmail',
     'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir'
   ];
   return ContentService.createTextOutput(JSON.stringify({
@@ -5532,12 +5539,24 @@ function perfPeriodoAnterior(de, ate, hoje) {
 function perfPassa(a, f) {
   var lc = fcListaChaves(f.clientes, f.cliente);
   if (lc.length && lc.indexOf(fcChave(a.cliente)) === -1) return false;
+  if (!perfPassaUnidade(a, f)) return false;   // r153
   if (f.estab && (a.tipoEst || 'SUPERMERCADO') !== f.estab) return false;
   if (f.tipo && a.tipo !== f.tipo) return false;
   var d = a.dataAuditoria || '';
   if (f.de && (!d || d < f.de)) return false;
   if (f.ate && (!d || d > f.ate)) return false;
   return true;
+}
+
+// r153: filtro de unidades ("cliente\tunidade"). Regra POR CLIENTE: se o cliente tem unidade(s) marcada(s),
+// só elas entram; cliente sem nenhuma unidade marcada entra com todas as unidades.
+function perfPassaUnidade(a, f) {
+  var lu = fcListaUnidades(f && f.unidades, '');
+  if (!lu.length) return true;
+  var kc = fcChave(a.cliente), ku = fcChave(a.unidade);
+  var clienteTemMarcada = lu.some(function (k) { return k.indexOf(kc + '|') === 0; });
+  if (!clienteTemMarcada) return true;
+  return lu.indexOf(kc + '|' + ku) !== -1;
 }
 
 function perfAgruparUnidades(analises) {
@@ -5585,10 +5604,10 @@ function perfArredObj(m) {
 // Cálculo puro (sem planilha) — testável isoladamente.
 function perfCalcular(analises, f, hoje) {
   f = f || {};
-  var filtro = { cliente: f.cliente || '', clientes: f.clientes || [], estab: f.estab || '', tipo: f.tipo || '', de: perfDataValida(f.de), ate: perfDataValida(f.ate) };
+  var filtro = { cliente: f.cliente || '', clientes: f.clientes || [], unidades: f.unidades || [], estab: f.estab || '', tipo: f.tipo || '', de: perfDataValida(f.de), ate: perfDataValida(f.ate) };
   var atuais = analises.filter(function (a) { return perfPassa(a, filtro); });
   var ant = perfPeriodoAnterior(filtro.de, filtro.ate, hoje);
-  var anteriores = ant ? analises.filter(function (a) { return perfPassa(a, { cliente: filtro.cliente, clientes: filtro.clientes, estab: filtro.estab, tipo: filtro.tipo, de: ant.de, ate: ant.ate }); }) : [];
+  var anteriores = ant ? analises.filter(function (a) { return perfPassa(a, { cliente: filtro.cliente, clientes: filtro.clientes, unidades: filtro.unidades, estab: filtro.estab, tipo: filtro.tipo, de: ant.de, ate: ant.ate }); }) : [];
 
   var uAt = perfAgruparUnidades(atuais);
   var uAn = perfAgruparUnidades(anteriores);
@@ -5653,8 +5672,16 @@ function perfFiltroDe(d) {
   if (Array.isArray(d.clientes)) d.clientes.forEach(function (x) { var n = fcLimparNome(x); if (n && clientes.indexOf(n) === -1) clientes.push(n); });
   var unico = fcLimparNome(d.cliente);
   if (!clientes.length && unico) clientes.push(unico);
+  // r153: unidades marcadas no filtro ("cliente\tunidade")
+  var unidades = [];
+  if (Array.isArray(d.unidades)) d.unidades.forEach(function (x) {
+    var p = String(x || '').split('\t');
+    if (p.length < 2) return;
+    var c = fcLimparNome(p[0]), u = fcLimparNome(p[1]);
+    if (c && u && unidades.indexOf(c + '\t' + u) === -1) unidades.push(c + '\t' + u);
+  });
   return {
-    cliente: clientes.length === 1 ? clientes[0] : '', clientes: clientes,
+    cliente: clientes.length === 1 ? clientes[0] : '', clientes: clientes, unidades: unidades,
     estab: (estab === 'FARMACIA' || estab === 'SUPERMERCADO') ? estab : '',
     tipo: PERF_TIPOS.indexOf(tipo) !== -1 ? tipo : '', de: perfDataValida(d.de), ate: perfDataValida(d.ate)
   };
@@ -5982,7 +6009,15 @@ function perfPastaCliente(cliente) {
   return getOuCriarSubpastaAud(raiz, perfNomeLimpo(cliente));
 }
 function perfNomeBase(filtro, cliente) {
-  return 'Performance_' + perfNomeLimpo(cliente || filtro.cliente) + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
+  return 'Performance_' + perfNomeLimpo(cliente || filtro.cliente) + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje()) + perfSufixoUnidades(filtro);
+}
+// r153: com unidades marcadas, o nome do arquivo ganha um sufixo curto (recortes diferentes não se sobrescrevem)
+function perfSufixoUnidades(filtro) {
+  var lu = fcListaUnidades(filtro && filtro.unidades, '');
+  if (!lu.length) return '';
+  var dig = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, lu.slice().sort().join(','), Utilities.Charset.UTF_8);
+  var hex = dig.slice(0, 3).map(function (b) { var v = (b < 0 ? b + 256 : b).toString(16); return v.length < 2 ? '0' + v : v; }).join('');
+  return '_' + lu.length + 'unid_' + hex;
 }
 
 /* ── DIRETOR: exporta a análise em PDF (HTML + PDF no Drive) ── */
@@ -6008,7 +6043,7 @@ function performanceExportarPDF(dados, cpf) {
     var pdfFile = pasta.createFile(pdfBlob);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return {
-      ok: true,
+      ok: true, pdfId: pdfFile.getId(),   // r153: id usado no envio por e-mail
       linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
       linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
     };
@@ -6042,6 +6077,7 @@ function performanceSalvarApresentacao(dados, cpf) {
       var arqPdf = pasta.createFile(pdfBlob);
       arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+      out.pdfId = arqPdf.getId();   // r153
     } catch (errPdf) {
       out.erroPDF = errPdf.message || String(errPdf);
       Logger.log('Performance: falha ao converter PDF da apresentação: ' + out.erroPDF);
@@ -6281,7 +6317,7 @@ function perfMontarHTMLGrupo(lista, filtro, anterior, textosPorCliente, tg) {
 function perfNomeBaseGrupo(filtro, lista) {
   var nomes = perfNomeLimpo(lista.map(function (c) { return c.cliente; }).join('+'));
   if (nomes.length > 70) nomes = nomes.substring(0, 70);
-  return 'Performance_Grupo_' + lista.length + 'clientes_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje());
+  return 'Performance_Grupo_' + lista.length + 'clientes_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje()) + perfSufixoUnidades(filtro);
 }
 
 /* ── DIRETOR: PDF único do grupo (HTML + PDF no Drive, pasta Performance_FC / Grupos) ── */
@@ -6312,7 +6348,7 @@ function performanceExportarPDFGrupo(dados, cpf) {
     var pdfFile = pasta.createFile(pdfBlob);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return {
-      ok: true, clientes: p.clientes.length,
+      ok: true, clientes: p.clientes.length, pdfId: pdfFile.getId(),   // r153
       linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
       linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
     };
@@ -6345,11 +6381,431 @@ function performanceSalvarApresentacaoGrupo(dados, cpf) {
       var arqPdf = pasta.createFile(pdfBlob);
       arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+      out.pdfId = arqPdf.getId();   // r153
     } catch (errPdf) {
       out.erroPDF = errPdf.message || String(errPdf);
       Logger.log('Performance (grupo): falha ao converter PDF da apresentação: ' + out.erroPDF);
     }
     return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   r153 — COMPARATIVO INTERNO ENTRE UNIDADES (com ranking)
+   Material da Formula Code: unidades agrupadas por cliente (ranking dentro
+   de cada cliente), ranking geral das unidades e, com 2+ clientes, ranking
+   entre os clientes. Usa os mesmos filtros da aba Performance (inclusive o
+   filtro de unidades). Salvo no Drive em Performance_FC / Interno.
+   As exportações para o cliente (cliente e grupo) continuam sem ranking.
+   ═══════════════════════════════════════════════════════════════════ */
+function perfOrdenarPorNota(lista, campoNome) {
+  return lista.slice().sort(function (a, b) {
+    if (a.geral === null && b.geral === null) return String(a[campoNome]).localeCompare(String(b[campoNome]));
+    if (a.geral === null) return 1;
+    if (b.geral === null) return -1;
+    return (b.geral - a.geral) || String(a[campoNome]).localeCompare(String(b[campoNome]));
+  });
+}
+
+function perfPrepararInterno(d) {
+  var f = perfFiltroDe(d);
+  var todas = perfLerAnalises();
+  var calc = perfCalcular(todas, f, perfHoje());
+  var clientes = calc.clientes.slice();
+  if (f.clientes.length) {   // ordem em que os clientes foram selecionados
+    var ordem = f.clientes.map(function (n) { return fcChave(n); });
+    clientes.sort(function (a, b) { return ordem.indexOf(fcChave(a.cliente)) - ordem.indexOf(fcChave(b.cliente)); });
+  }
+  var unidades = [];
+  clientes.forEach(function (c) {
+    c.lista.forEach(function (u) {
+      var o = {};
+      Object.keys(u).forEach(function (k) { o[k] = u[k]; });
+      o.cliente = c.cliente;
+      unidades.push(o);
+    });
+  });
+  if (unidades.length < 2) return { erro: 'O comparativo entre unidades precisa de pelo menos 2 unidades com análise no período.' };
+  var rankUn = perfOrdenarPorNota(unidades, 'unidade');
+  var rankCli = perfOrdenarPorNota(clientes, 'cliente');
+  var comNota = unidades.filter(function (u) { return u.geral !== null; });
+  var mediaGeral = comNota.length ? perfArred(comNota.reduce(function (s, u) { return s + u.geral; }, 0) / comNota.length) : null;
+  var analises = clientes.reduce(function (s, c) { return s + c.analises; }, 0);
+  var farmacia = clientes.some(function (c) { return todas.some(function (a) { return a.tipoEst === 'FARMACIA' && fcChave(a.cliente) === fcChave(c.cliente); }); });
+  return { calc: calc, filtro: calc.filtro, anterior: calc.periodoAnterior, clientes: clientes, unidades: unidades,
+           rankUnidades: rankUn, rankClientes: rankCli, mediaGeral: mediaGeral, analises: analises, farmacia: farmacia };
+}
+
+function perfPosicao(lista, item) {
+  var com = lista.filter(function (x) { return x.geral !== null; });
+  var i = com.indexOf(item);
+  return i === -1 ? '—' : (i + 1) + 'º';
+}
+
+var PERF_TEXTOS_INTERNO = ['resumo', 'ranking_unidades', 'entre_clientes', 'pontos_atencao', 'recomendacoes'];
+
+function perfTextoInternoFallback(p) {
+  var t = { por_cliente: {} };
+  var un = p.rankUnidades.filter(function (u) { return u.geral !== null; });
+  t.resumo = ((p.filtro.de || p.filtro.ate) ? 'No período ' + perfPeriodoTxt(p.filtro) : 'Em todo o período registrado') + ', foram comparadas ' + p.unidades.length + ' unidade(s) de ' + p.clientes.length + ' cliente(s), com ' + p.analises + ' análise(s) concluída(s)'
+    + (p.mediaGeral !== null ? ' e nota média de ' + perfFmt(p.mediaGeral) + '/10 entre as unidades.' : '.');
+  t.ranking_unidades = un.length > 1
+    ? 'A unidade ' + un[0].unidade + ' (' + un[0].cliente + ') ocupa a 1ª posição, com ' + perfFmt(un[0].geral) + '/10; a última posição é de ' + un[un.length - 1].unidade + ' (' + un[un.length - 1].cliente + '), com ' + perfFmt(un[un.length - 1].geral) + '/10. A diferença entre o topo e a base é de ' + perfFmt(un[0].geral - un[un.length - 1].geral) + ' ponto(s).'
+    : 'Apenas uma unidade com nota no período.';
+  p.clientes.forEach(function (c) {
+    var l = c.lista.filter(function (u) { return u.geral !== null; });
+    t.por_cliente[c.cliente] = l.length > 1
+      ? 'Em ' + c.cliente + ', a melhor posição é de ' + l[0].unidade + ' (' + perfFmt(l[0].geral) + ') e a última de ' + l[l.length - 1].unidade + ' (' + perfFmt(l[l.length - 1].geral) + '); nota média do cliente: ' + perfFmt(c.geral) + '.'
+      : (l.length ? 'Em ' + c.cliente + ', uma unidade com nota no período: ' + l[0].unidade + ' (' + perfFmt(l[0].geral) + ').' : '');
+  });
+  var cl = p.rankClientes.filter(function (c) { return c.geral !== null; });
+  t.entre_clientes = cl.length > 1
+    ? 'Entre os clientes, ' + cl[0].cliente + ' lidera com nota média de ' + perfFmt(cl[0].geral) + '/10 e ' + cl[cl.length - 1].cliente + ' fica na última posição, com ' + perfFmt(cl[cl.length - 1].geral) + '/10.'
+    : '';
+  var baixas = un.filter(function (u) { return u.geral < 6; }).map(function (u) { return u.unidade + ' (' + u.cliente + ')'; });
+  var volRuim = p.unidades.filter(function (u) { return u.volume !== null && u.volume < 6; }).map(function (u) { return u.unidade + ' (' + u.cliente + ')'; });
+  t.pontos_atencao = (baixas.length || volRuim.length)
+    ? [baixas.length ? 'Unidades abaixo de 6,0: ' + baixas.join(', ') + '.' : '', volRuim.length ? 'Volume de mercadoria acima do ideal em: ' + volRuim.join(', ') + '.' : ''].filter(Boolean).join(' ')
+    : 'Nenhuma unidade ficou abaixo de 6,0 e nenhuma apresentou volume acima do ideal no período.';
+  t.recomendacoes = (baixas.length || volRuim.length)
+    ? 'Priorizar o acompanhamento das unidades com menor nota, compartilhando com o cliente as práticas observadas nas unidades do topo do ranking' + (volRuim.length ? ' e reforçando a sugestão de reduzir o abastecimento/recebimento de mercadoria com pelo menos 5 dias de antecedência ao inventário' : '') + '.'
+    : 'Usar as unidades do topo do ranking como referência de boas práticas nas conversas com os clientes.';
+  return t;
+}
+
+function perfGarantirTextosInterno(t, fb, p) {
+  var out = { por_cliente: {} };
+  PERF_TEXTOS_INTERNO.forEach(function (k) {
+    var v = t && typeof t[k] === 'string' ? t[k].trim() : '';
+    out[k] = v || fb[k] || '';
+  });
+  if (p.clientes.length < 2) out.entre_clientes = '';
+  p.clientes.forEach(function (c) {
+    var v = t && t.por_cliente && typeof t.por_cliente[c.cliente] === 'string' ? t.por_cliente[c.cliente].trim() : '';
+    out.por_cliente[c.cliente] = v || fb.por_cliente[c.cliente] || '';
+  });
+  return out;
+}
+
+function perfMontarPromptInterno(p) {
+  var linhas = [];
+  linhas.push('PERÍODO: ' + perfPeriodoTxt(p.filtro) + ' | TIPO DE AVALIAÇÃO: ' + perfTipoTxt(p.filtro));
+  linhas.push('PERÍODO ANTERIOR DE MESMA DURAÇÃO: ' + (p.anterior ? perfDataBR(p.anterior.de) + ' a ' + perfDataBR(p.anterior.ate) : 'não disponível'));
+  linhas.push('CLIENTES: ' + p.clientes.length + ' | UNIDADES: ' + p.unidades.length + ' | ANÁLISES: ' + p.analises + ' | NOTA MÉDIA ENTRE AS UNIDADES: ' + perfFmt(p.mediaGeral));
+  linhas.push('');
+  var linhaMet = function (o) {
+    var l = [];
+    if (o.geral !== null) l.push('geral ' + perfFmt(o.geral) + ' (' + (o.faixa || '—') + ')');
+    if (o.equipe !== null) l.push('equipe de apoio ' + perfFmt(o.equipe) + ' [EQUIPE]');
+    if (o.retaguarda !== null) l.push('retaguarda ' + perfFmt(o.retaguarda));
+    if (o.areaVendas !== null) l.push('área de vendas ' + perfFmt(o.areaVendas));
+    if (o.organizacao !== null) l.push('organização ' + perfFmt(o.organizacao));
+    if (o.volume !== null) l.push('volume ' + perfFmt(o.volume) + ' (escala invertida: nota baixa = muita mercadoria)');
+    if (o.variacao && o.variacao.geral !== null) l.push('variação vs anterior ' + (o.variacao.geral > 0 ? '+' : '') + perfFmt(o.variacao.geral));
+    return l.join('; ');
+  };
+  p.clientes.forEach(function (c) {
+    linhas.push('=== CLIENTE: ' + c.cliente + ' — ' + linhaMet(c) + ' ===');
+    c.lista.forEach(function (u) { linhas.push('  ' + perfPosicao(c.lista, u) + ' no cliente / ' + perfPosicao(p.rankUnidades, u) + ' no geral — UNIDADE ' + u.unidade + ': ' + linhaMet(u) + ' (' + u.analises + ' análise(s))'); });
+    linhas.push('');
+  });
+  if (p.clientes.length > 1) {
+    linhas.push('RANKING ENTRE CLIENTES: ' + p.rankClientes.map(function (c) { return perfPosicao(p.rankClientes, c) + ' ' + c.cliente + ' (' + perfFmt(c.geral) + ')'; }).join(' | '));
+  }
+  var temEquipe = p.unidades.some(function (u) { return u.equipe !== null; });
+  var temVolume = p.unidades.some(function (u) { return u.volume !== null; });
+  var temAnterior = p.unidades.some(function (u) { return u.variacao.geral !== null; });
+  var sys = 'Você é um analista sênior de operações de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas. '
+    + 'Gere um COMPARATIVO INTERNO entre unidades de clientes, para a DIRETORIA DA FORMULA CODE, com base apenas nos dados fornecidos. REGRAS OBRIGATÓRIAS:\n'
+    + '1. Material de uso interno: PODE e DEVE usar ranking, posições e ordinais (1º, 2º, última posição), apontando com clareza o topo e a base.\n'
+    + '2. Tom profissional, objetivo e respeitoso. TERMOS PROIBIDOS: "desorganizado", "incompetente", "negligente", "caótico", "péssimo", "grave falha", "errado". Use "exige adequação" ou "ponto de atenção".\n'
+    + '3. Escala: 9-10=Excelente, 7.5-8.9=Bom, 6-7.4=Regular, 4-5.9=Insatisfatório, 1-3.9=Crítico.\n'
+    + '4. A análise avalia exclusivamente a PREPARAÇÃO DO AMBIENTE feita pelo cliente. PROIBIDO dar a entender que a contagem feita pela Formula Code foi incorreta ou teve a qualidade afetada; nunca mencione recontagem.\n'
+    + '5. VOLUME (escala invertida): nota baixa = excesso de mercadoria (ruim). Quanto MAIOR o volume, PIOR para o inventário; volume acima do ideal (nota < 6) é SEMPRE ponto de atenção, mesmo com boa organização. Nunca apresente volume alto como positivo.\n'
+    + '6. CRITÉRIOS N/A: os dados contêm APENAS o que foi avaliado. NUNCA mencione algo que não conste nos dados, nem como ausência. '
+    + (temEquipe ? 'Equipe de apoio: só cite a de quem tem nota [EQUIPE] nos dados.' : 'Nenhuma unidade teve equipe de apoio avaliada: é PROIBIDO mencionar equipe, equipe de apoio ou equipe de pesagem.') + '\n'
+    + '7. ' + (temVolume ? 'Inclua a leitura de volume quando relevante.' : 'Nenhuma unidade teve volume avaliado: não cite volume.') + '\n'
+    + '8. ' + (temAnterior ? 'Há variação vs período anterior: comente só de quem tem variação nos dados.' : 'NÃO há período anterior: não comente evolução.') + '\n'
+    + '9. Cite apenas números presentes nos dados (1 casa decimal). Não invente fatos, causas ou observações.\n'
+    + '10. PROIBIDO exigir "SKU único por pallet"; se falar de pallet, use "pallets com produtos organizados por código de barras". PROIBIDO sugerir que o cliente comunique/avise previamente movimentações de mercadoria entre a data da análise e a operação.\n'
+    + '11. "recomendacoes" são ações da FORMULA CODE na relação com os clientes (ex.: priorizar o acompanhamento de unidades da base do ranking, compartilhar com o cliente as práticas das unidades do topo, reforçar a sugestão de reduzir o abastecimento/recebimento com pelo menos 5 dias de antecedência quando houver volume acima do ideal). Nada de ameaça ou cobrança.\n'
+    + (p.farmacia ? '12. HÁ FARMÁCIAS: farmácia NÃO tem equipe de pesagem; é PROIBIDO mencionar "pesagem". Medicamentos isentos de prescrição = "MIPs" (nunca "OTC").\n' : '')
+    + '13. Texto direto e conciso: no máximo 450 palavras no total, sem repetir informações entre seções.\n';
+  var usr = 'Gere um JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n{\n'
+    + '"resumo": "2-3 frases: cenário geral (nº de clientes e unidades, nota média), topo e base do ranking.",\n'
+    + '"ranking_unidades": "2-3 frases sobre o ranking geral das unidades: quem lidera, quem está na base, distância entre elas e padrões (retaguarda, área de vendas' + (temVolume ? ', organização, volume' : '') + ').",\n'
+    + '"por_cliente": { ' + p.clientes.map(function (c) { return JSON.stringify(c.cliente) + ': "1-2 frases sobre o ranking das unidades deste cliente"'; }).join(', ') + ' },\n'
+    + '"entre_clientes": "' + (p.clientes.length > 1 ? '2 frases comparando os clientes pelo ranking' : 'string vazia (só há um cliente)') + '",\n'
+    + '"pontos_atencao": "2 frases citando as unidades que exigem adequação e por quê.",\n'
+    + '"recomendacoes": "2 frases com ações da Formula Code (regra 11)."\n}\n\n'
+    + 'As chaves de "por_cliente" devem ser EXATAMENTE os nomes acima.\n\nDADOS:\n\n' + linhas.join('\n');
+  return { system: sys, user: usr };
+}
+
+/* ── DIRETOR: texto do comparativo interno (IA + contingência) ── */
+function performanceGerarTextoInterno(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar o comparativo' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararInterno(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var fb = perfTextoInternoFallback(p);
+    var textos, origem = 'ia';
+    try {
+      var prompt = perfMontarPromptInterno(p);
+      var resp = chamarClaudeAPI(prompt.user, prompt.system);
+      textos = perfGarantirTextosInterno(JSON.parse(resp.replace(/```json|```/g, '').trim()), fb, p);
+    } catch (errIA) {
+      Logger.log('Performance (interno): Claude API erro: ' + errIA.message + '. Usando texto de contingência.');
+      textos = perfGarantirTextosInterno(null, fb, p);
+      origem = 'contingencia';
+    }
+    return { ok: true, textos: textos, origem: origem };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── HTML do comparativo interno ── */
+function perfColunasInterno(lista) {
+  var cols = [['Geral', 'geral']];
+  if (lista.some(function (o) { return o.equipe !== null; })) cols.push(['Equipe', 'equipe']);
+  cols.push(['Retaguarda', 'retaguarda']); cols.push(['Área de Vendas', 'areaVendas']);
+  if (lista.some(function (o) { return o.organizacao !== null; })) cols.push(['Organização', 'organizacao']);
+  if (lista.some(function (o) { return o.volume !== null; })) cols.push(['Volume', 'volume']);
+  return cols;
+}
+
+function perfTabelaRankingHtml(lista, rankRef, cols, colNome, colExtra, total) {
+  var th = function (t, esq) { return '<td style="padding:7px 6px;' + (esq ? 'text-align:left;padding-left:10px;' : 'text-align:center;') + 'font-weight:600">' + t + '</td>'; };
+  var h = '<table style="width:100%;font-size:11px;border:1px solid #E2E8F0;margin:8px 0 6px"><tr style="background:#001528;color:#FFF">'
+    + th('#') + th(colNome[0], true) + (colExtra ? th(colExtra[0], true) : '')
+    + cols.map(function (c) { return th(c[0]); }).join('') + th('Variação<br><span style="font-size:9px;font-weight:400;opacity:.8">vs anterior</span>') + '</tr>';
+  lista.forEach(function (o) {
+    h += '<tr style="page-break-inside:avoid"><td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center;font-weight:700;color:#001528">' + perfPosicao(rankRef, o) + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(o[colNome[1]]) + '</td>'
+      + (colExtra ? '<td style="padding:6px 8px;border-bottom:1px solid #F0F2F4;color:#556677">' + perfEsc(o[colExtra[1]]) + '</td>' : '')
+      + cols.map(function (c) { return perfCelNota(o[c[1]]); }).join('')
+      + '<td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + perfDeltaHtml(o.variacao ? o.variacao.geral : null) + '</td></tr>';
+  });
+  if (total) {
+    h += '<tr style="font-weight:700;background:#F0F2F4"><td></td><td style="padding:7px 10px">' + perfEsc(total.rotulo) + '</td>' + (colExtra ? '<td></td>' : '')
+      + cols.map(function (c) { return perfCelNota(total.obj[c[1]]); }).join('')
+      + '<td style="padding:7px 6px;text-align:center">' + perfDeltaHtml(total.obj.variacao ? total.obj.variacao.geral : null) + '</td></tr>';
+  }
+  return h + '</table>';
+}
+
+function perfMontarHTMLInterno(p, t) {
+  var h = perfHtmlAbertura('Comparativo Interno entre Unidades');
+  h += perfHeaderGrupoHtml('Comparativo entre Unidades<br>Relatório interno · com ranking');
+  var estab = p.filtro.estab === 'FARMACIA' ? 'Farmácia' : (p.filtro.estab === 'SUPERMERCADO' ? 'Supermercado' : 'Todos os estabelecimentos');
+  var cel = function (rot, val, w, pad) { return '<td style="padding:14px ' + (pad || 20) + 'px;background:#001528;color:#FFF;' + (w ? 'width:' + w + ';' : '') + '"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">' + rot + '</div><div style="font-size:12px;font-weight:700">' + val + '</div></td>'; };
+  h += '<table><tr>' + cel('Clientes', perfEsc(p.clientes.map(function (c) { return c.cliente; }).join(' · ')), '40%', 32) + cel('Período (data da análise)', perfEsc(perfPeriodoTxt(p.filtro))) + '</tr>'
+    + '<tr>' + cel('Tipo de avaliação', perfEsc(perfTipoTxt(p.filtro)), '', 32) + cel('Período anterior (comparação)', p.anterior ? perfEsc(perfDataBR(p.anterior.de) + ' a ' + perfDataBR(p.anterior.ate)) : 'não disponível') + '</tr>'
+    + '<tr>' + cel('Tipo de estabelecimento', estab, '', 32) + cel('Natureza', 'Relatório interno Formula Code, com ranking') + '</tr></table>';
+  h += '<div style="padding:22px 26px 6px"><table><tr>'
+    + perfCardHtml('Clientes', String(p.clientes.length), 'comparados', '#001528')
+    + perfCardHtml('Unidades', String(p.unidades.length), 'no ranking', '#001528')
+    + perfCardHtml('Análises', String(p.analises), 'concluídas no período', '#5DC500')
+    + perfCardHtml('Nota média', perfFmt(p.mediaGeral), 'média entre as unidades', perfCorNota(p.mediaGeral))
+    + '</tr></table></div>';
+  h += '<div style="padding:14px 32px 18px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Resumo') + perfParHtml(t.resumo) + '</div>';
+
+  var colsUn = perfColunasInterno(p.unidades);
+  if (p.clientes.length > 1) {
+    h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Ranking geral das unidades') + perfParHtml(t.ranking_unidades)
+      + perfTabelaRankingHtml(p.rankUnidades, p.rankUnidades, colsUn, ['Unidade', 'unidade'], ['Cliente', 'cliente'], null)
+      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota da unidade = média das análises do período · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).</div></div>';
+  }
+  p.clientes.forEach(function (c) {
+    h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0;page-break-inside:auto">' + perfSecHtml('Cliente: ' + perfEsc(c.cliente))
+      + (p.clientes.length === 1 ? perfParHtml(t.ranking_unidades) : '') + perfParHtml(t.por_cliente[c.cliente])
+      + perfTabelaRankingHtml(c.lista, c.lista, colsUn, ['Unidade', 'unidade'], null, { rotulo: 'Média do cliente', obj: c })
+      + '</div>';
+  });
+  if (p.clientes.length > 1) {
+    var colsCli = perfColunasInterno(p.clientes);
+    h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Ranking entre clientes') + perfParHtml(t.entre_clientes)
+      + '<table style="width:100%;font-size:12px;margin-bottom:8px">';
+    p.rankClientes.forEach(function (c) {
+      h += '<tr style="page-break-inside:avoid"><td style="width:6%;padding:5px 0;font-weight:700;color:#001528">' + perfPosicao(p.rankClientes, c) + '</td><td style="width:28%;padding:5px 8px 5px 0;font-weight:600;color:#001528">' + perfEsc(c.cliente) + '</td><td style="width:54%;padding:5px 0">' + perfBarraHtml(c.geral, perfCorNota(c.geral)) + '</td><td style="width:12%;padding:5px 0 5px 8px;font-weight:700;color:' + perfCorNota(c.geral) + '">' + perfFmt(c.geral) + '</td></tr>';
+    });
+    h += '</table>' + perfTabelaRankingHtml(p.rankClientes, p.rankClientes, colsCli, ['Cliente', 'cliente'], null, null)
+      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota do cliente = média das notas das unidades.</div></div>';
+  }
+  h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Conclusão');
+  if (t.pontos_atencao) h += '<div style="background:#FFF3E0;border-left:4px solid #E8872B;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#E8872B;margin-bottom:6px">⚠ PONTOS DE ATENÇÃO</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.pontos_atencao) + '</p></div>';
+  if (t.recomendacoes) h += '<div style="background:#E3F2FD;border-left:4px solid #001528;padding:14px 16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#001528;margin-bottom:6px">→ RECOMENDAÇÕES</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.recomendacoes) + '</p></div>';
+  h += '</div>';
+  return h + perfHtmlRodape() + '</div></body></html>';
+}
+
+function perfNomeBaseInterno(filtro, clientes, nUn) {
+  var nomes = perfNomeLimpo(clientes.map(function (c) { return c.cliente; }).join('+'));
+  if (nomes.length > 60) nomes = nomes.substring(0, 60);
+  return 'Comparativo_Interno_' + nUn + 'unidades_' + nomes + '_' + (filtro.de || 'inicio') + '_a_' + (filtro.ate || perfHoje()) + perfSufixoUnidades(filtro);
+}
+
+/* ── DIRETOR: PDF do comparativo interno (HTML + PDF no Drive, pasta Performance_FC / Interno) ── */
+function performanceExportarPDFInterno(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem exportar o comparativo' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var p = perfPrepararInterno(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var t = perfGarantirTextosInterno(d.textos || null, perfTextoInternoFallback(p), p);
+    var html = perfMontarHTMLInterno(p, t);
+    var pasta = perfPastaCliente('Interno');
+    var base = perfNomeBaseInterno(p.filtro, p.clientes, p.unidades.length);
+    [base + '.html', base + '.pdf'].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var arquivo = pasta.createFile(base + '.html', html, 'text/html');
+    arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var pdfBlob = arquivo.getAs('application/pdf');
+    pdfBlob.setName(base + '.pdf');
+    var pdfFile = pasta.createFile(pdfBlob);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return {
+      ok: true, pdfId: pdfFile.getId(),
+      linkHTML: 'https://drive.google.com/uc?id=' + arquivo.getId() + '&export=download',
+      linkPDF: 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download'
+    };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── DIRETOR: apresentação do comparativo interno (PPTX montado no navegador) + PDF ── */
+function performanceSalvarApresentacaoInterno(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem gerar apresentações' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    if (!d.pptxBase64) return { ok: false, erro: 'Arquivo da apresentação não recebido.' };
+    var p = perfPrepararInterno(d);
+    if (p.erro) return { ok: false, erro: p.erro };
+    var pasta = perfPastaCliente('Interno');
+    var base = 'Apresentacao_' + perfNomeBaseInterno(p.filtro, p.clientes, p.unidades.length);
+    var nomePptx = base + '.pptx', nomePdf = base + '.pdf';
+    [nomePptx, nomePdf].forEach(function (n) {
+      var ex = pasta.getFilesByName(n);
+      while (ex.hasNext()) ex.next().setTrashed(true);
+    });
+    var bytes = Utilities.base64Decode(d.pptxBase64);
+    var pptxBlob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', nomePptx);
+    var arqPptx = pasta.createFile(pptxBlob);
+    arqPptx.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var out = { ok: true, linkPPTX: 'https://drive.google.com/uc?id=' + arqPptx.getId() + '&export=download', linkPDF: '', erroPDF: null };
+    try {
+      var pdfBlob = converterPptxParaPdfReal(pptxBlob, base);
+      pdfBlob.setName(nomePdf);
+      var arqPdf = pasta.createFile(pdfBlob);
+      arqPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      out.linkPDF = 'https://drive.google.com/uc?id=' + arqPdf.getId() + '&export=download';
+      out.pdfId = arqPdf.getId();
+    } catch (errPdf) {
+      out.erroPDF = errPdf.message || String(errPdf);
+      Logger.log('Performance (interno): falha ao converter PDF da apresentação: ' + out.erroPDF);
+    }
+    return out;
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   r153 — ENVIO DA PERFORMANCE POR E-MAIL (análise + apresentação em PDF)
+   E-mails sugeridos = endereços para onde as análises individuais das
+   unidades foram enviadas (coluna 15 da aba de análises, qualquer data).
+   O Diretor confere/edita a lista na tela antes de enviar.
+   ═══════════════════════════════════════════════════════════════════ */
+var PERF_EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+function perfSepararEmails(txt) {
+  return String(txt || '').split(/[,;\s]+/).map(function (e) { return e.trim().toLowerCase(); }).filter(function (e) { return PERF_EMAIL_RE.test(e); });
+}
+
+function performanceEmailsSugeridos(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var pares = {};
+    (Array.isArray(d.pares) ? d.pares : []).forEach(function (x) {
+      var p = String(x || '').split('\t');
+      if (p.length > 1) pares[fcChave(p[0]) + '|' + fcChave(p[1])] = fcLimparNome(p[0]) + ' — ' + fcLimparNome(p[1]);
+    });
+    if (!Object.keys(pares).length) return { ok: true, emails: [] };
+    var todas = getOuCriarAbaAuditoria().getDataRange().getValues();
+    var mapa = {};
+    for (var i = 1; i < todas.length; i++) {
+      var row = todas[i];
+      if (String(row[9]) === 'EXCLUIDO') continue;
+      var k = fcChave(row[5]) + '|' + fcChave(row[6]);
+      if (!pares[k]) continue;
+      var lista = perfSepararEmails(row[14]);
+      if (!lista.length) continue;
+      var quando = row[15] instanceof Date ? Utilities.formatDate(row[15], 'America/Fortaleza', 'yyyy-MM-dd') : extrairDataISO(row[7]);
+      lista.forEach(function (e) {
+        if (!mapa[e]) mapa[e] = { email: e, unidades: [], ultimo: '' };
+        if (mapa[e].unidades.indexOf(pares[k]) === -1) mapa[e].unidades.push(pares[k]);
+        if (quando > mapa[e].ultimo) mapa[e].ultimo = quando;
+      });
+    }
+    var out = Object.keys(mapa).map(function (e) { return mapa[e]; });
+    out.sort(function (a, b) { return (b.ultimo > a.ultimo ? 1 : (b.ultimo < a.ultimo ? -1 : 0)) || a.email.localeCompare(b.email); });
+    return { ok: true, emails: out };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// Só anexa arquivos que estão dentro da pasta Performance_FC (proteção contra IDs de outros arquivos do Drive).
+function perfArquivoDaPerformance(arq) {
+  var fila = [], it = arq.getParents();
+  while (it.hasNext()) fila.push({ p: it.next(), n: 0 });
+  while (fila.length) {
+    var x = fila.shift();
+    if (x.p.getName() === 'Performance_FC') return true;
+    if (x.n >= 4) continue;
+    var it2 = x.p.getParents();
+    while (it2.hasNext()) fila.push({ p: it2.next(), n: x.n + 1 });
+  }
+  return false;
+}
+
+function performanceEnviarEmail(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem enviar a análise' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var escopo = ['cliente', 'grupo', 'interno'].indexOf(d.escopo) !== -1 ? d.escopo : 'cliente';
+    var emails = [];
+    (Array.isArray(d.emails) ? d.emails : []).forEach(function (e) { perfSepararEmails(e).forEach(function (x) { if (emails.indexOf(x) === -1) emails.push(x); }); });
+    if (!emails.length) return { ok: false, erro: 'Informe ao menos um e-mail válido.' };
+    if (emails.length > 40) return { ok: false, erro: 'Máximo de 40 destinatários por envio.' };
+    var anexos = [], nomes = [];
+    (Array.isArray(d.arquivos) ? d.arquivos : []).forEach(function (id) {
+      if (!id) return;
+      var arq = DriveApp.getFileById(String(id));
+      if (!perfArquivoDaPerformance(arq)) throw new Error('Arquivo fora da pasta Performance_FC: ' + arq.getName());
+      anexos.push(arq.getBlob());
+      nomes.push(arq.getName());
+    });
+    if (!anexos.length) return { ok: false, erro: 'Nenhum arquivo para anexar. Gere a análise e a apresentação antes de enviar.' };
+    var titulo = fcLimparNome(d.titulo) || 'Análise de Performance';
+    var periodo = fcLimparNome(d.periodoTxt);
+    var assunto, abertura;
+    if (escopo === 'interno') {
+      assunto = 'Comparativo entre Unidades — ' + titulo;
+      abertura = 'Segue em anexo o <strong>Comparativo entre Unidades</strong> (com ranking) de <strong>' + perfEsc(titulo) + '</strong>' + (periodo ? ', referente ao período <strong>' + perfEsc(periodo) + '</strong>' : '') + '.';
+    } else {
+      assunto = 'Análise de Performance das Unidades — ' + titulo;
+      abertura = 'Compartilhamos a <strong>Análise de Performance das Unidades</strong> de <strong>' + perfEsc(titulo) + '</strong>' + (periodo ? ', referente ao período <strong>' + perfEsc(periodo) + '</strong>' : '') + '. '
+        + 'O material reúne as Análises de Preparação para Inventário do período e destaca as boas práticas e as oportunidades de evolução observadas nas unidades.';
+    }
+    var corpoHTML = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
+      + fcCabecalhoEmailHtml()
+      + '<div style="padding:32px 24px;background:#FFF"><p style="font-size:15px;line-height:1.8">' + abertura + '</p>'
+      + '<p style="font-size:14px;line-height:1.7">' + (anexos.length > 1 ? 'A análise e a apresentação estão em anexo (PDF).' : 'O arquivo está em anexo (PDF).') + '</p>'
+      + '<p style="font-size:14px;line-height:1.7">Ficamos à disposição.</p>'
+      + '</div><div style="background:#001528;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
+      + '<strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
+    MailApp.sendEmail(emails.join(','), assunto, '', { htmlBody: corpoHTML, attachments: anexos, inlineImages: { fclogo: fcLogoEmailBlob() }, name: 'Formula Code — Análise de Performance', replyTo: 'lael@formulacode.tec.br' });
+    Logger.log('Performance: e-mail (' + escopo + ') enviado para ' + emails.join(', ') + ' com ' + nomes.join(', '));
+    return { ok: true, enviados: emails.length, mensagem: 'Enviado para ' + emails.length + ' destinatário(s)' };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
