@@ -141,6 +141,18 @@ function doPost(e) {
     else if (action === 'biGerarAnalise') { result = biGerarAnalise(data.cpf, data.pacote, data.correcao); }
     else if (action === 'biVerificarLiberacao') { result = { success: true, liberado: biLiberacaoValida(data.cpf, data.tokenBI) }; }
 
+    // ############ r155: ABA PESSOAS — Diagnóstico de Prontidão para Mudança ############
+    else if (action === 'diagListar') { result = diagListar(data, data.cpf); }
+    else if (action === 'diagCandidatos') { result = diagCandidatos(data, data.cpf); }
+    else if (action === 'diagCriar') { result = diagCriar(data, data.cpf); }
+    else if (action === 'diagDetalhe') { result = diagDetalhe(data, data.cpf); }
+    else if (action === 'diagAlterarStatus') { result = diagAlterarStatus(data, data.cpf); }
+    else if (action === 'diagEnviarAcessos') { result = diagEnviarAcessos(data, data.cpf); }
+    else if (action === 'diagPainel') { result = diagPainel(data, data.cpf); }
+    else if (action === 'diagGerarAnalise') { result = diagGerarAnalise(data, data.cpf); }
+    else if (action === 'diagObterQuestionario') { result = diagObterQuestionario(data); }   // público (link pessoal)
+    else if (action === 'diagResponder') { result = diagResponder(data); }                   // público (link pessoal)
+
     // Qualquer acao nao reconhecida devolve erro EXPLICITO, em vez de um objeto
     // vazio silencioso. Se voce ver esta mensagem, o script publicado esta
     // desatualizado em relacao ao index.html.
@@ -585,7 +597,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-02-r154';
+const VERSAO_SCRIPT = '2026-10-03-r155';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -614,7 +626,9 @@ function doGet(e) {
     'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo',
     'performanceGerarTextoInterno', 'performanceExportarPDFInterno', 'performanceSalvarApresentacaoInterno',
     'performanceEmailsSugeridos', 'performanceEnviarEmail',
-    'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir'
+    'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir',
+    'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
+    'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -2127,7 +2141,9 @@ const ACOES_PUBLICAS = [
   'redefinirSenhaComCodigo',
   'getVersaoScript',
   'npsObterPesquisa',
-  'npsResponder'
+  'npsResponder',
+  'diagObterQuestionario',   // r155: questionário pessoal do Diagnóstico de Prontidão (token no link)
+  'diagResponder'
 ];
 
 // ============================================================================ //
@@ -7448,4 +7464,666 @@ function biGerarAnalise(cpf, pacote, correcao) {
   } catch (e) {
     return { error: 'Não foi possível gerar a análise com a IA: ' + e.message };
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MÓDULO: PESSOAS — DIAGNÓSTICO DE PRONTIDÃO PARA MUDANÇA (HCMBOK) — r155
+   Primeiro uso: diagnóstico INTERNO dos supervisores da Formula Code.
+   - Só o DIRETOR cria, envia, acompanha e vê os resultados (inclusive
+     por pessoa). Supervisor nenhum enxerga o módulo.
+   - Cada supervisor recebe por e-mail um link PESSOAL (token único) para
+     o questionário público prontidao.html. O link vale para uma resposta.
+   - Questionário: prontidão (16 itens), autoavaliação de liderança (8),
+     disposição para liderar mudanças (3), indicações entre os próprios
+     supervisores (3 perguntas, até 3 nomes cada) e comentário opcional.
+   - Abas próprias (Diag_Cadastro / Diag_Participantes / Diag_Respostas):
+     nenhuma aba existente é alterada.
+   - Cálculo puro em diagCalcular (sem planilha), testável isoladamente.
+   ═══════════════════════════════════════════════════════════════════ */
+var DIAG_ABA_CAD = 'Diag_Cadastro';
+var DIAG_ABA_PART = 'Diag_Participantes';
+var DIAG_ABA_RESP = 'Diag_Respostas';
+var DIAG_CAB_CAD = ['ID', 'Criado_em', 'Criado_por_CPF', 'Titulo', 'Contexto', 'Status', 'Status_em'];
+var DIAG_CAB_PART = ['Token', 'Diag_ID', 'Pid', 'CPF', 'Nome', 'Email', 'Papel', 'Enviado_em', 'Qtd_envios', 'Respondido', 'Respondido_em'];
+var DIAG_CAB_RESP = ['Resp_ID', 'Diag_ID', 'Token', 'Pid', 'CPF', 'Nome', 'Respondido_em', 'Prontidao', 'Lideranca', 'Disposicao',
+                     'Ind_duvida', 'Ind_novidade', 'Ind_ensinar', 'Comentario', 'Consentimento'];
+
+var DIAG_DIMENSOES = [
+  { k: 'clareza', nome: 'Clareza do porquê' },
+  { k: 'abertura', nome: 'Abertura a mudanças' },
+  { k: 'historico', nome: 'Experiência com mudanças anteriores' },
+  { k: 'capacidade', nome: 'Capacidade e tempo' },
+  { k: 'confianca', nome: 'Confiança na direção' },
+  { k: 'comunicacao', nome: 'Comunicação interna' },
+  { k: 'seguranca', nome: 'Segurança para opinar' },
+  { k: 'engajamento', nome: 'Engajamento' }
+];
+// inv = afirmação invertida (concordar indica MENOS prontidão): a nota é espelhada no cálculo
+var DIAG_ITENS_PRONTIDAO = [
+  { d: 'clareza', inv: false, t: 'Entendo por que a Formula Code busca melhorar a forma como trabalhamos.' },
+  { d: 'clareza', inv: false, t: 'Sei como o meu trabalho afeta os resultados da empresa e dos clientes.' },
+  { d: 'abertura', inv: false, t: 'Gosto de aprender jeitos novos de fazer o meu trabalho.' },
+  { d: 'abertura', inv: true, t: 'Quando algo muda, prefiro esperar para ver se vai dar certo.' },
+  { d: 'historico', inv: false, t: 'As mudanças que já aconteceram na empresa melhoraram o nosso dia a dia.' },
+  { d: 'historico', inv: true, t: 'Muitas mudanças começam e depois são abandonadas.' },
+  { d: 'capacidade', inv: false, t: 'Tenho tempo, na minha rotina, para aprender algo novo.' },
+  { d: 'capacidade', inv: false, t: 'A equipe tem gente suficiente para o volume de trabalho.' },
+  { d: 'confianca', inv: false, t: 'Confio nas decisões da direção da empresa.' },
+  { d: 'confianca', inv: false, t: 'A direção cumpre o que promete.' },
+  { d: 'comunicacao', inv: false, t: 'Fico sabendo das mudanças antes de elas acontecerem.' },
+  { d: 'comunicacao', inv: false, t: 'As informações chegam de forma clara até mim.' },
+  { d: 'seguranca', inv: false, t: 'Posso dar minha opinião sem medo de ser prejudicado.' },
+  { d: 'seguranca', inv: false, t: 'Quando erro, sou orientado, e não punido.' },
+  { d: 'engajamento', inv: false, t: 'Tenho orgulho de trabalhar na Formula Code.' },
+  { d: 'engajamento', inv: false, t: 'Me sinto parte das decisões que afetam o meu trabalho.' }
+];
+var DIAG_ITENS_LIDERANCA = [
+  'Explico à minha equipe o porquê das decisões.',
+  'Peço a opinião da equipe antes de decidir.',
+  'Dou o exemplo do que cobro.',
+  'Apoio a equipe quando surge uma novidade no trabalho.',
+  'Resolvo conflitos com respeito.',
+  'Reconheço quem faz um bom trabalho.',
+  'Dou autonomia para a equipe resolver problemas.',
+  'Cumpro os combinados.'
+];
+var DIAG_ITENS_DISPOSICAO = [
+  'Estou disposto a liderar mudanças na forma como a equipe trabalha.',
+  'Vejo valor em revisar processos que já funcionam.',
+  'Acompanho de perto a adoção de novos procedimentos.'
+];
+var DIAG_PERGUNTAS_INDICACAO = [
+  { k: 'duvida', t: 'A quem você recorre quando tem dúvida sobre como fazer algo no trabalho?' },
+  { k: 'novidade', t: 'Quando surge uma novidade na empresa, de quem você quer ouvir a opinião?' },
+  { k: 'ensinar', t: 'Quem você indicaria para ensinar um supervisor novo?' }
+];
+var DIAG_ESCALA = ['Discordo totalmente', 'Discordo', 'Não concordo nem discordo', 'Concordo', 'Concordo totalmente'];
+// Limites (0 a 100). Influenciador: indicado por pelo menos 20% dos colegas que responderam E por no mínimo 2 pessoas.
+var DIAG_LIMITES = { alta: 70, moderada: 50, favoravel: 70, influenciaPct: 0.2, influenciaMin: 2 };
+var DIAG_PAPEIS = {
+  'Patrocinador': 'Disposição alta para liderar mudanças e liderança autodeclarada forte. Pode puxar a mudança junto com a direção.',
+  'Apoiador a desenvolver': 'Disposição alta para liderar mudanças, mas a própria avaliação de liderança ainda é modesta. Vale apoiar com orientação.',
+  'Neutro': 'Disposição moderada. Tende a acompanhar o grupo; precisa entender bem o porquê.',
+  'Resistente': 'Disposição baixa para liderar mudanças neste momento. Pede conversa individual antes de envolver em mudanças.'
+};
+var DIAG_QUADRANTES = {
+  agente: { titulo: 'Agente de mudança', texto: 'Influente e com atitude favorável: recrutar primeiro.' },
+  prioridade: { titulo: 'Prioridade: conversa individual', texto: 'Influente, mas com atitude ainda não favorável: conversar antes de começar.' },
+  apoio: { titulo: 'Apoio', texto: 'Atitude favorável, pouca influência: manter informado e engajado.' },
+  acompanhar: { titulo: 'Acompanhar', texto: 'Pouca influência e atitude ainda não favorável: acompanhar sem foco excessivo.' },
+  sem_resposta: { titulo: 'Sem resposta', texto: 'Não respondeu o questionário.' }
+};
+
+/* ── Infraestrutura de planilha ── */
+function diagAba(nome, cab) {
+  var ss = getPlanilha();
+  var aba = ss.getSheetByName(nome);
+  if (!aba) {
+    aba = ss.insertSheet(nome);
+    aba.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+  }
+  return aba;
+}
+function diagLer(nome, cab) {
+  var aba = diagAba(nome, cab);
+  var ult = aba.getLastRow();
+  if (ult < 2) return [];
+  var vals = aba.getRange(2, 1, ult - 1, cab.length).getValues();
+  return vals.map(function (r, i) {
+    var o = { linha: i + 2 };
+    cab.forEach(function (c, j) { o[c] = r[j]; });
+    return o;
+  });
+}
+function diagExigirDiretor(cpf) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') throw new Error('Acesso restrito à Diretoria.');
+}
+function diagDados(dados) { return typeof dados === 'string' ? JSON.parse(dados) : (dados || {}); }
+function diagNovoId(prefixo, tam) { return (prefixo || '') + Utilities.getUuid().replace(/-/g, '').substring(0, tam || 12); }
+function diagDataBR(v) {
+  if (!v) return '';
+  var d = v instanceof Date ? v : new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  return Utilities.formatDate(d, 'America/Fortaleza', 'dd/MM/yyyy HH:mm');
+}
+function diagLimparToken(t) {
+  var s = String(t || '').trim();
+  return /^[A-Za-z0-9]{24,64}$/.test(s) ? s : '';
+}
+function diagFmt(x) {
+  if (x === null || x === undefined || isNaN(x)) return '—';
+  return (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
+}
+
+/* ── Supervisores (fonte: aba Colaboradores) ── */
+function diagSupervisoresColab() {
+  var dados = getColabDados();
+  var idx = getColabIndices();
+  var idxEmail = getIndiceEmail();
+  var out = [];
+  for (var i = 1; i < dados.length; i++) {
+    var r = dados[i];
+    if (String(r[idx.perfil] || '').trim().toUpperCase() !== 'SUPERVISOR') continue;
+    var cpf = normalizarCPF(r[idx.cpf]);
+    if (cpf.length !== 11) continue;
+    out.push({ cpf: cpf, nome: String(r[idx.nome] || '').trim(), email: idxEmail > -1 ? String(r[idxEmail] || '').trim() : '' });
+  }
+  out.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  return out;
+}
+
+function diagCandidatos(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    return { ok: true, supervisores: diagSupervisoresColab().map(function (s) {
+      return { cpf: s.cpf, nome: s.nome, email: s.email };
+    }) };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Criar diagnóstico ── */
+function diagCriar(dados, cpf) {
+  var lock = LockService.getScriptLock();
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var titulo = String(d.titulo || '').trim().substring(0, 150);
+    if (!titulo) return { ok: false, erro: 'Informe um título para o diagnóstico.' };
+    var cpfs = Array.isArray(d.cpfs) ? d.cpfs.map(normalizarCPF) : [];
+    var sup = diagSupervisoresColab();
+    var escolhidos = sup.filter(function (s) { return cpfs.indexOf(s.cpf) !== -1; });
+    if (escolhidos.length < 2) return { ok: false, erro: 'Selecione pelo menos 2 supervisores (as indicações precisam de colegas).' };
+    lock.waitLock(15000);
+    var id = diagNovoId('dg_', 12);
+    var agora = new Date();
+    diagAba(DIAG_ABA_CAD, DIAG_CAB_CAD).appendRow([id, agora, normalizarCPF(cpf), titulo, 'INTERNO', 'ABERTO', agora]);
+    var linhas = escolhidos.map(function (s) {
+      return [Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').substring(0, 8),
+              id, diagNovoId('p', 10), s.cpf, s.nome, s.email, 'SUPERVISOR', '', 0, 'NAO', ''];
+    });
+    var abaP = diagAba(DIAG_ABA_PART, DIAG_CAB_PART);
+    abaP.getRange(abaP.getLastRow() + 1, 1, linhas.length, DIAG_CAB_PART.length).setValues(linhas);
+    return { ok: true, id: id, mensagem: 'Diagnóstico criado com ' + linhas.length + ' supervisores.' };
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+/* ── Listar diagnósticos (com contagens) ── */
+function diagListar(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    var cads = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD);
+    var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART);
+    var lista = cads.map(function (c) {
+      var ps = parts.filter(function (p) { return p.Diag_ID === c.ID; });
+      return {
+        id: c.ID, titulo: c.Titulo, status: c.Status, criadoEm: diagDataBR(c.Criado_em),
+        criadoTs: c.Criado_em instanceof Date ? c.Criado_em.getTime() : 0,
+        participantes: ps.length,
+        enviados: ps.filter(function (p) { return Number(p.Qtd_envios) > 0; }).length,
+        respondidos: ps.filter(function (p) { return p.Respondido === 'SIM'; }).length
+      };
+    });
+    lista.sort(function (a, b) { return b.criadoTs - a.criadoTs; });
+    return { ok: true, diagnosticos: lista };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Detalhe (participantes e status de envio/resposta) ── */
+function diagDetalhe(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === d.id; })[0];
+    if (!cad) return { ok: false, erro: 'Diagnóstico não encontrado.' };
+    var sup = diagSupervisoresColab();
+    var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART).filter(function (p) { return p.Diag_ID === d.id; }).map(function (p) {
+      var atual = sup.filter(function (s) { return s.cpf === normalizarCPF(p.CPF); })[0];
+      return {
+        pid: p.Pid, nome: p.Nome, email: (atual && atual.email) || p.Email || '',
+        enviadoEm: diagDataBR(p.Enviado_em), qtdEnvios: Number(p.Qtd_envios) || 0,
+        respondido: p.Respondido === 'SIM', respondidoEm: diagDataBR(p.Respondido_em)
+      };
+    });
+    parts.sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+    return { ok: true, diagnostico: { id: cad.ID, titulo: cad.Titulo, status: cad.Status, criadoEm: diagDataBR(cad.Criado_em) }, participantes: parts };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Encerrar / reabrir respostas ── */
+function diagAlterarStatus(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var status = d.status === 'ENCERRADO' ? 'ENCERRADO' : 'ABERTO';
+    var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === d.id; })[0];
+    if (!cad) return { ok: false, erro: 'Diagnóstico não encontrado.' };
+    diagAba(DIAG_ABA_CAD, DIAG_CAB_CAD).getRange(cad.linha, 6, 1, 2).setValues([[status, new Date()]]);
+    return { ok: true, status: status };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Envio do acesso pessoal por e-mail (disparado pelo Diretor) ── */
+function diagEnviarAcessos(dados, cpf) {
+  var lock = LockService.getScriptLock();
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var urlBase = String(d.urlBaseApp || '');
+    if (!/^https:\/\/[A-Za-z0-9._~\-\/]+\/$/.test(urlBase)) return { ok: false, erro: 'Endereço do app inválido para montar o link.' };
+    var pids = Array.isArray(d.pids) ? d.pids.map(String) : [];
+    if (!pids.length) return { ok: false, erro: 'Selecione pelo menos um supervisor.' };
+    var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === d.id; })[0];
+    if (!cad) return { ok: false, erro: 'Diagnóstico não encontrado.' };
+    if (cad.Status !== 'ABERTO') return { ok: false, erro: 'Este diagnóstico está encerrado. Reabra para enviar acessos.' };
+    lock.waitLock(20000);
+    var sup = diagSupervisoresColab();
+    var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART).filter(function (p) { return p.Diag_ID === d.id && pids.indexOf(String(p.Pid)) !== -1; });
+    var abaP = diagAba(DIAG_ABA_PART, DIAG_CAB_PART);
+    var enviados = [], falhas = [];
+    var cota = MailApp.getRemainingDailyQuota();
+    parts.forEach(function (p) {
+      if (p.Respondido === 'SIM') { falhas.push({ nome: p.Nome, motivo: 'já respondeu' }); return; }
+      var atual = sup.filter(function (s) { return s.cpf === normalizarCPF(p.CPF); })[0];
+      var email = (atual && atual.email) || String(p.Email || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { falhas.push({ nome: p.Nome, motivo: 'sem e-mail válido na aba Colaboradores' }); return; }
+      if (cota <= 0) { falhas.push({ nome: p.Nome, motivo: 'cota diária de e-mails do Google esgotada' }); return; }
+      try {
+        var link = urlBase + 'prontidao.html?t=' + p.Token;
+        var reenvio = Number(p.Qtd_envios) > 0;
+        MailApp.sendEmail(email, (reenvio ? 'Lembrete: ' : '') + 'Diagnóstico de Prontidão — seu acesso pessoal', '', {
+          htmlBody: diagEmailAcessoHtml(p.Nome, cad.Titulo, link, reenvio),
+          inlineImages: { fclogo: fcLogoEmailBlob() },
+          name: 'Formula Code — Pessoas', replyTo: 'lael@formulacode.tec.br'
+        });
+        cota--;
+        abaP.getRange(p.linha, 6).setValue(email);
+        abaP.getRange(p.linha, 8, 1, 2).setValues([[new Date(), (Number(p.Qtd_envios) || 0) + 1]]);
+        enviados.push(p.Nome);
+      } catch (eMail) {
+        falhas.push({ nome: p.Nome, motivo: 'falha no envio (' + eMail.message + ')' });
+      }
+    });
+    return { ok: true, enviados: enviados, falhas: falhas };
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+function diagEmailAcessoHtml(nome, titulo, link, reenvio) {
+  var primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
+  primeiro = primeiro ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase() : '';
+  return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
+    + fcCabecalhoEmailHtml()
+    + '<div style="padding:28px 24px;background:#FFF">'
+    + '<p style="font-size:15px;line-height:1.7;margin:0 0 14px">Olá' + (primeiro ? ', ' + perfEsc(primeiro) : '') + '!</p>'
+    + (reenvio ? '<p style="font-size:14px;line-height:1.7;margin:0 0 14px;color:#6B7B8D">Este é um lembrete: seu questionário ainda está aguardando resposta.</p>' : '')
+    + '<p style="font-size:15px;line-height:1.7;margin:0 0 14px">A Formula Code está fazendo um <strong>Diagnóstico de Prontidão para Mudança</strong> com os supervisores. '
+    + 'O objetivo é entender como a equipe enxerga o trabalho, a comunicação e as mudanças, para planejar melhor os próximos passos.</p>'
+    + '<div style="background:#F4F6F8;padding:14px 16px;border-radius:10px;margin:18px 0">'
+    + '<p style="font-size:12px;color:#6B7B8D;margin:0 0 4px">DIAGNÓSTICO</p><p style="font-size:14px;margin:0"><strong>' + perfEsc(titulo) + '</strong></p></div>'
+    + '<p style="font-size:14px;line-height:1.7;margin:0 0 14px">Leva cerca de <strong>10 minutos</strong>. Não existe resposta certa ou errada: responda pensando no seu dia a dia. '
+    + 'As respostas são <strong>confidenciais</strong> e vistas apenas pela Diretoria.</p>'
+    + '<div style="border:2px solid #5DC500;border-radius:12px;padding:18px;margin:22px 0;text-align:center;background:#F7FDF0">'
+    + '<p style="font-size:13px;line-height:1.6;color:#1A2A3A;margin:0 0 14px">Este link é <strong>pessoal</strong>: não encaminhe para outra pessoa.</p>'
+    + '<a href="' + link + '" style="display:inline-block;padding:12px 28px;background:#5DC500;color:#001528;text-decoration:none;border-radius:8px;font-weight:700">Responder o questionário</a></div>'
+    + '</div><div style="background:#001528;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
+    + '<strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
+}
+
+/* ── PÚBLICO: abrir o questionário a partir do token pessoal ── */
+function diagObterQuestionario(dados) {
+  try {
+    var d = diagDados(dados);
+    var t = diagLimparToken(d.t);
+    if (!t) return { ok: false, erro: 'Link inválido.' };
+    var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART);
+    var eu = parts.filter(function (p) { return p.Token === t; })[0];
+    if (!eu) return { ok: false, erro: 'Link inválido ou expirado.' };
+    var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === eu.Diag_ID; })[0];
+    if (!cad) return { ok: false, erro: 'Diagnóstico não encontrado.' };
+    if (eu.Respondido === 'SIM') return { ok: true, respondida: true, nome: eu.Nome };
+    if (cad.Status !== 'ABERTO') return { ok: false, encerrado: true, erro: 'Este diagnóstico já foi encerrado e não recebe mais respostas.' };
+    var colegas = parts.filter(function (p) { return p.Diag_ID === eu.Diag_ID && p.Token !== t; })
+      .map(function (p) { return { pid: p.Pid, nome: p.Nome }; })
+      .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+    return {
+      ok: true, respondida: false, nome: eu.Nome, titulo: cad.Titulo,
+      escala: DIAG_ESCALA,
+      prontidao: DIAG_ITENS_PRONTIDAO.map(function (i) { return i.t; }),
+      lideranca: DIAG_ITENS_LIDERANCA, disposicao: DIAG_ITENS_DISPOSICAO,
+      indicacoes: DIAG_PERGUNTAS_INDICACAO, colegas: colegas
+    };
+  } catch (e) {
+    Logger.log('diagObterQuestionario: ' + e.message);
+    return { ok: false, erro: 'Não foi possível abrir o questionário. Tente novamente em instantes.' };
+  }
+}
+
+/* ── PÚBLICO: gravar a resposta (uma por link) ── */
+function diagValidarNotas(lista, qtd) {
+  if (!Array.isArray(lista) || lista.length !== qtd) return null;
+  var out = [];
+  for (var i = 0; i < qtd; i++) {
+    var v = parseInt(lista[i], 10);
+    if (isNaN(v) || v < 1 || v > 5) return null;
+    out.push(v);
+  }
+  return out;
+}
+function diagResponder(dados) {
+  var lock = LockService.getScriptLock();
+  try {
+    var d = diagDados(dados);
+    var t = diagLimparToken(d.t);
+    if (!t) return { ok: false, erro: 'Link inválido.' };
+    if (d.consentimento !== true) return { ok: false, erro: 'Confirme que leu e concorda com o uso das respostas.' };
+    var pront = diagValidarNotas(d.prontidao, DIAG_ITENS_PRONTIDAO.length);
+    var lid = diagValidarNotas(d.lideranca, DIAG_ITENS_LIDERANCA.length);
+    var disp = diagValidarNotas(d.disposicao, DIAG_ITENS_DISPOSICAO.length);
+    if (!pront || !lid || !disp) return { ok: false, erro: 'Responda todas as afirmações (de 1 a 5) antes de enviar.' };
+    var comentario = String(d.comentario || '').trim().substring(0, 2000);
+
+    lock.waitLock(15000);
+    var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART);
+    var eu = parts.filter(function (p) { return p.Token === t; })[0];
+    if (!eu) return { ok: false, erro: 'Link inválido ou expirado.' };
+    if (eu.Respondido === 'SIM') return { ok: false, jaRespondida: true, erro: 'Este questionário já foi respondido.' };
+    var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === eu.Diag_ID; })[0];
+    if (!cad || cad.Status !== 'ABERTO') return { ok: false, erro: 'Este diagnóstico já foi encerrado e não recebe mais respostas.' };
+    var validos = parts.filter(function (p) { return p.Diag_ID === eu.Diag_ID && p.Token !== t; }).map(function (p) { return String(p.Pid); });
+    var ind = d.indicacoes || {};
+    var indLimpo = {};
+    DIAG_PERGUNTAS_INDICACAO.forEach(function (q) {
+      var l = Array.isArray(ind[q.k]) ? ind[q.k].map(String) : [];
+      var u = [];
+      l.forEach(function (pid) { if (validos.indexOf(pid) !== -1 && u.indexOf(pid) === -1 && u.length < 3) u.push(pid); });
+      indLimpo[q.k] = u.join(';');
+    });
+    var agora = new Date();
+    diagAba(DIAG_ABA_RESP, DIAG_CAB_RESP).appendRow([
+      diagNovoId('dr_', 12), eu.Diag_ID, t, eu.Pid, eu.CPF, eu.Nome, agora,
+      pront.join(';'), lid.join(';'), disp.join(';'),
+      indLimpo.duvida, indLimpo.novidade, indLimpo.ensinar, comentario, 'SIM'
+    ]);
+    diagAba(DIAG_ABA_PART, DIAG_CAB_PART).getRange(eu.linha, 10, 1, 2).setValues([['SIM', agora]]);
+    return { ok: true };
+  } catch (e) {
+    Logger.log('diagResponder: ' + e.message);
+    return { ok: false, erro: 'Não foi possível registrar sua resposta agora. Tente novamente em instantes.' };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+/* ── Cálculo puro (sem planilha) — testável isoladamente ──
+   participantes: [{pid, nome}]  respostas: [{pid, prontidao:[16], lideranca:[8], disposicao:[3],
+   indicacoes:{duvida:[pid], novidade:[pid], ensinar:[pid]}, comentario, respondidoEm}] */
+function diagEscore(v, inv) {
+  v = Number(v);
+  if (!(v >= 1 && v <= 5)) return null;
+  if (inv) v = 6 - v;
+  return (v - 1) / 4 * 100;
+}
+function diagMedia(arr) {
+  var a = arr.filter(function (x) { return x !== null && x !== undefined && !isNaN(x); });
+  if (!a.length) return null;
+  return a.reduce(function (s, x) { return s + x; }, 0) / a.length;
+}
+function diagR1(x) { return x === null || x === undefined || isNaN(x) ? null : Math.round(x * 10) / 10; }
+function diagNivel(x) {
+  if (x === null || x === undefined) return '';
+  return x >= DIAG_LIMITES.alta ? 'Alta' : (x >= DIAG_LIMITES.moderada ? 'Moderada' : 'Baixa');
+}
+function diagPapel(disp, lid) {
+  if (disp === null) return '';
+  if (disp >= DIAG_LIMITES.alta) return lid !== null && lid >= DIAG_LIMITES.alta ? 'Patrocinador' : 'Apoiador a desenvolver';
+  return disp >= DIAG_LIMITES.moderada ? 'Neutro' : 'Resistente';
+}
+function diagCalcular(participantes, respostas) {
+  var porPid = {};
+  respostas.forEach(function (r) { porPid[r.pid] = r; });
+  var nResp = respostas.length;
+
+  // indicações recebidas
+  var recebidas = {};
+  participantes.forEach(function (p) { recebidas[p.pid] = { quem: {}, porPergunta: { duvida: 0, novidade: 0, ensinar: 0 } }; });
+  var ligacoes = [];
+  respostas.forEach(function (r) {
+    DIAG_PERGUNTAS_INDICACAO.forEach(function (q) {
+      ((r.indicacoes || {})[q.k] || []).forEach(function (pid) {
+        if (!recebidas[pid] || pid === r.pid) return;
+        recebidas[pid].quem[r.pid] = true;
+        recebidas[pid].porPergunta[q.k]++;
+        ligacoes.push({ de: r.pid, para: pid, pergunta: q.k });
+      });
+    });
+  });
+
+  var pessoas = participantes.map(function (p) {
+    var r = porPid[p.pid];
+    var rec = recebidas[p.pid];
+    var indicadores = Object.keys(rec.quem).length;
+    var base = nResp - (r ? 1 : 0);
+    var pct = base > 0 ? indicadores / base : 0;
+    var influenciador = base > 0 && indicadores >= DIAG_LIMITES.influenciaMin && pct >= DIAG_LIMITES.influenciaPct;
+    var o = {
+      pid: p.pid, nome: p.nome, respondeu: !!r, respondidoEm: r ? (r.respondidoEm || '') : '',
+      indicacoesRecebidas: indicadores, indicacoesPorPergunta: rec.porPergunta,
+      influenciaPct: Math.round(pct * 1000) / 10, influenciador: influenciador
+    };
+    if (!r) { o.quadrante = 'sem_resposta'; return o; }
+    var dims = {};
+    DIAG_DIMENSOES.forEach(function (dm) {
+      var notas = [];
+      DIAG_ITENS_PRONTIDAO.forEach(function (it, i) { if (it.d === dm.k) notas.push(diagEscore(r.prontidao[i], it.inv)); });
+      dims[dm.k] = diagMedia(notas);
+    });
+    var prontidao = diagMedia(DIAG_DIMENSOES.map(function (dm) { return dims[dm.k]; }));
+    var atitudeNotas = [];
+    DIAG_ITENS_PRONTIDAO.forEach(function (it, i) {
+      if (it.d === 'clareza' || it.d === 'abertura' || it.d === 'engajamento') atitudeNotas.push(diagEscore(r.prontidao[i], it.inv));
+    });
+    var atitude = diagMedia(atitudeNotas);
+    var lideranca = diagMedia(r.lideranca.map(function (v) { return diagEscore(v, false); }));
+    var disposicao = diagMedia(r.disposicao.map(function (v) { return diagEscore(v, false); }));
+    var favoravel = atitude !== null && atitude >= DIAG_LIMITES.favoravel;
+    o.dimensoes = {};
+    DIAG_DIMENSOES.forEach(function (dm) { o.dimensoes[dm.k] = diagR1(dims[dm.k]); });
+    o.prontidao = diagR1(prontidao); o.nivel = diagNivel(prontidao);
+    o.atitude = diagR1(atitude);
+    o.lideranca = diagR1(lideranca); o.disposicao = diagR1(disposicao);
+    o.papel = diagPapel(disposicao, lideranca);
+    o.quadrante = influenciador ? (favoravel ? 'agente' : 'prioridade') : (favoravel ? 'apoio' : 'acompanhar');
+    o.notas = { prontidao: r.prontidao.slice(), lideranca: r.lideranca.slice(), disposicao: r.disposicao.slice() };
+    o.comentario = r.comentario || '';
+    return o;
+  });
+
+  var resp = pessoas.filter(function (p) { return p.respondeu; });
+  var dimGrupo = {};
+  DIAG_DIMENSOES.forEach(function (dm) { dimGrupo[dm.k] = diagR1(diagMedia(resp.map(function (p) { return p.dimensoes[dm.k]; }))); });
+  var prontGrupo = diagMedia(resp.map(function (p) { return p.prontidao; }));
+  var itensGrupo = {
+    prontidao: DIAG_ITENS_PRONTIDAO.map(function (it, i) { return diagR1(diagMedia(resp.map(function (p) { return diagEscore(p.notas.prontidao[i], it.inv); }))); }),
+    lideranca: DIAG_ITENS_LIDERANCA.map(function (t, i) { return diagR1(diagMedia(resp.map(function (p) { return diagEscore(p.notas.lideranca[i], false); }))); }),
+    disposicao: DIAG_ITENS_DISPOSICAO.map(function (t, i) { return diagR1(diagMedia(resp.map(function (p) { return diagEscore(p.notas.disposicao[i], false); }))); })
+  };
+  var contPapel = {}, contQuad = {};
+  Object.keys(DIAG_PAPEIS).forEach(function (k) { contPapel[k] = 0; });
+  Object.keys(DIAG_QUADRANTES).forEach(function (k) { contQuad[k] = 0; });
+  pessoas.forEach(function (p) { if (p.papel) contPapel[p.papel]++; contQuad[p.quadrante]++; });
+
+  return {
+    participantes: participantes.length, respondentes: resp.length,
+    grupo: {
+      prontidao: diagR1(prontGrupo), nivel: diagNivel(prontGrupo),
+      atitude: diagR1(diagMedia(resp.map(function (p) { return p.atitude; }))),
+      lideranca: diagR1(diagMedia(resp.map(function (p) { return p.lideranca; }))),
+      disposicao: diagR1(diagMedia(resp.map(function (p) { return p.disposicao; }))),
+      dimensoes: dimGrupo, itens: itensGrupo,
+      influenciadores: pessoas.filter(function (p) { return p.influenciador; }).length,
+      papeis: contPapel, quadrantes: contQuad
+    },
+    pessoas: pessoas, ligacoes: ligacoes
+  };
+}
+
+/* ── Leitura das respostas de um diagnóstico + cálculo ── */
+function diagMontarResultado(id) {
+  var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === id; })[0];
+  if (!cad) throw new Error('Diagnóstico não encontrado.');
+  var parts = diagLer(DIAG_ABA_PART, DIAG_CAB_PART).filter(function (p) { return p.Diag_ID === id; });
+  var tokens = {};
+  parts.forEach(function (p) { tokens[p.Token] = p.Pid; });
+  var lista = function (s) { return String(s || '').split(';').map(function (x) { return x.trim(); }).filter(String); };
+  var vistos = {};
+  var resps = diagLer(DIAG_ABA_RESP, DIAG_CAB_RESP).filter(function (r) { return r.Diag_ID === id && tokens[r.Token]; })
+    .filter(function (r) { if (vistos[r.Token]) return false; vistos[r.Token] = true; return true; })
+    .map(function (r) {
+      return {
+        pid: tokens[r.Token], respondidoEm: diagDataBR(r.Respondido_em),
+        prontidao: lista(r.Prontidao).map(Number), lideranca: lista(r.Lideranca).map(Number), disposicao: lista(r.Disposicao).map(Number),
+        indicacoes: { duvida: lista(r.Ind_duvida), novidade: lista(r.Ind_novidade), ensinar: lista(r.Ind_ensinar) },
+        comentario: String(r.Comentario || '')
+      };
+    });
+  var participantes = parts.map(function (p) { return { pid: p.Pid, nome: p.Nome }; })
+    .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+  return {
+    diagnostico: { id: cad.ID, titulo: cad.Titulo, status: cad.Status, criadoEm: diagDataBR(cad.Criado_em) },
+    resultado: diagCalcular(participantes, resps)
+  };
+}
+
+function diagPainel(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var m = diagMontarResultado(d.id);
+    return {
+      ok: true, diagnostico: m.diagnostico, resultado: m.resultado,
+      definicoes: {
+        dimensoes: DIAG_DIMENSOES, prontidao: DIAG_ITENS_PRONTIDAO, lideranca: DIAG_ITENS_LIDERANCA,
+        disposicao: DIAG_ITENS_DISPOSICAO, indicacoes: DIAG_PERGUNTAS_INDICACAO, escala: DIAG_ESCALA,
+        limites: DIAG_LIMITES, papeis: DIAG_PAPEIS, quadrantes: DIAG_QUADRANTES
+      }
+    };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ── Análise em texto (IA, com contingência automática) ── */
+function diagPacoteAnalise(m) {
+  var r = m.resultado, g = r.grupo;
+  var nomeDim = {};
+  DIAG_DIMENSOES.forEach(function (dm) { nomeDim[dm.k] = dm.nome; });
+  var nomes = {};
+  r.pessoas.forEach(function (p) { nomes[p.pid] = p.nome; });
+  return {
+    diagnostico: m.diagnostico.titulo,
+    escala_dos_indices: '0 a 100 (Alta a partir de 70; Moderada de 50 a 69,9; Baixa abaixo de 50)',
+    participantes: r.participantes, respondentes: r.respondentes,
+    grupo: {
+      prontidao: diagFmt(g.prontidao), nivel: g.nivel, atitude: diagFmt(g.atitude),
+      lideranca_autodeclarada: diagFmt(g.lideranca), disposicao_para_liderar_mudancas: diagFmt(g.disposicao),
+      dimensoes: DIAG_DIMENSOES.map(function (dm) { return { dimensao: dm.nome, indice: diagFmt(g.dimensoes[dm.k]) }; }),
+      influenciadores: g.influenciadores, papeis: g.papeis
+    },
+    supervisores: r.pessoas.map(function (p) {
+      var o = { nome: p.nome, respondeu: p.respondeu ? 'sim' : 'não',
+                indicacoes_recebidas: p.indicacoesRecebidas, influencia_percentual: diagFmt(p.influenciaPct) + '%',
+                influenciador: p.influenciador ? 'sim' : 'não', quadrante: DIAG_QUADRANTES[p.quadrante].titulo };
+      if (p.respondeu) {
+        o.prontidao = diagFmt(p.prontidao); o.nivel = p.nivel; o.atitude = diagFmt(p.atitude);
+        o.lideranca_autodeclarada = diagFmt(p.lideranca); o.disposicao = diagFmt(p.disposicao); o.papel = p.papel;
+        o.dimensoes = DIAG_DIMENSOES.map(function (dm) { return dm.nome + ': ' + diagFmt(p.dimensoes[dm.k]); }).join('; ');
+        if (p.comentario) o.comentario = p.comentario;
+      }
+      return o;
+    }),
+    indicacoes: r.ligacoes.map(function (l) {
+      var q = DIAG_PERGUNTAS_INDICACAO.filter(function (x) { return x.k === l.pergunta; })[0];
+      return (nomes[l.de] || '?') + ' indicou ' + (nomes[l.para] || '?') + ' em "' + (q ? q.t : l.pergunta) + '"';
+    })
+  };
+}
+
+function diagAnaliseAutomatica(m) {
+  var r = m.resultado, g = r.grupo;
+  var dims = DIAG_DIMENSOES.map(function (dm) { return { nome: dm.nome, v: g.dimensoes[dm.k] }; }).filter(function (x) { return x.v !== null; });
+  dims.sort(function (a, b) { return b.v - a.v; });
+  var resp = r.pessoas.filter(function (p) { return p.respondeu; });
+  var infl = r.pessoas.filter(function (p) { return p.influenciador; });
+  var prior = r.pessoas.filter(function (p) { return p.quadrante === 'prioridade'; });
+  var agentes = r.pessoas.filter(function (p) { return p.quadrante === 'agente'; });
+  var secoes = [];
+  if (dims.length) {
+    secoes.push({ titulo: 'Dimensões da prontidão', paragrafos: [
+      'As dimensões mais fortes do grupo são ' + dims.slice(0, 2).map(function (x) { return x.nome + ' (' + diagFmt(x.v) + ')'; }).join(' e ') + '.',
+      'As dimensões mais frágeis são ' + dims.slice(-2).reverse().map(function (x) { return x.nome + ' (' + diagFmt(x.v) + ')'; }).join(' e ') + '.'
+    ] });
+  }
+  secoes.push({ titulo: 'Liderança e papéis', paragrafos: [
+    'A liderança autodeclarada média é ' + diagFmt(g.lideranca) + ' e a disposição média para liderar mudanças é ' + diagFmt(g.disposicao) + '. Esses dois índices vêm apenas da autoavaliação de cada supervisor.',
+    resp.map(function (p) { return p.nome + ': ' + p.papel; }).join('; ') + '.'
+  ] });
+  secoes.push({ titulo: 'Influência no grupo', paragrafos: [
+    infl.length ? 'Influenciadores identificados pelas indicações: ' + infl.map(function (p) { return p.nome + ' (' + p.indicacoesRecebidas + ' indicações, ' + diagFmt(p.influenciaPct) + '% dos colegas)'; }).join('; ') + '.'
+                : 'Nenhum supervisor atingiu o critério de influenciador (indicado por pelo menos 20% dos colegas que responderam e por no mínimo 2 pessoas).'
+  ] });
+  var recs = [];
+  if (prior.length) recs.push({ acao: 'Conversar individualmente com ' + prior.map(function (p) { return p.nome; }).join(', ') + ' antes de iniciar mudanças.', base: 'Influenciador(es) com atitude abaixo de 70.' });
+  if (agentes.length) recs.push({ acao: 'Envolver ' + agentes.map(function (p) { return p.nome; }).join(', ') + ' como agente(s) de mudança.', base: 'Influenciador(es) com atitude favorável (70 ou mais).' });
+  if (dims.length) recs.push({ acao: 'Trabalhar primeiro a dimensão ' + dims[dims.length - 1].nome + '.', base: 'É a dimensão de menor índice no grupo (' + diagFmt(dims[dims.length - 1].v) + ').' });
+  return {
+    titulo: 'Diagnóstico de Prontidão — ' + m.diagnostico.titulo,
+    resumo: ['Responderam ' + r.respondentes + ' de ' + r.participantes + ' supervisores. O índice de prontidão do grupo é ' + diagFmt(g.prontidao) + ' (nível ' + (g.nivel || '—') + ').'],
+    secoes: secoes, recomendacoes: recs
+  };
+}
+
+function diagGerarAnalise(dados, cpf) {
+  try {
+    diagExigirDiretor(cpf);
+    var d = diagDados(dados);
+    var m = diagMontarResultado(d.id);
+    if (!m.resultado.respondentes) return { ok: false, erro: 'Ainda não há respostas para analisar.' };
+    var pacote = diagPacoteAnalise(m);
+    var sistema = [
+      'Você é um consultor sênior de gestão de mudanças organizacionais, com base na metodologia HCMBOK, trabalhando para a Diretoria da Formula Code (serviços de inventário em redes de varejo).',
+      'Escreva, em português do Brasil, a análise de um Diagnóstico de Prontidão para Mudança aplicado aos SUPERVISORES da empresa, com base EXCLUSIVAMENTE no JSON recebido.',
+      'O material é INTERNO, lido apenas pelo Diretor: pode citar os supervisores pelo nome.',
+      'REGRAS OBRIGATÓRIAS:',
+      '1. Use somente números que estão no JSON, copiados exatamente como aparecem (ex.: "72,5"). Não calcule médias novas nem arredonde.',
+      '2. Não invente causas, fatos ou histórias. Quando os dados mostram um efeito mas não o motivo, diga que os dados não mostram o motivo.',
+      '3. Liderança e disposição são AUTODECLARADAS (autoavaliação): trate como a percepção que cada supervisor tem de si, nunca como fato comprovado.',
+      '4. Tom profissional, respeitoso e construtivo. Não use rótulos pejorativos sobre pessoas; descreva comportamentos e índices.',
+      '5. Explique o que os índices significam para a viabilidade de mudanças de processo e de cultura, conectando prontidão, papéis (Patrocinador, Apoiador a desenvolver, Neutro, Resistente) e a rede de influência (quadrantes).',
+      '6. Recomendações: só as que decorrem diretamente de um dado. Cada uma cita no campo "base" o dado que a justifica. Nada genérico.',
+      '7. Sem emojis, sem markdown, sem listas com hífen dentro dos parágrafos.',
+      'Responda SOMENTE com JSON válido neste formato:',
+      '{"titulo": "texto", "resumo": ["parágrafo", "..."], "secoes": [{"titulo": "texto", "paragrafos": ["parágrafo", "..."]}], "recomendacoes": [{"acao": "texto", "base": "dado que justifica"}]}',
+      'Use de 4 a 6 seções (por exemplo: prontidão do grupo; dimensões fortes e frágeis; perfil de liderança e papéis; influência e rede de indicações; pontos de atenção individuais; viabilidade de mudanças).'
+    ].join('\n');
+    var texto = '';
+    try {
+      texto = biChamarIA_('Dados do diagnóstico (JSON):\n' + JSON.stringify(pacote), sistema, 6000);
+      var limpo = String(texto).replace(/```json|```/g, '').trim();
+      var ini = limpo.indexOf('{'), fim = limpo.lastIndexOf('}');
+      var an = JSON.parse(limpo.substring(ini, fim + 1));
+      if (!an || !Array.isArray(an.resumo) || !Array.isArray(an.secoes)) throw new Error('formato');
+      an.recomendacoes = Array.isArray(an.recomendacoes) ? an.recomendacoes.filter(function (x) { return x && x.acao; }) : [];
+      an.secoes = an.secoes.filter(function (s) { return s && s.titulo; }).map(function (s) { return { titulo: String(s.titulo), paragrafos: Array.isArray(s.paragrafos) ? s.paragrafos.map(String) : [] }; });
+      return { ok: true, origem: 'ia', analise: an };
+    } catch (eIa) {
+      Logger.log('diagGerarAnalise (IA): ' + eIa.message);
+      return { ok: true, origem: 'automatica', analise: diagAnaliseAutomatica(m) };
+    }
+  } catch (e) { return { ok: false, erro: e.message }; }
 }

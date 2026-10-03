@@ -426,6 +426,10 @@
             <li class="nav-item">
                 <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-financeiro" type="button">🏦 Financeiro</button>
             </li>
+            <!-- r155: aba Pessoas (somente Diretor) -->
+            <li class="nav-item hidden" id="li-aba-pessoas">
+                <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-pessoas" type="button" id="btn-aba-pessoas">👥 Pessoas</button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -834,6 +838,93 @@
         </div>
 
         </div>
+
+        <!-- ############ r155: ABA PESSOAS (somente Diretor) ############ -->
+        <div class="tab-pane fade" id="tab-pessoas">
+
+        <h6 class="fw-bold text-primary mb-1">🧭 Diagnóstico de Prontidão para Mudança</h6>
+        <div class="small text-muted mb-3">Mapeia a prontidão da equipe, o perfil de liderança e quem influencia o grupo (metodologia HCMBOK). Cada supervisor recebe por e-mail um link pessoal; os resultados ficam visíveis só para a Diretoria.</div>
+
+        <label class="form-label fw-bold text-primary mb-1 small">Diagnóstico:</label>
+        <div class="d-flex gap-2 mb-2">
+            <select id="pes-sel-diag" class="form-select" onchange="pesCarregarDetalhe()">
+                <option value="">Carregando...</option>
+            </select>
+            <button class="btn btn-outline-secondary fw-bold" type="button" title="Atualizar" onclick="pesCarregarLista(document.getElementById('pes-sel-diag').value)">🔄</button>
+        </div>
+        <button class="btn btn-outline-primary w-100 py-2 fw-bold mb-3" type="button" id="pes-btn-novo" onclick="pesAbrirNovo()">➕ Novo diagnóstico</button>
+
+        <!-- Novo diagnóstico -->
+        <div id="pes-novo" class="hidden border rounded p-3 mb-3 bg-light shadow-sm">
+            <label class="form-label fw-bold text-primary mb-1 small">Título:</label>
+            <input type="text" id="pes-novo-titulo" class="form-control form-control-sm mb-3" maxlength="150">
+            <div class="d-flex align-items-center mb-1">
+                <label class="form-label fw-bold text-primary mb-0 small">Supervisores participantes:</label>
+                <button type="button" class="btn btn-link btn-sm ms-auto p-0 fw-bold" onclick="pesMarcarTodosNovo()">Marcar/desmarcar todos</button>
+            </div>
+            <div id="pes-novo-lista" class="border rounded bg-white p-2 mb-2" style="max-height: 280px; overflow-y: auto;">
+                <div class="text-muted small p-1">Carregando supervisores...</div>
+            </div>
+            <div class="small text-muted mb-3">A lista vem da aba Colaboradores (perfil Supervisor). Quem estiver sem e-mail cadastrado pode participar, mas só recebe o acesso depois que o e-mail for preenchido.</div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary w-100 fw-bold" id="pes-btn-criar" onclick="pesCriar()">✅ Criar diagnóstico</button>
+                <button type="button" class="btn btn-outline-secondary w-100 fw-bold" onclick="pesFecharNovo()">Cancelar</button>
+            </div>
+        </div>
+
+        <!-- Detalhe do diagnóstico selecionado -->
+        <div id="pes-detalhe" class="hidden">
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3">
+                        <div class="fs-5 fw-bold" style="color: var(--fc-primaria);" id="pes-card-part">–</div>
+                        <div class="small text-muted fw-bold">Participantes</div>
+                    </div></div>
+                </div>
+                <div class="col-4">
+                    <div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3">
+                        <div class="fs-5 fw-bold" style="color: var(--fc-primaria);" id="pes-card-env">–</div>
+                        <div class="small text-muted fw-bold">Acessos enviados</div>
+                    </div></div>
+                </div>
+                <div class="col-4">
+                    <div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-3">
+                        <div class="fs-5 fw-bold" style="color: var(--fc-primaria);" id="pes-card-resp">–</div>
+                        <div class="small text-muted fw-bold">Respondidos</div>
+                    </div></div>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                <span class="fw-bold text-primary" id="pes-det-titulo"></span>
+                <span class="badge" id="pes-det-status"></span>
+                <span class="small text-muted ms-auto" id="pes-det-criado"></span>
+            </div>
+
+            <div class="table-responsive rounded shadow-sm mb-2">
+                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 36px;"><input type="checkbox" class="form-check-input" id="pes-chk-todos" title="Selecionar todos os pendentes" onchange="pesMarcarTodosEnvio(this.checked)"></th>
+                            <th class="text-primary">Supervisor</th>
+                            <th class="text-primary">Acesso</th>
+                            <th class="text-primary">Resposta</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pes-tbody"></tbody>
+                </table>
+            </div>
+            <div class="small text-muted mb-3">Quem já respondeu não recebe novo e-mail. Reenviar para quem ainda não respondeu manda um lembrete com o mesmo link.</div>
+
+            <button type="button" class="btn fc-btn-verde w-100 py-2 fw-bold mb-2" id="pes-btn-enviar" onclick="pesEnviarAcessos()">📧 Enviar acesso por e-mail aos selecionados</button>
+            <button type="button" class="btn btn-primary w-100 py-2 fw-bold mb-2" onclick="pesAbrirPainel()">📊 Abrir painel de resultados</button>
+            <button type="button" class="btn btn-outline-secondary w-100 py-2 fw-bold" id="pes-btn-status" onclick="pesAlternarStatus()">🔒 Encerrar respostas</button>
+        </div>
+
+        <div id="pes-vazio" class="hidden text-center text-muted py-4 border rounded bg-light">Nenhum diagnóstico criado ainda. Toque em ➕ Novo diagnóstico para começar.</div>
+
+        </div>
+        <!-- ############ FIM ABA PESSOAS ############ -->
         </div>
         <!-- ############ FIM DAS ABAS ############ -->
     </div>
@@ -4429,7 +4520,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-02-r154';
+    const VERSAO_ESPERADA = '2026-10-03-r155';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4510,6 +4601,8 @@
             if (btnBiFin) btnBiFin.classList.toggle('hidden', !ehDiretor);
             const btnBiGrupo = document.getElementById('btn-bi-grupo');   // r140
             if (btnBiGrupo) btnBiGrupo.classList.toggle('hidden', !ehDiretor);
+            const liPessoas = document.getElementById('li-aba-pessoas');   // r155: aba Pessoas só para Diretor
+            if (liPessoas) liPessoas.classList.toggle('hidden', !ehDiretor);
             const btnRelAdto = document.getElementById('btn-rel-adiantamento');
             if (btnRelAdto) btnRelAdto.classList.toggle('hidden', !ehDiretor);
             const areaRelVis = document.getElementById('area-relatorio-visual');
@@ -4590,6 +4683,209 @@
             aplicarEstadoPresenca();
         }, 2000);
     });
+</script>
+<!-- ############ r155: ABA PESSOAS — Diagnóstico de Prontidão (somente Diretor) ############ -->
+<!-- Bloco isolado: só funções com prefixo "pes". Não altera nenhuma função existente. -->
+<script>
+    let pesDiagAtual = null;      // { diagnostico, participantes }
+    let pesCandidatos = [];
+
+    function pesMsgErro(res, padrao) { return (res && (res.erro || res.error)) || padrao; }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('btn-aba-pessoas');
+        // Lista de diagnósticos é curta: carrega ao abrir a aba (mesmo padrão dos cartões-resumo).
+        if (btn) btn.addEventListener('shown.bs.tab', () => pesCarregarLista(document.getElementById('pes-sel-diag').value));
+    });
+
+    async function pesCarregarLista(manterId) {
+        const sel = document.getElementById('pes-sel-diag');
+        sel.innerHTML = '<option value="">Carregando...</option>';
+        try {
+            const res = await chamarApi({ action: 'diagListar' });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível listar os diagnósticos.'));
+            const lista = res.diagnosticos || [];
+            document.getElementById('pes-vazio').classList.toggle('hidden', lista.length > 0);
+            if (!lista.length) {
+                sel.innerHTML = '<option value="">Nenhum diagnóstico</option>';
+                document.getElementById('pes-detalhe').classList.add('hidden');
+                return;
+            }
+            sel.innerHTML = lista.map(d => '<option value="' + escaparHtml(d.id) + '">' +
+                escaparHtml(d.titulo) + ' — ' + d.respondidos + '/' + d.participantes + ' resp.' + (d.status !== 'ABERTO' ? ' (encerrado)' : '') +
+                '</option>').join('');
+            const alvo = (manterId && lista.some(d => d.id === manterId)) ? manterId : lista[0].id;
+            sel.value = alvo;
+            await pesCarregarDetalhe();
+        } catch (e) {
+            sel.innerHTML = '<option value="">Erro ao carregar</option>';
+            alert('⚠️ ' + e.message);
+        }
+    }
+
+    async function pesCarregarDetalhe() {
+        const id = document.getElementById('pes-sel-diag').value;
+        const det = document.getElementById('pes-detalhe');
+        if (!id) { det.classList.add('hidden'); return; }
+        const tbody = document.getElementById('pes-tbody');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Carregando...</td></tr>';
+        det.classList.remove('hidden');
+        try {
+            const res = await chamarApi({ action: 'diagDetalhe', id: id });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível abrir o diagnóstico.'));
+            pesDiagAtual = res;
+            pesRenderDetalhe();
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">' + escaparHtml(e.message) + '</td></tr>';
+        }
+    }
+
+    function pesRenderDetalhe() {
+        const d = pesDiagAtual.diagnostico, ps = pesDiagAtual.participantes || [];
+        const aberto = d.status === 'ABERTO';
+        document.getElementById('pes-card-part').textContent = ps.length;
+        document.getElementById('pes-card-env').textContent = ps.filter(p => p.qtdEnvios > 0).length;
+        document.getElementById('pes-card-resp').textContent = ps.filter(p => p.respondido).length;
+        document.getElementById('pes-det-titulo').textContent = d.titulo;
+        const st = document.getElementById('pes-det-status');
+        st.textContent = aberto ? 'Recebendo respostas' : 'Encerrado';
+        st.className = 'badge ' + (aberto ? 'bg-success' : 'bg-secondary');
+        document.getElementById('pes-det-criado').textContent = 'Criado em ' + d.criadoEm;
+        document.getElementById('pes-btn-status').textContent = aberto ? '🔒 Encerrar respostas' : '🔓 Reabrir respostas';
+        document.getElementById('pes-btn-enviar').disabled = !aberto;
+        document.getElementById('pes-chk-todos').checked = false;
+        document.getElementById('pes-chk-todos').disabled = !aberto;
+        document.getElementById('pes-tbody').innerHTML = ps.map(p => {
+            const semEmail = !p.email;
+            const podeEnviar = aberto && !p.respondido && !semEmail;
+            const acesso = p.qtdEnvios > 0
+                ? '<span class="text-success fw-bold">Enviado</span><div class="text-muted" style="font-size:0.75rem;">' + escaparHtml(p.enviadoEm) + (p.qtdEnvios > 1 ? ' · ' + p.qtdEnvios + ' envios' : '') + '</div>'
+                : (semEmail ? '<span class="text-danger fw-bold">Sem e-mail</span>' : '<span class="text-muted">Não enviado</span>');
+            const resposta = p.respondido
+                ? '<span class="text-success fw-bold">✅ Respondido</span><div class="text-muted" style="font-size:0.75rem;">' + escaparHtml(p.respondidoEm) + '</div>'
+                : '<span class="text-muted">Aguardando</span>';
+            return '<tr>' +
+                '<td class="text-center"><input type="checkbox" class="form-check-input pes-chk-env" value="' + escaparHtml(p.pid) + '"' + (podeEnviar ? '' : ' disabled') + '></td>' +
+                '<td><div class="fw-bold">' + escaparHtml(p.nome) + '</div><div class="text-muted" style="font-size:0.75rem;">' + escaparHtml(p.email || 'cadastre o e-mail na aba Colaboradores') + '</div></td>' +
+                '<td>' + acesso + '</td><td>' + resposta + '</td></tr>';
+        }).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">Sem participantes.</td></tr>';
+    }
+
+    function pesMarcarTodosEnvio(marcar) {
+        document.querySelectorAll('.pes-chk-env').forEach(c => { if (!c.disabled) c.checked = marcar; });
+    }
+
+    async function pesEnviarAcessos() {
+        if (!pesDiagAtual) return;
+        const pids = Array.from(document.querySelectorAll('.pes-chk-env:checked')).map(c => c.value);
+        if (!pids.length) return alert('Marque pelo menos um supervisor na lista.');
+        const nomes = (pesDiagAtual.participantes || []).filter(p => pids.indexOf(p.pid) > -1)
+            .map(p => '• ' + p.nome + (p.qtdEnvios > 0 ? ' (lembrete)' : '')).join('\n');
+        if (!confirm('Enviar o acesso pessoal por e-mail para:\n\n' + nomes + '\n\nConfirma o envio?')) return;
+        const btn = document.getElementById('pes-btn-enviar');
+        btn.disabled = true; btn.textContent = '⏳ Enviando...';
+        try {
+            const urlBase = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
+            const res = await chamarApi({ action: 'diagEnviarAcessos', id: pesDiagAtual.diagnostico.id, pids: pids, urlBaseApp: urlBase });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível enviar.'));
+            let msg = '';
+            if (res.enviados.length) msg += '✅ Enviado para ' + res.enviados.length + ' supervisor(es):\n' + res.enviados.map(n => '• ' + n).join('\n');
+            if (res.falhas.length) msg += (msg ? '\n\n' : '') + '⚠️ Não enviado:\n' + res.falhas.map(f => '• ' + f.nome + ' — ' + f.motivo).join('\n');
+            alert(msg || 'Nada foi enviado.');
+            await pesCarregarDetalhe();
+            pesAtualizarOpcaoLista();
+        } catch (e) {
+            alert('⚠️ ' + e.message);
+        } finally {
+            btn.textContent = '📧 Enviar acesso por e-mail aos selecionados';
+            btn.disabled = !(pesDiagAtual && pesDiagAtual.diagnostico.status === 'ABERTO');
+        }
+    }
+
+    // Atualiza o texto da opção selecionada (contagem de respostas) sem recarregar a lista inteira.
+    function pesAtualizarOpcaoLista() {
+        if (!pesDiagAtual) return;
+        const sel = document.getElementById('pes-sel-diag');
+        const op = sel.options[sel.selectedIndex];
+        if (!op) return;
+        const d = pesDiagAtual.diagnostico, ps = pesDiagAtual.participantes || [];
+        op.text = d.titulo + ' — ' + ps.filter(p => p.respondido).length + '/' + ps.length + ' resp.' + (d.status !== 'ABERTO' ? ' (encerrado)' : '');
+    }
+
+    async function pesAlternarStatus() {
+        if (!pesDiagAtual) return;
+        const d = pesDiagAtual.diagnostico;
+        const novo = d.status === 'ABERTO' ? 'ENCERRADO' : 'ABERTO';
+        if (!confirm(novo === 'ENCERRADO'
+            ? 'Encerrar as respostas? Os links deixam de aceitar respostas (você pode reabrir depois).'
+            : 'Reabrir as respostas? Os links voltam a aceitar respostas de quem ainda não respondeu.')) return;
+        try {
+            const res = await chamarApi({ action: 'diagAlterarStatus', id: d.id, status: novo });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível alterar.'));
+            await pesCarregarDetalhe();
+            pesAtualizarOpcaoLista();
+        } catch (e) { alert('⚠️ ' + e.message); }
+    }
+
+    async function pesAbrirNovo() {
+        const caixa = document.getElementById('pes-novo');
+        caixa.classList.remove('hidden');
+        const hoje = new Date();
+        const mes = hoje.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '').replace(' de ', '/');
+        document.getElementById('pes-novo-titulo').value = 'Prontidão para Mudança — Supervisores — ' + mes;
+        const lista = document.getElementById('pes-novo-lista');
+        lista.innerHTML = '<div class="text-muted small p-1">Carregando supervisores...</div>';
+        try {
+            const res = await chamarApi({ action: 'diagCandidatos' });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível carregar os supervisores.'));
+            pesCandidatos = res.supervisores || [];
+            lista.innerHTML = pesCandidatos.length ? pesCandidatos.map(s =>
+                '<label class="d-flex align-items-start gap-2 p-1 border-bottom" style="cursor:pointer;">' +
+                '<input type="checkbox" class="form-check-input mt-1 pes-chk-novo" value="' + escaparHtml(s.cpf) + '" checked>' +
+                '<span><span class="fw-bold">' + escaparHtml(s.nome) + '</span><br><span class="' + (s.email ? 'text-muted' : 'text-danger fw-bold') + '" style="font-size:0.78rem;">' +
+                escaparHtml(s.email || 'sem e-mail cadastrado') + '</span></span></label>').join('')
+                : '<div class="text-muted small p-1">Nenhum colaborador com perfil Supervisor encontrado.</div>';
+        } catch (e) {
+            lista.innerHTML = '<div class="text-danger small p-1">' + escaparHtml(e.message) + '</div>';
+        }
+    }
+
+    function pesFecharNovo() { document.getElementById('pes-novo').classList.add('hidden'); }
+
+    function pesMarcarTodosNovo() {
+        const chks = Array.from(document.querySelectorAll('.pes-chk-novo'));
+        const marcar = chks.some(c => !c.checked);
+        chks.forEach(c => { c.checked = marcar; });
+    }
+
+    async function pesCriar() {
+        const titulo = document.getElementById('pes-novo-titulo').value.trim();
+        const cpfs = Array.from(document.querySelectorAll('.pes-chk-novo:checked')).map(c => c.value);
+        if (!titulo) return alert('Informe um título.');
+        if (cpfs.length < 2) return alert('Selecione pelo menos 2 supervisores.');
+        const btn = document.getElementById('pes-btn-criar');
+        btn.disabled = true; btn.textContent = '⏳ Criando...';
+        try {
+            const res = await chamarApi({ action: 'diagCriar', titulo: titulo, cpfs: cpfs });
+            if (!res.ok) throw new Error(pesMsgErro(res, 'Não foi possível criar.'));
+            pesFecharNovo();
+            await pesCarregarLista(res.id);
+            alert('✅ ' + res.mensagem + '\n\nAgora marque os supervisores na lista e toque em 📧 Enviar acesso.');
+        } catch (e) {
+            alert('⚠️ ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = '✅ Criar diagnóstico';
+        }
+    }
+
+    function pesAbrirPainel() {
+        if (!pesDiagAtual) return;
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'pessoas.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir o painel.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado()) + '&diag=' + encodeURIComponent(pesDiagAtual.diagnostico.id);
+        window.open(url, '_blank');
+    }
 </script>
 </body>
 </html>
