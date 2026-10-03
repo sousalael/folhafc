@@ -566,7 +566,7 @@ var Engine = (function(){
        fmt 'brl_pct' = valor em R$ + % (pctKey). rankBy 'pct' = melhor/pior pelo percentual
        (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
-      {key:'acuracidade',    label:'Acuracidade de estoque (%)',               melhor:'target100', fmt:'pct'},
+      {key:'acuracidade',    label:'Eficiência Operacional (%)',               melhor:'target100', fmt:'pct'},
       {key:'saldoLiquido',   label:'Valor Quebra (saldo entre perdas e sobras)', melhor:'min_abs', fmt:'brl'},
       {key:'totalSobras',    label:'Valor Sobras',                             melhor:'min_abs',   fmt:'brl'},
       {key:'totalFaltas',    label:'Valor Perdas',                             melhor:'min_abs',   fmt:'brl'},
@@ -692,9 +692,9 @@ var Engine = (function(){
     if (!data) return '';
     if (rt === 'critica') {
       var c = data;
-      var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nAcuracidade: ' + pct(c.acuracidade) + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
+      var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nEficiência Operacional: ' + pct(c.acuracidade) + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
         + '\nPerda de estoque: ' + pct(c.perdaEstoquePct) + '\nFaltas: ' + num(c.faltaCount) + ' SKUs (' + brl(c.totalFaltas) + ')\nSobras: ' + num(c.sobraCount) + ' SKUs (' + brl(c.totalSobras) + ')\nSaldo líquido: ' + brl(c.saldoLiquido);
-      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, acuracidade ' + pct(x.acuracidade) + ', valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
+      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, Eficiência Operacional ' + pct(x.acuracidade) + ', valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
       return m;
     }
     if (rt === 'ruptura') {
@@ -728,14 +728,15 @@ var Engine = (function(){
     // 1) Achado principal + impacto financeiro — sem reexplicar universo/fórmula (isso é a Metodologia)
     // r82: nunca dar a entender que a qualidade/confiabilidade da contagem está comprometida —
     // divergência é sempre atribuída aos processos de entrada, transformação e saída de mercadoria.
+    /* r158: indicador = Eficiência Operacional, sem meta; acima de 100% mostra a conta */
     paragrafos.push(
-      'Com ' + pct(c.acuracidade) + ' de acuracidade em valor, a contagem física localizou ' + brl(c.valorEstoqueContado) + ' de um estoque de sistema de ' + brl(c.valorEstoque)
-      + ' — uma diferença de ' + brl(Math.abs(c.saldoLiquido)) + ' sobre ' + num(c.totalSKUs) + ' SKUs analisados.'
-      + (c.acuracidade >= 95
-          ? ' Esse patamar está dentro da faixa considerada saudável para o varejo.'
-          : (c.acuracidade >= 90
-              ? ' Esse patamar está abaixo da meta de 95%, mas ainda longe de um quadro crítico.'
-              : ' Esse patamar representa uma divergência relevante, concentrada nos processos de entrada, transformação e saída de mercadoria — e pede atenção prioritária nessas frentes.'))
+      (c.acuracidade > 100
+        ? 'A Eficiência Operacional ficou em ' + contaEficiencia(c) + ', sobre ' + num(c.totalSKUs) + ' SKUs analisados.'
+        : 'Com Eficiência Operacional de ' + pct(c.acuracidade) + ', a contagem física localizou ' + brl(c.valorEstoqueContado) + ' de um estoque de sistema de ' + brl(c.valorEstoque)
+          + ' — uma diferença de ' + brl(Math.abs(c.saldoLiquido)) + ' sobre ' + num(c.totalSKUs) + ' SKUs analisados.')
+      + (c.acuracidade < 90
+          ? ' Esse resultado representa uma divergência relevante, concentrada nos processos de entrada, transformação e saída de mercadoria — e pede atenção prioritária nessas frentes.'
+          : '')
     );
 
     // 2) Perda de estoque % — indicador único que resume o tamanho financeiro da divergência
@@ -787,18 +788,16 @@ var Engine = (function(){
       }
       if (piores.length > 2) {
         var melhor = piores[piores.length - 1];
-        paragrafos.push('No outro extremo, ' + melhor.nome + ' se destaca com ' + pct(melhor.acuracidade) + ' de acuracidade — uma referência interna de processo bem controlado, que pode servir de modelo para as demais categorias.');
+        paragrafos.push('No outro extremo, ' + melhor.nome + ' se destaca com Eficiência Operacional de ' + pct(melhor.acuracidade) + ' — uma referência interna de processo bem controlado, que pode servir de modelo para as demais categorias.');
       }
     }
 
     // 6) Recomendação final — reconcilia resultado geral com exceções por categoria; nunca sugere recontagem
     // e nunca atribui a divergência à qualidade da contagem em si (r82)
-    if (c.acuracidade >= 95 && !temCategoriaCritica) {
-      paragrafos.push('Recomendação: o controle de estoque está dentro de um padrão saudável — manter o acompanhamento dos processos de entrada, transformação e saída de mercadoria e monitorar a acuracidade nas próximas contagens para evitar deterioração gradual.');
-    } else if (c.acuracidade >= 95 && temCategoriaCritica) {
-      paragrafos.push('Recomendação: apesar do resultado geral saudável, as categorias sinalizadas acima merecem atenção prioritária — reforçar o acompanhamento dos processos de entrada, transformação e saída de mercadoria especificamente nesses setores, sem necessidade de intervenção ampla no restante da operação.');
+    if (c.acuracidade >= 90 && temCategoriaCritica) {
+      paragrafos.push('Recomendação: as categorias sinalizadas acima merecem atenção prioritária — reforçar o acompanhamento dos processos de entrada, transformação e saída de mercadoria especificamente nesses setores, sem necessidade de intervenção ampla no restante da operação.');
     } else if (c.acuracidade >= 90) {
-      paragrafos.push('Recomendação: melhorar e acompanhar mais de perto os processos de entrada, transformação e saída de mercadoria, com foco nos SKUs e categorias de maior divergência financeira, deve ser suficiente para aproximar o estoque físico do contábil.');
+      paragrafos.push('Recomendação: manter e acompanhar de perto os processos de entrada, transformação e saída de mercadoria, com foco nos SKUs e categorias de maior divergência financeira, e monitorar a Eficiência Operacional nas próximas contagens.');
     } else {
       paragrafos.push('Recomendação: o volume de divergência aponta para processos de entrada, transformação e saída de mercadoria que precisam de revisão prioritária — vale investigar a fundo a conferência de recebimento (entrada), os lançamentos de transformação interna do produto, quando houver, e as baixas de venda, quebra e transferência (saída), priorizando as categorias e SKUs de maior impacto financeiro.');
     }
@@ -915,19 +914,31 @@ var Engine = (function(){
   }
 
   // ── r68: Geração de recomendações baseadas nos dados ──
+  /* r158: Eficiência Operacional (antigo "Acuracidade") — mesmo cálculo: valor contado ÷ valor em sistema.
+     Sem meta. Acima de 100% mostra a conta que explica o resultado (sobras maiores que perdas). */
+  function fmtPctEf(v){ return (Math.round((v||0)*10)/10).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}) + '%'; }
+  function fmtBRLEf(v){ return 'R$ ' + Math.round(v||0).toLocaleString('pt-BR'); }
+  function contaEficiencia(c){
+    if (!c) return '';
+    var p = fmtPctEf(c.acuracidade);
+    if (!(c.acuracidade > 100)) return p;
+    var dif = (c.valorEstoqueContado||0) - (c.valorEstoque||0);
+    return p + ' (' + fmtBRLEf(c.valorEstoqueContado) + ' contados ÷ ' + fmtBRLEf(c.valorEstoque) + ' em sistema — as sobras superaram as perdas em ' + fmtBRLEf(dif) + ')';
+  }
+
   function gerarRecomendacoes(results, info) {
     var recs = [];
     var diasVenda = info && info.diasVenda ? info.diasVenda : 30;
 
-    // 1. Acuracidade / Crítica
+    // 1. Eficiência Operacional / Crítica (r158: sem meta; alerta abaixo de 90%)
     if (results.critica) {
       var c = results.critica;
       if (c.acuracidade < 90) {
-        recs.push({dim:'critica', prioridade:1, texto:'Acuracidade crítica de ' + c.acuracidade + '%. Recomenda-se revisão a fundo dos processos de entrada (conferência de recebimento), transformação e saída (baixa de venda, quebra, transferência) de mercadoria, priorizando os setores de maior divergência.'});
-      } else if (c.acuracidade < 95) {
-        recs.push({dim:'critica', prioridade:2, texto:'Acuracidade de ' + c.acuracidade + '% — abaixo da meta de 95%. Recomenda-se reforçar o acompanhamento dos processos de entrada, transformação e saída de mercadoria, com foco nos SKUs de maior divergência financeira.'});
+        recs.push({dim:'critica', prioridade:1, texto:'Eficiência Operacional de ' + contaEficiencia(c) + ', com divergência relevante entre o estoque em sistema e o físico. Recomenda-se revisão a fundo dos processos de entrada (conferência de recebimento), transformação e saída (baixa de venda, quebra, transferência) de mercadoria, priorizando os setores de maior divergência.'});
+      } else if (c.acuracidade > 100) {
+        recs.push({dim:'critica', prioridade:2, texto:'Eficiência Operacional de ' + contaEficiencia(c) + '. Recomenda-se reforçar o acompanhamento do processo de entrada de mercadoria (baixa de nota fiscal e conferência de recebimento), com foco nos SKUs de maior sobra em valor.'});
       } else {
-        recs.push({dim:'critica', prioridade:3, texto:'Acuracidade de ' + c.acuracidade + '% está dentro da meta. Manter os processos atuais e monitorar para garantir consistência nas próximas contagens.'});
+        recs.push({dim:'critica', prioridade:3, texto:'Eficiência Operacional de ' + contaEficiencia(c) + '. Manter o acompanhamento dos processos de entrada, transformação e saída de mercadoria, com foco nos SKUs de maior divergência financeira, para garantir consistência nas próximas contagens.'});
       }
       if (c.faltaCount > c.sobraCount * 2) {
         recs.push({dim:'critica', prioridade:1, texto:'Faltas superam sobras em mais do dobro (' + c.faltaCount + ' faltas vs ' + c.sobraCount + ' sobras). Investigar possíveis falhas nos processos de saída de mercadoria (quebra não lançada, furto) ou de registro no sistema.'});
@@ -972,7 +983,7 @@ var Engine = (function(){
       var a = results.abc;
       var pctA = a.totalInvest > 0 ? round2(a.investA / a.totalInvest * 100) : 0;
       if (pctA > 50) {
-        recs.push({dim:'abc', prioridade:2, texto:'Curva A concentra ' + pctA + '% do investimento total (R$ ' + formatNum(a.investA) + '). Garantir que estes SKUs tenham alta acuracidade e reposição prioritária.'});
+        recs.push({dim:'abc', prioridade:2, texto:'Curva A concentra ' + pctA + '% do investimento total (R$ ' + formatNum(a.investA) + '). Garantir que estes SKUs tenham alta Eficiência Operacional e reposição prioritária.'});
       }
       if (a.totalInvest > 0) {
         recs.push({dim:'abc', prioridade:3, texto:'Investimento total em estoque: R$ ' + formatNum(a.totalInvest) + '. Faturamento 90 dias: R$ ' + formatNum(a.totalFat) + '. Giro de estoque de ' + round2(a.totalFat / a.totalInvest) + 'x no período.'});
@@ -1001,5 +1012,5 @@ var Engine = (function(){
     return Number(v).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0});
   }
 
-  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, gerarAnaliseCritica:gerarAnaliseCritica, gerarAnaliseRuptura:gerarAnaliseRuptura, gerarAnaliseDias:gerarAnaliseDias, gerarAnaliseABC:gerarAnaliseABC, gerarAnalisePerda:gerarAnalisePerda, buildMetricasIA:buildMetricasIA, formatNum:formatNum};
+  return {calcCritica:calcCritica, calcRuptura:calcRuptura, calcDiasEstoque:calcDiasEstoque, calcInvestimentoABC:calcInvestimentoABC, calcProjecaoPerda:calcProjecaoPerda, calcABC:calcABC, buildItemsFromContagem:buildItemsFromContagem, buildCustoMap:buildCustoMap, resolveCusto:resolveCusto, round2:round2, roundInt:roundInt, calcComparativo:calcComparativo, calcHistorico:calcHistorico, gerarRecomendacoes:gerarRecomendacoes, contaEficiencia:contaEficiencia, gerarAnaliseCritica:gerarAnaliseCritica, gerarAnaliseRuptura:gerarAnaliseRuptura, gerarAnaliseDias:gerarAnaliseDias, gerarAnaliseABC:gerarAnaliseABC, gerarAnalisePerda:gerarAnalisePerda, buildMetricasIA:buildMetricasIA, formatNum:formatNum};
 })();

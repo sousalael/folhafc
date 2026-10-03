@@ -1491,7 +1491,7 @@
     // =========================================================================
     // ⚠️ ATENÇÃO: SUBSTITUA O TEXTO ABAIXO PELO LINK DO SEU DEPLOY DO APPS SCRIPT
     // =========================================================================
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; 
+    const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })(); 
 
     // =========================================================================
     // RESILIENCIA A RESPOSTAS LENTAS DO APPS SCRIPT
@@ -4520,7 +4520,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-03-r157';
+    const VERSAO_ESPERADA = '2026-10-03-r158';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');

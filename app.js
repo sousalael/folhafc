@@ -662,11 +662,13 @@ function renderResumo(){
 
   if(avail.critica){
     var c=r.critica;
-    var cls=c.acuracidade>=95?'ok':(c.acuracidade>=90?'alerta':'critico');
+    /* r158: Eficiência Operacional — sem meta; alerta só abaixo de 90%; acima de 100% mostra a conta */
+    var cls=c.acuracidade<90?'critico':'ok';
     html+='<div class="resumo-card '+cls+'">';
-    html+='<div class="resumo-card-label">ACURACIDADE</div>';
+    html+='<div class="resumo-card-label">EFICIÊNCIA OPERACIONAL</div>';
     html+='<div class="resumo-card-valor">'+PCT(c.acuracidade)+'</div>';
-    html+='<div class="resumo-card-titulo">Precisão do estoque</div>';
+    html+='<div class="resumo-card-titulo">Valor contado ÷ valor em sistema</div>';
+    if(c.acuracidade>100)html+='<div class="resumo-card-detalhe">'+Engine.contaEficiencia(c)+'</div>';
     html+='<div class="resumo-card-detalhe">'+NUM(c.totalSKUs)+' SKUs analisados &nbsp;·&nbsp; '+NUM(c.faltaCount)+' faltas &nbsp;·&nbsp; '+NUM(c.sobraCount)+' sobras</div>';
     html+='</div>';
   }
@@ -798,7 +800,7 @@ function renderCritica(page){
   var html='<div class="section-title"><i class="ti ti-notes"></i> Análise</div>';
   html+='<div class="analysis-box'+(analiseCarregando?' loading':'')+'" id="analiseCriticaBox">'+analiseTexto.split('\n\n').map(function(par){return '<p>'+par+'</p>';}).join('')+'</div>';
   html+='<div class="metrics">';
-  html+='<div class="metric"><div class="metric-label">Acuracidade</div><div class="metric-value text-green">'+PCT(c.acuracidade)+'</div><div class="metric-detail">Valor contado ÷ valor de sistema</div></div>';
+  html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div>'+(c.acuracidade>100?'<div class="metric-detail">'+Engine.contaEficiencia(c)+'</div>':'')+'</div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div><div class="metric-detail">Antes da contagem (sistema)</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div><div class="metric-detail">Apurado na contagem física</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
@@ -808,7 +810,7 @@ function renderCritica(page){
   html+='</div>';
   if(c.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Resultado por categoria</div>';
-    html+=renderCatCards(c.categorias,[{label:'Acuracidade',key:'acuracidade',fmt:PCT,color:function(){return 'text-green';}},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
+    html+=renderCatCards(c.categorias,[{label:'Eficiência Operacional',key:'acuracidade',fmt:PCT,color:function(v){return v<90?'text-red':'text-green';}},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
     html+='<div class="chart-wrap" style="height:'+Math.max(200,c.categorias.length*58+60)+'px"><canvas id="chartCritica"></canvas></div>';
   }
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar SKU ou descrição..." value="'+srch+'" onkeyup="App.filterCritica(this.value)">';
@@ -996,7 +998,7 @@ function renderComparativo(){
   });
   html+='</tbody></table></div></div>';
   /* Legenda */
-  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura em dias", a unidade mais próxima da faixa ideal é considerada melhor. Acuracidade: melhor = mais próxima de 100%. Perda de Estoque: melhor = mais próxima de 0%. Ruptura Depósito x Loja = % dos SKUs com estoque no depósito que estão zerados na loja (mesmo cálculo da aba Ruptura). Sem giro é comparado pelo percentual sobre o valor do estoque; as curvas A, B e C são apenas informativas. A curva C não inclui os itens sem giro.</span></div>';
+  html+='<div class="note"><i class="ti ti-info-circle"></i><span>Verde = melhor desempenho na métrica · Vermelho = pior. Para "Cobertura em dias", a unidade mais próxima da faixa ideal é considerada melhor. Eficiência Operacional: melhor = mais próxima de 100%. Perda de Estoque: melhor = mais próxima de 0%. Ruptura Depósito x Loja = % dos SKUs com estoque no depósito que estão zerados na loja (mesmo cálculo da aba Ruptura). Sem giro é comparado pelo percentual sobre o valor do estoque; as curvas A, B e C são apenas informativas. A curva C não inclui os itens sem giro.</span></div>';
   $('panel-comparativo').innerHTML=html;
 }
 
@@ -1041,7 +1043,7 @@ window.App = {
     var metricas='';
     Comparativo.unidades.forEach(function(u){
       metricas+='UNIDADE: '+u.unidade+'\n';
-      if(u.acuracidade!==null) metricas+='  Acuracidade: '+PCT(u.acuracidade)+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
+      if(u.acuracidade!==null) metricas+='  Eficiência Operacional: '+PCT(u.acuracidade)+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
       if(u.taxaRuptura!==null) metricas+='  Taxa ruptura: '+PCT(u.taxaRuptura)+' | Rupturas: '+NUM(u.totalRupturas)+' | Curva A: '+NUM(u.rupturaA)+'\n';
       if(u.coberturaGeral!==null) metricas+='  Cobertura: '+u.coberturaGeral+' dias | Curva A: '+u.coberturaA+' dias | Sem giro: '+NUM(u.semGiro)+' | Excesso: '+BRLi(u.valorExcesso)+'\n';
       if(u.totalInvest!==null) metricas+='  Investimento: '+BRLi(u.totalInvest)+' | Fat. 90d: '+BRLi(u.totalFat)+'\n';

@@ -95,7 +95,7 @@ textarea:focus{outline:none;border-color:var(--navy)}
 </main>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
+const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
 const TOKEN = (new URLSearchParams(window.location.search).get('t') || '').trim();
 const MAX_COMENTARIO = 2000;
 

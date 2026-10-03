@@ -598,7 +598,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-03-r157';
+const VERSAO_SCRIPT = '2026-10-03-r158';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4462,12 +4462,23 @@ function gerarTextoTemplateFarmacia(ident, respostas, observacoes, scores) {
 /* ═══════════════════════════════════════════════════════
    RESUMO EXECUTIVO DE INVENTÁRIO VIA CLAUDE API
    ═══════════════════════════════════════════════════════ */
+/* r158: o KPI "Acuracidade" passou a se chamar "Eficiência Operacional" — se a IA ainda usar o termo antigo, troca no texto */
+function trocarTermoEficiencia_(o) {
+  if (typeof o === 'string') return o.replace(/\b(a |da |de |na )?acur[aá](cidade|cia)\b/gi, function (m, art) { return (art || '') + 'Eficiência Operacional'; });
+  if (Array.isArray(o)) return o.map(trocarTermoEficiencia_);
+  if (o && typeof o === 'object') { var r = {}; Object.keys(o).forEach(function (k) { r[k] = trocarTermoEficiencia_(o[k]); }); return r; }
+  return o;
+}
+
 function gerarResumoInventarioIA(dados) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
 
     var sys = 'Você é um analista sênior de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas no Brasil. '
       + 'Gere resumos executivos profissionais e concisos para relatórios de análise de inventário. '
+      + 'TERMINOLOGIA OBRIGATÓRIA: o indicador valor do estoque contado ÷ valor do estoque em sistema se chama SEMPRE "Eficiência Operacional" — nunca use as palavras "acuracidade" ou "acurácia". '
+      + 'Esse indicador NÃO tem meta: nunca cite meta (como 95%) nem diga que está acima ou abaixo de uma meta. Abaixo de 90% é ponto de atenção. '
+      + 'Quando a Eficiência Operacional passar de 100%, mostre a conta que explica o resultado (valor contado ÷ valor em sistema) e explique que as sobras superaram as perdas. '
       + 'Tom consultivo e objetivo. Foque em insights acionáveis. Valores monetários em R$ (formato brasileiro). '
       + 'Nunca explique como um indicador é calculado, a fórmula usada ou o critério de universo/qualificação dos dados — isso já aparece em outra seção do relatório (Metodologia). Interprete apenas o que os números significam para o negócio: causa provável, risco, prioridade. '
       + 'Jamais recomende recontagem de estoque, seja completa ou cíclica, como ação corretiva — a divergência de inventário é sintoma de processo, não de contagem malfeita. A correção correta é sempre melhorar e acompanhar mais de perto os processos de entrada, transformação e saída de mercadorias (conferência de recebimento, perdas de produção/transformação quando aplicável, baixa de venda, quebra, transferência), priorizando pelos SKUs, categorias ou curvas de maior impacto financeiro. '
@@ -4492,6 +4503,7 @@ function gerarResumoInventarioIA(dados) {
 
     var resposta = chamarClaudeAPI(usr, sys);
     var resumos = JSON.parse(resposta.replace(/```json|```/g, '').trim());
+    resumos = trocarTermoEficiencia_(resumos);   // r158
     return { ok: true, resumos: resumos };
   } catch (e) {
     return { ok: false, erro: e.message };
@@ -4505,6 +4517,9 @@ function gerarComparativoIA(dados) {
 
     var sys = 'Você é um analista sênior de inventário da Formula Code, empresa especializada em contagem de estoque para redes varejistas no Brasil. '
       + 'Gere uma análise comparativa profissional entre unidades do mesmo cliente. '
+      + 'TERMINOLOGIA OBRIGATÓRIA: o indicador valor do estoque contado ÷ valor do estoque em sistema se chama SEMPRE "Eficiência Operacional" — nunca use as palavras "acuracidade" ou "acurácia". '
+      + 'Esse indicador NÃO tem meta: nunca cite meta (como 95%) nem diga que está acima ou abaixo de uma meta. Abaixo de 90% é ponto de atenção. '
+      + 'Quando a Eficiência Operacional passar de 100%, mostre a conta que explica o resultado (valor contado ÷ valor em sistema) e explique que as sobras superaram as perdas. '
       + 'Tom consultivo e objetivo. Foque em diferenças relevantes e recomendações acionáveis por unidade. '
       + 'Valores monetários em R$ (formato brasileiro). '
       + 'Não repita os números — o leitor já tem as tabelas. Foque na interpretação e no impacto. '
@@ -4518,7 +4533,7 @@ function gerarComparativoIA(dados) {
     var usr = 'Com base nos dados comparativos abaixo, gere uma análise em JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown):\n\n'
       + '{\n'
       + '"resumo_comparativo": "1 parágrafo de visão geral: quem vai melhor, onde estão as maiores diferenças, o que salta aos olhos.",\n'
-      + '"analise_critica": "1 parágrafo comparando acuracidade, faltas e sobras entre as unidades. Qual unidade tem controle mais frágil?",\n'
+      + '"analise_critica": "1 parágrafo comparando Eficiência Operacional, faltas e sobras entre as unidades. Qual unidade tem controle mais frágil?",\n'
       + '"analise_ruptura": "1 parágrafo comparando taxa de ruptura e rupturas curva A. Qual unidade perde mais venda por falta de reposição?",\n'
       + '"analise_cobertura": "1 parágrafo comparando dias de estoque, excessos e sem giro. Qual unidade tem melhor equilíbrio compra vs demanda?",\n'
       + '"analise_perda": "1 parágrafo comparando perda projetada. Onde a urgência de ação é maior?",\n'
@@ -4531,6 +4546,7 @@ function gerarComparativoIA(dados) {
 
     var resposta = chamarClaudeAPI(usr, sys);
     var resumos = JSON.parse(resposta.replace(/```json|```/g, '').trim());
+    resumos = trocarTermoEficiencia_(resumos);   // r158
     return { ok: true, resumos: resumos };
   } catch (e) {
     return { ok: false, erro: e.message };

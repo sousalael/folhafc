@@ -448,8 +448,8 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 /* ═══════════════════════════════════════════════════════
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
-const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r157';
+const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
+const VERSAO = 'r158';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1195,23 +1195,39 @@ async function carregarProjetosAud(forcar) {
   const sec = SECOES[state.secaoAtual];
   if (sec && sec.tipo === 'identificacao' && $('.stepper-bar')) renderFormulario();
 }
+/* r158: só projetos do mês atual + os dos últimos 3 dias do mês anterior (vale para todos os usuários).
+   Mês de referência = data de hoje no aparelho. Projeto sem data válida continua aparecendo. */
+function projJanela() {
+  const h = new Date();
+  const p2 = n => String(n).padStart(2, '0');
+  const iso = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  return { ini: iso(new Date(h.getFullYear(), h.getMonth(), -2)), fim: iso(new Date(h.getFullYear(), h.getMonth() + 1, 0)) };
+}
+function projVisiveis() {
+  const j = projJanela();
+  return (state.projetosAud || []).filter(p => {
+    const d = String(p.data || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return true;
+    return d >= j.ini && d <= j.fim;
+  });
+}
 function projClientes() {
   const mapa = {};
-  (state.projetosAud || []).forEach(p => { const k = fcChave(p.cliente); if (!mapa[k]) mapa[k] = p.cliente; });   // lista vem do mais recente: vale a grafia mais nova
+  projVisiveis().forEach(p => { const k = fcChave(p.cliente); if (!mapa[k]) mapa[k] = p.cliente; });   // lista vem do mais recente: vale a grafia mais nova
   return Object.keys(mapa).map(k => mapa[k]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 function projUnidades(cliente) {
   const ck = fcChave(cliente);
   if (!ck) return [];
   const mapa = {};
-  (state.projetosAud || []).forEach(p => { if (fcChave(p.cliente) !== ck) return; const uk = fcChave(p.unidade); if (!mapa[uk]) mapa[uk] = p.unidade; });
+  projVisiveis().forEach(p => { if (fcChave(p.cliente) !== ck) return; const uk = fcChave(p.unidade); if (!mapa[uk]) mapa[uk] = p.unidade; });
   return Object.keys(mapa).map(k => mapa[k]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 function projDatas(cliente, unidade) {
   const ck = fcChave(cliente), uk = fcChave(unidade);
   if (!ck || !uk) return [];
   const datas = [];
-  (state.projetosAud || []).forEach(p => { if (fcChave(p.cliente) === ck && fcChave(p.unidade) === uk && datas.indexOf(p.data) === -1) datas.push(p.data); });
+  projVisiveis().forEach(p => { if (fcChave(p.cliente) === ck && fcChave(p.unidade) === uk && datas.indexOf(p.data) === -1) datas.push(p.data); });
   return datas.sort().reverse();
 }
 function escolherClienteProj(valor) {
@@ -1255,12 +1271,13 @@ function renderIdentificacao(secao) {
       <div class="campo-input">
         <label>Cliente</label>
         <select onchange="escolherClienteProj(this.value)">${opcoesSelectProj(projClientes(), v.cliente, 'Selecione o cliente...')}</select>
+        <div class="proj-dica">Mostrando os projetos de ${npsDataBR(projJanela().ini)} a ${npsDataBR(projJanela().fim)}.</div>
       </div>
 
       <div class="campo-input">
         <label>Unidade</label>
         <select onchange="escolherUnidadeProj(this.value)"${v.cliente ? '' : ' disabled'}>${opcoesSelectProj(unidades, v.unidade, v.cliente ? 'Selecione a unidade...' : 'Escolha o cliente primeiro')}</select>
-        ${v.cliente && !unidades.length ? '<div class="proj-dica">Este cliente não tem projeto com unidade cadastrada na aba Projetos.</div>' : ''}
+        ${v.cliente && !unidades.length ? '<div class="proj-dica">Este cliente não tem projeto neste mês (nem nos últimos 3 dias do mês anterior) na aba Projetos.</div>' : ''}
       </div>`;
   } else {
     blocoClienteUnidade = `
