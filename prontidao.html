@@ -6,7 +6,8 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Diagnóstico de Prontidão — Formula Code</title>
-<!-- r155: questionário PESSOAL do Diagnóstico de Prontidão para Mudança (aba Pessoas).
+<!-- r156: Diretoria como opção nas perguntas de indicação (até 3 pessoas no total por pergunta).
+     r155: questionário PESSOAL do Diagnóstico de Prontidão para Mudança (aba Pessoas).
      Aberto pelo link único enviado por e-mail a cada supervisor (?t=token). -->
 <style>
 :root{--navy:#001528;--green:#5DC500;--bg:#F4F6F8;--text:#1A2A3A;--text-light:#6B7B8D;--border:#E2E8F0;--white:#FFF;--red:#E05252}
@@ -58,6 +59,9 @@ h2{font-size:17px;line-height:1.3;color:var(--navy);margin-bottom:4px}
 .chip[aria-pressed="true"]{background:#EAF8E0;border-color:var(--green);color:var(--navy)}
 .chip[aria-pressed="true"]::before{content:'✓ ';color:#3a8000}
 .chip:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.grupo-chips{font-size:11px;font-weight:700;color:var(--text-light);margin:10px 0 6px}
+.grupo-chips:first-child{margin-top:0}
+.chip.dir{border-style:dashed}
 
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:14px;cursor:pointer;margin-top:12px;padding:12px 14px;border:2px solid var(--border);border-radius:12px}
 .consent input{width:22px;height:22px;flex:0 0 22px;margin-top:1px;accent-color:#3a8000}
@@ -154,13 +158,17 @@ function telaFormulario() {
   const blocoPront = Q.prontidao.map((t, i) => likertHtml('p', i, t, ++n)).join('');
   const blocoLid = Q.lideranca.map((t, i) => likertHtml('l', i, t, ++n)).join('');
   const blocoDisp = Q.disposicao.map((t, i) => likertHtml('m', i, t, ++n)).join('');
+  const diretores = Q.diretores || [];   // r156: Diretoria também pode ser indicada
   const blocoInd = Q.indicacoes.map(q => {
     indicacoes[q.k] = [];
     return '<div class="indic"><div class="txt">' + esc(q.t) + '</div>' +
-      '<div class="dica">Escolha até 3 colegas. Se ninguém vier à mente, pode deixar sem marcar.</div>' +
-      '<div class="chips" data-q="' + esc(q.k) + '">' +
+      '<div class="dica">Escolha até 3 pessoas. Se ninguém vier à mente, pode deixar sem marcar.</div>' +
+      '<div data-q="' + esc(q.k) + '" class="caixa-q">' +
+      (diretores.length ? '<div class="grupo-chips">Diretoria</div><div class="chips">' +
+        diretores.map(c => '<button type="button" class="chip dir" aria-pressed="false" data-pid="' + esc(c.pid) + '">' + esc(c.nome) + '</button>').join('') + '</div>' : '') +
+      '<div class="grupo-chips">Supervisores</div><div class="chips">' +
       Q.colegas.map(c => '<button type="button" class="chip" aria-pressed="false" data-pid="' + esc(c.pid) + '">' + esc(c.nome) + '</button>').join('') +
-      '</div></div>';
+      '</div></div></div>';
   }).join('');
 
   document.getElementById('raiz').innerHTML = `
@@ -199,8 +207,8 @@ function telaFormulario() {
     </div>
 
     <div class="card">
-      <h2>Parte 4 · Seus colegas supervisores</h2>
-      <p class="secao-desc">As respostas ajudam a entender como o grupo se apoia. Ninguém verá quem indicou quem, só a Diretoria.</p>
+      <h2>Parte 4 · Seus colegas e a Diretoria</h2>
+      <p class="secao-desc">As respostas ajudam a entender como o grupo se apoia. Você pode indicar supervisores e diretores. Ninguém verá quem indicou quem, só a Diretoria.</p>
       ${blocoInd}
     </div>
 
@@ -219,14 +227,14 @@ function telaFormulario() {
     if (item) item.classList.remove('faltou');
     atualizarProgresso();
   }));
-  document.querySelectorAll('.chips').forEach(caixa => {
+  document.querySelectorAll('.caixa-q').forEach(caixa => {
     const q = caixa.getAttribute('data-q');
     caixa.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', function () {
       const pid = this.getAttribute('data-pid');
       const lista = indicacoes[q];
       const pos = lista.indexOf(pid);
       if (pos > -1) { lista.splice(pos, 1); this.setAttribute('aria-pressed', 'false'); return; }
-      if (lista.length >= 3) { mostrarErro('Escolha no máximo 3 colegas por pergunta. Desmarque um nome para trocar.'); return; }
+      if (lista.length >= 3) { mostrarErro('Escolha no máximo 3 pessoas por pergunta. Desmarque um nome para trocar.'); return; }
       lista.push(pid); this.setAttribute('aria-pressed', 'true');
       document.getElementById('erro').classList.remove('visivel');
     }));

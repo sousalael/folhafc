@@ -8,7 +8,8 @@
     <meta http-equiv="Expires" content="0">
     <meta name="robots" content="noindex, nofollow">
     <title>Pessoas — Diagnóstico de Prontidão — Formula Code</title>
-    <!-- r155: painel de resultados do Diagnóstico de Prontidão para Mudança (somente Diretor).
+    <!-- r156: Diretoria nas indicações (rede, tabela, cartão e exportações).
+         r155: painel de resultados do Diagnóstico de Prontidão para Mudança (somente Diretor).
          Aberto pela aba Pessoas do Sistema de Gestão (?token&cpf&diag). -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -129,7 +130,8 @@
 
             <div class="bloco">
                 <h2>Rede de indicações</h2>
-                <div class="desc">Cada seta vai de quem indicou para quem foi indicado. Círculos maiores receberam mais indicações; borda verde marca os influenciadores.</div>
+                <div class="desc">Cada seta vai de quem indicou para quem foi indicado. Círculos maiores receberam mais indicações; borda verde marca os influenciadores. A Diretoria (círculos verdes, no centro) pode ser indicada, mas não responde o questionário.</div>
+                <div class="small fw-semibold mb-2" id="rede-dir" style="color:var(--fc-primaria)"></div>
                 <div class="btn-group filtro-rede mb-2 flex-wrap" role="group" id="filtro-rede"></div>
                 <div class="rede-wrap"><canvas id="canvas-rede" width="1600" height="1000"></canvas></div>
                 <div class="table-responsive mt-3"><table class="table table-sm table-bordered tabela-sup mb-0" id="tabela-ind"></table></div>
@@ -177,6 +179,16 @@
     let filtroRede = 'todas';
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function fmtPct(x) { return (x === null || x === undefined || isNaN(x)) ? '—' : fmt(x) + '%'; }
+    // r156: Diretoria pode ser indicada (não responde; não entra em matriz nem papéis)
+    function diretores() { return dados.resultado.diretores || []; }
+    function indDir() { return dados.resultado.indicacoesDiretoria || { total: 0, paraDiretoria: 0, pct: null, porPergunta: [] }; }
+    function textoIndDir() {
+        const I = indDir();
+        if (!I.total) return 'Ainda não há indicações.';
+        return 'Indicações para a Diretoria: ' + I.paraDiretoria + ' de ' + I.total + ' (' + fmtPct(I.pct) + '). ' +
+            I.porPergunta.map(x => ROT_PERG[x.k] + ': ' + x.paraDiretoria + ' de ' + x.total + ' (' + fmtPct(x.pct) + ')').join(' · ') + '.';
+    }
     function fmt(x) { return (x === null || x === undefined || isNaN(x)) ? '—' : (Math.round(x * 10) / 10).toFixed(1).replace('.', ','); }
     function nivelDe(x) { if (x === null || x === undefined) return ''; const L = dados.definicoes.limites; return x >= L.alta ? 'Alta' : (x >= L.moderada ? 'Moderada' : 'Baixa'); }
     function corValor(x) { return COR_NIVEL[nivelDe(x)] || '#9AA7B4'; }
@@ -216,7 +228,7 @@
 
     function renderTudo() {
         renderCards(); renderDimensoes(); renderTabela(); renderMatriz(); renderFiltroRede(); desenharRedeTela();
-        renderTabelaIndicacoes(); renderPapeis(); renderSelPessoa(); renderComentarios();
+        renderTabelaIndicacoes(); renderRedeDir(); renderPapeis(); renderSelPessoa(); renderComentarios();
     }
 
     // ---------- Cards ----------
@@ -229,7 +241,8 @@
             card(fmt(g.atitude), 'Atitude diante de mudanças', '', g.atitude !== null ? 'nv-' + nivelDe(g.atitude) : '') +
             card(fmt(g.lideranca), 'Liderança (autodeclarada)', '', g.lideranca !== null ? 'nv-' + nivelDe(g.lideranca) : '') +
             card(fmt(g.disposicao), 'Disposição p/ liderar mudanças', '', g.disposicao !== null ? 'nv-' + nivelDe(g.disposicao) : '') +
-            card(String(g.influenciadores), 'Influenciadores', '', '');
+            card(String(g.influenciadores), 'Influenciadores', '', '') +
+            card(fmtPct(indDir().pct), 'Indicações à Diretoria', indDir().total ? indDir().paraDiretoria + ' de ' + indDir().total : '', '');
     }
 
     // ---------- Dimensões ----------
@@ -291,6 +304,7 @@
             '<button type="button" class="btn btn-sm ' + (k === filtroRede ? 'btn-fc' : 'btn-outline-secondary') + '" onclick="trocarFiltroRede(\'' + k + '\')">' + ROT_PERG[k] + '</button>').join('');
     }
     function trocarFiltroRede(k) { filtroRede = k; renderFiltroRede(); desenharRedeTela(); }
+    function renderRedeDir() { document.getElementById('rede-dir').textContent = textoIndDir(); }
     function desenharRedeTela() { desenharRede(document.getElementById('canvas-rede'), filtroRede); }
 
     function desenharRede(canvas, filtro) {
@@ -298,11 +312,12 @@
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = '#FBFCFD'; ctx.fillRect(0, 0, W, H);
         const pessoas = dados.resultado.pessoas;
+        const dirs = diretores();
         const n = pessoas.length;
         if (!n) return;
         const lig = dados.resultado.ligacoes.filter(l => filtro === 'todas' || l.pergunta === filtro);
         const recebe = {};
-        pessoas.forEach(p => { recebe[p.pid] = 0; });
+        pessoas.concat(dirs).forEach(p => { recebe[p.pid] = 0; });
         lig.forEach(l => { recebe[l.para] = (recebe[l.para] || 0) + 1; });
         const maxRec = Math.max(1, ...Object.values(recebe));
         const cx = W / 2, cy = H / 2 - 5, R = Math.min(W, H) / 2 - 170;
@@ -310,6 +325,12 @@
         pessoas.forEach((p, i) => {
             const ang = -Math.PI / 2 + i * 2 * Math.PI / n;
             pos[p.pid] = { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang), r: 34 + 34 * (recebe[p.pid] / maxRec), ang: ang };
+        });
+        // Diretoria no centro (um só: no meio; vários: num anel interno)
+        const Rd = dirs.length > 1 ? 120 : 0;
+        dirs.forEach((p, i) => {
+            const ang = -Math.PI / 2 + i * 2 * Math.PI / Math.max(1, dirs.length);
+            pos[p.pid] = { x: cx + Rd * Math.cos(ang), y: cy + Rd * Math.sin(ang), r: 30 + 30 * (recebe[p.pid] / maxRec), ang: ang, centro: true };
         });
         // agrupa ligações repetidas (mesmo par, perguntas diferentes) para engrossar a seta
         const pares = {};
@@ -332,6 +353,18 @@
             ctx.lineTo(x2 - ux * ah + uy * ah * 0.55, y2 - uy * ah - ux * ah * 0.55);
             ctx.closePath(); ctx.fill();
         });
+        dirs.forEach(p => {
+            const c = pos[p.pid];
+            ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 2 * Math.PI);
+            ctx.fillStyle = '#5DC500'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+            ctx.fillStyle = '#001528'; ctx.font = 'bold 28px Calibri, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(recebe[p.pid]), c.x, c.y);
+            const nome = String(p.nome).split(/\s+/).slice(0, 2).join(' ');
+            ctx.font = 'bold 24px Calibri, Arial, sans-serif'; ctx.textBaseline = 'top';
+            const larg = ctx.measureText(nome).width + 16, ly = c.y + c.r + 6;
+            ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.fillRect(c.x - larg / 2, ly - 2, larg, 30);
+            ctx.fillStyle = '#2E7D32'; ctx.fillText(nome, c.x, ly);
+        });
         pessoas.forEach(p => {
             const c = pos[p.pid];
             ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 2 * Math.PI);
@@ -348,14 +381,14 @@
             ctx.fillText(nome, lx, ly);
         });
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = '24px Calibri, Arial, sans-serif'; ctx.fillStyle = '#6B7B8D';
-        ctx.fillText('Pergunta: ' + ROT_PERG[filtro] + '   ·   número no círculo = indicações recebidas   ·   cinza = não respondeu', 30, H - 26);
+        ctx.fillText('Pergunta: ' + ROT_PERG[filtro] + '   ·   número no círculo = indicações recebidas   ·   cinza = não respondeu' + (dirs.length ? '   ·   verde = Diretoria' : ''), 30, H - 26);
     }
 
     function renderTabelaIndicacoes() {
         const perg = dados.definicoes.indicacoes;
         const cab = '<thead><tr><th>Supervisor</th>' + perg.map(q => '<th class="text-center" title="' + esc(q.t) + '">' + ROT_PERG[q.k] + '</th>').join('') + '<th class="text-center">Colegas que indicaram</th><th class="text-center">Influência</th></tr></thead>';
-        const linhas = dados.resultado.pessoas.slice().sort((a, b) => b.indicacoesRecebidas - a.indicacoesRecebidas || String(a.nome).localeCompare(String(b.nome), 'pt-BR')).map(p =>
-            '<tr><td class="fw-bold">' + esc(p.nome) + (p.influenciador ? ' ⭐' : '') + '</td>' +
+        const linhas = dados.resultado.pessoas.concat(diretores()).sort((a, b) => b.indicacoesRecebidas - a.indicacoesRecebidas || String(a.nome).localeCompare(String(b.nome), 'pt-BR')).map(p =>
+            '<tr' + (p.diretor ? ' style="background:#F3FBEC"' : '') + '><td class="fw-bold">' + esc(p.nome) + (p.diretor ? ' <span class="selo" style="background:#5DC50022;color:#2E7D32;border:1px solid #5DC50066">Diretoria</span>' : '') + (p.influenciador ? ' ⭐' : '') + '</td>' +
             perg.map(q => '<td class="text-center">' + (p.indicacoesPorPergunta[q.k] || 0) + '</td>').join('') +
             '<td class="text-center">' + p.indicacoesRecebidas + '</td><td class="text-center fw-bold">' + fmt(p.influenciaPct) + '%</td></tr>').join('');
         document.getElementById('tabela-ind').innerHTML = cab + '<tbody>' + linhas + '</tbody>';
@@ -484,7 +517,8 @@
             ['Atitude diante de mudanças', fmt(g.atitude)],
             ['Liderança (autodeclarada)', fmt(g.lideranca)],
             ['Disposição para liderar mudanças (autodeclarada)', fmt(g.disposicao)],
-            ['Influenciadores identificados', String(g.influenciadores)]
+            ['Influenciadores identificados', String(g.influenciadores)],
+            ['Indicações para a Diretoria', indDir().total ? indDir().paraDiretoria + ' de ' + indDir().total + ' (' + fmtPct(indDir().pct) + ')' : '—']
         ] };
         const dims = { titulo: 'Prontidão por dimensão', cab: ['Dimensão', 'Índice', 'Nível'], linhas: D.dimensoes.map(dm => [dm.nome, fmt(g.dimensoes[dm.k]), nivelDe(g.dimensoes[dm.k]) || '—']) };
         const sup = { titulo: 'Supervisores', cab: ['Supervisor', 'Prontidão', 'Atitude', 'Liderança*', 'Disposição*', 'Papel', 'Indicações', 'Quadrante'],
@@ -492,7 +526,7 @@
                 ? [p.nome + (p.influenciador ? ' (influenciador)' : ''), fmt(p.prontidao), fmt(p.atitude), fmt(p.lideranca), fmt(p.disposicao), p.papel, p.indicacoesRecebidas + ' (' + fmt(p.influenciaPct) + '%)', D.quadrantes[p.quadrante].titulo]
                 : [p.nome + ' (não respondeu)', '—', '—', '—', '—', '—', p.indicacoesRecebidas + ' (' + fmt(p.influenciaPct) + '%)', D.quadrantes[p.quadrante].titulo]) };
         const ind = { titulo: 'Indicações recebidas', cab: ['Supervisor'].concat(D.indicacoes.map(q => ROT_PERG[q.k])).concat(['Colegas', 'Influência']),
-            linhas: r.pessoas.slice().sort((a, b) => b.indicacoesRecebidas - a.indicacoesRecebidas).map(p => [p.nome].concat(D.indicacoes.map(q => String(p.indicacoesPorPergunta[q.k] || 0))).concat([String(p.indicacoesRecebidas), fmt(p.influenciaPct) + '%'])) };
+            linhas: r.pessoas.concat(diretores()).sort((a, b) => b.indicacoesRecebidas - a.indicacoesRecebidas).map(p => [p.nome + (p.diretor ? ' (Diretoria)' : '')].concat(D.indicacoes.map(q => String(p.indicacoesPorPergunta[q.k] || 0))).concat([String(p.indicacoesRecebidas), fmt(p.influenciaPct) + '%'])) };
         const papeis = { titulo: 'Papéis na mudança', cab: ['Papel', 'Quantidade', 'Supervisores'], linhas: Object.keys(D.papeis).map(k => {
             const ns = r.pessoas.filter(p => p.papel === k).map(p => p.nome); return [k, String(ns.length), ns.join(', ') || '—']; }) };
         return { indicadores, dims, sup, ind, papeis };
@@ -605,6 +639,7 @@
             tabela(T.sup, 38);
             figura('Matriz Influência × Atitude', figuraMatriz());
             figura('Rede de indicações (todas as perguntas)', figuraRede());
+            paragrafo(textoIndDir());
             tabela(T.ind, 50);
             tabela(T.papeis, 45);
             if (an) {
@@ -650,7 +685,7 @@
         slides.push({ titulo: 'Prontidão por dimensão', imagem: figuraDimensoes() });
         for (let i = 0; i < T.sup.linhas.length; i += 7) slides.push({ titulo: 'Supervisores' + (i ? ' (continuação)' : ''), tabela: { cab: T.sup.cab, linhas: T.sup.linhas.slice(i, i + 7) }, nota: '*Liderança e disposição autodeclaradas.' });
         slides.push({ titulo: 'Matriz Influência × Atitude', imagem: figuraMatriz() });
-        slides.push({ titulo: 'Rede de indicações', imagem: figuraRede() });
+        slides.push({ titulo: 'Rede de indicações', imagem: figuraRede(), nota: textoIndDir() });
         for (let i = 0; i < T.ind.linhas.length; i += 10) slides.push({ titulo: 'Indicações recebidas' + (i ? ' (continuação)' : ''), tabela: { cab: T.ind.cab, linhas: T.ind.linhas.slice(i, i + 10) } });
         slides.push({ titulo: 'Papéis na mudança', tabela: T.papeis });
         if (an) {
@@ -708,8 +743,9 @@
                     s.addText(sl.textos.map((t, i) => ({ text: t, options: { breakLine: i < sl.textos.length - 1, paraSpaceAfter: 10 } })),
                         { x: M, y: 1.15, w: LW, h: 5.8, fontFace: 'Calibri', fontSize: 14, color: '1F2B38', valign: 'top', fit: 'shrink', lineSpacingMultiple: 1.1 });
                 } else if (sl.imagem) {
-                    const c = caixaImagem(sl.imagem, M, 1.15, LW, 5.8);
+                    const c = caixaImagem(sl.imagem, M, 1.15, LW, sl.nota ? 5.25 : 5.8);
                     s.addImage({ data: sl.imagem.url, x: c.x, y: c.y, w: c.w, h: c.h });
+                    if (sl.nota) s.addText(sl.nota, { x: M, y: 6.45, w: LW, h: 0.55, fontFace: 'Calibri', fontSize: 11.5, bold: true, color: '001528', valign: 'top', fit: 'shrink' });
                 } else if (sl.tabela) {
                     const t = sl.tabela;
                     const linhas = [t.cab.map(c => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: '001528' }, align: 'center' } }))]
@@ -775,8 +811,10 @@
                     let y = 1.3;
                     linhas.forEach(l => { doc.text(l, M, y); y += tam * 1.25 / 72; });
                 } else if (sl.imagem) {
-                    const c = caixaImagem(sl.imagem, M, 1.15, LW, 5.8);
+                    const c = caixaImagem(sl.imagem, M, 1.15, LW, sl.nota ? 5.25 : 5.8);
                     doc.addImage(sl.imagem.url, 'PNG', c.x, c.y, c.w, c.h);
+                    if (sl.nota) { doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(0, 21, 40);
+                        doc.splitTextToSize(sl.nota, LW).slice(0, 2).forEach((l, i) => doc.text(l, M, 6.65 + i * 0.22)); }
                 } else if (sl.tabela) {
                     const t = sl.tabela, cw = larguraColunas(t, LW);
                     doc.autoTable({ startY: 1.2, head: [t.cab], body: t.linhas, margin: { left: M, right: M }, theme: 'grid', tableWidth: LW,

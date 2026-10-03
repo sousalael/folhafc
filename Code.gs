@@ -597,7 +597,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-03-r155';
+const VERSAO_SCRIPT = '2026-10-03-r156';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -7468,6 +7468,7 @@ function biGerarAnalise(cpf, pacote, correcao) {
 
 /* ═══════════════════════════════════════════════════════════════════
    MÓDULO: PESSOAS — DIAGNÓSTICO DE PRONTIDÃO PARA MUDANÇA (HCMBOK) — r155
+   r156: Diretoria pode ser indicada nas 3 perguntas de indicação (contada à parte).
    Primeiro uso: diagnóstico INTERNO dos supervisores da Formula Code.
    - Só o DIRETOR cria, envia, acompanha e vê os resultados (inclusive
      por pessoa). Supervisor nenhum enxerga o módulo.
@@ -7611,6 +7612,32 @@ function diagSupervisoresColab() {
   }
   out.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
   return out;
+}
+
+// r156: Diretoria como opção nas perguntas de indicação. Lida AO VIVO da aba Colaboradores
+// (vale também para diagnósticos já criados). O id é derivado do CPF + diagnóstico por hash:
+// estável entre leituras e sem expor o CPF na página pública.
+function diagDiretoresColab() {
+  var dados = getColabDados();
+  var idx = getColabIndices();
+  var out = [];
+  for (var i = 1; i < dados.length; i++) {
+    var r = dados[i];
+    if (String(r[idx.perfil] || '').trim().toUpperCase() !== 'DIRETOR') continue;
+    var cpf = normalizarCPF(r[idx.cpf]);
+    if (cpf.length !== 11) continue;
+    out.push({ cpf: cpf, nome: String(r[idx.nome] || '').trim() });
+  }
+  out.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  return out;
+}
+function diagPidDiretor(diagId, cpf) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'diretor|' + diagId + '|' + cpf);
+  var hex = bytes.map(function (b) { var v = (b < 0 ? b + 256 : b).toString(16); return v.length === 1 ? '0' + v : v; }).join('');
+  return 'd' + hex.substring(0, 11);
+}
+function diagDiretoresDoDiag(diagId) {
+  return diagDiretoresColab().map(function (d) { return { pid: diagPidDiretor(diagId, d.cpf), nome: d.nome }; });
 }
 
 function diagCandidatos(dados, cpf) {
@@ -7798,7 +7825,8 @@ function diagObterQuestionario(dados) {
       escala: DIAG_ESCALA,
       prontidao: DIAG_ITENS_PRONTIDAO.map(function (i) { return i.t; }),
       lideranca: DIAG_ITENS_LIDERANCA, disposicao: DIAG_ITENS_DISPOSICAO,
-      indicacoes: DIAG_PERGUNTAS_INDICACAO, colegas: colegas
+      indicacoes: DIAG_PERGUNTAS_INDICACAO, colegas: colegas,
+      diretores: diagDiretoresDoDiag(eu.Diag_ID)   // r156
     };
   } catch (e) {
     Logger.log('diagObterQuestionario: ' + e.message);
@@ -7837,7 +7865,8 @@ function diagResponder(dados) {
     if (eu.Respondido === 'SIM') return { ok: false, jaRespondida: true, erro: 'Este questionário já foi respondido.' };
     var cad = diagLer(DIAG_ABA_CAD, DIAG_CAB_CAD).filter(function (c) { return c.ID === eu.Diag_ID; })[0];
     if (!cad || cad.Status !== 'ABERTO') return { ok: false, erro: 'Este diagnóstico já foi encerrado e não recebe mais respostas.' };
-    var validos = parts.filter(function (p) { return p.Diag_ID === eu.Diag_ID && p.Token !== t; }).map(function (p) { return String(p.Pid); });
+    var validos = parts.filter(function (p) { return p.Diag_ID === eu.Diag_ID && p.Token !== t; }).map(function (p) { return String(p.Pid); })
+      .concat(diagDiretoresDoDiag(eu.Diag_ID).map(function (d) { return d.pid; }));   // r156: Diretoria também pode ser indicada
     var ind = d.indicacoes || {};
     var indLimpo = {};
     DIAG_PERGUNTAS_INDICACAO.forEach(function (q) {
@@ -7886,7 +7915,8 @@ function diagPapel(disp, lid) {
   if (disp >= DIAG_LIMITES.alta) return lid !== null && lid >= DIAG_LIMITES.alta ? 'Patrocinador' : 'Apoiador a desenvolver';
   return disp >= DIAG_LIMITES.moderada ? 'Neutro' : 'Resistente';
 }
-function diagCalcular(participantes, respostas) {
+function diagCalcular(participantes, respostas, diretores) {
+  diretores = diretores || [];   // r156: [{pid, nome}] — indicados, mas não respondem
   var porPid = {};
   respostas.forEach(function (r) { porPid[r.pid] = r; });
   var nResp = respostas.length;
@@ -7894,6 +7924,8 @@ function diagCalcular(participantes, respostas) {
   // indicações recebidas
   var recebidas = {};
   participantes.forEach(function (p) { recebidas[p.pid] = { quem: {}, porPergunta: { duvida: 0, novidade: 0, ensinar: 0 } }; });
+  diretores.forEach(function (p) { if (!recebidas[p.pid]) recebidas[p.pid] = { quem: {}, porPergunta: { duvida: 0, novidade: 0, ensinar: 0 }, diretor: true }; });
+  var totalIndic = 0, totalIndicDir = 0, porPergTotal = { duvida: 0, novidade: 0, ensinar: 0 }, porPergDir = { duvida: 0, novidade: 0, ensinar: 0 };
   var ligacoes = [];
   respostas.forEach(function (r) {
     DIAG_PERGUNTAS_INDICACAO.forEach(function (q) {
@@ -7902,6 +7934,8 @@ function diagCalcular(participantes, respostas) {
         recebidas[pid].quem[r.pid] = true;
         recebidas[pid].porPergunta[q.k]++;
         ligacoes.push({ de: r.pid, para: pid, pergunta: q.k });
+        totalIndic++; porPergTotal[q.k]++;
+        if (recebidas[pid].diretor) { totalIndicDir++; porPergDir[q.k]++; }
       });
     });
   });
@@ -7960,8 +7994,17 @@ function diagCalcular(participantes, respostas) {
   Object.keys(DIAG_QUADRANTES).forEach(function (k) { contQuad[k] = 0; });
   pessoas.forEach(function (p) { if (p.papel) contPapel[p.papel]++; contQuad[p.quadrante]++; });
 
+  var dirs = diretores.map(function (d) {
+    var rec = recebidas[d.pid], n = Object.keys(rec.quem).length;
+    return { pid: d.pid, nome: d.nome, diretor: true, indicacoesRecebidas: n, indicacoesPorPergunta: rec.porPergunta,
+             influenciaPct: nResp ? Math.round(n / nResp * 1000) / 10 : 0 };
+  });
+  var pctDir = function (a, b) { return b ? Math.round(a / b * 1000) / 10 : null; };
   return {
     participantes: participantes.length, respondentes: resp.length,
+    diretores: dirs,
+    indicacoesDiretoria: { total: totalIndic, paraDiretoria: totalIndicDir, pct: pctDir(totalIndicDir, totalIndic),
+      porPergunta: DIAG_PERGUNTAS_INDICACAO.map(function (q) { return { k: q.k, total: porPergTotal[q.k], paraDiretoria: porPergDir[q.k], pct: pctDir(porPergDir[q.k], porPergTotal[q.k]) }; }) },
     grupo: {
       prontidao: diagR1(prontGrupo), nivel: diagNivel(prontGrupo),
       atitude: diagR1(diagMedia(resp.map(function (p) { return p.atitude; }))),
@@ -7998,8 +8041,24 @@ function diagMontarResultado(id) {
     .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
   return {
     diagnostico: { id: cad.ID, titulo: cad.Titulo, status: cad.Status, criadoEm: diagDataBR(cad.Criado_em) },
-    resultado: diagCalcular(participantes, resps)
+    resultado: diagCalcular(participantes, resps, diagDiretoresComHistorico(id, resps, participantes))
   };
+}
+
+// r156: diretores atuais + qualquer pid de diretor indicado no passado que saiu do cadastro
+function diagDiretoresComHistorico(id, resps, participantes) {
+  var lista = diagDiretoresDoDiag(id);
+  var conhecidos = {};
+  lista.forEach(function (d) { conhecidos[d.pid] = true; });
+  participantes.forEach(function (p) { conhecidos[p.pid] = true; });
+  resps.forEach(function (r) {
+    ['duvida', 'novidade', 'ensinar'].forEach(function (k) {
+      (r.indicacoes[k] || []).forEach(function (pid) {
+        if (!conhecidos[pid] && /^d[0-9a-f]{11}$/.test(pid)) { conhecidos[pid] = true; lista.push({ pid: pid, nome: 'Diretor(a) fora do cadastro atual' }); }
+      });
+    });
+  });
+  return lista;
 }
 
 function diagPainel(dados, cpf) {
@@ -8025,6 +8084,7 @@ function diagPacoteAnalise(m) {
   DIAG_DIMENSOES.forEach(function (dm) { nomeDim[dm.k] = dm.nome; });
   var nomes = {};
   r.pessoas.forEach(function (p) { nomes[p.pid] = p.nome; });
+  (r.diretores || []).forEach(function (p) { nomes[p.pid] = p.nome + ' (Diretoria)'; });
   return {
     diagnostico: m.diagnostico.titulo,
     escala_dos_indices: '0 a 100 (Alta a partir de 70; Moderada de 50 a 69,9; Baixa abaixo de 50)',
@@ -8047,6 +8107,15 @@ function diagPacoteAnalise(m) {
       }
       return o;
     }),
+    diretoria_indicada: {
+      observacao: 'Diretores não respondem o questionário; podem apenas ser indicados pelos supervisores. Não entram na matriz nem nos papéis.',
+      indicacoes_para_a_diretoria: r.indicacoesDiretoria.paraDiretoria + ' de ' + r.indicacoesDiretoria.total + ' indicações (' + diagFmt(r.indicacoesDiretoria.pct) + '%)',
+      por_pergunta: r.indicacoesDiretoria.porPergunta.map(function (x) {
+        var q = DIAG_PERGUNTAS_INDICACAO.filter(function (y) { return y.k === x.k; })[0];
+        return q.t + ': ' + x.paraDiretoria + ' de ' + x.total + ' (' + diagFmt(x.pct) + '%)';
+      }),
+      diretores: (r.diretores || []).map(function (d) { return d.nome + ': indicado(a) por ' + d.indicacoesRecebidas + ' supervisor(es) (' + diagFmt(d.influenciaPct) + '% dos que responderam)'; })
+    },
     indicacoes: r.ligacoes.map(function (l) {
       var q = DIAG_PERGUNTAS_INDICACAO.filter(function (x) { return x.k === l.pergunta; })[0];
       return (nomes[l.de] || '?') + ' indicou ' + (nomes[l.para] || '?') + ' em "' + (q ? q.t : l.pergunta) + '"';
@@ -8077,6 +8146,13 @@ function diagAnaliseAutomatica(m) {
     infl.length ? 'Influenciadores identificados pelas indicações: ' + infl.map(function (p) { return p.nome + ' (' + p.indicacoesRecebidas + ' indicações, ' + diagFmt(p.influenciaPct) + '% dos colegas)'; }).join('; ') + '.'
                 : 'Nenhum supervisor atingiu o critério de influenciador (indicado por pelo menos 20% dos colegas que responderam e por no mínimo 2 pessoas).'
   ] });
+  var ID = r.indicacoesDiretoria;
+  if (ID && ID.total) {
+    secoes.push({ titulo: 'Indicações para a Diretoria', paragrafos: [
+      ID.paraDiretoria + ' de ' + ID.total + ' indicações (' + diagFmt(ID.pct) + '%) apontaram para a Diretoria. ' +
+      ID.porPergunta.map(function (x) { var q = DIAG_PERGUNTAS_INDICACAO.filter(function (y) { return y.k === x.k; })[0]; return '"' + q.t + '": ' + x.paraDiretoria + ' de ' + x.total + ' (' + diagFmt(x.pct) + '%)'; }).join('; ') + '.'
+    ] });
+  }
   var recs = [];
   if (prior.length) recs.push({ acao: 'Conversar individualmente com ' + prior.map(function (p) { return p.nome; }).join(', ') + ' antes de iniciar mudanças.', base: 'Influenciador(es) com atitude abaixo de 70.' });
   if (agentes.length) recs.push({ acao: 'Envolver ' + agentes.map(function (p) { return p.nome; }).join(', ') + ' como agente(s) de mudança.', base: 'Influenciador(es) com atitude favorável (70 ou mais).' });
@@ -8105,11 +8181,12 @@ function diagGerarAnalise(dados, cpf) {
       '3. Liderança e disposição são AUTODECLARADAS (autoavaliação): trate como a percepção que cada supervisor tem de si, nunca como fato comprovado.',
       '4. Tom profissional, respeitoso e construtivo. Não use rótulos pejorativos sobre pessoas; descreva comportamentos e índices.',
       '5. Explique o que os índices significam para a viabilidade de mudanças de processo e de cultura, conectando prontidão, papéis (Patrocinador, Apoiador a desenvolver, Neutro, Resistente) e a rede de influência (quadrantes).',
+      '5b. Em "diretoria_indicada": os supervisores também puderam indicar diretores. Comente o quanto o grupo recorre à Diretoria em cada pergunta (dúvidas, novidades, ensinar), usando só esses números, sem supor causas. Diretores não respondem: não atribua a eles prontidão, papel ou quadrante.',
       '6. Recomendações: só as que decorrem diretamente de um dado. Cada uma cita no campo "base" o dado que a justifica. Nada genérico.',
       '7. Sem emojis, sem markdown, sem listas com hífen dentro dos parágrafos.',
       'Responda SOMENTE com JSON válido neste formato:',
       '{"titulo": "texto", "resumo": ["parágrafo", "..."], "secoes": [{"titulo": "texto", "paragrafos": ["parágrafo", "..."]}], "recomendacoes": [{"acao": "texto", "base": "dado que justifica"}]}',
-      'Use de 4 a 6 seções (por exemplo: prontidão do grupo; dimensões fortes e frágeis; perfil de liderança e papéis; influência e rede de indicações; pontos de atenção individuais; viabilidade de mudanças).'
+      'Use de 4 a 7 seções (por exemplo: prontidão do grupo; dimensões fortes e frágeis; perfil de liderança e papéis; influência e rede de indicações; papel da Diretoria nas indicações; pontos de atenção individuais; viabilidade de mudanças).'
     ].join('\n');
     var texto = '';
     try {
