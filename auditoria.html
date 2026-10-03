@@ -449,7 +449,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec';
-const VERSAO = 'r156';
+const VERSAO = 'r157';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -485,7 +485,8 @@ const SECOES_SUPER = [
       {id:'cliente',label:'Cliente',tipo:'select_cliente'},
       {id:'unidade',label:'Unidade',tipo:'select_unidade'},
       {id:'data_auditoria',label:'Data da Auditoria',tipo:'date'},
-      {id:'responsavel_cliente',label:'Responsável do Cliente',tipo:'text'}
+      {id:'responsavel_cliente',label:'Responsável do Cliente',tipo:'text'},
+      {id:'email_gerente',label:'E-mail do Gerente da Unidade',tipo:'email'}   // r157: opcional
     ]
   },
   // ── 1. ESTRUTURA FÍSICA ──
@@ -1322,7 +1323,20 @@ function renderIdentificacao(secao) {
         <input type="text" value="${esc(v.responsavel_cliente || '')}" placeholder="Nome do responsável na unidade"
                oninput="setIdent('responsavel_cliente',this.value)">
       </div>
+
+      <div class="campo-input">
+        <label>E-mail do Gerente da Unidade <span style="font-weight:400;color:var(--text-light)">(opcional)</span></label>
+        <input type="email" multiple inputmode="email" autocomplete="off" value="${esc(v.email_gerente || '')}" placeholder="gerente@cliente.com.br — separe vários por vírgula"
+               oninput="setIdent('email_gerente',this.value)" onblur="conferirEmailGerente(this.value)">
+      </div>
     </div>`;
+}
+
+// r157: e-mail do gerente é opcional; só avisa se algum endereço digitado não parece válido (não bloqueia)
+function conferirEmailGerente(valor) {
+  const partes = String(valor || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  const ruins = partes.filter(x => !PF_EMAIL_RE.test(x));
+  if (ruins.length) toast('Confira o e-mail do gerente: ' + ruins.join(', '), 4500);
 }
 
 function setIdent(campo, valor) {
@@ -1873,7 +1887,8 @@ document.addEventListener('click', e => {
 
 // r114: Histórico com filtros (cliente e período) e exclusão em lote das avaliações NÃO concluídas.
 function histFiltro() {
-  if (!state.histFiltro) state.histFiltro = { clientes: [], periodo: 'mes', de: '', ate: '', tipoEst: '' };
+  if (!state.histFiltro) state.histFiltro = { clientes: [], periodo: 'mes', de: '', ate: '', tipoEst: '', envio: '' };
+  if (state.histFiltro.envio === undefined) state.histFiltro.envio = '';   // r157
   return state.histFiltro;
 }
 
@@ -1895,6 +1910,8 @@ function histFiltrar(lista) {
   return (lista || []).filter(a => {
     if (cli.length && cli.indexOf(histNorm(a.cliente)) === -1) return false;
     if (f.tipoEst && (a.tipoEstabelecimento || 'SUPERMERCADO') !== f.tipoEst) return false;
+    if (f.envio === 'enviadas' && !a.dataEnvio) return false;   // r157: envio do relatório
+    if (f.envio === 'nao' && a.dataEnvio) return false;
     const d = histDataISO(a.dataAuditoria) || histDataISO(a.dataRegistro);
     if (iv.de && (!d || d < iv.de)) return false;
     if (iv.ate && (!d || d > iv.ate)) return false;
@@ -1947,6 +1964,7 @@ async function histBuscar() {
 
 // r136: array compartilhado dos botões de tipo (evita duplicar a lista em cada função)
 const HIST_TIPOS = [['', 'Todos'], ['SUPERMERCADO', '🛒 Supermercado'], ['FARMACIA', '💊 Farmácia']];
+const HIST_ENVIO = [['', 'Todas'], ['enviadas', '✓ Enviadas'], ['nao', '✉ Não enviadas']];   // r157
 
 function histRenderTudo() {
   const c = $('#abaConteudo');
@@ -1957,12 +1975,14 @@ function histRenderTudo() {
   const msCli = msHtml('hCli', { opcoes: opcoesCli, sel: f.clientes, rotuloTodos: 'Todos os clientes', rotuloPlural: 'clientes', msgVazio: 'Nenhum cliente com análise neste tipo de estabelecimento', cb: v => histMudou('clientes', v) });
   const optsPer = NPS_PERIODOS.map(p => `<option value="${p.v}"${p.v === f.periodo ? ' selected' : ''}>${p.t}</option>`).join('');
   const btnsTipo = HIST_TIPOS.map(t => `<button type="button" class="hist-tipo${f.tipoEst === t[0] ? ' ativo' : ''}" onclick="histEscolherTipo('${t[0]}')">${t[1]}</button>`).join('');
+  const btnsEnvio = HIST_ENVIO.map(t => `<button type="button" class="hist-tipo${f.envio === t[0] ? ' ativo' : ''}" onclick="histEscolherEnvio('${t[0]}')">${t[1]}</button>`).join('');
 
   c.innerHTML = `
     <div class="hist-filtros">
       ${msCli}
       <select aria-label="Período (data da análise)" onchange="histMudou('periodo',this.value)">${optsPer}</select>
       <div class="hist-tipos full" id="histTipoBtns" role="group" aria-label="Tipo de estabelecimento">${btnsTipo}</div>
+      <div class="hist-tipos full" id="histEnvioBtns" role="group" aria-label="Envio do relatório">${btnsEnvio}</div>
       <div class="hist-datas${f.periodo === 'custom' ? ' aberto' : ''}" id="histDatas">
         <input type="date" aria-label="Data inicial" value="${esc(f.de)}" onchange="histMudou('de',this.value)">
         <input type="date" aria-label="Data final" value="${esc(f.ate)}" onchange="histMudou('ate',this.value)">
@@ -1990,6 +2010,14 @@ function histEscolherTipo(v) {
   histMarcarPendente();
 }
 
+// r157: Enviadas / Não enviadas (envio do relatório) — filtra a lista já buscada; marca pendente como os demais filtros
+function histEscolherEnvio(v) {
+  const f = histFiltro();
+  f.envio = v;
+  document.querySelectorAll('#histEnvioBtns .hist-tipo').forEach((b, i) => b.classList.toggle('ativo', HIST_ENVIO[i][0] === v));
+  histMarcarPendente();
+}
+
 function histRenderResultados() {
   const box = $('#histResultados');
   if (!box) return;
@@ -2006,7 +2034,8 @@ function histRenderResultados() {
     corpo = '<div class="card-inicio" style="text-align:center;color:var(--text-light);padding:24px">' +
       (total ? 'Nenhum resultado para os filtros escolhidos.' : 'Nenhuma auditoria concluída encontrada.') + '</div>';
   } else {
-    corpo = `<div class="hist-conta">Concluídas: ${lista.length} de ${total}</div>` + lista.map(a => histItemConcluido(a, isDiretor)).join('');
+    const rotEnvio = { enviadas: ' · enviadas', nao: ' · não enviadas' }[state.histAplicado.envio] || '';   // r157
+    corpo = `<div class="hist-conta">Concluídas${rotEnvio}: ${lista.length} de ${total}</div>` + lista.map(a => histItemConcluido(a, isDiretor)).join('');
   }
 
   box.innerHTML = corpo;
@@ -2023,7 +2052,7 @@ function histItemConcluido(a, isDiretor) {
           <button class="btn-fc btn-fc-outline" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="abrirRelatorio('${a.id}','pdf')">📥 PDF</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}','${a.cliente}','${a.unidade}','${a.emailCliente||''}')">✉ Enviar relatórios</button>
+          <button class="btn-fc btn-fc-orange" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvio('${a.id}')">✉ Enviar relatórios</button>
           ${permitePesquisa ? `<button class="btn-fc btn-fc-green" style="width:auto;flex:1;padding:8px;font-size:11px" onclick="prepararEnvioPesquisa('${a.id}')">📊 Enviar pesquisa CSAT/NPS</button>` : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
@@ -4565,10 +4594,109 @@ async function abrirRelatorio(auditoriaId, formato) {
   }
 }
 
-async function prepararEnvio(auditoriaId, cliente, unidade, emailSalvo) {
-  const email = prompt('E-mail do cliente:', emailSalvo || '');
-  if (!email || !email.includes('@')) return;
+/* ═══════════════════════════════════════════════════════
+   r157 — ENVIO DOS RELATÓRIOS COM LISTA EDITÁVEL
+   Em vez de digitar o e-mail, abre a janela de envio (mesmo padrão da
+   Performance): lista já marcada com o e-mail do gerente informado na
+   análise + os já usados antes na mesma unidade; dá para desmarcar e
+   adicionar. A geração e o envio do relatório/apresentação não mudaram
+   (executarEnvioRelatorio = o mesmo fluxo de antes).
+   ═══════════════════════════════════════════════════════ */
+async function prepararEnvio(auditoriaId) {
+  const a = (state.histLista || []).find(x => x.id === auditoriaId) || {};
+  showLoading('Buscando os e-mails da unidade...');
+  const r = await apiCall('emailsSugeridosAuditoria', { auditoriaId });
+  hideLoading();
+  if (!r.ok) toast('Não foi possível buscar os e-mails sugeridos: ' + (r.erro || 'falha') + '. Você pode digitá-los.', 5000);
+  state.audEnvio = {
+    auditoriaId,
+    titulo: (r.cliente || a.cliente || '') + ' — ' + (r.unidade || a.unidade || ''),
+    data: a.dataAuditoria || '',
+    emails: ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: e.origem || '', marcado: e.marcar !== false }))
+  };
+  audRenderModalEnvio();
+}
 
+function audRenderModalEnvio() {
+  const e = state.audEnvio;
+  if (!e) return;
+  let m = document.getElementById('audModalEnvio');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'audModalEnvio';
+    m.className = 'nps-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.addEventListener('click', ev => { if (ev.target === m) audFecharEnvio(); });
+    document.body.appendChild(m);
+  }
+  const lista = e.emails.length
+    ? e.emails.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="audEnvMarcar(${i},this.checked)"><span>${esc(x.email)}${x.sub ? '<small>' + esc(x.sub) + '</small>' : ''}</span></label>`).join('')
+    : '<div class="ms-vazio">Nenhum e-mail informado na análise nem usado antes nesta unidade. Adicione abaixo.</div>';
+  m.innerHTML = `
+    <div class="nps-folha" style="max-width:520px">
+      <div class="nps-modal-topo"><div class="nps-modal-linha"><div class="nps-modal-titulo">✉️ Enviar relatórios</div><button type="button" class="nps-modal-x" aria-label="Fechar" onclick="audFecharEnvio()">✕</button></div></div>
+      <div class="nps-modal-corpo">
+        <p style="font-size:13px;line-height:1.5;margin:0 0 10px;color:var(--text)"><b>${esc(e.titulo)}</b>${e.data ? '<br><span style="color:var(--text-light)">' + esc(e.data) + '</span>' : ''}</p>
+        <div class="pf-env-rot" id="audEnvRot">Destinatários (${e.emails.filter(x => x.marcado).length} marcado(s))</div>
+        <div class="pf-env-lista">${lista}</div>
+        <div class="pf-env-add">
+          <input type="email" id="audEnvNovo" placeholder="Adicionar e-mail (separe vários por vírgula)" aria-label="Adicionar e-mail" onkeydown="if(event.key==='Enter'){event.preventDefault();audEnvAdicionar();}">
+          <button type="button" onclick="audEnvAdicionar()">Adicionar</button>
+        </div>
+        <div class="pf-env-rot">Anexos</div>
+        <div class="pf-env-anexos">📄 Análise (PDF) e 🎬 Apresentação Executiva (PDF) — gerados ou reaproveitados na hora do envio, como antes.</div>
+        <div class="pf-links" style="margin-top:4px">
+          <button type="button" style="background:var(--navy);color:#fff" onclick="audEnvConfirmar()">Enviar</button>
+          <button type="button" style="background:#E2E8F0;color:var(--navy)" onclick="audFecharEnvio()">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+}
+function audFecharEnvio() {
+  const m = document.getElementById('audModalEnvio');
+  if (m) m.remove();
+  state.audEnvio = null;
+}
+function audEnvMarcar(i, on) {
+  const e = state.audEnvio;
+  if (!e || !e.emails[i]) return;
+  e.emails[i].marcado = !!on;
+  const rot = document.getElementById('audEnvRot');
+  if (rot) rot.textContent = 'Destinatários (' + e.emails.filter(x => x.marcado).length + ' marcado(s))';
+}
+function audEnvAdicionar() {
+  const e = state.audEnvio;
+  const el = document.getElementById('audEnvNovo');
+  if (!e || !el) return false;
+  const partes = String(el.value || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (!partes.length) return true;
+  const invalidos = partes.filter(x => !PF_EMAIL_RE.test(x));
+  if (invalidos.length) { toast('E-mail inválido: ' + invalidos.join(', '), 4000); return false; }
+  partes.forEach(x => {
+    const ex = e.emails.find(y => y.email === x);
+    if (ex) ex.marcado = true;
+    else e.emails.push({ email: x, sub: 'Adicionado agora', marcado: true });
+  });
+  audRenderModalEnvio();
+  const novo = document.getElementById('audEnvNovo');
+  if (novo) novo.focus();
+  return true;
+}
+async function audEnvConfirmar() {
+  const e = state.audEnvio;
+  if (!e) return;
+  const pend = document.getElementById('audEnvNovo');
+  if (pend && pend.value.trim() && !audEnvAdicionar()) return;   // e-mail digitado e não adicionado: adiciona antes (se for válido)
+  const emails = e.emails.filter(x => x.marcado).map(x => x.email);
+  if (!emails.length) { toast('Marque ou adicione ao menos um e-mail'); return; }
+  const id = e.auditoriaId;
+  audFecharEnvio();
+  await executarEnvioRelatorio(id, emails.join(', '));
+}
+
+// Fluxo de geração + envio (o mesmo de antes do r157; só recebe a lista confirmada na janela)
+async function executarEnvioRelatorio(auditoriaId, email) {
   showLoading('Gerando relatório...');
   // Gerar relatório primeiro
   const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });

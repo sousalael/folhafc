@@ -95,6 +95,7 @@ function doPost(e) {
     else if (action === 'gerarRelatorioAuditoria') { result = gerarRelatorioAuditoria(data, data.cpf); }
     else if (action === 'obterRelatorio') { result = obterRelatorio(data, data.cpf); }
     else if (action === 'enviarRelatorioAuditoria') { result = enviarRelatorioAuditoria(data, data.cpf); }
+    else if (action === 'emailsSugeridosAuditoria') { result = emailsSugeridosAuditoria(data, data.cpf); }   // r157
     else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
@@ -597,7 +598,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-03-r156';
+const VERSAO_SCRIPT = '2026-10-03-r157';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -625,7 +626,7 @@ function doGet(e) {
     'enviarPesquisaNps', 'listarProjetosAuditoria',
     'performanceGerarTextoGrupo', 'performanceExportarPDFGrupo', 'performanceSalvarApresentacaoGrupo',
     'performanceGerarTextoInterno', 'performanceExportarPDFInterno', 'performanceSalvarApresentacaoInterno',
-    'performanceEmailsSugeridos', 'performanceEnviarEmail',
+    'performanceEmailsSugeridos', 'performanceEnviarEmail', 'emailsSugeridosAuditoria',
     'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir',
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder'
@@ -2653,7 +2654,7 @@ function getOuCriarAbaAuditoria() {
       'Cliente','Unidade','DataAuditoria','ResponsavelCliente',
       'Status','SecaoAtual','Respostas','Observacoes',
       'FotosIds','EmailCliente','DataEnvio','ScoreGeral',
-      'ScoreEquipe','VersaoApp','TipoEstabelecimento'
+      'ScoreEquipe','VersaoApp','TipoEstabelecimento','EmailGerente'
     ]);
     aba.getRange('1:1').setFontWeight('bold').setBackground('#001528').setFontColor('#FFFFFF');
     aba.setFrozenRows(1);
@@ -2735,7 +2736,8 @@ function salvarAuditoria(dados, cpf) {
     if (tipoEst !== 'FARMACIA' && tipoEst !== 'SUPERMERCADO') {
       tipoEst = tipoEstabelecimentoPorRespostas(d.respostas) || (linhaExistente > 0 ? String(todas[linhaExistente-1][19] || '').toUpperCase() : '') || 'SUPERMERCADO';
     }
-    if (aba.getMaxColumns() < 20) aba.insertColumnsAfter(aba.getMaxColumns(), 20 - aba.getMaxColumns());
+    if (aba.getMaxColumns() < 21) aba.insertColumnsAfter(aba.getMaxColumns(), 21 - aba.getMaxColumns());   // r157: +coluna EmailGerente
+    if (!todas[0] || !todas[0][20]) aba.getRange(1, 21).setValue('EmailGerente');
     var rowData = [
       d.id,
       linhaExistente > 0 ? todas[linhaExistente-1][1] : agora,
@@ -2745,7 +2747,8 @@ function salvarAuditoria(dados, cpf) {
       d.status || 'RASCUNHO', d.secaoAtual || 0,
       JSON.stringify(d.respostas || {}), JSON.stringify(d.observacoes || {}),
       JSON.stringify(d.fotosIds || {}), ident.email_cliente || '',
-      '', parseFloat(scores.geral)||0, parseFloat(scores.equipe)||0, d.versao || 'r50', tipoEst
+      '', parseFloat(scores.geral)||0, parseFloat(scores.equipe)||0, d.versao || 'r50', tipoEst,
+      perfSepararEmails(ident.email_gerente).join(', ')   // r157: E-mail do Gerente da Unidade (opcional)
     ];
     if (linhaExistente > 0) aba.getRange(linhaExistente, 1, 1, rowData.length).setValues([rowData]);
     else aba.appendRow(rowData);
@@ -2774,6 +2777,7 @@ function carregarAuditoria(dados, cpf) {
         return { ok: true, auditoria: {
           id: row[0], identificacao: { tipo_avaliacao: row[4], cliente: row[5], unidade: row[6],
             data_auditoria: extrairDataISO(row[7]), responsavel_cliente: row[8],
+            email_gerente: String(row[20] || ''),   // r157
             tipo_estabelecimento: tipoEstabelecimentoDaLinha(row, respostas) },
           respostas: respostas, observacoes: observacoes, fotosIds: fotosIds,
           secaoAtual: row[10], status: row[9]
@@ -2946,7 +2950,8 @@ function listarHistoricoAuditorias(dados, cpf) {
       resultado.push({
         id: row[0], dataRegistro: row[1], auditor: row[2], tipoAvaliacao: row[4], nps: (perfil === 'DIRETOR' ? (mapaNps[row[0]] || null) : null),
         cliente: row[5], unidade: row[6], dataAuditoria: row[7], status: status, tipoEstabelecimento: tipoEstabelecimentoDaLinhaRapido(row),
-        scoreGeral: (row[16] instanceof Date) ? '' : (parseFloat(row[16])||''), scoreEquipe: (row[17] instanceof Date) ? '' : (parseFloat(row[17])||''), emailCliente: String(row[14]||''), dataEnvio: row[15] ? String(row[15]) : ''
+        scoreGeral: (row[16] instanceof Date) ? '' : (parseFloat(row[16])||''), scoreEquipe: (row[17] instanceof Date) ? '' : (parseFloat(row[17])||''), emailCliente: String(row[14]||''), dataEnvio: row[15] ? String(row[15]) : '',
+        emailGerente: String(row[20] || '')   // r157
       });
     }
     resultado.sort(function(a, b) { return new Date(b.dataAuditoria) - new Date(a.dataAuditoria); });
@@ -3295,6 +3300,12 @@ function enviarRelatorioAuditoria(dados, cpf) {
     if (perfil !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem enviar relatórios' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
     if (!d.email || !d.auditoriaId) return { ok: false, erro: 'E-mail e ID obrigatórios' };
+    // r157: aceita lista de e-mails (vinda da janela de envio editável), separados por vírgula
+    var listaEmails = [];
+    perfSepararEmails(d.email).forEach(function (x) { if (listaEmails.indexOf(x) === -1) listaEmails.push(x); });
+    if (!listaEmails.length) return { ok: false, erro: 'Informe ao menos um e-mail válido.' };
+    if (listaEmails.length > 40) return { ok: false, erro: 'Máximo de 40 destinatários por envio.' };
+    d.email = listaEmails.join(', ');
     var meta = PropertiesService.getScriptProperties().getProperty('rel_' + d.auditoriaId);
     if (!meta) return { ok: false, erro: 'Gere o relatório antes de enviar' };
     var relMeta = JSON.parse(meta);
@@ -3348,6 +3359,52 @@ function enviarRelatorioAuditoria(dados, cpf) {
     aba.getRange(linha, 16).setValue(new Date());
     registrarClienteFC(cliente, unidade, d.email);
     return { ok: true, mensagem: apresentacaoAnexada ? 'Relatório e apresentação enviados para ' + d.email : 'Relatório enviado para ' + d.email, apresentacaoAnexada: apresentacaoAnexada };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   r157 — E-MAILS SUGERIDOS PARA O ENVIO DA ANÁLISE
+   Lista = e-mail do gerente informado NESTA análise + e-mails já usados
+   antes na MESMA unidade (envios anteriores e gerentes informados em
+   outras análises). O Diretor confere/edita a lista na tela antes de enviar.
+   ═══════════════════════════════════════════════════════════════════ */
+function emailsSugeridosAuditoria(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var todas = getOuCriarAbaAuditoria().getDataRange().getValues();
+    var alvo = null;
+    for (var i = 1; i < todas.length; i++) { if (todas[i][0] === d.auditoriaId) { alvo = todas[i]; break; } }
+    if (!alvo) return { ok: false, erro: 'Análise não encontrada' };
+    var kc = fcChave(alvo[5]), ku = fcChave(alvo[6]);
+    var mapa = {}, ordem = [];
+    var add = function (email, origem, quando, prioridade) {
+      if (!mapa[email]) { mapa[email] = { email: email, origens: [], ultimo: '', prioridade: prioridade }; ordem.push(email); }
+      var m = mapa[email];
+      if (m.origens.indexOf(origem) === -1) m.origens.push(origem);
+      if (quando && quando > m.ultimo) m.ultimo = quando;
+      if (prioridade < m.prioridade) m.prioridade = prioridade;
+    };
+    perfSepararEmails(alvo[20]).forEach(function (e) { add(e, 'Gerente informado nesta análise', '', 0); });
+    for (var j = 1; j < todas.length; j++) {
+      var row = todas[j];
+      if (String(row[9]) === 'EXCLUIDO') continue;
+      if (fcChave(row[5]) !== kc || fcChave(row[6]) !== ku) continue;
+      var quando = row[15] instanceof Date ? Utilities.formatDate(row[15], 'America/Fortaleza', 'yyyy-MM-dd') : extrairDataISO(row[7]);
+      var dataBR = quando ? quando.split('-').reverse().join('/') : '';
+      perfSepararEmails(row[14]).forEach(function (e) { add(e, row[0] === d.auditoriaId ? 'Já enviado nesta análise' : 'Envio anterior' + (dataBR ? ' (' + dataBR + ')' : ''), quando, row[0] === d.auditoriaId ? 0 : 1); });
+      if (row[0] !== d.auditoriaId) perfSepararEmails(row[20]).forEach(function (e) { add(e, 'Gerente informado em outra análise', quando, 2); });
+    }
+    try {   // cadastro de clientes/unidades (último e-mail usado na unidade)
+      var cad = getOuCriarAbaClientes().getDataRange().getValues();
+      for (var k = 1; k < cad.length; k++) {
+        if (fcChave(cad[k][0]) === kc && fcChave(cad[k][1]) === ku) perfSepararEmails(cad[k][2]).forEach(function (e) { add(e, 'Cadastro da unidade', '', 1); });
+      }
+    } catch (eCad) { Logger.log('emailsSugeridosAuditoria: cadastro: ' + eCad.message); }
+    var out = ordem.map(function (e) { return mapa[e]; });
+    out.sort(function (a, b) { return (a.prioridade - b.prioridade) || (b.ultimo > a.ultimo ? 1 : (b.ultimo < a.ultimo ? -1 : 0)); });
+    return { ok: true, cliente: String(alvo[5] || ''), unidade: String(alvo[6] || ''),
+             emails: out.map(function (m) { return { email: m.email, origem: m.origens.join(' · '), marcar: true }; }) };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
