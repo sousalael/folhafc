@@ -598,7 +598,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-03-r158';
+const VERSAO_SCRIPT = '2026-10-05-r159';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -2736,8 +2736,9 @@ function salvarAuditoria(dados, cpf) {
     if (tipoEst !== 'FARMACIA' && tipoEst !== 'SUPERMERCADO') {
       tipoEst = tipoEstabelecimentoPorRespostas(d.respostas) || (linhaExistente > 0 ? String(todas[linhaExistente-1][19] || '').toUpperCase() : '') || 'SUPERMERCADO';
     }
-    if (aba.getMaxColumns() < 21) aba.insertColumnsAfter(aba.getMaxColumns(), 21 - aba.getMaxColumns());   // r157: +coluna EmailGerente
+    if (aba.getMaxColumns() < 22) aba.insertColumnsAfter(aba.getMaxColumns(), 22 - aba.getMaxColumns());   // r157: +EmailGerente · r159: +Alimentacao
     if (!todas[0] || !todas[0][20]) aba.getRange(1, 21).setValue('EmailGerente');
+    if (!todas[0] || !todas[0][21]) aba.getRange(1, 22).setValue('Alimentacao');
     var rowData = [
       d.id,
       linhaExistente > 0 ? todas[linhaExistente-1][1] : agora,
@@ -2748,7 +2749,8 @@ function salvarAuditoria(dados, cpf) {
       JSON.stringify(d.respostas || {}), JSON.stringify(d.observacoes || {}),
       JSON.stringify(d.fotosIds || {}), ident.email_cliente || '',
       '', parseFloat(scores.geral)||0, parseFloat(scores.equipe)||0, d.versao || 'r50', tipoEst,
-      perfSepararEmails(ident.email_gerente).join(', ')   // r157: E-mail do Gerente da Unidade (opcional)
+      perfSepararEmails(ident.email_gerente).join(', '),   // r157: E-mail do Gerente da Unidade (opcional)
+      JSON.stringify(d.alimentacao || [])   // r159: Alimentação (só Supermercado) — refeições cadastradas (tipo/qualidade/quantidade), informativo, fora da nota geral
     ];
     if (linhaExistente > 0) aba.getRange(linhaExistente, 1, 1, rowData.length).setValues([rowData]);
     else aba.appendRow(rowData);
@@ -2770,16 +2772,17 @@ function carregarAuditoria(dados, cpf) {
       if (row[0] === d.id) {
         if (normalizarCPF(row[3]) !== cpfLimpo && perfil !== 'DIRETOR')
           return { ok: false, erro: 'Auditoria pertence a outro auditor' };
-        var respostas = {}, observacoes = {}, fotosIds = {};
+        var respostas = {}, observacoes = {}, fotosIds = {}, alimentacao = [];
         try { respostas = JSON.parse(row[11] || '{}'); } catch(e) {}
         try { observacoes = JSON.parse(row[12] || '{}'); } catch(e) {}
         try { fotosIds = JSON.parse(row[13] || '{}'); } catch(e) {}
+        try { alimentacao = JSON.parse(row[21] || '[]'); } catch(e) {}   // r159
         return { ok: true, auditoria: {
           id: row[0], identificacao: { tipo_avaliacao: row[4], cliente: row[5], unidade: row[6],
             data_auditoria: extrairDataISO(row[7]), responsavel_cliente: row[8],
             email_gerente: String(row[20] || ''),   // r157
             tipo_estabelecimento: tipoEstabelecimentoDaLinha(row, respostas) },
-          respostas: respostas, observacoes: observacoes, fotosIds: fotosIds,
+          respostas: respostas, observacoes: observacoes, fotosIds: fotosIds, alimentacao: alimentacao,
           secaoAtual: row[10], status: row[9]
         }};
       }
@@ -3066,7 +3069,13 @@ var CRITERIOS_MAP = {
   });
 })();
 
-function montarPromptAuditoria(ident, respostas, observacoes, scores) {
+function montarPromptAuditoria(ident, respostas, observacoes, scores, alimentacao) {
+  // r159: Alimentação (só Supermercado) — lista de refeições cadastradas; nunca aparece em Farmácia.
+  var ALIM_TIPOS_VALIDOS = { 'Lanche':1, 'Almoço':1, 'Jantar':1 };
+  var refAlim = (alimentacao || []).filter(function (r) {
+    return r && (typeof r.qualidade === 'number' || typeof r.quantidade === 'number');
+  });
+  var temAlimentacao = refAlim.length > 0;
   var INFRA={ef_iluminacao:1,ef_equipamentos:1};
   var secoes={};var notasEquipe=[];
   for(var id in respostas){var v=respostas[id];if(v==='NA'||!v)continue;var nota=parseFloat(v);if(isNaN(nota))continue;
@@ -3086,6 +3095,13 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var dadosTexto=(ehFarmacia?'TIPO DE ESTABELECIMENTO: FARMÁCIA (setores próprios do segmento: use a terminologia de farmácia e nunca termos de supermercado; o setor de medicamentos isentos de prescrição chama-se "MIPs (medicamentos isentos de prescrição)" — NUNCA use "OTC"; "Cestões" é um setor de medicamentos da área de vendas)\n':'')+'CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+'\nAUDITOR: '+(ident.auditor||'')+'\nSCORE GERAL (sem infraestrutura): '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\n\n';
   for(var sec in secoes){dadosTexto+='=== '+sec+' ===\n';
     secoes[sec].forEach(function(item){dadosTexto+='  '+item.criterio+': '+item.nota+'/10'+(item.invertida?' (ESCALA DE VOLUME: 1=volume excessivo, 10=volume ideal; nota BAIXA significa MUITA mercadoria, o que é ruim para o inventário)':' (1=inadequado,10=excelente)')+(item.equipe?' [EQUIPE]':'')+(item.infra?' [INFRAESTRUTURA]':'')+'\n';});dadosTexto+='\n';}
+  if(temAlimentacao){dadosTexto+='=== ALIMENTAÇÃO (cortesia do cliente à equipe, não entra na nota geral) ===\n';
+    refAlim.forEach(function(r){var tipoTxt=ALIM_TIPOS_VALIDOS[r.tipo]?r.tipo:'Refeição';
+      var partes=[];
+      if(typeof r.qualidade==='number')partes.push('qualidade '+r.qualidade+'/10');
+      if(typeof r.quantidade==='number')partes.push('quantidade/suficiência '+r.quantidade+'/10');
+      dadosTexto+='  '+tipoTxt+': '+partes.join(', ')+'\n';});
+    dadosTexto+='\n';}
   dadosTexto+='=== OBSERVAÇÕES DO AUDITOR ===\n';
   for(var obsId in observacoes){if(observacoes[obsId])dadosTexto+=observacoes[obsId]+'\n\n';}
 
@@ -3121,7 +3137,10 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +'19. CRITÉRIOS N/A: os dados abaixo (seção "===...===") já foram filtrados para conter APENAS os critérios que o auditor efetivamente avaliou (nota numérica preenchida). Critérios marcados como N/A pelo auditor simplesmente não aparecem nos dados fornecidos. NUNCA mencione, elogie, cite como oportunidade ou de qualquer forma faça referência a um critério, setor ou quesito que não conste explicitamente nos dados abaixo — mesmo que seja um item comum em auditorias desse tipo. Não invente notas, fatos ou observações sobre nada que esteja fora dos dados desta auditoria específica.\n'
     +'20. AÇÃO SEMPRE DO CLIENTE, NUNCA DA FORMULA CODE: toda ação recomendada em qualquer seção (oportunidades, sugestões, ou qualquer outra) é SEMPRE uma ação a ser organizada e executada pelo próprio CLIENTE, internamente — nunca uma ação, visita, reunião, comunicação ou orientação promovida pela equipe da Formula Code junto ao cliente, mesmo quando o objetivo for mitigar uma ineficiência do próprio cliente. PROIBIDO: "uma visita de alinhamento com a equipe de apoio... consolidará o sucesso da operação", "a Formula Code deve orientar/reforçar/comunicar com a equipe do cliente", "recomendamos que a FC alinhe com a equipe" ou qualquer formulação equivalente que atribua a ação à FC. A Formula Code executa exclusivamente a contagem; toda adequação de ambiente, equipe ou processo é responsabilidade e ação do cliente.\n'
     +'21. PROIBIDO, em qualquer seção, recomendar que o cliente comunique, informe, alinhe ou avise previamente — a quem quer que seja — sobre movimentações de mercadoria, espaço, volume ou layout que ocorram entre a data desta auditoria e a data da operação oficial. A loja não tem nenhuma obrigação de avisar sobre atividades operacionais inerentes ao próprio negócio (reabastecimento, reorganização, recebimento de mercadoria etc.) só porque uma auditoria de preparação foi realizada antes. PROIBIDAS formulações como "sugerimos que qualquer movimentação de espaço ou volume seja comunicada previamente" ou "de forma a preservar as condições aqui certificadas" — essa auditoria certifica a preparação NO MOMENTO em que foi feita, não cria nenhuma condição a ser preservada ou monitorada depois. Se o objetivo da frase for reduzir o risco de a preparação se deteriorar antes da contagem oficial, a única formulação aceitável é uma recomendação de AÇÃO do próprio cliente (ex: manter os cuidados já adotados, evitar reabastecimento excessivo perto da data — regra 17a), nunca um pedido de comunicação/aviso prévio.\n'
-    +'22. NOME DO DOCUMENTO: este material se chama "Análise de Preparação para Inventário". Ao se referir a ele (inclusive no campo texto_email), use sempre esse nome — nunca "relatório de auditoria" nem "auditoria de inventário".';
+    +'22. NOME DO DOCUMENTO: este material se chama "Análise de Preparação para Inventário". Ao se referir a ele (inclusive no campo texto_email), use sempre esse nome — nunca "relatório de auditoria" nem "auditoria de inventário".\n'
+    +'23. '+(temAlimentacao
+      ? 'ALIMENTAÇÃO: é uma cortesia do cliente à equipe da operação, NUNCA uma obrigação contratual — jamais trate como falha ou pendência do cliente. Elogie generosamente quando as notas forem altas, e reenquadre de forma construtiva (nunca como crítica) quando forem baixas. NÃO aplique aqui a lógica de "quanto maior pior" das regras 6/6b — para alimentação, quantidade/suficiência alta é sempre algo bom. Mencione apenas no campo "analise_alimentacao".'
+      : 'ALIMENTAÇÃO: esta auditoria não teve nenhuma refeição cadastrada. É PROIBIDO mencionar alimentação, refeição, lanche, almoço ou jantar em qualquer seção.')+'\n';
 
   var campoResumo = temEquipe
     ? '"resumo_executivo": "3-4 frases. Cenário geral, principal problema, principal destaque, equipe.",\n'
@@ -3135,6 +3154,9 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
   var campoEquipe = temEquipe
     ? '"analise_equipe": "2-3 frases. Visão consolidada comparando retaguarda e área de vendas.",\n'
     : '';
+  var campoAlimentacao = temAlimentacao
+    ? '"analise_alimentacao": "2-3 frases sobre a alimentação oferecida à equipe (regra 23: cortesia do cliente, elogiar/reenquadrar, nunca tratar como pendência).",\n'
+    : '';
 
   var usr='Gere um relatório em JSON com esta estrutura EXATA (responda APENAS o JSON, sem markdown, sem backticks):\n\n'
     +'{\n'
@@ -3142,6 +3164,7 @@ function montarPromptAuditoria(ident, respostas, observacoes, scores) {
     +campoRetaguarda
     +campoAreaVendas
     +campoEquipe
+    +campoAlimentacao
     +'"pontosPositivos": "3-4 frases citando destaques positivos SEM scores e SEM infraestrutura.",\n'
     +'"oportunidades": "3-4 frases sobre o que precisa melhorar'+(temEquipe?', incluindo equipe se < 6.':'.')+'",\n'
     +'"sugestoes": "Siga a REGRA 18: se houver oportunidade de melhoria real, 3-4 frases com ações vinculadas aos problemas (linguagem de parceria) fechando com orientação leve de prazo (18a); se NÃO houver nenhuma oportunidade (preparação exemplar), 1-2 frases recomendando usar esta unidade como referência de boas práticas a ser replicada nas demais unidades — nada além disso (18b).",\n'
@@ -3178,22 +3201,23 @@ function gerarRelatorioAuditoria(dados, cpf) {
     if (row[7] instanceof Date) {
       ident.data_auditoria = Utilities.formatDate(row[7], 'America/Fortaleza', 'yyyy-MM-dd');
     }
-    var respostas={}, observacoes={}, fotosIds={};
+    var respostas={}, observacoes={}, fotosIds={}, alimentacao=[];
     try{respostas=JSON.parse(row[11]||'{}')}catch(e){}
     try{observacoes=JSON.parse(row[12]||'{}')}catch(e){}
     try{fotosIds=JSON.parse(row[13]||'{}')}catch(e){}
+    try{alimentacao=JSON.parse(row[21]||'[]')}catch(e){}   // r159
     var scores = calcularScoresAuditoria(respostas);
     var relatorio;
     try {
-      var promptAud = montarPromptAuditoria(ident, respostas, observacoes, scores);
+      var promptAud = montarPromptAuditoria(ident, respostas, observacoes, scores, alimentacao);
       var respostaIA = chamarClaudeAPI(promptAud.user, promptAud.system);
       relatorio = JSON.parse(respostaIA.replace(/```json|```/g, '').trim());
     } catch(errIA) {
       Logger.log('Claude API erro: ' + errIA.message + '. Usando template.');
-      relatorio = gerarTextoTemplate(ident, respostas, observacoes, scores);
+      relatorio = gerarTextoTemplate(ident, respostas, observacoes, scores, alimentacao);
     }
     _t0 = _perfMarca(_t0, 'relatorio: chamada a IA (Claude) + parse do texto');
-    var html = montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds);
+    var html = montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alimentacao);
     _t0 = _perfMarca(_t0, 'relatorio: montagem do HTML');
     var pastaId = getOuCriarPastaAuditoria(ident.cliente, ident.unidade, ident.data_auditoria);
     var pasta = DriveApp.getFolderById(pastaId);
@@ -3235,7 +3259,8 @@ function gerarRelatorioAuditoria(dados, cpf) {
         resumo_executivo:relatorio.resumo_executivo||'',
         pontosPositivos:relatorio.pontosPositivos||'',
         oportunidades:relatorio.oportunidades||'',
-        sugestoes:relatorio.sugestoes||''
+        sugestoes:relatorio.sugestoes||'',
+        analise_alimentacao:relatorio.analise_alimentacao||''   // r159: referência pra apresentação reaproveitar
       }
     }));
     return { ok:true, linkHTML:linkHTML, linkPDF:linkPDF, pdfId:pdfFile.getId(),
@@ -3692,10 +3717,11 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     var ident = { cliente:String(row[5]||''), unidade:String(row[6]||''), data_auditoria:formatarDataBR(row[7]),
       tipo_avaliacao:String(row[4]||''), auditor:String(row[2]||'') };
 
-    var respostas={}, observacoes={}, fotosIds={};
+    var respostas={}, observacoes={}, fotosIds={}, alimentacao=[];
     try { respostas = JSON.parse(row[11]||'{}'); } catch(e) {}
     try { observacoes = JSON.parse(row[12]||'{}'); } catch(e) {}
     try { fotosIds = JSON.parse(row[13]||'{}'); } catch(e) {}
+    try { alimentacao = JSON.parse(row[21]||'[]'); } catch(e) {}   // r159
 
     var scores = calcularScoresAuditoria(respostas);
     var estrutura = calcularEstruturaApresentacao(respostas);
@@ -3716,7 +3742,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
 
     var textos;
     try {
-      var promptApres = montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, tipoEstabelecimentoDaLinha(row, respostas) === 'FARMACIA');
+      var promptApres = montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, tipoEstabelecimentoDaLinha(row, respostas) === 'FARMACIA', alimentacao);
       var respostaIA = chamarClaudeAPI(promptApres.user, promptApres.system);
       textos = JSON.parse(respostaIA.replace(/```json|```/g, '').trim());
     } catch (errIA) {
@@ -3861,7 +3887,10 @@ function calcularNotasPorSetor(respostas) {
   return out;
 }
 
-function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, ehFarmacia) {
+function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura, analisePreparacao, ehFarmacia, alimentacao) {
+  // r159: Alimentação — mesma lógica do relatório completo; a apresentação já reaproveita o texto
+  // publicado lá (analisePreparacao.analise_alimentacao) quando existir, pela regra de consistência 11.
+  var refAlimApres = (alimentacao||[]).filter(function(r){return r&&(typeof r.qualidade==='number'||typeof r.quantidade==='number');});
   var obsTexto = '';
   var obsPresentes = [];
   OBS_IDS_APRESENTACAO.forEach(function(k){
@@ -3886,9 +3915,19 @@ function montarPromptApresentacaoAuditoria(ident, observacoes, scores, estrutura
       + (analisePreparacao.sugestoes ? 'Sugestões: ' + analisePreparacao.sugestoes + '\n' : '');
   }
 
+  var alimTexto = '';
+  if (refAlimApres.length) {
+    var ALIM_TIPOS_A={'Lanche':1,'Almoço':1,'Jantar':1};
+    alimTexto = '\n\nALIMENTAÇÃO (cortesia do cliente à equipe, não entra no score — mencione só se relevante, elogiando ou reenquadrando de forma construtiva, nunca como pendência): '
+      + refAlimApres.map(function(r){var t=ALIM_TIPOS_A[r.tipo]?r.tipo:'Refeição';var p=[];
+        if(typeof r.qualidade==='number')p.push('qualidade '+r.qualidade+'/10');
+        if(typeof r.quantidade==='number')p.push('quantidade/suficiência '+r.quantidade+'/10');
+        return t+' ('+p.join(', ')+')';}).join('; ');
+  }
   var dadosTexto = 'CLIENTE: '+(ident.cliente||'')+'\nUNIDADE: '+(ident.unidade||'')+'\nDATA: '+(ident.data_auditoria||'')+
     '\nSCORE GERAL: '+(scores.geral||'')+'/10\nSCORE EQUIPE: '+(scores.equipe||'')+'/10\nSCORES POR ÁREA: '+estruturaTexto+
     '\n\nOBSERVAÇÕES ORIGINAIS DO AUDITOR:\n'+(obsTexto || '(nenhuma observação registrada)')
+    + alimTexto
     + analiseTexto;
 
   var sys = 'Você é um consultor sênior de operações de inventário da Formula Code. '
@@ -4064,7 +4103,7 @@ function obterApresentacaoAuditoria(dados, cpf) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
-function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
+function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alimentacao) {
   var logoPNG = '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';
   function corN(n){n=parseFloat(n)||0;if(n>=9)return'#2E7D32';if(n>=7.5)return'#5DC500';if(n>=6)return'#D4A017';if(n>=4)return'#E8872B';return'#E05252';}
   function txF(n){n=parseFloat(n)||0;if(n>=9)return'Excelente';if(n>=7.5)return'Bom';if(n>=6)return'Regular';if(n>=4)return'Insatisfatório';return'Crítico';}
@@ -4133,6 +4172,16 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   function tabelaSimples(items){if(!items.length)return'';
     var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#001528;color:#FFF"><td style="padding:6px 10px;font-weight:600">Critério</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+(it.invertida?' <span style="font-size:10px;color:#6B7B8D">(10 = volume ideal)</span>':'')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>'+(items.some(function(i){return i.invertida;})?LEGENDA_VOLUME:'');}
+  // r159: tabela de Alimentação — informativa, nunca entra na nota geral (por isso não usa celCor/escala invertida)
+  function tabelaAlimentacao(lista){
+    var ALIM_TIPOS={'Lanche':1,'Almoço':1,'Jantar':1};
+    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 6px"><tr style="background:#001528;color:#FFF"><td style="padding:6px 10px;font-weight:600">Refeição</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:110px">Qualidade</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:150px">Quantidade / Suficiência</td></tr>';
+    lista.forEach(function(r){var tipoTxt=ALIM_TIPOS[r.tipo]?r.tipo:'Refeição';
+      var q=typeof r.qualidade==='number'?r.qualidade:null, qt=typeof r.quantidade==='number'?r.quantidade:null;
+      h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+tipoTxt+'</td>'
+        +'<td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(q!==null?celCor(q):'text-align:center;color:#CCC')+'">'+(q!==null?q:'—')+'</td>'
+        +'<td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(qt!==null?celCor(qt):'text-align:center;color:#CCC')+'">'+(qt!==null?qt:'—')+'</td></tr>';});
+    return h+'</table><div style="font-size:10px;color:#6B7B8D;margin:-2px 0 14px;line-height:1.5">Alimentação é uma cortesia do cliente à equipe — não entra na nota geral da análise.</div>';}
 
   // r101: bloco de fotos de UMA seção específica, inserido logo após a
   // tabela daquela seção (mesmo agrupamento por secaoId usado na
@@ -4197,6 +4246,11 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
     }h+='</div>';});
   // Equipe consolidada
   if(relatorio.analise_equipe)h+='<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0"><div style="font-size:13px;font-weight:700;color:#001528;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid #E8872B;padding-left:8px">Equipe de Apoio — Visão Geral ('+(scores.equipe||'—')+'/10)</div><p style="font-size:13px;line-height:1.8">'+String(relatorio.analise_equipe).replace(/\n\n/g,'</p><p style="font-size:13px;line-height:1.8;margin-top:8px">')+'</p></div>';
+  // r159: Alimentação (só Supermercado; lista vem vazia em Farmácia e some sozinha)
+  if(alimentacao&&alimentacao.length){h+='<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0"><div style="font-size:13px;font-weight:700;color:#001528;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid #5DC500;padding-left:8px">Alimentação</div>'
+    +tabelaAlimentacao(alimentacao)
+    +(relatorio.analise_alimentacao?'<p style="font-size:13px;line-height:1.8">'+String(relatorio.analise_alimentacao).replace(/\n\n/g,'</p><p style="font-size:13px;line-height:1.8;margin-top:8px">')+'</p>':'')
+    +'</div>';}
   // Conclusão 3 blocos
   h+='<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0"><div style="font-size:13px;font-weight:700;color:#001528;text-transform:uppercase;letter-spacing:2px;margin-bottom:16px;border-left:4px solid #5DC500;padding-left:8px">Conclusão</div>';
   if(relatorio.pontosPositivos)h+='<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">'+relatorio.pontosPositivos+'</p></div>';
@@ -4206,7 +4260,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds) {
   h+='<table><tr><td style="padding:20px 32px;text-align:center;color:rgba(255,255,255,.4);font-size:11px;line-height:1.8;background:#001528"><strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance<br>Análise gerada automaticamente pelo Sistema de Gestão FC</td></tr></table></div></body></html>';
   return h;
 }
-function gerarTextoTemplate(ident, respostas, observacoes, scores) {
+function gerarTextoTemplate(ident, respostas, observacoes, scores, alimentacao) {
   if (tipoEstabelecimentoPorRespostas(respostas)) return gerarTextoTemplateFarmacia(ident, respostas, observacoes, scores);
   function fx(n){n=parseFloat(n)||0;if(n>=9)return'excelente';if(n>=7.5)return'bom';if(n>=6)return'regular';if(n>=4)return'insatisfatório';return'crítico';}
   function R(id){var v=respostas[id];if(!v||v==='NA')return null;return parseFloat(v)||null;}
@@ -4399,8 +4453,20 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores) {
   if(volRuinsAV.length)suParts.push('reduzir o abastecimento de mercadoria nas gôndolas com pelo menos 5 dias de antecedência ao inventário');
   su=suParts.length?('Sugerimos considerar antes da data do inventário: '+suParts.join('; ')+'. A conclusão dessas adequações previamente ao início da contagem oficial garante mais agilidade e precisão na operação.'):'A preparação desta unidade se destacou em todos os critérios avaliados. Recomendamos utilizá-la como referência, um cenário de boas práticas a ser replicado nas demais unidades.';
 
+  // r159: alimentação — texto de contingência (cortesia do cliente; elogia generosamente / reenquadra sem nunca criticar)
+  var ALIM_TIPOS_VALIDOS_T={'Lanche':1,'Almoço':1,'Jantar':1};
+  var refAlimT=(alimentacao||[]).filter(function(r){return r&&(typeof r.qualidade==='number'||typeof r.quantidade==='number');});
+  var analiseAlimentacao='';
+  if(refAlimT.length){
+    var notasAlim=[];refAlimT.forEach(function(r){if(typeof r.qualidade==='number')notasAlim.push(r.qualidade);if(typeof r.quantidade==='number')notasAlim.push(r.quantidade);});
+    var mAlim=notasAlim.reduce(function(a,b){return a+b;},0)/notasAlim.length;
+    var nomesAlim=refAlimT.map(function(r){return ALIM_TIPOS_VALIDOS_T[r.tipo]?r.tipo.toLowerCase():'refeição';});
+    if(mAlim>=7.5)analiseAlimentacao='A alimentação oferecida à equipe ('+nomesAlim.join(', ')+') foi muito bem avaliada, tanto em qualidade quanto em quantidade — uma cortesia que a Formula Code agradece e reconhece como diferencial do cliente.';
+    else analiseAlimentacao='Quanto à alimentação oferecida à equipe ('+nomesAlim.join(', ')+'), agradecemos a cortesia do cliente; sugerimos considerar pequenos ajustes de qualidade e/ou quantidade nas próximas operações, sempre que for conveniente para o cliente.';
+  }
   return {
     resumo_executivo:resumo,analise_retaguarda:ret.trim(),analise_area_vendas:av.trim(),analise_equipe:analiseEquipe,
+    analise_alimentacao:analiseAlimentacao,
     pontosPositivos:pp,oportunidades:op,sugestoes:su,
     texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
   };

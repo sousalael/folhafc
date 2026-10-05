@@ -61,6 +61,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .subsecao-header .sh-badge{font-size:11px;padding:2px 8px;border-radius:8px;font-weight:600}
 .subsecao-header .sh-badge.pendente{background:#fef3cd;color:#856404}
 .subsecao-header .sh-badge.preenchido{background:rgba(93,197,0,.15);color:#3a8000}
+.alim-item{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;background:var(--bg)}
+.alim-item-head{display:flex;align-items:center;gap:8px}
+.alim-item-head select{flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px}
+.alim-remover{background:none;border:none;color:#E05252;font-size:16px;cursor:pointer;padding:4px 8px;line-height:1}
+.alim-nota{margin-top:10px}
 .subsecao-body{padding:16px;display:none;border-top:1px solid var(--border)}
 .subsecao.aberta .subsecao-body{display:block}
 .subsecao.aberta .subsecao-header{background:var(--white)}
@@ -449,7 +454,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r158';
+const VERSAO = 'r159';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -568,6 +573,14 @@ const SECOES_SUPER = [
     ],
     observacao:{id:'obs_camaras',label:'Observações sobre as câmaras'},
     fotos:{max:99,label:'Fotos das câmaras'}
+  },
+  // ── 4b. ALIMENTAÇÃO (r159) ──
+  // Seção dinâmica — até 6 refeições cadastráveis (Lanche/Almoço/Jantar), com nota de Qualidade e
+  // de Quantidade/Suficiência cada. Informativo: nunca entra na nota geral da análise (decisão de
+  // Lael). Renderização própria (renderAlimentacao), fora do motor genérico de critérios.
+  {
+    id:'alimentacao', titulo:'Alimentação', icone:'bi-cup-hot', tipo:'alimentacao', estrutura:'Retaguarda', departamento:'Refeições da Equipe',
+    observacao:{id:'obs_alimentacao',label:'Observações sobre a alimentação'}
   },
   // ── 5. PERECÍVEIS — ÁREA DE VENDAS ──
   {
@@ -874,6 +887,7 @@ function secaoPreenchida(secao) {
     return obrigatorios.every(c => state.identificacao[c]);
   }
   if (secao.tipo === 'finalizacao') return true;
+  if (secao.tipo === 'alimentacao') return true;   // r159: opcional — pode legitimamente não ter refeição cadastrada
   return criterios.length > 0 && criterios.every(c => state.respostas[c.id] !== undefined);
 }
 
@@ -910,6 +924,7 @@ async function salvarRascunho(silencioso) {
     identificacao: state.identificacao,
     respostas: state.respostas,
     observacoes: state.observacoes,
+    alimentacao: state.alimentacao || [],   // r159
     // r74: BUG CORRIGIDO — este payload não incluía fotosIds, então
     // cada "próxima seção" (que chama salvarRascunho) sobrescrevia no
     // banco o campo FotosIds com {} — apagando as fotos já salvas no
@@ -1069,6 +1084,7 @@ function iniciarAvaliacaoTipo(tipo) {
   state.observacoes = {};
   state.fotos = {};
   state.fotosIds = {};
+  state.alimentacao = [];   // r159
   state.identificacao = { tipo_estabelecimento: tipo };
   state.secaoAtual = 0;
   state.status = 'RASCUNHO';
@@ -1106,6 +1122,7 @@ async function carregarRascunho(idx) {
     state.respostas = r.auditoria.respostas || {};
     state.observacoes = r.auditoria.observacoes || {};
     state.fotos = {};
+    state.alimentacao = r.auditoria.alimentacao || [];   // r159
     state.identificacao = r.auditoria.identificacao || {};
     state.secaoAtual = r.auditoria.secaoAtual || 0;
   } else {
@@ -1116,12 +1133,14 @@ async function carregarRascunho(idx) {
       state.respostas = d.respostas || {};
       state.observacoes = d.observacoes || {};
       state.fotos = d.fotos || {};
+      state.alimentacao = d.alimentacao || [];   // r159
       state.identificacao = d.identificacao || {};
       state.secaoAtual = d.secaoAtual || 0;
     } else {
       state.respostas = {};
       state.observacoes = {};
       state.fotos = {};
+      state.alimentacao = [];   // r159
       state.identificacao = rascunho.identificacao || {};
       state.secaoAtual = 0;
     }
@@ -1154,6 +1173,8 @@ function renderFormulario() {
     conteudo = renderIdentificacao(secao);
   } else if (secao.tipo === 'finalizacao') {
     conteudo = renderFinalizacao(secao);
+  } else if (secao.tipo === 'alimentacao') {
+    conteudo = renderAlimentacao(secao);
   } else {
     conteudo = renderSecaoAvaliacao(secao);
   }
@@ -1496,6 +1517,79 @@ function setObs(obsId, valor) {
   state.observacoes[obsId] = valor;
 }
 
+/* ── ALIMENTAÇÃO (r159) — única seção com critérios variáveis: até 6 refeições cadastráveis,
+   cada uma com Tipo (Lanche/Almoço/Jantar) + nota de Qualidade + nota de Quantidade/Suficiência.
+   Guardado em state.alimentacao (array), fora de state.respostas — por isso nunca entra na
+   nota geral da análise (decisão de Lael), nem passa pelo motor genérico de critérios. ── */
+const ALIM_TIPOS = ['Lanche', 'Almoço', 'Jantar'];
+const ALIM_MAX = 6;
+function alimBotoes(i, campo, val) {
+  let h = '';
+  for (let n = 1; n <= 10; n++) {
+    const sel = val === n;
+    h += `<button type="button" class="rating-btn ${sel ? 'selected ' + scoreClass(n) : ''}" onclick="setAlimNota(${i},'${campo}',${n})">${n}</button>`;
+  }
+  const naSel = val === 'NA';
+  h += `<button type="button" class="rating-btn na-btn ${naSel ? 'selected' : ''}" onclick="setAlimNota(${i},'${campo}','NA')">N/A</button>`;
+  return h;
+}
+function renderAlimentacao(secao) {
+  const lista = state.alimentacao || (state.alimentacao = []);
+  const itens = lista.map((m, i) => `
+    <div class="alim-item">
+      <div class="alim-item-head">
+        <select onchange="setAlimTipo(${i},this.value)">
+          <option value="">Selecione o tipo...</option>
+          ${ALIM_TIPOS.map(t => `<option value="${t}" ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+        <button type="button" class="alim-remover" onclick="removerAlimentacao(${i})" title="Remover"><i class="bi bi-trash"></i></button>
+      </div>
+      <div class="alim-nota">
+        <div class="criterio-label">Qualidade da refeição</div>
+        <div class="rating-row">${alimBotoes(i, 'qualidade', m.qualidade)}</div>
+      </div>
+      <div class="alim-nota">
+        <div class="criterio-label">Quantidade / Suficiência para a equipe</div>
+        <div class="rating-row">${alimBotoes(i, 'quantidade', m.quantidade)}</div>
+      </div>
+    </div>`).join('');
+  const addBtn = lista.length < ALIM_MAX
+    ? `<button type="button" class="btn-fc btn-fc-outline" style="width:100%" onclick="adicionarAlimentacao()"><i class="bi bi-plus-lg"></i> Adicionar refeição</button>`
+    : `<div class="proj-dica">Máximo de ${ALIM_MAX} refeições por análise.</div>`;
+  return `
+    <div class="secao-card">
+      <div class="secao-titulo"><i class="bi ${secao.icone}"></i> ${secao.titulo}</div>
+      <div class="secao-subtitulo">Refeições oferecidas à equipe durante a operação (opcional)</div>
+      <div class="proj-dica" style="margin:-6px 0 14px">Esta nota é apenas informativa e não entra na média geral da análise.</div>
+      ${itens}
+      ${addBtn}
+    </div>
+    <div class="secao-card">
+      <div class="campo-obs">
+        <label>${secao.observacao.label}</label>
+        <textarea placeholder="Registre suas observações..."
+          oninput="setObs('${secao.observacao.id}',this.value)">${state.observacoes[secao.observacao.id] || ''}</textarea>
+      </div>
+    </div>`;
+}
+function adicionarAlimentacao() {
+  const lista = state.alimentacao || (state.alimentacao = []);
+  if (lista.length >= ALIM_MAX) return;
+  lista.push({ tipo: '', qualidade: undefined, quantidade: undefined });
+  renderFormulario();
+}
+function removerAlimentacao(i) {
+  state.alimentacao.splice(i, 1);
+  renderFormulario();
+}
+function setAlimTipo(i, valor) {
+  state.alimentacao[i].tipo = valor;
+}
+function setAlimNota(i, campo, valor) {
+  state.alimentacao[i][campo] = valor;
+  renderFormulario();
+}
+
 function toggleSubsecao(id) {
   const el = document.getElementById(id);
   if (el) el.classList.toggle('aberta');
@@ -1783,6 +1877,7 @@ async function finalizarAvaliacao() {
     identificacao: state.identificacao,
     respostas: state.respostas,
     observacoes: state.observacoes,
+    alimentacao: state.alimentacao || [],   // r159
     fotosIds: fotosIds,
     status: 'CONCLUIDO',
     versao: VERSAO
@@ -4581,6 +4676,7 @@ async function editarAuditoria(auditoriaId) {
   state.observacoes = a.observacoes || {};
   state.fotos = {};
   state.fotosIds = a.fotosIds || {};
+  state.alimentacao = a.alimentacao || [];   // r159
   state.status = a.status || 'CONCLUIDO';
   state.secaoAtual = 0;
   state.editando = true;
