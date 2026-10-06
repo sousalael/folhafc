@@ -598,7 +598,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-05-r159';
+const VERSAO_SCRIPT = '2026-10-06-r160';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3319,12 +3319,18 @@ function excluirAvaliacaoEmAndamento(dados, cpf) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
+// r160: cópia oculta padrão de toda Análise de Preparação para Inventário — pode ser desmarcada
+// individualmente na janela de envio (campo d.bcc manda só os endereços que ficaram marcados;
+// o backend só aceita endereços desta lista, nunca o que vier solto do cliente).
+var BCC_PADRAO_AUDITORIA = ['alecxandro_@hotmail.com', 'geizenberg@formulacode.tec.br'];
+
 function enviarRelatorioAuditoria(dados, cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
     if (perfil !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem enviar relatórios' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
     if (!d.email || !d.auditoriaId) return { ok: false, erro: 'E-mail e ID obrigatórios' };
+    var listaBcc = BCC_PADRAO_AUDITORIA.filter(function (x) { return Array.isArray(d.bcc) && d.bcc.indexOf(x) !== -1; });
     // r157: aceita lista de e-mails (vinda da janela de envio editável), separados por vírgula
     var listaEmails = [];
     perfSepararEmails(d.email).forEach(function (x) { if (listaEmails.indexOf(x) === -1) listaEmails.push(x); });
@@ -3379,7 +3385,9 @@ function enviarRelatorioAuditoria(dados, cpf) {
       + '<p style="text-align:center;margin:24px 0"><a href="' + relMeta.linkHTML + '" style="display:inline-block;padding:12px 28px;background:#001528;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Ver Análise Online</a></p>'
       + '</div><div style="background:#001528;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
       + '<strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
-    MailApp.sendEmail(d.email, assunto, '', { htmlBody:corpoHTML, attachments:anexos, inlineImages:{ fclogo: fcLogoEmailBlob() }, name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' });
+    var opcoesEnvio = { htmlBody:corpoHTML, attachments:anexos, inlineImages:{ fclogo: fcLogoEmailBlob() }, name:'Formula Code — Análise de Preparação para Inventário', replyTo:'lael@formulacode.tec.br' };
+    if (listaBcc.length) opcoesEnvio.bcc = listaBcc.join(', ');   // r160
+    MailApp.sendEmail(d.email, assunto, '', opcoesEnvio);
     aba.getRange(linha, 15).setValue(d.email);
     aba.getRange(linha, 16).setValue(new Date());
     registrarClienteFC(cliente, unidade, d.email);

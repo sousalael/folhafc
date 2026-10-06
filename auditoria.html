@@ -389,6 +389,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 .pf-env-add button{border:none;border-radius:10px;padding:9px 14px;font-weight:700;background:var(--navy);color:#fff;cursor:pointer}
 .pf-env-rot{font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
 .pf-env-anexos{font-size:12px;line-height:1.7;color:var(--text);background:var(--bg);border-radius:10px;padding:8px 12px;margin:6px 0 12px}
+.pf-env-bcc{border:1px solid var(--border);border-radius:10px;padding:2px 10px;margin:6px 0 12px}
 @media(max-width:420px){.pf-grid{grid-template-columns:1fr}.pf-met{grid-template-columns:86px 1fr 28px}.aba-home{font-size:11px;padding:10px 4px;gap:4px}.aba-home .bi{display:none}}
 @media(prefers-reduced-motion:reduce){button.pf-card{transition:none}}
 
@@ -454,7 +455,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r159';
+const VERSAO = 'r160';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -4725,7 +4726,13 @@ async function prepararEnvio(auditoriaId) {
     auditoriaId,
     titulo: (r.cliente || a.cliente || '') + ' — ' + (r.unidade || a.unidade || ''),
     data: a.dataAuditoria || '',
-    emails: ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: e.origem || '', marcado: e.marcar !== false }))
+    emails: ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: e.origem || '', marcado: e.marcar !== false })),
+    // r160: cópia oculta padrão de toda Análise de Preparação para Inventário — vem marcada,
+    // dá pra desmarcar cada endereço individualmente só neste envio.
+    bcc: [
+      { email: 'alecxandro_@hotmail.com', marcado: true },
+      { email: 'geizenberg@formulacode.tec.br', marcado: true }
+    ]
   };
   audRenderModalEnvio();
 }
@@ -4759,6 +4766,8 @@ function audRenderModalEnvio() {
         </div>
         <div class="pf-env-rot">Anexos</div>
         <div class="pf-env-anexos">📄 Análise (PDF) e 🎬 Apresentação Executiva (PDF) — gerados ou reaproveitados na hora do envio, como antes.</div>
+        <div class="pf-env-rot">Cópia oculta (BCC)</div>
+        <div class="pf-env-bcc">${e.bcc.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="audBccMarcar(${i},this.checked)"><span>${esc(x.email)}</span></label>`).join('')}</div>
         <div class="pf-links" style="margin-top:4px">
           <button type="button" style="background:var(--navy);color:#fff" onclick="audEnvConfirmar()">Enviar</button>
           <button type="button" style="background:#E2E8F0;color:var(--navy)" onclick="audFecharEnvio()">Cancelar</button>
@@ -4777,6 +4786,11 @@ function audEnvMarcar(i, on) {
   e.emails[i].marcado = !!on;
   const rot = document.getElementById('audEnvRot');
   if (rot) rot.textContent = 'Destinatários (' + e.emails.filter(x => x.marcado).length + ' marcado(s))';
+}
+function audBccMarcar(i, on) {   // r160
+  const e = state.audEnvio;
+  if (!e || !e.bcc[i]) return;
+  e.bcc[i].marcado = !!on;
 }
 function audEnvAdicionar() {
   const e = state.audEnvio;
@@ -4803,13 +4817,14 @@ async function audEnvConfirmar() {
   if (pend && pend.value.trim() && !audEnvAdicionar()) return;   // e-mail digitado e não adicionado: adiciona antes (se for válido)
   const emails = e.emails.filter(x => x.marcado).map(x => x.email);
   if (!emails.length) { toast('Marque ou adicione ao menos um e-mail'); return; }
+  const bcc = e.bcc.filter(x => x.marcado).map(x => x.email);   // r160
   const id = e.auditoriaId;
   audFecharEnvio();
-  await executarEnvioRelatorio(id, emails.join(', '));
+  await executarEnvioRelatorio(id, emails.join(', '), bcc);
 }
 
 // Fluxo de geração + envio (o mesmo de antes do r157; só recebe a lista confirmada na janela)
-async function executarEnvioRelatorio(auditoriaId, email) {
+async function executarEnvioRelatorio(auditoriaId, email, bcc) {   // r160: bcc = lista de e-mails de cópia oculta marcados
   showLoading('Gerando relatório...');
   // Gerar relatório primeiro
   const rg = await apiCall('gerarRelatorioAuditoria', { auditoriaId });
@@ -4864,7 +4879,7 @@ async function executarEnvioRelatorio(auditoriaId, email) {
 
   showLoading('Enviando relatório e apresentação...');
   // r130: este e-mail leva só os relatórios; a pesquisa CSAT/NPS tem botão e e-mail próprios (prepararEnvioPesquisa).
-  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email });
+  const re = await apiCall('enviarRelatorioAuditoria', { auditoriaId, email, bcc: bcc || [] });   // r160
   hideLoading();
   if (re.ok) {
     toast('Relatório e apresentação enviados para ' + email);
