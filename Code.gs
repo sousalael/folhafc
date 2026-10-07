@@ -598,7 +598,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-06-r160';
+const VERSAO_SCRIPT = '2026-10-07-r161';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -8265,7 +8265,7 @@ function diagPacoteAnalise(m) {
     },
     indicacoes: r.ligacoes.map(function (l) {
       var q = DIAG_PERGUNTAS_INDICACAO.filter(function (x) { return x.k === l.pergunta; })[0];
-      return (nomes[l.de] || '?') + ' indicou ' + (nomes[l.para] || '?') + ' em "' + (q ? q.t : l.pergunta) + '"';
+      return (nomes[l.de] || '?') + ' indicou ' + (nomes[l.para] || '?') + ' na pergunta: ' + (q ? q.t : l.pergunta);   // r161: sem aspas
     })
   };
 }
@@ -8311,6 +8311,111 @@ function diagAnaliseAutomatica(m) {
   };
 }
 
+/* r161: a análise do Diagnóstico caía SEMPRE na versão automática. Causa: a IA devolvia
+   texto em JSON livre e qualquer aspa copiada dos dados (ou resposta cortada no limite de
+   tamanho) tornava o texto ilegível. Agora a IA preenche uma "ferramenta" com esquema fixo:
+   a resposta já chega organizada em campos, sem precisar ler texto. Também tenta de novo
+   quando a IA está sobrecarregada e devolve o MOTIVO real quando não dá certo.
+   Função própria do módulo Pessoas: biChamarIA_ (B.I.) e as demais análises ficam intocadas. */
+var DIAG_IA_MODELO = 'claude-haiku-4-5-20251001';
+var DIAG_IA_MAX_TOKENS = 8000;
+var DIAG_IA_TENTATIVAS = 3;
+var DIAG_IA_FERRAMENTA = {
+  name: 'registrar_analise',
+  description: 'Registra a análise do Diagnóstico de Prontidão para Mudança, já organizada em título, resumo, seções e recomendações.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      titulo: { type: 'string', description: 'Título da análise.' },
+      resumo: { type: 'array', items: { type: 'string' }, description: 'Parágrafos do resumo executivo (1 a 3).' },
+      secoes: { type: 'array', description: 'De 4 a 7 seções.', items: { type: 'object', properties: {
+        titulo: { type: 'string' }, paragrafos: { type: 'array', items: { type: 'string' } } }, required: ['titulo', 'paragrafos'] } },
+      recomendacoes: { type: 'array', items: { type: 'object', properties: {
+        acao: { type: 'string', description: 'Ação recomendada.' }, base: { type: 'string', description: 'Dado do diagnóstico que justifica a ação.' } }, required: ['acao', 'base'] } }
+    },
+    required: ['titulo', 'resumo', 'secoes', 'recomendacoes']
+  }
+};
+
+function diagErroIA(codigo, detalhe) {
+  var e = new Error(detalhe || codigo);
+  e.codigoIA = codigo;
+  return e;
+}
+function diagMotivoIA(e) {
+  var M = {
+    SEM_CHAVE: 'a chave da IA não está configurada no Apps Script (CLAUDE_API_KEY).',
+    AUTENTICACAO: 'a chave da IA foi recusada (pode estar vencida ou incorreta).',
+    CREDITO: 'a conta da IA está sem crédito disponível.',
+    SOBRECARGA: 'a IA está sobrecarregada no momento. Tente gerar de novo em alguns minutos.',
+    LIMITE: 'muitas chamadas à IA em pouco tempo. Tente de novo em alguns minutos.',
+    INCOMPLETA: 'a resposta da IA ficou maior que o limite permitido e veio incompleta.',
+    FORMATO: 'a IA devolveu a análise fora do formato esperado.',
+    CONEXAO: 'não foi possível conectar à IA. Tente de novo em instantes.'
+  };
+  return M[e && e.codigoIA] || ('erro inesperado da IA (' + String((e && e.message) || e).substring(0, 160) + ').');
+}
+function diagChamarIAEstruturada_(prompt, sistema) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
+  if (!apiKey) throw diagErroIA('SEM_CHAVE');
+  var ultimoErro = null;
+  for (var tentativa = 1; tentativa <= DIAG_IA_TENTATIVAS; tentativa++) {
+    try {
+      var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+        method: 'post', contentType: 'application/json',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        payload: JSON.stringify({
+          model: DIAG_IA_MODELO, max_tokens: DIAG_IA_MAX_TOKENS, system: sistema,
+          tools: [DIAG_IA_FERRAMENTA], tool_choice: { type: 'tool', name: DIAG_IA_FERRAMENTA.name },
+          messages: [{ role: 'user', content: prompt }]
+        }),
+        muteHttpExceptions: true
+      });
+      var status = resp.getResponseCode();
+      var json = {};
+      try { json = JSON.parse(resp.getContentText()); } catch (eJ) { json = {}; }
+      if (status !== 200 || json.error) {
+        var tipo = (json.error && json.error.type) || '';
+        var msg = (json.error && json.error.message) || ('HTTP ' + status);
+        if (status === 401 || tipo === 'authentication_error') throw diagErroIA('AUTENTICACAO', msg);
+        if (/credit|balance|billing/i.test(msg)) throw diagErroIA('CREDITO', msg);
+        if (status === 529 || tipo === 'overloaded_error') throw diagErroIA('SOBRECARGA', msg);
+        if (status === 429 || tipo === 'rate_limit_error') throw diagErroIA('LIMITE', msg);
+        if (status >= 500) throw diagErroIA('SOBRECARGA', msg);
+        throw diagErroIA('OUTRO', msg);
+      }
+      if (json.stop_reason === 'max_tokens') throw diagErroIA('INCOMPLETA');
+      var bloco = (json.content || []).filter(function (c) { return c.type === 'tool_use' && c.name === DIAG_IA_FERRAMENTA.name; })[0];
+      if (!bloco || !bloco.input) throw diagErroIA('FORMATO', 'sem bloco tool_use');
+      return diagNormalizarAnalise(bloco.input);   // conferido aqui dentro: resposta vazia também ganha nova tentativa
+    } catch (e) {
+      if (!e.codigoIA) e = diagErroIA('CONEXAO', e.message);
+      ultimoErro = e;
+      Logger.log('diagGerarAnalise (IA) tentativa ' + tentativa + ': ' + e.codigoIA + ' — ' + e.message);
+      // só vale tentar de novo quando o problema é passageiro
+      var passageiro = ['SOBRECARGA', 'LIMITE', 'CONEXAO', 'FORMATO'].indexOf(e.codigoIA) !== -1;
+      if (!passageiro || tentativa === DIAG_IA_TENTATIVAS) break;
+      Utilities.sleep(3000 * tentativa);
+    }
+  }
+  throw ultimoErro;
+}
+function diagNormalizarAnalise(an) {
+  if (!an || typeof an !== 'object') throw diagErroIA('FORMATO', 'análise vazia');
+  var txt = function (x) { return String(x === null || x === undefined ? '' : x).trim(); };
+  var lista = function (x) { return Array.isArray(x) ? x.map(txt).filter(String) : (txt(x) ? [txt(x)] : []); };
+  var out = {
+    titulo: txt(an.titulo) || 'Análise do Diagnóstico de Prontidão',
+    resumo: lista(an.resumo),
+    secoes: (Array.isArray(an.secoes) ? an.secoes : []).filter(function (s) { return s && txt(s.titulo); })
+      .map(function (s) { return { titulo: txt(s.titulo), paragrafos: lista(s.paragrafos) }; }),
+    recomendacoes: (Array.isArray(an.recomendacoes) ? an.recomendacoes : []).filter(function (x) { return x && txt(x.acao); })
+      .map(function (x) { return { acao: txt(x.acao), base: txt(x.base) }; })
+  };
+  if (!out.resumo.length || !out.secoes.length) throw diagErroIA('FORMATO', 'resumo ou seções vazios');
+  return out;
+}
+
 function diagGerarAnalise(dados, cpf) {
   try {
     diagExigirDiretor(cpf);
@@ -8329,25 +8434,18 @@ function diagGerarAnalise(dados, cpf) {
       '4. Tom profissional, respeitoso e construtivo. Não use rótulos pejorativos sobre pessoas; descreva comportamentos e índices.',
       '5. Explique o que os índices significam para a viabilidade de mudanças de processo e de cultura, conectando prontidão, papéis (Patrocinador, Apoiador a desenvolver, Neutro, Resistente) e a rede de influência (quadrantes).',
       '5b. Em "diretoria_indicada": os supervisores também puderam indicar diretores. Comente o quanto o grupo recorre à Diretoria em cada pergunta (dúvidas, novidades, ensinar), usando só esses números, sem supor causas. Diretores não respondem: não atribua a eles prontidão, papel ou quadrante.',
-      '6. Recomendações: só as que decorrem diretamente de um dado. Cada uma cita no campo "base" o dado que a justifica. Nada genérico.',
+      '6. Recomendações: só as que decorrem diretamente de um dado. Cada uma cita no campo base o dado que a justifica. Nada genérico.',
       '7. Sem emojis, sem markdown, sem listas com hífen dentro dos parágrafos.',
-      'Responda SOMENTE com JSON válido neste formato:',
-      '{"titulo": "texto", "resumo": ["parágrafo", "..."], "secoes": [{"titulo": "texto", "paragrafos": ["parágrafo", "..."]}], "recomendacoes": [{"acao": "texto", "base": "dado que justifica"}]}',
+      '8. Seja objetivo: cada parágrafo com no máximo 5 frases.',
+      'Entregue a análise chamando a ferramenta registrar_analise (título, resumo, seções e recomendações).',
       'Use de 4 a 7 seções (por exemplo: prontidão do grupo; dimensões fortes e frágeis; perfil de liderança e papéis; influência e rede de indicações; papel da Diretoria nas indicações; pontos de atenção individuais; viabilidade de mudanças).'
     ].join('\n');
-    var texto = '';
     try {
-      texto = biChamarIA_('Dados do diagnóstico (JSON):\n' + JSON.stringify(pacote), sistema, 6000);
-      var limpo = String(texto).replace(/```json|```/g, '').trim();
-      var ini = limpo.indexOf('{'), fim = limpo.lastIndexOf('}');
-      var an = JSON.parse(limpo.substring(ini, fim + 1));
-      if (!an || !Array.isArray(an.resumo) || !Array.isArray(an.secoes)) throw new Error('formato');
-      an.recomendacoes = Array.isArray(an.recomendacoes) ? an.recomendacoes.filter(function (x) { return x && x.acao; }) : [];
-      an.secoes = an.secoes.filter(function (s) { return s && s.titulo; }).map(function (s) { return { titulo: String(s.titulo), paragrafos: Array.isArray(s.paragrafos) ? s.paragrafos.map(String) : [] }; });
+      var an = diagChamarIAEstruturada_('Dados do diagnóstico (JSON):\n' + JSON.stringify(pacote), sistema);
       return { ok: true, origem: 'ia', analise: an };
     } catch (eIa) {
-      Logger.log('diagGerarAnalise (IA): ' + eIa.message);
-      return { ok: true, origem: 'automatica', analise: diagAnaliseAutomatica(m) };
+      Logger.log('diagGerarAnalise (IA): ' + (eIa.codigoIA || '') + ' — ' + eIa.message);
+      return { ok: true, origem: 'automatica', motivo: diagMotivoIA(eIa), analise: diagAnaliseAutomatica(m) };
     }
   } catch (e) { return { ok: false, erro: e.message }; }
 }

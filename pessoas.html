@@ -454,7 +454,7 @@
         btn.disabled = true; btn.textContent = '⏳ Gerando análise...';
         try {
             const res = await chamar({ action: 'diagGerarAnalise', id: DIAG_ID });
-            analiseAtual = { analise: res.analise, origem: res.origem, geradoEm: new Date() };
+            analiseAtual = { analise: res.analise, origem: res.origem, motivo: res.motivo || '', geradoEm: new Date() };   // r161: motivo real quando cai na automática
             renderAnalise();
             document.getElementById('bloco-analise').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) { alert('⚠️ ' + e.message); }
@@ -463,7 +463,7 @@
     function renderAnalise() {
         const a = analiseAtual.analise;
         document.getElementById('analise').innerHTML =
-            (analiseAtual.origem === 'automatica' ? '<div class="aviso-auto">A IA não respondeu a tempo: esta é a análise automática, montada só com os números do diagnóstico.</div>' : '') +
+            (analiseAtual.origem === 'automatica' ? '<div class="aviso-auto"><b>Análise automática</b>, montada só com os números do diagnóstico, porque a análise com IA não pôde ser feita' + (analiseAtual.motivo ? ': ' + esc(analiseAtual.motivo) : '.') + '</div>' : '') +
             '<h3 style="margin-top:0">' + esc(a.titulo || 'Análise') + '</h3>' +
             (a.resumo || []).map(t => '<p>' + esc(t) + '</p>').join('') +
             (a.secoes || []).map(s => '<h3>' + esc(s.titulo) + '</h3>' + (s.paragrafos || []).map(t => '<p>' + esc(t) + '</p>').join('')).join('') +
@@ -651,7 +651,7 @@
                         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 123, 141);
                         doc.splitTextToSize('Base: ' + r.base, LW - 5).forEach(l => { novaPaginaSe(4.8); doc.text(l, M + 5, y); y += 4.6; }); y += 2.5; });
                 }
-                if (analiseAtual.origem === 'automatica') paragrafo('Observação: análise automática (a IA não respondeu), montada só com os números do diagnóstico.');
+                if (analiseAtual.origem === 'automatica') paragrafo('Observação: análise automática, montada só com os números do diagnóstico' + (analiseAtual.motivo ? ' (a análise com IA não pôde ser feita: ' + analiseAtual.motivo + ')' : '') + '.');
             }
             const cs = comentariosLista();
             if (cs.length) { titulo('Comentários'); cs.forEach(paragrafo); }
