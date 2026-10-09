@@ -48,6 +48,11 @@
         .fc-pend-card.fc-pend-azul     { --fc-pend-cor: #001528; }   /* r163: cobrança automática */
         .fc-cob-status { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
         .fc-cob-status b.on { color: #3a8000; } .fc-cob-status b.off { color: #E05252; }
+        .fc-cob-acoes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }   /* r165 */
+        .fc-cob-acoes button { font-size: 11px; padding: 3px 10px; border-radius: 6px; }
+        .fc-cob-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+        .fc-cob-tag.ativa { background: #EAF8E0; color: #3a8000; } .fc-cob-tag.pausada { background: #F1F3F5; color: #6B7B8D; }
+        .fc-pend-item.pausada { opacity: .65; }
         .fc-cob-sub { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6B7B8D; margin: 12px 0 6px; }
         .fc-pend-head {
             display: flex;
@@ -2403,6 +2408,23 @@
     // r163: COBRANÇA AUTOMÁTICA — e-mail a cada 2h para os supervisores dos inventários do mês
     // sem Análise de Preparação concluída. Isolado: qualquer falha aqui só esconde o card.
     let cobAtiva = false;
+    let cobLista = [];   // r165: lojas mostradas no card (para os botões por loja)
+    // r165: por loja — Ignorar = pausa (fica na lista e pode reativar); Excluir = sai da lista e da cobrança de vez
+    async function definirCobrancaLoja(i, acao) {
+        const p = cobLista[i];
+        if (!p) return;
+        const nome = p.cliente + ' — ' + p.unidade + ' (' + p.data + ')';
+        if (acao === 'excluir' && !confirm('Excluir a cobrança de ' + nome + '?\n\nA loja sai da lista e os supervisores não recebem mais lembretes dela. Não dá para desfazer pelo painel.')) return;
+        if (acao === 'pausar' && !confirm('Pausar a cobrança de ' + nome + '?\n\nA loja continua na lista e você pode reativar quando quiser.')) return;
+        try {
+            const res = await chamarApi({ action: 'cobrancaDefinirLoja', cpf: getCpfLogado(), chave: p.chave, acao: acao });
+            if (!res || !res.ok) alert('⚠️ ' + ((res && res.erro) || 'Falha ao alterar a cobrança desta loja.'));
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            carregarCobrancaHome();
+        }
+    }
     async function carregarCobrancaHome() {
         const card = document.getElementById('card-cobranca-analise');
         try {
@@ -2415,7 +2437,8 @@
             if (inpH && document.activeElement !== inpH) inpH.value = horas;
             document.getElementById('cob-freq').style.display = 'block';
             const pend = res.pendentes || [], sem = res.semEmail || [];
-            document.getElementById('cob-count').innerText = pend.length;
+            cobLista = pend;   // r165
+            document.getElementById('cob-count').innerText = pend.filter(p => p.estado !== 'pausada').length;
             const ult = res.ultimaExecucao;
             let txt = cobAtiva
                 ? '<b class="on">Ativa</b> — lembretes ' + horasTxt + ', 24h por dia, até a análise ser concluída.'
@@ -2433,11 +2456,19 @@
             btn.style.display = 'block';
             let h = '';
             if (pend.length) {
-                h += '<div class="fc-cob-sub">Sem análise concluída (mês)</div><ul class="fc-pend-lista">' + pend.map(p => `
-                    <li class="fc-pend-item">
-                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                h += '<div class="fc-cob-sub">Sem análise concluída (mês)</div><ul class="fc-pend-lista">' + pend.map((p, i) => {
+                    const pausada = p.estado === 'pausada';
+                    return `
+                    <li class="fc-pend-item ${pausada ? 'pausada' : ''}">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}<span class="fc-cob-tag ${pausada ? 'pausada' : 'ativa'}">${pausada ? 'Pausada' : 'Cobrando'}</span></div>
                         <div class="fc-pend-detalhe">${escaparHtml(p.data)} · ${p.supervisores.length ? 'Supervisor(es): ' + escaparHtml(p.supervisores.join(', ')) : 'ninguém para receber o e-mail'}</div>
-                    </li>`).join('') + '</ul>';
+                        <div class="fc-cob-acoes">
+                            ${pausada
+                                ? `<button type="button" class="btn btn-outline-success" onclick="definirCobrancaLoja(${i},'ativar')">Reativar</button>`
+                                : `<button type="button" class="btn btn-outline-secondary" onclick="definirCobrancaLoja(${i},'pausar')">Ignorar (pausar)</button>`}
+                            <button type="button" class="btn btn-outline-danger" onclick="definirCobrancaLoja(${i},'excluir')">Excluir</button>
+                        </div>
+                    </li>`; }).join('') + '</ul>';
             }
             if (sem.length) {
                 h += '<div class="fc-cob-sub" style="color:#E05252">Sem para quem cobrar</div><ul class="fc-pend-lista">' + sem.map(p => `
@@ -4637,7 +4668,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-09-r164';
+    const VERSAO_ESPERADA = '2026-10-09-r165';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');

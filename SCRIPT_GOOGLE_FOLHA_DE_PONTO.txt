@@ -103,6 +103,7 @@ function doPost(e) {
     else if (action === 'cobrancaAtivar') { result = cobrancaAtivar(data, data.cpf); }   // r163
     else if (action === 'cobrancaDesativar') { result = cobrancaDesativar(data, data.cpf); }   // r163
     else if (action === 'cobrancaSalvarFrequencia') { result = cobrancaSalvarFrequencia(data, data.cpf); }   // r164
+    else if (action === 'cobrancaDefinirLoja') { result = cobrancaDefinirLoja(data, data.cpf); }   // r165
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -602,7 +603,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-09-r164';
+const VERSAO_SCRIPT = '2026-10-09-r165';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -634,7 +635,7 @@ function doGet(e) {
     'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir',
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
-    'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia'
+    'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -3658,6 +3659,12 @@ var COB_PROP_EXEC = 'cob_ultima_execucao';
 // roda de hora em hora e cada supervisor/loja só recebe de novo quando completa o intervalo escolhido.
 // Folga de 10 min porque o Google não dispara no minuto exato (sem ela, 2h viraria 3h na prática).
 var COB_PROP_HORAS = 'cob_intervalo_horas';
+// r165: escolha do Diretor por loja (vale para todos os supervisores dela). Loja nova entra cobrada;
+// 'pausada' = continua na lista e pode ser reativada; 'excluida' = sai da lista e da cobrança de vez.
+var COB_PROP_ESCOLHAS = 'cob_escolhas';
+function cobLerEscolhas() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(COB_PROP_ESCOLHAS) || '{}') || {}; } catch (e) { return {}; }
+}
 var COB_HORAS_PADRAO = 2;
 var COB_FOLGA_MIN = 10;
 function cobIntervaloHoras() {
@@ -3674,7 +3681,7 @@ function cobNormData(v) {
 }
 
 // Lista o que está pendente agora (sem enviar nada).
-function cobrancaCalcular() {
+function cobrancaCalcular(incluirExcluidas) {   // r165: true = traz também as lojas excluídas pelo Diretor
   var TZ = 'America/Fortaleza';
   var ref = getDataPendenciaAnterior();                 // último dia já "vencido" (corte 6h)
   var hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
@@ -3730,17 +3737,20 @@ function cobrancaCalcular() {
     }
   }
 
+  var escolhas = cobLerEscolhas();   // r165
   var pendentes = [], semEmail = [];
   pend.forEach(function (p) {
+    var estado = escolhas[p.chave] === 'pausada' ? 'pausada' : (escolhas[p.chave] === 'excluida' ? 'excluida' : 'ativa');
+    if (estado === 'excluida' && !incluirExcluidas) return;   // r165: excluída some da lista e da cobrança
     var mapa = supPorChave[p.chave] || {};
     var sups = Object.keys(mapa).map(function (cpf) {
       return { cpf: cpf, nome: getNomePorCPF(cpf) || mapa[cpf] || 'Supervisor', email: String(getEmailPorCPF(cpf) || '').trim() };
     });
     var comEmail = sups.filter(function (x) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.email); });
-    var item = { chave: p.chave, data: p.data, dataBR: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: comEmail };
+    var item = { chave: p.chave, data: p.data, dataBR: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: comEmail, estado: estado };
     pendentes.push(item);
-    if (!sups.length) semEmail.push({ data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'nenhum supervisor bateu presença' });
-    else if (!comEmail.length) semEmail.push({ data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'supervisor sem e-mail na aba Colaboradores: ' + sups.map(function (x) { return x.nome; }).join(', ') });
+    if (!sups.length) semEmail.push({ chave: p.chave, estado: estado, data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'nenhum supervisor bateu presença' });
+    else if (!comEmail.length) semEmail.push({ chave: p.chave, estado: estado, data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'supervisor sem e-mail na aba Colaboradores: ' + sups.map(function (x) { return x.nome; }).join(', ') });
   });
   return { pendentes: pendentes, semEmail: semEmail };
 }
@@ -3768,15 +3778,16 @@ function cobrancaRodar() {
   try {
     var urlApp = props.getProperty(COB_PROP_URL) || '';
     if (!/^https:\/\//.test(urlApp)) { resumo.falhas.push('endereço do sistema não registrado — desative e ative a cobrança de novo'); return; }
-    var calc = cobrancaCalcular();
-    resumo.pendentes = calc.pendentes.length;
-    resumo.semEmail = calc.semEmail.length;
+    var calc = cobrancaCalcular(true);   // r165: com as excluídas, para limpar as escolhas sem reler a planilha
+    resumo.pendentes = calc.pendentes.filter(function (p) { return p.estado === 'ativa'; }).length;   // r165: só as cobradas
+    resumo.semEmail = calc.semEmail.filter(function (p) { return p.estado !== 'excluida'; }).length;
     var ultimos = {};
     try { ultimos = JSON.parse(props.getProperty(COB_PROP_ULTIMOS) || '{}'); } catch (e) { ultimos = {}; }
     var novos = {}, agora = Date.now();
     var horas = cobIntervaloHoras();   // r164
     var cota = MailApp.getRemainingDailyQuota();
     calc.pendentes.forEach(function (p) {
+      if (p.estado !== 'ativa') return;   // r165: pausada ou excluída pelo Diretor
       p.supervisores.forEach(function (sup) {
         var k = p.chave + '|' + sup.cpf;
         var ultimo = ultimos[k] || 0;
@@ -3792,12 +3803,29 @@ function cobrancaRodar() {
       });
     });
     props.setProperty(COB_PROP_ULTIMOS, JSON.stringify(novos));
+    cobLimparEscolhas(calc);   // r165
   } catch (e) {
     resumo.falhas.push(e.message || String(e));
   } finally {
     try { props.setProperty(COB_PROP_EXEC, JSON.stringify(resumo)); } catch (e2) {}
     lock.releaseLock();
   }
+}
+
+// r165: mantém só as escolhas de lojas que ainda estão pendentes (concluída ou fora do mês = some)
+function cobLimparEscolhas(calcTodas) {
+  var esc = cobLerEscolhas(), chaves = Object.keys(esc);
+  if (!chaves.length) return;
+  var vivas = {}, novo = {};
+  calcTodas.pendentes.forEach(function (p) { vivas[p.chave] = 1; });
+  chaves.forEach(function (k) { if (vivas[k]) novo[k] = esc[k]; });
+  if (Object.keys(novo).length !== chaves.length) PropertiesService.getScriptProperties().setProperty(COB_PROP_ESCOLHAS, JSON.stringify(novo));
+}
+// todas as lojas pendentes do período, inclusive as excluídas (que o cálculo esconde)
+function cobChavesPendentes() {
+  var vivas = {};
+  cobrancaCalcular(true).pendentes.forEach(function (p) { vivas[p.chave] = 1; });
+  return vivas;
 }
 
 function cobGatilhos() {
@@ -3827,7 +3855,7 @@ function cobrancaStatus(dados, cpf) {
     try { exec = JSON.parse(PropertiesService.getScriptProperties().getProperty(COB_PROP_EXEC) || 'null'); } catch (e) {}
     var calc = cobrancaCalcular();
     return { ok: true, ativa: ativa, erroGatilho: erroGatilho, ultimaExecucao: exec, intervaloHoras: cobIntervaloHoras(),
-      pendentes: calc.pendentes.map(function (p) { return { data: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: p.supervisores.map(function (x) { return x.nome; }) }; }),
+      pendentes: calc.pendentes.map(function (p) { return { chave: p.chave, estado: p.estado, data: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: p.supervisores.map(function (x) { return x.nome; }) }; }),
       semEmail: calc.semEmail };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
@@ -3862,6 +3890,24 @@ function cobrancaSalvarFrequencia(dados, cpf) {
       if (gs.length) { gs.forEach(function (t) { ScriptApp.deleteTrigger(t); }); ScriptApp.newTrigger(COB_FUNCAO).timeBased().everyHours(1).create(); }
     } catch (eT) { return { ok: false, erro: cobMsgAutorizacao(eT) }; }
     return { ok: true, horas: h };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// r165: Diretor escolhe, por loja, cobrar (ativar), pausar (ignorar) ou excluir.
+function cobrancaDefinirLoja(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var acao = String(d.acao || ''), chave = String(d.chave || '');
+    if (['ativar', 'pausar', 'excluir'].indexOf(acao) === -1) return { ok: false, erro: 'Ação inválida' };
+    var lock = LockService.getScriptLock(); lock.waitLock(20000);
+    try {
+      if (!cobChavesPendentes()[chave]) return { ok: false, erro: 'Esta loja não está mais pendente (a análise pode ter sido concluída). Atualize a tela.' };
+      var esc = cobLerEscolhas();
+      if (acao === 'ativar') delete esc[chave]; else esc[chave] = acao === 'pausar' ? 'pausada' : 'excluida';
+      PropertiesService.getScriptProperties().setProperty(COB_PROP_ESCOLHAS, JSON.stringify(esc));
+    } finally { lock.releaseLock(); }
+    return { ok: true };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
