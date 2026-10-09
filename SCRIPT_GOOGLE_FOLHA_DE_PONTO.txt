@@ -99,6 +99,10 @@ function doPost(e) {
     else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
+    else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
+    else if (action === 'cobrancaAtivar') { result = cobrancaAtivar(data, data.cpf); }   // r163
+    else if (action === 'cobrancaDesativar') { result = cobrancaDesativar(data, data.cpf); }   // r163
+    else if (action === 'cobrancaSalvarFrequencia') { result = cobrancaSalvarFrequencia(data, data.cpf); }   // r164
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -598,7 +602,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-07-r161';
+const VERSAO_SCRIPT = '2026-10-09-r164';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -629,7 +633,8 @@ function doGet(e) {
     'performanceEmailsSugeridos', 'performanceEnviarEmail', 'emailsSugeridosAuditoria',
     'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir',
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
-    'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder'
+    'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
+    'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -3629,6 +3634,243 @@ function getPendenciasHome(cpf) {
     });
 
     return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: naoEncerrados, semAnalise: semAnalise };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   r163 — COBRANÇA AUTOMÁTICA DA ANÁLISE DE PREPARAÇÃO PARA INVENTÁRIO
+   Um gatilho do Google roda cobrancaRodar() de hora em hora, 24h por dia; cada lembrete se
+   repete na frequência escolhida pelo Diretor no painel (r164: 1 a 24 horas, padrão 2).
+   Projetos considerados: os do mês atual (mais os dos últimos 3 dias do mês
+   anterior, para quem fez inventário na virada do mês não ficar sem cobrança),
+   já vencidos pelo mesmo corte das 6h do card "Sem Análise de Preparação".
+   Para cada projeto sem análise CONCLUÍDA da mesma loja e da mesma data
+   (rascunho não conta), manda e-mail a TODOS os supervisores que bateram
+   presença como Supervisor naquele projeto, com o e-mail da aba Colaboradores.
+   Para sozinho quando a análise é concluída. Ativar/Desativar pelo Diretor
+   no card da tela principal.
+   ═══════════════════════════════════════════════════════════════════ */
+var COB_FUNCAO = 'cobrancaRodar';
+var COB_PROP_URL = 'cob_url_app';
+var COB_PROP_ULTIMOS = 'cob_ultimos';
+var COB_PROP_EXEC = 'cob_ultima_execucao';
+// r164: frequência configurável pelo Diretor no painel (1 a 24 horas, padrão 2). O gatilho do Google
+// roda de hora em hora e cada supervisor/loja só recebe de novo quando completa o intervalo escolhido.
+// Folga de 10 min porque o Google não dispara no minuto exato (sem ela, 2h viraria 3h na prática).
+var COB_PROP_HORAS = 'cob_intervalo_horas';
+var COB_HORAS_PADRAO = 2;
+var COB_FOLGA_MIN = 10;
+function cobIntervaloHoras() {
+  var h = parseInt(PropertiesService.getScriptProperties().getProperty(COB_PROP_HORAS), 10);
+  return (h >= 1 && h <= 24) ? h : COB_HORAS_PADRAO;
+}
+
+function cobNormData(v) {
+  var t = String(v || '').trim();
+  var m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+
+// Lista o que está pendente agora (sem enviar nada).
+function cobrancaCalcular() {
+  var TZ = 'America/Fortaleza';
+  var ref = getDataPendenciaAnterior();                 // último dia já "vencido" (corte 6h)
+  var hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  var tres = Utilities.formatDate(new Date(new Date().getTime() - 3 * 24 * 60 * 60 * 1000), TZ, 'yyyy-MM-dd');
+
+  var proj = getSheet('Projetos').getDataRange().getDisplayValues();
+  var projetos = [], vistos = {}, datasBR = {};
+  for (var i = 1; i < proj.length; i++) {
+    var r = proj[i];
+    var iso = cobNormData(r[0]);
+    if (!iso || iso > ref.iso) continue;                                    // ainda não venceu o corte das 6h
+    if (iso.slice(0, 7) !== hoje.slice(0, 7) && iso < tres) continue;       // fora do mês (só aceita os últimos 3 dias do mês anterior)
+    var cli = fcLimparNome(r[1]), uni = fcLimparNome(r[2]);
+    if (!cli || !uni) continue;
+    var chave = iso + '|' + fcChave(cli) + '|' + fcChave(uni);
+    if (vistos[chave]) continue;
+    vistos[chave] = 1;
+    projetos.push({ chave: chave, data: iso, dataBR: String(r[0]).trim(), cliente: cli, unidade: uni });
+    datasBR[String(r[0]).trim()] = 1;
+  }
+  if (!projetos.length) return { pendentes: [], semEmail: [] };
+
+  // análises concluídas (qualquer data do período), por data + cliente + unidade
+  var aud = getOuCriarAbaAuditoria().getDataRange().getDisplayValues();
+  var feitas = {};
+  for (var k = 1; k < aud.length; k++) {
+    if (String(aud[k][9]).trim() !== 'CONCLUIDO') continue;
+    var dA = cobNormData(aud[k][7]);
+    if (dA) feitas[dA + '|' + fcChave(aud[k][5]) + '|' + fcChave(aud[k][6])] = 1;
+  }
+  var pend = projetos.filter(function (p) { return !feitas[p.chave]; });
+  if (!pend.length) return { pendentes: [], semEmail: [] };
+
+  // supervisores com presença: lê a aba Presencas uma vez, a partir da 1ª linha de alguma data do período
+  var supPorChave = {};
+  var abaP = getSheet('Presencas');
+  var ult = abaP.getLastRow();
+  if (ult >= 2) {
+    var colA = abaP.getRange(2, 1, ult - 1, 1).getDisplayValues();
+    var ini = -1;
+    for (var a = 0; a < colA.length; a++) { if (datasBR[String(colA[a][0]).trim()]) { ini = a; break; } }
+    if (ini !== -1) {
+      var linhas = abaP.getRange(ini + 2, 1, ult - ini - 1, 8).getDisplayValues();
+      linhas.forEach(function (p) {
+        if (!datasBR[String(p[0]).trim()]) return;
+        if (String(p[4] || '').toUpperCase().indexOf('SUPERVIS') !== 0) return;
+        var cpfP = normalizarCPF(p[3]);
+        if (!cpfP) return;
+        var ch = cobNormData(p[0]) + '|' + fcChave(p[1]) + '|' + fcChave(p[2]);
+        if (!supPorChave[ch]) supPorChave[ch] = {};
+        supPorChave[ch][cpfP] = String(p[7] || '');
+      });
+    }
+  }
+
+  var pendentes = [], semEmail = [];
+  pend.forEach(function (p) {
+    var mapa = supPorChave[p.chave] || {};
+    var sups = Object.keys(mapa).map(function (cpf) {
+      return { cpf: cpf, nome: getNomePorCPF(cpf) || mapa[cpf] || 'Supervisor', email: String(getEmailPorCPF(cpf) || '').trim() };
+    });
+    var comEmail = sups.filter(function (x) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.email); });
+    var item = { chave: p.chave, data: p.data, dataBR: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: comEmail };
+    pendentes.push(item);
+    if (!sups.length) semEmail.push({ data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'nenhum supervisor bateu presença' });
+    else if (!comEmail.length) semEmail.push({ data: p.dataBR, cliente: p.cliente, unidade: p.unidade, motivo: 'supervisor sem e-mail na aba Colaboradores: ' + sups.map(function (x) { return x.nome; }).join(', ') });
+  });
+  return { pendentes: pendentes, semEmail: semEmail };
+}
+
+function cobEmailHtml(nome, p, urlApp, horas) {
+  return '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1A2A3A">'
+    + fcCabecalhoEmailHtml()
+    + '<div style="padding:32px 24px;background:#FFF">'
+    + '<p style="font-size:15px;line-height:1.8;margin:0 0 14px">Olá, ' + perfEsc(String(nome || '').split(' ')[0]) + '!</p>'
+    + '<p style="font-size:15px;line-height:1.8;margin:0 0 14px">O inventário abaixo ainda está sem a <strong>Análise de Preparação para Inventário</strong> concluída no sistema. Por favor, preencha e conclua a análise assim que possível.</p>'
+    + '<div style="background:#F4F6F8;padding:16px;border-radius:10px;margin:20px 0"><p style="font-size:12px;color:#6B7B8D;margin:0 0 4px">INVENTÁRIO</p>'
+    + '<p style="font-size:14px;margin:0"><strong>' + perfEsc(p.cliente) + '</strong> — ' + perfEsc(p.unidade) + '<br>' + perfEsc(p.dataBR) + '</p></div>'
+    + '<p style="text-align:center;margin:24px 0"><a href="' + urlApp + '" style="display:inline-block;padding:12px 28px;background:#001528;color:#FFF;text-decoration:none;border-radius:8px;font-weight:600">Entrar no sistema</a></p>'
+    + '<p style="font-size:12px;line-height:1.6;color:#6B7B8D;margin:0">Este lembrete é automático e será reenviado a cada ' + (horas === 1 ? '1 hora' : horas + ' horas') + ' até a análise ser concluída. Se a análise já foi feita, confira se ela foi <strong>concluída</strong> (rascunho não conta) e se a loja e a data são as mesmas do projeto.</p>'
+    + '</div><div style="background:#001528;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
+    + '<strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
+}
+
+// Chamado pelo gatilho do Google a cada 2 horas.
+function cobrancaRodar() {
+  var props = PropertiesService.getScriptProperties();
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  var resumo = { quando: new Date().toISOString(), enviados: 0, falhas: [], pendentes: 0, semEmail: 0 };
+  try {
+    var urlApp = props.getProperty(COB_PROP_URL) || '';
+    if (!/^https:\/\//.test(urlApp)) { resumo.falhas.push('endereço do sistema não registrado — desative e ative a cobrança de novo'); return; }
+    var calc = cobrancaCalcular();
+    resumo.pendentes = calc.pendentes.length;
+    resumo.semEmail = calc.semEmail.length;
+    var ultimos = {};
+    try { ultimos = JSON.parse(props.getProperty(COB_PROP_ULTIMOS) || '{}'); } catch (e) { ultimos = {}; }
+    var novos = {}, agora = Date.now();
+    var horas = cobIntervaloHoras();   // r164
+    var cota = MailApp.getRemainingDailyQuota();
+    calc.pendentes.forEach(function (p) {
+      p.supervisores.forEach(function (sup) {
+        var k = p.chave + '|' + sup.cpf;
+        var ultimo = ultimos[k] || 0;
+        novos[k] = ultimo;                                         // só mantém quem ainda está pendente (limpa o resto)
+        if (ultimo && agora - ultimo < (horas * 60 - COB_FOLGA_MIN) * 60 * 1000) return;
+        if (cota <= 5) { resumo.falhas.push(sup.email + ': cota diária de e-mails do Google esgotada'); return; }
+        try {
+          MailApp.sendEmail(sup.email,
+            'Pendente: Análise de Preparação para Inventário — ' + p.cliente + ' / ' + p.unidade + ' (' + p.dataBR + ')', '',
+            { htmlBody: cobEmailHtml(sup.nome, p, urlApp, horas), inlineImages: { fclogo: fcLogoEmailBlob() }, name: 'Formula Code — Sistema de Gestão', replyTo: 'lael@formulacode.tec.br' });
+          novos[k] = agora; cota--; resumo.enviados++;
+        } catch (eEnv) { resumo.falhas.push(sup.email + ': ' + (eEnv.message || String(eEnv))); }
+      });
+    });
+    props.setProperty(COB_PROP_ULTIMOS, JSON.stringify(novos));
+  } catch (e) {
+    resumo.falhas.push(e.message || String(e));
+  } finally {
+    try { props.setProperty(COB_PROP_EXEC, JSON.stringify(resumo)); } catch (e2) {}
+    lock.releaseLock();
+  }
+}
+
+function cobGatilhos() {
+  return ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === COB_FUNCAO; });
+}
+
+// Rodar UMA vez pelo editor do Apps Script se o botão Ativar avisar que falta autorização.
+function cobrancaAutorizar() {
+  ScriptApp.getProjectTriggers();
+  MailApp.getRemainingDailyQuota();
+  return 'Autorizado. Volte ao sistema e toque em Ativar.';
+}
+
+function cobMsgAutorizacao(e) {
+  var m = String((e && e.message) || e || '');
+  return /permiss|authoriz|autoriza|scriptapp/i.test(m)
+    ? 'O Google ainda não autorizou o sistema a criar o lembrete automático. Abra o editor do Apps Script, escolha a função "cobrancaAutorizar" no menu de funções, clique em Executar e aceite as permissões. Depois toque em Ativar de novo.'
+    : m;
+}
+
+function cobrancaStatus(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var ativa = false, erroGatilho = '';
+    try { ativa = cobGatilhos().length > 0; } catch (eG) { erroGatilho = cobMsgAutorizacao(eG); }
+    var exec = null;
+    try { exec = JSON.parse(PropertiesService.getScriptProperties().getProperty(COB_PROP_EXEC) || 'null'); } catch (e) {}
+    var calc = cobrancaCalcular();
+    return { ok: true, ativa: ativa, erroGatilho: erroGatilho, ultimaExecucao: exec, intervaloHoras: cobIntervaloHoras(),
+      pendentes: calc.pendentes.map(function (p) { return { data: p.dataBR, cliente: p.cliente, unidade: p.unidade, supervisores: p.supervisores.map(function (x) { return x.nome; }) }; }),
+      semEmail: calc.semEmail };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+function cobrancaAtivar(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var url = String(d.urlApp || '');
+    if (!/^https:\/\/[A-Za-z0-9._~\-\/]+\/$/.test(url)) return { ok: false, erro: 'Endereço do sistema inválido' };
+    PropertiesService.getScriptProperties().setProperty(COB_PROP_URL, url);
+    try {
+      cobGatilhos().forEach(function (t) { ScriptApp.deleteTrigger(t); });
+      ScriptApp.newTrigger(COB_FUNCAO).timeBased().everyHours(1).create();   // r164: confere de hora em hora; o intervalo real vem do painel
+    } catch (eT) { return { ok: false, erro: cobMsgAutorizacao(eT) }; }
+    cobrancaRodar();   // primeira rodada já na ativação
+    return { ok: true };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// r164: Diretor define de quantas em quantas horas o lembrete se repete (inteiro de 1 a 24).
+// Se a cobrança já estiver ativa com o gatilho antigo (a cada 2h, r163), troca por um de hora em hora.
+function cobrancaSalvarFrequencia(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var h = Number(d.horas);
+    if (!(h >= 1 && h <= 24) || Math.floor(h) !== h) return { ok: false, erro: 'Informe um número inteiro de horas entre 1 e 24.' };
+    PropertiesService.getScriptProperties().setProperty(COB_PROP_HORAS, String(h));
+    try {
+      var gs = cobGatilhos();
+      if (gs.length) { gs.forEach(function (t) { ScriptApp.deleteTrigger(t); }); ScriptApp.newTrigger(COB_FUNCAO).timeBased().everyHours(1).create(); }
+    } catch (eT) { return { ok: false, erro: cobMsgAutorizacao(eT) }; }
+    return { ok: true, horas: h };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+function cobrancaDesativar(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    try { cobGatilhos().forEach(function (t) { ScriptApp.deleteTrigger(t); }); }
+    catch (eT) { return { ok: false, erro: cobMsgAutorizacao(eT) }; }
+    return { ok: true };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 

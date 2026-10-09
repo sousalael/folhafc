@@ -45,6 +45,10 @@
         }
         .fc-pend-card.fc-pend-vermelho { --fc-pend-cor: #E05252; }
         .fc-pend-card.fc-pend-laranja  { --fc-pend-cor: #E8872B; }
+        .fc-pend-card.fc-pend-azul     { --fc-pend-cor: #001528; }   /* r163: cobrança automática */
+        .fc-cob-status { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
+        .fc-cob-status b.on { color: #3a8000; } .fc-cob-status b.off { color: #E05252; }
+        .fc-cob-sub { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6B7B8D; margin: 12px 0 6px; }
         .fc-pend-head {
             display: flex;
             align-items: center;
@@ -364,6 +368,26 @@
             </div>
         </div>
         <!-- ############ FIM DOS CARDS DE PENDÊNCIAS ############ -->
+
+        <!-- ############ r163: COBRANÇA AUTOMÁTICA DA ANÁLISE DE PREPARAÇÃO (só Diretor) ############ -->
+        <div class="fc-pend-card fc-pend-azul mb-3" id="card-cobranca-analise" style="display:none;">
+            <div class="fc-pend-head">
+                <div class="fc-pend-titulo"><span class="fc-pend-icone" style="background:#E8EAF6">🔔</span> Cobrança da Análise de Preparação</div>
+                <div class="fc-pend-contagem" id="cob-count">0</div>
+            </div>
+            <div class="fc-cob-status" id="cob-status">Carregando...</div>
+            <div id="cob-freq" style="display:none;margin-bottom:10px">
+                <label for="cob-horas" style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#6B7B8D">Frequência dos lembretes (horas)</label>
+                <div style="display:flex;gap:8px;margin-top:4px">
+                    <input type="number" id="cob-horas" class="form-control form-control-sm" min="1" max="24" step="1" inputmode="numeric" style="max-width:110px" onkeydown="if(event.key==='Enter'){event.preventDefault();salvarFrequenciaCobranca();}">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="cob-salvar-freq" onclick="salvarFrequenciaCobranca()">Salvar</button>
+                </div>
+                <div style="font-size:11px;color:#6B7B8D;margin-top:4px">De 1 a 24 horas. Vale na hora, inclusive para quem já está sendo cobrado.</div>
+            </div>
+            <button type="button" class="btn btn-sm w-100" id="cob-botao" onclick="alternarCobranca()" style="display:none;"></button>
+            <div id="cob-listas"></div>
+        </div>
+        <!-- ############ FIM DA COBRANÇA AUTOMÁTICA ############ -->
 
         <!-- ############ NOVO: SELEÇÃO DE PROJETO (saiu da tela de login) ############ -->
         <div class="card mb-4 border-0 shadow-sm" style="background-color: #f4f4fb;">
@@ -1782,6 +1806,7 @@
                 document.getElementById('span-nome-sup').innerText = res.nome + ` (${res.perfil})`;
 
                 carregarPendenciasHome(); // r133: cards de pendências do dia anterior (não bloqueia o restante do login)
+                if (res.perfil === 'DIRETOR') carregarCobrancaHome(); // r163: card da cobrança automática (não bloqueia o login)
 
                 if (projetoAtivo && projetoAtivo.data) atualizarCabecalhoProjeto();
 
@@ -2372,6 +2397,98 @@
         } catch (err) {
             // Falha ao carregar pendências não deve travar o login: só esconde os cards.
             wrap.style.display = 'none';
+        }
+    }
+
+    // r163: COBRANÇA AUTOMÁTICA — e-mail a cada 2h para os supervisores dos inventários do mês
+    // sem Análise de Preparação concluída. Isolado: qualquer falha aqui só esconde o card.
+    let cobAtiva = false;
+    async function carregarCobrancaHome() {
+        const card = document.getElementById('card-cobranca-analise');
+        try {
+            const res = await chamarApi({ action: 'cobrancaStatus', cpf: getCpfLogado() });
+            if (!res || !res.ok) { card.style.display = 'none'; return; }
+            cobAtiva = !!res.ativa;
+            const horas = res.intervaloHoras || 2;   // r164
+            const horasTxt = horas === 1 ? 'a cada 1 hora' : 'a cada ' + horas + ' horas';
+            const inpH = document.getElementById('cob-horas');
+            if (inpH && document.activeElement !== inpH) inpH.value = horas;
+            document.getElementById('cob-freq').style.display = 'block';
+            const pend = res.pendentes || [], sem = res.semEmail || [];
+            document.getElementById('cob-count').innerText = pend.length;
+            const ult = res.ultimaExecucao;
+            let txt = cobAtiva
+                ? '<b class="on">Ativa</b> — lembretes ' + horasTxt + ', 24h por dia, até a análise ser concluída.'
+                : '<b class="off">Desativada</b> — nenhum lembrete está sendo enviado.';
+            if (ult && ult.quando) {
+                const quando = new Date(ult.quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                txt += '<br><span style="color:#6B7B8D">Última rodada: ' + escaparHtml(quando) + ' · ' + ult.enviados + ' e-mail(s) enviado(s)'
+                    + (ult.falhas && ult.falhas.length ? ' · <span style="color:#E05252">' + ult.falhas.length + ' falha(s): ' + escaparHtml(ult.falhas.slice(0, 3).join('; ')) + '</span>' : '') + '</span>';
+            }
+            if (res.erroGatilho) txt += '<br><span style="color:#E05252">' + escaparHtml(res.erroGatilho) + '</span>';
+            document.getElementById('cob-status').innerHTML = txt;
+            const btn = document.getElementById('cob-botao');
+            btn.innerText = cobAtiva ? 'Desativar cobrança automática' : 'Ativar cobrança automática';
+            btn.className = 'btn btn-sm w-100 ' + (cobAtiva ? 'btn-outline-danger' : 'btn-success');
+            btn.style.display = 'block';
+            let h = '';
+            if (pend.length) {
+                h += '<div class="fc-cob-sub">Sem análise concluída (mês)</div><ul class="fc-pend-lista">' + pend.map(p => `
+                    <li class="fc-pend-item">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                        <div class="fc-pend-detalhe">${escaparHtml(p.data)} · ${p.supervisores.length ? 'Supervisor(es): ' + escaparHtml(p.supervisores.join(', ')) : 'ninguém para receber o e-mail'}</div>
+                    </li>`).join('') + '</ul>';
+            }
+            if (sem.length) {
+                h += '<div class="fc-cob-sub" style="color:#E05252">Sem para quem cobrar</div><ul class="fc-pend-lista">' + sem.map(p => `
+                    <li class="fc-pend-item">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                        <div class="fc-pend-detalhe">${escaparHtml(p.data)} · ${escaparHtml(p.motivo)}</div>
+                    </li>`).join('') + '</ul>';
+            }
+            if (!pend.length) h += '<div class="fc-pend-detalhe" style="font-size:12px;color:#6B7B8D">Todos os inventários do mês têm a análise concluída.</div>';
+            document.getElementById('cob-listas').innerHTML = h;
+            card.style.display = 'block';
+        } catch (err) {
+            card.style.display = 'none';
+        }
+    }
+    async function alternarCobranca() {
+        const btn = document.getElementById('cob-botao');
+        const ativar = !cobAtiva;
+        const hAtual = parseInt(document.getElementById('cob-horas').value, 10) || 2;
+        if (ativar && !confirm('Ativar a cobrança automática?\n\nOs supervisores dos inventários do mês sem Análise de Preparação concluída vão receber um e-mail agora e depois a cada ' + (hAtual === 1 ? '1 hora' : hAtual + ' horas') + ', 24h por dia, até a análise ser concluída.')) return;
+        if (!ativar && !confirm('Desativar a cobrança automática? Nenhum lembrete será enviado até você ativar de novo.')) return;
+        btn.disabled = true; btn.innerText = ativar ? 'Ativando e enviando a 1ª rodada...' : 'Desativando...';
+        try {
+            const urlApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
+            const res = await chamarApi({ action: ativar ? 'cobrancaAtivar' : 'cobrancaDesativar', cpf: getCpfLogado(), urlApp: urlApp });
+            if (!res || !res.ok) alert('⚠️ ' + ((res && res.erro) || 'Falha ao alterar a cobrança.'));
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.disabled = false;
+            carregarCobrancaHome();
+        }
+    }
+
+    // r164: frequência dos lembretes configurável no painel (1 a 24 horas)
+    async function salvarFrequenciaCobranca() {
+        const inp = document.getElementById('cob-horas');
+        const btn = document.getElementById('cob-salvar-freq');
+        const v = String(inp.value || '').trim();
+        const h = Number(v);
+        if (!/^\d+$/.test(v) || h < 1 || h > 24) { alert('⚠️ Informe um número inteiro de horas entre 1 e 24.'); inp.focus(); return; }
+        btn.disabled = true; btn.innerText = 'Salvando...';
+        try {
+            const res = await chamarApi({ action: 'cobrancaSalvarFrequencia', cpf: getCpfLogado(), horas: h });
+            if (!res || !res.ok) alert('⚠️ ' + ((res && res.erro) || 'Falha ao salvar a frequência.'));
+            else inp.blur();
+        } catch (err) {
+            alert('⚠️ ' + err.message);
+        } finally {
+            btn.disabled = false; btn.innerText = 'Salvar';
+            carregarCobrancaHome();
         }
     }
 
@@ -4520,7 +4637,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-07-r161';
+    const VERSAO_ESPERADA = '2026-10-09-r164';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');

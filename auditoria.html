@@ -455,7 +455,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r161';
+const VERSAO = 'r164';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -4732,7 +4732,13 @@ async function prepararEnvio(auditoriaId) {
     bcc: [
       { email: 'alecxandro_@hotmail.com', marcado: true },
       { email: 'geizenberg@formulacode.tec.br', marcado: true }
-    ]
+    ],
+    // r162: pesquisa CSAT/NPS junto do envio — só em análises DURANTE A OPERAÇÃO (mesma regra do botão avulso).
+    // Vem marcada; destinatários escolhidos à parte (lista própria, começa igual às sugestões do relatório).
+    // Sem cópia oculta: o BCC acima vale só para o relatório.
+    permitePesquisa: String(a.tipoAvaliacao || '').toUpperCase().indexOf('DURANTE') !== -1,
+    pesquisa: true,
+    pesqEmails: ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: e.origem || '', marcado: e.marcar !== false }))
   };
   audRenderModalEnvio();
 }
@@ -4768,6 +4774,7 @@ function audRenderModalEnvio() {
         <div class="pf-env-anexos">📄 Análise (PDF) e 🎬 Apresentação Executiva (PDF) — gerados ou reaproveitados na hora do envio, como antes.</div>
         <div class="pf-env-rot">Cópia oculta (BCC)</div>
         <div class="pf-env-bcc">${e.bcc.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="audBccMarcar(${i},this.checked)"><span>${esc(x.email)}</span></label>`).join('')}</div>
+        ${audHtmlPesquisaEnvio(e)}
         <div class="pf-links" style="margin-top:4px">
           <button type="button" style="background:var(--navy);color:#fff" onclick="audEnvConfirmar()">Enviar</button>
           <button type="button" style="background:#E2E8F0;color:var(--navy)" onclick="audFecharEnvio()">Cancelar</button>
@@ -4810,17 +4817,84 @@ function audEnvAdicionar() {
   if (novo) novo.focus();
   return true;
 }
+/* ── r162: pesquisa CSAT/NPS na mesma janela do envio do relatório ── */
+function audHtmlPesquisaEnvio(e) {
+  if (!e.permitePesquisa) return '';
+  const lista = e.pesqEmails.length
+    ? e.pesqEmails.map((x, i) => `<label class="pf-env-item"><input type="checkbox" ${x.marcado ? 'checked' : ''} onchange="audPesqMarcar(${i},this.checked)"><span>${esc(x.email)}${x.sub ? '<small>' + esc(x.sub) + '</small>' : ''}</span></label>`).join('')
+    : '<div class="ms-vazio">Nenhum e-mail na lista. Adicione abaixo.</div>';
+  return `
+        <div class="pf-env-rot">Pesquisa CSAT/NPS</div>
+        <label class="pf-env-item" style="border:1px solid var(--border);border-radius:10px;margin:6px 0 8px"><input type="checkbox" ${e.pesquisa ? 'checked' : ''} onchange="audPesqAtivar(this.checked)"><span><b>📊 Enviar também a pesquisa CSAT/NPS</b><small>E-mail separado, um para cada destinatário marcado abaixo. Sem cópia oculta.</small></span></label>
+        ${e.pesquisa ? `
+        <div class="pf-env-rot" id="audPesqRot">Destinatários da pesquisa (${e.pesqEmails.filter(x => x.marcado).length} marcado(s))</div>
+        <div class="pf-env-lista">${lista}</div>
+        <div class="pf-env-add">
+          <input type="email" id="audPesqNovo" placeholder="Adicionar e-mail para a pesquisa" aria-label="Adicionar e-mail para a pesquisa" onkeydown="if(event.key==='Enter'){event.preventDefault();audPesqAdicionar();}">
+          <button type="button" onclick="audPesqAdicionar()">Adicionar</button>
+        </div>` : ''}`;
+}
+function audPesqAtivar(on) {
+  const e = state.audEnvio;
+  if (!e) return;
+  e.pesquisa = !!on;
+  audRenderModalEnvio();
+}
+function audPesqMarcar(i, on) {
+  const e = state.audEnvio;
+  if (!e || !e.pesqEmails[i]) return;
+  e.pesqEmails[i].marcado = !!on;
+  const rot = document.getElementById('audPesqRot');
+  if (rot) rot.textContent = 'Destinatários da pesquisa (' + e.pesqEmails.filter(x => x.marcado).length + ' marcado(s))';
+}
+function audPesqAdicionar() {
+  const e = state.audEnvio;
+  const el = document.getElementById('audPesqNovo');
+  if (!e || !el) return false;
+  const partes = String(el.value || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (!partes.length) return true;
+  const invalidos = partes.filter(x => !PF_EMAIL_RE.test(x));
+  if (invalidos.length) { toast('E-mail inválido: ' + invalidos.join(', '), 4000); return false; }
+  partes.forEach(x => {
+    const ex = e.pesqEmails.find(y => y.email === x);
+    if (ex) ex.marcado = true;
+    else e.pesqEmails.push({ email: x, sub: 'Adicionado agora', marcado: true });
+  });
+  audRenderModalEnvio();
+  const novo = document.getElementById('audPesqNovo');
+  if (novo) novo.focus();
+  return true;
+}
+// Envia a pesquisa, um e-mail por destinatário (cada um com seu link), usando o mesmo envio do botão avulso.
+async function audEnviarPesquisas(auditoriaId, emails) {
+  const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
+  const falhas = [];
+  for (let i = 0; i < emails.length; i++) {
+    showLoading('Enviando a pesquisa CSAT/NPS (' + (i + 1) + ' de ' + emails.length + ')...');
+    const re = await apiCall('enviarPesquisaNps', { auditoriaId, email: emails[i], urlBaseApp });
+    if (!re.ok) falhas.push(emails[i] + (re.erro ? ' (' + re.erro + ')' : ''));
+  }
+  hideLoading();
+  if (!falhas.length) toast('Relatório enviado e pesquisa CSAT/NPS enviada para ' + emails.length + ' destinatário(s)', 5000);
+  else toast('Relatório enviado. A pesquisa NÃO foi para: ' + falhas.join('; ') + '. Use o botão "Enviar pesquisa CSAT/NPS" do histórico para tentar de novo.', 9000);
+}
 async function audEnvConfirmar() {
   const e = state.audEnvio;
   if (!e) return;
   const pend = document.getElementById('audEnvNovo');
   if (pend && pend.value.trim() && !audEnvAdicionar()) return;   // e-mail digitado e não adicionado: adiciona antes (se for válido)
+  const pendP = document.getElementById('audPesqNovo');
+  if (pendP && pendP.value.trim() && !audPesqAdicionar()) return;   // r162: idem para a lista da pesquisa
   const emails = e.emails.filter(x => x.marcado).map(x => x.email);
   if (!emails.length) { toast('Marque ou adicione ao menos um e-mail'); return; }
   const bcc = e.bcc.filter(x => x.marcado).map(x => x.email);   // r160
+  const enviarPesq = !!(e.permitePesquisa && e.pesquisa);   // r162
+  const pesqEmails = enviarPesq ? e.pesqEmails.filter(x => x.marcado).map(x => x.email) : [];
+  if (enviarPesq && !pesqEmails.length) { toast('Marque ao menos um e-mail para a pesquisa ou desmarque "Enviar também a pesquisa CSAT/NPS"', 5000); return; }
   const id = e.auditoriaId;
   audFecharEnvio();
-  await executarEnvioRelatorio(id, emails.join(', '), bcc);
+  const enviado = await executarEnvioRelatorio(id, emails.join(', '), bcc);
+  if (enviado && pesqEmails.length) await audEnviarPesquisas(id, pesqEmails);   // pesquisa só depois do relatório ter saído
 }
 
 // Fluxo de geração + envio (o mesmo de antes do r157; só recebe a lista confirmada na janela)
@@ -4884,8 +4958,10 @@ async function executarEnvioRelatorio(auditoriaId, email, bcc) {   // r160: bcc 
   if (re.ok) {
     toast('Relatório e apresentação enviados para ' + email);
     verHistorico(true);
+    return true;   // r162
   } else {
     toast('Erro: ' + (re.erro || 'falha'));
+    return false;
   }
 }
 
