@@ -1,6 +1,6 @@
-=== PROVA DE PUBLICACAO — 2026-10-09 21:38:38 UTC ===
+=== PROVA DE PUBLICACAO — 2026-10-09 21:51:21 UTC ===
 Versao esperada: 2026-10-09-r166
-VER (numero interno do clasp): 226
+VER (numero interno do clasp): 227
 SITE_DEP_ID (implantacao do pipeline): AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G
 URL: https://script.google.com/macros/s/AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G/exec
 
