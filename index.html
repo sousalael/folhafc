@@ -4722,7 +4722,14 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-12-r171';
+    const VERSAO_ESPERADA = '2026-10-12-r172';
+
+    // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
+    // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
+    // o app espera e confere de novo sozinho (a cada 20 s, por até 6 min) em vez de acusar erro.
+    function numeroRevisao(v) { const m = String(v || '').match(/r(\d+)/i); return m ? parseInt(m[1], 10) : 0; }
+    let tentativasVersao = 0;
+    const MAX_TENTATIVAS_VERSAO = 18;
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4732,11 +4739,24 @@
             if (res.versao === VERSAO_ESPERADA) {
                 badge.innerHTML = '✅ Script atualizado (versão ' + escaparHtml(res.versao) + ')';
                 badge.className = 'small text-center text-success mt-3';
-            } else {
-                badge.innerHTML = '⚠️ Script desatualizado! Servidor está na versão "' + escaparHtml(res.versao) +
-                    '", mas este app espera "' + VERSAO_ESPERADA + '". Publique uma <strong>Nova Versão</strong> no Apps Script (Implantar → Gerenciar implantações → lápis → Nova versão → Implantar).';
-                badge.className = 'small text-center text-danger mt-3 fw-bold';
+                return;
             }
+            const nServ = numeroRevisao(res.versao), nApp = numeroRevisao(VERSAO_ESPERADA);
+            if (nServ && nApp && nServ > nApp) {
+                badge.innerHTML = '⚠️ O servidor já está numa versão mais nova (' + escaparHtml(res.versao) + ') que esta página (' + VERSAO_ESPERADA + '). Recarregue a página com <strong>Ctrl+F5</strong> (no celular, feche e abra de novo).';
+                badge.className = 'small text-center text-warning mt-3 fw-bold';
+                return;
+            }
+            if (tentativasVersao < MAX_TENTATIVAS_VERSAO) {
+                tentativasVersao++;
+                badge.innerHTML = '⏳ Servidor sendo atualizado (de ' + escaparHtml(res.versao) + ' para ' + VERSAO_ESPERADA + '). Isso leva até 3 minutos após a publicação; conferindo de novo automaticamente…';
+                badge.className = 'small text-center text-secondary mt-3';
+                setTimeout(verificarVersaoScript, 20000);
+                return;
+            }
+            badge.innerHTML = '⚠️ Script desatualizado! Servidor está na versão "' + escaparHtml(res.versao) +
+                '", mas este app espera "' + VERSAO_ESPERADA + '". A publicação automática não concluiu: veja a aba <strong>Actions</strong> do GitHub (a execução "Deploy Apps Script" deve estar vermelha, com o motivo) ou publique uma <strong>Nova Versão</strong> no Apps Script (Implantar → Gerenciar implantações → lápis → Nova versão → Implantar).';
+            badge.className = 'small text-center text-danger mt-3 fw-bold';
         } catch (err) {
             badge.innerHTML = '⚠️ Não foi possível verificar a versão do script (' + escaparHtml(err.message) + '). Isso também pode indicar uma versão muito antiga, sem esta ação.';
             badge.className = 'small text-center text-danger mt-3';

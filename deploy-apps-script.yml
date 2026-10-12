@@ -1,5 +1,8 @@
 name: Deploy Apps Script
 
+# r172: o GitHub "achata" as pastas no upload pelo navegador (tudo cai na raiz).
+#  Por isso o robô passa a ler TUDO da raiz: SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt -> Code.gs
+#  e appsscript.json da raiz -> manifesto. Também dispara quando o appsscript.json da raiz muda.
 # r171: o robô deixou de confiar no "Script is already up to date" do clasp.
 #  - .clasp.json agora fica na RAIZ do repositório (rootDir "apps-script"), layout
 #    padrão do clasp, sem ambiguidade de pasta entre versões do clasp;
@@ -15,6 +18,7 @@ on:
     paths:
       - "apps-script/**"
       - "SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt"
+      - "appsscript.json"
   workflow_dispatch: {}
 
 permissions:
@@ -40,8 +44,15 @@ jobs:
       - name: Configurar credenciais do clasp
         run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
-      - name: Sincronizar Code.gs com o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt da raiz
-        run: cp SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt apps-script/Code.gs
+      - name: Sincronizar Code.gs e manifesto a partir da raiz
+        run: |
+          mkdir -p apps-script
+          cp SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt apps-script/Code.gs
+          if [ -f appsscript.json ]; then cp appsscript.json apps-script/appsscript.json; echo "Manifesto copiado da raiz."; fi
+          if ! grep -q "script.scriptapp" apps-script/appsscript.json; then
+            echo "ERRO: o appsscript.json não tem a permissão script.scriptapp (a cobrança automática pararia)."
+            exit 1
+          fi
 
       # r171: trava de segurança — script e site precisam esperar a mesma versão
       - name: Conferir versões antes de publicar
