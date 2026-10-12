@@ -111,6 +111,7 @@ function doPost(e) {
     else if (action === 'orcPrecosObter') { result = orcPrecosObter(data, data.cpf); }     // r168
     else if (action === 'orcPrecosSalvar') { result = orcPrecosSalvar(data, data.cpf); }   // r168
     else if (action === 'orcInterpretar') { result = orcInterpretar(data, data.cpf); }     // r168
+    else if (action === 'orcDistancias') { result = orcDistancias(data, data.cpf); }       // r174: distâncias rodoviárias automáticas
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -610,7 +611,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-12-r172';
+const VERSAO_SCRIPT = '2026-10-12-r174';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -8761,7 +8762,7 @@ var ORC_ABA_PRECOS = 'Precos';
 var ORC_PARTE = 45000;
 var ORC_MAX_PARTES = 20;
 var ORC_MAX_PARTES_PRECOS = 4;
-var ORC_IA_MODELO = 'claude-haiku-4-5-20251001';
+// r173: modelos da interpretação em ORC_IA_MODELOS (logo acima de orcInterpretar)
 var __orcPlanilhaMemo = null;
 
 function orcPlanilha_() {
@@ -8923,6 +8924,94 @@ function orcPrecosSalvar(data, cpf) {
 
 // Interpretação do texto livre: a tela monta o prompt completo (regras e formato);
 // aqui só se chama a IA e se devolve o JSON já convertido.
+/* ───────────────────────────────────────────────────────────────────
+   r174: DISTÂNCIAS RODOVIÁRIAS AUTOMÁTICAS (Fortaleza, Natal, Juazeiro do Norte → cidade da loja)
+   1º Google Maps (serviço nativo do Apps Script, rota de carro);
+   2º reserva: localização da cidade (Open-Meteo) + rota de carro (OSRM).
+   Cada cidade calculada fica guardada na aba "Distancias" da planilha da
+   calculadora, para não recalcular (e não gastar cota) a cada vez.
+   ─────────────────────────────────────────────────────────────────── */
+var ORC_ABA_DIST = 'Distancias';
+var ORC_DIST_ORIGENS = {
+  FOR: { nome: 'Fortaleza, CE, Brasil',         lat: -3.7319, lon: -38.5267 },
+  NAT: { nome: 'Natal, RN, Brasil',             lat: -5.7945, lon: -35.2110 },
+  JUA: { nome: 'Juazeiro do Norte, CE, Brasil', lat: -7.2131, lon: -39.3151 }
+};
+var ORC_UFS = { AC:'Acre', AL:'Alagoas', AP:'Amapá', AM:'Amazonas', BA:'Bahia', CE:'Ceará', DF:'Distrito Federal', ES:'Espírito Santo',
+  GO:'Goiás', MA:'Maranhão', MT:'Mato Grosso', MS:'Mato Grosso do Sul', MG:'Minas Gerais', PA:'Pará', PB:'Paraíba', PR:'Paraná',
+  PE:'Pernambuco', PI:'Piauí', RJ:'Rio de Janeiro', RN:'Rio Grande do Norte', RS:'Rio Grande do Sul', RO:'Rondônia', RR:'Roraima',
+  SC:'Santa Catarina', SP:'São Paulo', SE:'Sergipe', TO:'Tocantins' };
+
+function orcSemAcento_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+// "Mossoró-RN", "Mossoró/RN", "Mossoró - RN", "Mossoró, RN", "Mossoró RN" -> {cidade:"Mossoró", uf:"RN"}
+function orcSepararCidade_(texto) {
+  var t = String(texto || '').trim().replace(/\s+/g, ' ');
+  var m = t.match(/^(.*?)[\s,\/\-–]+([A-Za-z]{2})\.?$/);
+  if (m && ORC_UFS[m[2].toUpperCase()]) return { cidade: m[1].replace(/[\s,\/\-–]+$/, '').trim(), uf: m[2].toUpperCase() };
+  return { cidade: t, uf: '' };
+}
+function orcAbaDist_() { return orcAba_(ORC_ABA_DIST, ['Chave', 'Cidade', 'FOR', 'NAT', 'JUA', 'Fonte', 'AtualizadoEm']); }
+
+function orcDistGoogle_(destino) {
+  var r = {};
+  Object.keys(ORC_DIST_ORIGENS).forEach(function(o) {
+    var d = Maps.newDirectionFinder().setOrigin(ORC_DIST_ORIGENS[o].nome).setDestination(destino)
+      .setMode(Maps.DirectionFinder.Mode.DRIVING).setLanguage('pt-BR').getDirections();
+    if (!d || d.status !== 'OK' || !d.routes || !d.routes.length) throw new Error('Google Maps: ' + (d && d.status ? d.status : 'sem rota'));
+    var metros = 0; d.routes[0].legs.forEach(function(l) { metros += l.distance.value; });
+    r[o] = Math.round(metros / 1000);
+  });
+  return r;
+}
+function orcDistOsrm_(cidade, uf) {
+  var g = JSON.parse(UrlFetchApp.fetch('https://geocoding-api.open-meteo.com/v1/search?count=10&language=pt&countryCode=BR&name=' +
+    encodeURIComponent(cidade), { muteHttpExceptions: true }).getContentText() || '{}');
+  var lista = (g.results || []).filter(function(x) { return x.country_code === 'BR'; });
+  if (uf) lista = lista.filter(function(x) { return orcSemAcento_(x.admin1) === orcSemAcento_(ORC_UFS[uf]); });
+  var alvo = lista.filter(function(x) { return orcSemAcento_(x.name) === orcSemAcento_(cidade); })[0] || lista[0];
+  if (!alvo) throw new Error('cidade não encontrada');
+  var r = {};
+  Object.keys(ORC_DIST_ORIGENS).forEach(function(o) {
+    var og = ORC_DIST_ORIGENS[o];
+    var j = JSON.parse(UrlFetchApp.fetch('https://router.project-osrm.org/route/v1/driving/' + og.lon + ',' + og.lat + ';' + alvo.longitude + ',' + alvo.latitude + '?overview=false',
+      { muteHttpExceptions: true }).getContentText() || '{}');
+    if (j.code !== 'Ok' || !j.routes || !j.routes.length) throw new Error('rota não encontrada');
+    r[o] = Math.round(j.routes[0].distance / 1000);
+  });
+  return r;
+}
+
+function orcDistancias(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var cidades = (Array.isArray(data.cidades) ? data.cidades : []).map(function(c) { return String(c || '').trim(); }).filter(Boolean).slice(0, 60);
+  var aba = orcAbaDist_();
+  var cache = {};
+  if (aba.getLastRow() > 1) aba.getRange(2, 1, aba.getLastRow() - 1, 7).getDisplayValues().forEach(function(l, i) { cache[l[0]] = { linha: i + 2, FOR: Number(l[2]), NAT: Number(l[3]), JUA: Number(l[4]), fonte: l[5] }; });
+  var res = {};
+  cidades.forEach(function(texto) {
+    if (res[texto]) return;
+    var sep = orcSepararCidade_(texto);
+    var chave = orcSemAcento_(sep.cidade) + '|' + sep.uf;
+    if (cache[chave] && !data.forcar) { res[texto] = { FOR: cache[chave].FOR, NAT: cache[chave].NAT, JUA: cache[chave].JUA, fonte: cache[chave].fonte }; return; }
+    var destino = sep.cidade + ', ' + (sep.uf ? sep.uf + ', ' : '') + 'Brasil';
+    var km = null, fonte = '', erros = [];
+    try { km = orcDistGoogle_(destino); fonte = 'Google Maps'; } catch (e) { erros.push(e.message); }
+    if (!km) { try { km = orcDistOsrm_(sep.cidade, sep.uf); fonte = 'OpenStreetMap'; } catch (e) { erros.push(e.message); } }
+    if (!km) { res[texto] = { erro: 'Não encontrei a rota até "' + texto + '". Confira o nome da cidade com a UF (ex.: Mossoró-RN).' }; return; }
+    var linha = [chave, sep.cidade + (sep.uf ? '-' + sep.uf : ''), km.FOR, km.NAT, km.JUA, fonte, orcAgora_()];
+    if (cache[chave]) aba.getRange(cache[chave].linha, 1, 1, 7).setValues([linha]);
+    else { aba.appendRow(linha); cache[chave] = { linha: aba.getLastRow() }; }
+    res[texto] = { FOR: km.FOR, NAT: km.NAT, JUA: km.JUA, fonte: fonte };
+  });
+  return { success: true, distancias: res };
+}
+
+/* r173: a interpretação dentro do Claude usava um modelo mais capaz que o Haiku.
+   Agora o servidor usa o Sonnet (mais preciso para ler descrições longas/ditadas), com
+   temperatura 0 (resposta estável). Se o modelo não existir na conta ou demorar demais,
+   cai para o próximo da lista, até o Haiku, para nunca ficar sem resposta. */
+var ORC_IA_MODELOS = ['claude-sonnet-5-5', 'claude-sonnet-4-5', 'claude-haiku-4-5-20251001'];
+
 function orcInterpretar(data, cpf) {
   if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
   var prompt = String(data.prompt || '');
@@ -8930,31 +9019,41 @@ function orcInterpretar(data, cpf) {
   if (prompt.length > 150000) return { error: 'Texto grande demais para interpretar de uma vez. Divida em partes.' };
   var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
   if (!apiKey) return { error: 'Chave da API Claude não configurada (CLAUDE_API_KEY).' };
-  var sistema = 'Você converte descrições de orçamentos de inventário em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
+  var sistema = 'Você é o assistente de orçamentos da Formula Code e converte descrições de orçamentos de inventário em JSON, seguindo à risca o formato e as regras do pedido. Leia o texto inteiro antes de responder; não invente quantidades nem preços que não foram ditos. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
   var ultimoErro = '';
-  for (var tentativa = 1; tentativa <= 2; tentativa++) {
-    var conteudo = tentativa === 1 ? prompt : prompt + '\n\nATENÇÃO: a resposta anterior não era um JSON válido. Responda apenas com o objeto JSON.';
-    var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-      method: 'post', contentType: 'application/json',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      payload: JSON.stringify({ model: ORC_IA_MODELO, max_tokens: 16000, system: sistema, messages: [{ role: 'user', content: conteudo }] }),
-      muteHttpExceptions: true
-    });
-    var codigo = resp.getResponseCode();
-    var corpo = {};
-    try { corpo = JSON.parse(resp.getContentText()); } catch (e) { corpo = {}; }
-    if (corpo.error) {
-      ultimoErro = corpo.error.message || ('código ' + codigo);
-      if (codigo === 429 || codigo >= 500) { Utilities.sleep(2000); continue; }
-      return { error: 'IA: ' + ultimoErro };
+  for (var m = 0; m < ORC_IA_MODELOS.length; m++) {
+    var modelo = ORC_IA_MODELOS[m];
+    for (var tentativa = 1; tentativa <= 2; tentativa++) {
+      var conteudo = tentativa === 1 ? prompt : prompt + '\n\nATENÇÃO: a resposta anterior não era um JSON válido. Responda apenas com o objeto JSON.';
+      var resp;
+      try {
+        resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+          method: 'post', contentType: 'application/json',
+          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          payload: JSON.stringify({ model: modelo, max_tokens: 16000, temperature: 0, system: sistema, messages: [{ role: 'user', content: conteudo }] }),
+          muteHttpExceptions: true
+        });
+      } catch (e) {
+        ultimoErro = 'falha de conexão com ' + modelo + ': ' + e.message;   // ex.: tempo esgotado — tenta o próximo modelo (mais rápido)
+        break;
+      }
+      var codigo = resp.getResponseCode();
+      var corpo = {};
+      try { corpo = JSON.parse(resp.getContentText()); } catch (e) { corpo = {}; }
+      if (corpo.error) {
+        ultimoErro = (corpo.error.message || ('código ' + codigo)) + ' [' + modelo + ']';
+        if (codigo === 404 || (codigo === 400 && /model/i.test(String(corpo.error.message || '')))) break;   // modelo indisponível: próximo
+        if (codigo === 429 || codigo === 529 || codigo >= 500) { Utilities.sleep(2000); continue; }
+        return { error: 'IA: ' + ultimoErro };
+      }
+      var texto = (corpo.content || []).map(function(c) { return c.text || ''; }).join('');
+      var ini = texto.indexOf('{'), fim = texto.lastIndexOf('}');
+      if (ini >= 0 && fim > ini) {
+        try { return { success: true, json: JSON.parse(texto.substring(ini, fim + 1)), modelo: modelo, reserva: modelo.indexOf('haiku') >= 0 }; }
+        catch (e) { ultimoErro = 'resposta não veio em JSON válido'; }
+      } else ultimoErro = 'resposta sem JSON';
+      if (corpo.stop_reason === 'max_tokens') return { error: 'O texto é grande demais para interpretar de uma vez. Divida em partes (por regional, por exemplo).' };
     }
-    var texto = (corpo.content || []).map(function(c) { return c.text || ''; }).join('');
-    var ini = texto.indexOf('{'), fim = texto.lastIndexOf('}');
-    if (ini >= 0 && fim > ini) {
-      try { return { success: true, json: JSON.parse(texto.substring(ini, fim + 1)) }; }
-      catch (e) { ultimoErro = 'resposta não veio em JSON válido'; }
-    } else ultimoErro = 'resposta sem JSON';
-    if (corpo.stop_reason === 'max_tokens') return { error: 'O texto é grande demais para interpretar de uma vez. Divida em partes (por regional, por exemplo).' };
   }
   return { error: 'Não foi possível interpretar (' + ultimoErro + ').' };
 }

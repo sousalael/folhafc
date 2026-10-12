@@ -8,7 +8,9 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r170: ditado por voz (botão 🎤); a IA lê preços, transporte, refeições e hospedagem por dia; preços lidos valem só no orçamento ou na tabela (escolha na conferência); Excel em maiúsculas.
+<!-- r174: distâncias até a cidade da loja calculadas automaticamente (Google Maps no servidor), ao informar a cidade e após a interpretação.
+     r173: interpretação no servidor usa o Sonnet (como dentro do Claude), temperatura 0; espera até 5 min.
+     r170: ditado por voz (botão 🎤); a IA lê preços, transporte, refeições e hospedagem por dia; preços lidos valem só no orçamento ou na tabela (escolha na conferência); Excel em maiúsculas.
      r169: funções Apoio, Supervisor farmácia e Inventariante farmácia; refeições de farmácia; marcação "Farmácia" na unidade.
      r168: Calculadora de Orçamentos de inventário (somente Diretor).
      Aberta pelo botão 🧮 da tela principal do Sistema de Gestão (?token&cpf).
@@ -180,7 +182,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       </div>
       <p class="hint">Se algo estiver errado, ajuste o texto e interprete de novo, ou aplique e corrija nos campos.</p>
     </div>
-    <p class="hint" id="hintLer">A leitura usa a mesma IA do sistema e pode levar até um minuto. Depois de interpretar, você confere o que foi entendido e só então aplica. Você pode falar diárias, preços de refeições, hotel, van e combustível, e em quais dias a equipe toma café, almoça, lancha, janta e dorme fora: o que você disser vale, e o que não disser é sugerido automaticamente. Para ditar, use o Chrome ou o Edge (no iPhone, o Safari) e libere o microfone.</p>
+    <p class="hint" id="hintLer">A leitura usa a IA do sistema e pode levar até 2 minutos. Depois de interpretar, você confere o que foi entendido e só então aplica. Você pode falar diárias, preços de refeições, hotel, van e combustível, e em quais dias a equipe toma café, almoça, lancha, janta e dorme fora: o que você disser vale, e o que não disser é sugerido automaticamente. Para ditar, use o Chrome ou o Edge (no iPhone, o Safari) e libere o microfone.</p>
   </section>
 
   <!-- 2. PREÇOS -->
@@ -373,7 +375,7 @@ function precosIniciais(){
 function linhaVazia(u){ return Object.assign({funcao:(u && u.farmacia) ? "inv_farm" : "apoio", detalhe:""}, zeroOrig()); }   // r169: Apoio é o padrão fora de farmácia
 function diaVazio(u){ return {inicio:"14:00", coletores:0, linhas:[Object.assign({funcao:(u && u.farmacia) ? "sup_farm" : "supervisor", detalhe:""}, zeroOrig(), {FOR:1})]}; }
 function kmPadrao(reg){ const k = zeroOrig(); if(reg && reg.km) k[reg.origem] = reg.km; return k; }
-function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, origemFixa:false, clienteAlimenta:true, farmacia:false, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
+function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, kmFonte:"", origemFixa:false, clienteAlimenta:true, farmacia:false, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
 function regionalVazia(){ return {nome:"", origem:"FOR", km:0, unidades:[unidadeVazia()]}; }
 function normCompo(c){
   c = c || {}; const d = zeroOrig();
@@ -423,6 +425,7 @@ function normUnidade(u, reg){
   else if(u.km!==undefined) b.kmPor[reg ? reg.origem : "FOR"] = num(u.km);     // compatibilidade com versões anteriores
   b.origemFixa = !!u.origemFixa;
   b.kmEstimado = !!u.kmEstimado;
+  b.kmFonte = typeof u.kmFonte==="string" ? u.kmFonte : "";   // r174: "Google Maps" / "OpenStreetMap" quando calculado
   b.clienteAlimenta = u.clienteAlimenta===false ? false : true;
   b.lucro = (u.lucro===null || u.lucro===undefined || u.lucro==="") ? null : num(u.lucro);
   b.precoFinal = (u.precoFinal===null || u.precoFinal===undefined || u.precoFinal==="") ? null : num(u.precoFinal);
@@ -887,11 +890,14 @@ function desenharUnidade(reg, ri, u, ui){
     </div>
     <div class="grid">
       <label class="f">Unidade do cliente${inp(P+".nome", u.nome)}</label>
-      <label class="f">Cidade da loja${inp(P+".cidade", u.cidade)}</label>
+      <label class="f">Cidade da loja (com UF)${inp(P+".cidade", u.cidade, "text", 'placeholder="ex.: Mossoró-RN"')}</label>
       <label class="f">Tipo de inventário<select data-path="${P}.tipo">${TIPOS.map(t=>`<option ${t===u.tipo?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
       ${ORIGENS.map(o=>`<label class="f">Distância de ${o.nome} (km, só ida)${inp(P+".kmPor."+o.id, u.kmPor[o.id], "number", 'min="0"')}
         ${ehLocal(u, o.id) && u.kmPor[o.id] ? '<span class="tag">equipe local</span>' : ""}</label>`).join("")}
-      ${u.kmEstimado ? '<p class="est" style="grid-column:1/-1;margin:0">Distâncias estimadas automaticamente, confira.</p>' : ""}
+      <div style="grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="ghost small" data-acao="calcDist" ${A} ${u.cidade.trim() ? "" : "disabled"}>📍 Calcular distâncias pela cidade</button>
+        ${u.kmFonte ? `<span class="tag">Distâncias de carro calculadas pelo ${esc(u.kmFonte)}.</span>` : u.kmEstimado ? '<span class="est">Distâncias estimadas pela IA, confira (ou clique em "Calcular distâncias").</span>' : (u.cidade.trim() ? "" : '<span class="tag">Informe a cidade com a UF (ex.: Mossoró-RN) e as distâncias são calculadas sozinhas.</span>')}
+      </div>
       <label class="chk"><input type="checkbox" data-path="${P}.origemFixa" data-t="bool" ${u.origemFixa?"checked":""}>Origens definidas por mim (não redistribuir)</label>
       <label class="f">Lucro desta unidade (R$)<input type="number" min="0" data-path="${P}.lucro" data-t="numnull" value="${u.lucro===null?"":u.lucro}" placeholder="Padrão: ${precos.lucroUnidade}"></label>
       <label class="chk" style="align-self:end"><input type="checkbox" data-path="${P}.clienteAlimenta" data-t="bool" ${u.clienteAlimenta?"checked":""}>Cliente fornece alimentação durante a operação</label>
@@ -1006,7 +1012,9 @@ function aoEditar(el, evento){
   const ml = p.match(/^(regionais\.\d+\.unidades\.\d+)\.dias\.\d+\.linhas\.\d+\.funcao$/);
   if(ml){ const uu = getPath(orc, ml[1]); if(!uu.farmacia && FUN[el.value] && FUN[el.value].farm){ aplicarFarmacia(uu, true); toast("Unidade marcada como farmácia"); } }
   const mk = p.match(/^(regionais\.\d+\.unidades\.\d+)\.kmPor\.\w+$/);
-  if(mk) getPath(orc, mk[1]).kmEstimado = false;
+  if(mk){ const uu = getPath(orc, mk[1]); uu.kmEstimado = false; uu.kmFonte = ""; }
+  const mc = p.match(/^(regionais\.\d+\.unidades\.\d+)\.cidade$/);   // r174: cidade informada -> calcula as distâncias
+  if(mc && evento==="change"){ const uu = getPath(orc, mc[1]); if(uu.cidade.trim()) calcularDistancias([uu], true); else desenharOrcamento(); }
   // Ajusta faixa de dias da equipe
   const m = p.match(/^(regionais\.\d+\.unidades\.\d+\.equipes\.\d+)\.(saida|retorno)$/);
   if(m){
@@ -1044,6 +1052,7 @@ elOrc.addEventListener("click", async e=>{
     case "remDia": u.dias.splice(di,1); break;
     case "addLinha": u.dias[di].linhas.push(linhaVazia(u)); break;
     case "remLinha": u.dias[di].linhas.splice(Number(e.target.dataset.l),1); break;
+    case "calcDist": calcularDistancias([u], true, true); return;
     case "sugEq":
       if(u.equipes.length && !await confirmar("Substituir as equipes atuais pelas sugeridas?", "Substituir")) return;
       sugerirEquipes(u, reg, saldoInicial(orc, u), origensPrioridade(orc)); toast("Equipes e alimentação sugeridas"); break;
@@ -1074,6 +1083,34 @@ function limparEntrada(){
   aberto.clear(); aberto.add("r0");
 }
 function salvar(){ gravar(CH_ORC, orc); atualizar(); }
+
+/* r174: distâncias automáticas — o servidor calcula a rota de carro de Fortaleza, Natal e
+   Juazeiro do Norte até a cidade da loja e guarda o resultado para as próximas vezes. */
+async function buscarDistancias(cidades, forcar){
+  const lista = [...new Set(cidades.map(c=>String(c||"").trim()).filter(Boolean))];
+  if(!lista.length) return {};
+  const r = await chamar({action:"orcDistancias", cidades:lista, forcar:!!forcar});
+  return r.distancias || {};
+}
+function aplicarDistancia(u, d){
+  if(!d || d.erro) return false;
+  ORIGENS.forEach(o=>{ if(d[o.id]!==undefined && isFinite(Number(d[o.id]))) u.kmPor[o.id] = Number(d[o.id]); });
+  u.kmEstimado = false; u.kmFonte = d.fonte || "Google Maps";
+  return true;
+}
+async function calcularDistancias(unidades, redesenhar, forcar){
+  const us = unidades.filter(u=>u.cidade && u.cidade.trim());
+  if(!us.length) return;
+  toast(`Calculando distâncias até ${us.length===1 ? us[0].cidade : us.length + " cidades"}…`);
+  try{
+    const D = await buscarDistancias(us.map(u=>u.cidade), forcar);
+    const erros = [];
+    us.forEach(u=>{ const d = D[u.cidade.trim()]; if(!aplicarDistancia(u, d)) erros.push(d && d.erro ? d.erro : `Sem resultado para "${u.cidade}".`); });
+    if(redesenhar){ desenharOrcamento(); salvar(); }
+    if(erros.length) toast(erros[0]);
+    else toast("Distâncias calculadas. Se as equipes já estavam montadas, use \"Sugerir equipes e alimentação\" para refazer o transporte.");
+  }catch(e){ toast("Não foi possível calcular as distâncias agora: " + e.message); if(redesenhar) desenharOrcamento(); }
+}
 
 /* =====================================================================
    TELA – PREÇO DE VENDA E COERÊNCIA
@@ -1333,7 +1370,7 @@ function descritivo(o){
       T.push(u.nome || `Unidade ${ui+1}`);
       const loc = [];
       if(u.cidade) loc.push(u.cidade);
-      loc.push("distâncias: " + ORIGENS.map(x=>`${x.nome} ${kmDe(u, x.id)} km`).join(", ") + (u.kmEstimado ? " (estimadas)" : ""));
+      loc.push("distâncias: " + ORIGENS.map(x=>`${x.nome} ${kmDe(u, x.id)} km`).join(", ") + (u.kmFonte ? ` (${u.kmFonte})` : u.kmEstimado ? " (estimadas)" : ""));
       T.push(`- Cidade: ${loc.join(", ")}`);
       T.push(`- Tipo: ${u.tipo}${u.farmacia ? " (farmácia)" : ""}`);
       T.push(`- Alimentação durante a operação: ${u.clienteAlimenta ? "fornecida pelo cliente" : "por conta da Formula Code"}`);
@@ -1424,7 +1461,7 @@ FORMATO
    "origem": "FOR", "NAT" ou "JUA" (base de equipe mais próxima dessa regional),
    "unidades": [{
      "nome": "nome da unidade",
-     "cidade": "cidade da loja com UF",
+     "cidade": "cidade da loja no formato Cidade-UF (ex.: Mossoró-RN); deduza a UF se o texto não disser",
      "tipo": ${TIPOS.map(t=>JSON.stringify(t)).join(" | ")},
      "kmPor": {"FOR": km de Fortaleza-CE, "NAT": km de Natal-RN, "JUA": km de Juazeiro do Norte-CE} = distância rodoviária só de ida de cada base até a cidade da loja,
      "kmEstimado": true se você estimou alguma distância, false se todas vieram no texto,
@@ -1480,11 +1517,11 @@ DESCRIÇÃO
 }
 
 const elMsg = document.getElementById("msgLer"), btnLer = document.getElementById("btnLer"), btnParar = document.getElementById("btnParar");
-let ctl = null, samplePronto = null;
+let ctl = null, samplePronto = null, ultimaInterpReserva = false;
 function msgLer(t, erro){ elMsg.textContent = t; elMsg.className = "msg " + (erro?"err":"ok"); }
 // r168: a interpretação passa pelo servidor do sistema (mesma IA já usada nas análises)
 async function obterSample(){
-  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt}, opts && opts.signal); return r.json; } };
+  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt}, opts && opts.signal); ultimaInterpReserva = !!r.reserva; return r.json; } };
 }
 
 function mesclar(novo){
@@ -1504,13 +1541,21 @@ btnLer.addEventListener("click", async ()=>{
   const tudo = [txt, textoPlanilha ? "PLANILHA CARREGADA:\n" + textoPlanilha : ""].filter(Boolean).join("\n\n");
   if(!tudo){ msgLer("Escreva a descrição ou carregue uma planilha primeiro.", true); return; }
   const sample = samplePronto || await obterSample();
-  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false; msgLer("Interpretando... isso pode levar até um minuto.", false);
+  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false; msgLer("Interpretando... isso pode levar até 2 minutos.", false);
   try{
     const r = await sample.json(montarPrompt(tudo), {signal:ctl.signal, modelTier:"complex"});
     const novo = normOrc(r);
     if(!novo.cliente) novo.cliente = orc.cliente;
     let nU = 0;
     const substitui = document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)));
+    // r174: distâncias reais pela cidade (substituem as estimadas pela IA; distâncias ditas no texto são mantidas)
+    const precisa = [];
+    novo.regionais.forEach(reg=>reg.unidades.forEach(u=>{ if(u.cidade.trim() && (u.kmEstimado || ORIGENS.some(o=>!u.kmPor[o.id]))) precisa.push(u); }));
+    if(precisa.length){
+      msgLer("Calculando as distâncias até as cidades das lojas…", false);
+      try{ const D = await buscarDistancias(precisa.map(u=>u.cidade)); precisa.forEach(u=>aplicarDistancia(u, D[u.cidade.trim()])); }
+      catch(e){ /* mantém as estimativas da IA */ }
+    }
     const saldo = saldoInicial(substitui ? null : orc), ordem = origensPrioridade(novo);
     novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
       nU++;
@@ -1524,7 +1569,7 @@ btnLer.addEventListener("click", async ()=>{
     desenharPreviaPrecos();
     document.getElementById("previa").hidden = false;
     const est = novo.regionais.some(r=>r.unidades.some(u=>u.kmEstimado));
-    msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.`, false);
+    msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.` + (ultimaInterpReserva ? " Atenção: a IA principal não respondeu e foi usado o modo rápido, que é menos preciso; confira com mais cuidado." : ""), false);
   }catch(e){
     const m = {cancelled:"Interpretação interrompida.", sessao:e.message, timeout:"A interpretação demorou demais. Tente dividir o texto em partes menores."}[e.code]
       || ("Não consegui interpretar" + (e.message ? " (" + e.message + ")" : "") + ". Tente reescrever com mais detalhes ou preencha os campos.");
@@ -1685,7 +1730,7 @@ let tmrOrc = null, tmrPrecos = null, salvandoOrc = false, repetirOrc = false, se
 async function chamar(payload, sinalExterno){
   payload.token = tokenSessao;
   const controle = new AbortController();
-  const timer = setTimeout(()=>controle.abort(), 150000);
+  const timer = setTimeout(()=>controle.abort(), payload.action==="orcInterpretar" ? 330000 : 150000);   // r173: a IA mais precisa pode levar mais tempo
   if(sinalExterno) sinalExterno.addEventListener("abort", ()=>controle.abort());
   try{
     const resp = await fetch(API_URL, {method:"POST", body:JSON.stringify(payload), signal:controle.signal});
