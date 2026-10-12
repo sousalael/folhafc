@@ -841,6 +841,10 @@
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn fc-btn-verde w-100 py-2 fw-bold hidden" id="btn-bi-grupo" onclick="abrirBiGrupo()">📈 B.I. Formula Code</button>
         </div>
+        <!-- r168: Calculadora de Orçamentos (somente Diretor) — abre orcamentos.html em nova aba -->
+        <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+            <button class="btn fc-btn-verde w-100 py-2 fw-bold hidden" id="btn-orcamentos" onclick="abrirOrcamentos()">🧮 Calculadora de Orçamentos</button>
+        </div>
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
             <button class="btn btn-outline-primary w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalRelProvisionamento" onclick="prepararRelProvisionamento()">📑 Relatório de Provisionamento</button>
         </div>
@@ -4011,6 +4015,15 @@
         window.open(url, '_blank');
     }
 
+    // r168: Calculadora de Orçamentos (orcamentos.html), mesmo padrão do B.I.
+    function abrirOrcamentos() {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'orcamentos.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir a Calculadora de Orçamentos.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
+        window.open(url, '_blank');
+    }
+
     function abrirRevisaoLancamentos() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'revisao.html';
         const tok = window.tokenSessao || '';
@@ -4709,7 +4722,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-09-r167';
+    const VERSAO_ESPERADA = '2026-10-11-r168';
 
     async function verificarVersaoScript() {
         const badge = document.getElementById('badge-versao-script');
@@ -4790,6 +4803,8 @@
             if (btnBiFin) btnBiFin.classList.toggle('hidden', !ehDiretor);
             const btnBiGrupo = document.getElementById('btn-bi-grupo');   // r140
             if (btnBiGrupo) btnBiGrupo.classList.toggle('hidden', !ehDiretor);
+            const btnOrc = document.getElementById('btn-orcamentos');   // r168
+            if (btnOrc) btnOrc.classList.toggle('hidden', !ehDiretor);
             const liPessoas = document.getElementById('li-aba-pessoas');   // r155: aba Pessoas só para Diretor
             if (liPessoas) liPessoas.classList.toggle('hidden', !ehDiretor);
             const liCobranca = document.getElementById('li-aba-cobranca');   // r167: aba Cobrança só para Diretor

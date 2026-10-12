@@ -104,6 +104,13 @@ function doPost(e) {
     else if (action === 'cobrancaDesativar') { result = cobrancaDesativar(data, data.cpf); }   // r163
     else if (action === 'cobrancaSalvarFrequencia') { result = cobrancaSalvarFrequencia(data, data.cpf); }   // r164
     else if (action === 'cobrancaDefinirLoja') { result = cobrancaDefinirLoja(data, data.cpf); }   // r165
+    else if (action === 'orcListar') { result = orcListar(data, data.cpf); }               // r168: Calculadora de Orçamentos (só Diretor)
+    else if (action === 'orcCarregar') { result = orcCarregar(data, data.cpf); }           // r168
+    else if (action === 'orcSalvar') { result = orcSalvar(data, data.cpf); }               // r168
+    else if (action === 'orcExcluir') { result = orcExcluir(data, data.cpf); }             // r168
+    else if (action === 'orcPrecosObter') { result = orcPrecosObter(data, data.cpf); }     // r168
+    else if (action === 'orcPrecosSalvar') { result = orcPrecosSalvar(data, data.cpf); }   // r168
+    else if (action === 'orcInterpretar') { result = orcInterpretar(data, data.cpf); }     // r168
     else if (action === 'excluirAuditoria') { result = excluirAuditoria(data, data.cpf); }
     else if (action === 'excluirAvaliacaoEmAndamento') { result = excluirAvaliacaoEmAndamento(data, data.cpf); }
     else if (action === 'contarAnalisadasPerformance') { result = contarAnalisadasPerformance(data, data.cpf); }
@@ -603,7 +610,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-09-r167';
+const VERSAO_SCRIPT = '2026-10-11-r168';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -8737,3 +8744,218 @@ function diagGerarAnalise(dados, cpf) {
     }
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   MÓDULO: CALCULADORA DE ORÇAMENTOS (r168) — somente Diretor
+   Banco próprio: planilha ORC_SHEET_ID (abas Orcamentos e Precos).
+   Cada Diretor vê e edita só os próprios orçamentos e tem a própria
+   tabela de preços. O JSON do orçamento é guardado em partes (limite de
+   50 mil caracteres por célula), cada parte começando com "J:" para a
+   planilha nunca interpretar o texto como fórmula. Excel é gerado na
+   tela (nada vai para o Drive).
+   ═══════════════════════════════════════════════════════════════════ */
+var ORC_SHEET_ID = '12PcTstaKIYJL1qUZ7TjRS6vZn6WySbnHakWJeZACwGA';
+var ORC_ABA = 'Orcamentos';
+var ORC_ABA_PRECOS = 'Precos';
+var ORC_PARTE = 45000;
+var ORC_MAX_PARTES = 20;
+var ORC_MAX_PARTES_PRECOS = 4;
+var ORC_IA_MODELO = 'claude-haiku-4-5-20251001';
+var __orcPlanilhaMemo = null;
+
+function orcPlanilha_() {
+  if (!__orcPlanilhaMemo) __orcPlanilhaMemo = SpreadsheetApp.openById(ORC_SHEET_ID);
+  return __orcPlanilhaMemo;
+}
+function orcCabOrcamentos_() {
+  var c = ['ID','CPF','Diretor','Cliente','Status','CriadoEm','AtualizadoEm','ConcluidoEm','Unidades','Regionais','Custo','Preco','Partes'];
+  for (var i = 1; i <= ORC_MAX_PARTES; i++) c.push('Dados' + i);
+  return c;
+}
+function orcCabPrecos_() {
+  var c = ['CPF','Diretor','AtualizadoEm','Partes'];
+  for (var i = 1; i <= ORC_MAX_PARTES_PRECOS; i++) c.push('Dados' + i);
+  return c;
+}
+function orcAba_(nome, cab) {
+  var ss = orcPlanilha_();
+  var aba = ss.getSheetByName(nome);
+  if (!aba) {
+    aba = ss.insertSheet(nome);
+    aba.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold').setBackground('#001528').setFontColor('#FFFFFF');
+    aba.setFrozenRows(1);
+    aba.getRange(1, 1, aba.getMaxRows(), cab.length).setNumberFormat('@');
+  }
+  return aba;
+}
+function orcEhDiretor_(cpf) { return getPerfilPorCPF(cpf) === 'DIRETOR'; }
+function orcAgora_() { return Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyy-MM-dd HH:mm:ss'); }
+function orcPartir_(obj, maxPartes) {
+  var txt = JSON.stringify(obj || {});
+  var partes = [];
+  for (var i = 0; i < txt.length; i += ORC_PARTE) partes.push('J:' + txt.substr(i, ORC_PARTE));
+  if (partes.length > maxPartes) throw new Error('Orçamento grande demais para salvar (' + Math.round(txt.length / 1000) + ' mil caracteres).');
+  return partes;
+}
+function orcJuntar_(valores, nPartes) {
+  var txt = '';
+  for (var i = 0; i < nPartes; i++) { var v = String(valores[i] || ''); txt += (v.indexOf('J:') === 0 ? v.substr(2) : v); }
+  return txt ? JSON.parse(txt) : null;
+}
+function orcLinhaPorValor_(aba, coluna, valor) {
+  if (aba.getLastRow() < 2) return 0;
+  var achou = aba.getRange(2, coluna, aba.getLastRow() - 1, 1).createTextFinder(String(valor)).matchEntireCell(true).findNext();
+  return achou ? achou.getRow() : 0;
+}
+function orcNum_(v) { var n = Number(String(v).replace(',', '.')); return isFinite(n) ? n : 0; }
+
+function orcListar(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var aba = orcAba_(ORC_ABA, orcCabOrcamentos_());
+  var n = aba.getLastRow();
+  if (n < 2) return { success: true, lista: [] };
+  var v = aba.getRange(2, 1, n - 1, 13).getDisplayValues();
+  var lista = [];
+  v.forEach(function(r) {
+    if (!r[0] || String(r[1]) !== String(cpf)) return;
+    lista.push({ id: r[0], cliente: r[3], status: r[4], criadoEm: r[5], atualizadoEm: r[6], concluidoEm: r[7],
+                 unidades: orcNum_(r[8]), regionais: orcNum_(r[9]), custo: orcNum_(r[10]), preco: orcNum_(r[11]) });
+  });
+  lista.sort(function(a, b) { return String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)); });
+  return { success: true, lista: lista };
+}
+
+function orcCarregar(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var aba = orcAba_(ORC_ABA, orcCabOrcamentos_());
+  var lin = orcLinhaPorValor_(aba, 1, data.id);
+  if (!lin) return { error: 'Orçamento não encontrado.' };
+  var r = aba.getRange(lin, 1, 1, 13 + ORC_MAX_PARTES).getDisplayValues()[0];
+  if (String(r[1]) !== String(cpf)) return { error: 'Este orçamento pertence a outro Diretor.' };
+  var pacote = orcJuntar_(r.slice(13), orcNum_(r[12]) || 1) || {};
+  return { success: true, id: r[0], status: r[4], criadoEm: r[5], atualizadoEm: r[6], concluidoEm: r[7],
+           orc: pacote.orc || null, precos: pacote.precos || null };
+}
+
+function orcSalvar(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  if (!data.orc || typeof data.orc !== 'object') return { error: 'Orçamento vazio.' };
+  var status = data.status === 'Concluído' ? 'Concluído' : 'Rascunho';
+  var resumo = data.resumo || {};
+  var partes = orcPartir_({ orc: data.orc, precos: data.precos || null }, ORC_MAX_PARTES);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var aba = orcAba_(ORC_ABA, orcCabOrcamentos_());
+    var agora = orcAgora_();
+    var lin = 0, criado = agora, concluido = '';
+    var id = data.id ? String(data.id) : '';
+    if (id) {
+      lin = orcLinhaPorValor_(aba, 1, id);
+      if (!lin) return { error: 'Orçamento não encontrado (pode ter sido excluído).' };
+      var atual = aba.getRange(lin, 1, 1, 8).getDisplayValues()[0];
+      if (String(atual[1]) !== String(cpf)) return { error: 'Este orçamento pertence a outro Diretor.' };
+      criado = atual[5] || agora;
+      concluido = atual[7] || '';
+    } else {
+      id = 'ORC-' + Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyyMMdd-HHmmss') + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+      lin = aba.getLastRow() + 1;
+    }
+    if (status === 'Concluído') concluido = concluido || agora; else concluido = '';
+    var linha = [id, String(cpf), getNomePorCPF(cpf) || '', String(resumo.cliente || data.orc.cliente || ''), status, criado, agora, concluido,
+                 String(orcNum_(resumo.unidades)), String(orcNum_(resumo.regionais)), String(orcNum_(resumo.custo)), String(orcNum_(resumo.preco)), String(partes.length)];
+    for (var i = 0; i < ORC_MAX_PARTES; i++) linha.push(partes[i] || '');
+    var rng = aba.getRange(lin, 1, 1, linha.length);
+    rng.setNumberFormat('@');
+    rng.setValues([linha]);
+    return { success: true, id: id, status: status, criadoEm: criado, atualizadoEm: agora, concluidoEm: concluido };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function orcExcluir(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var aba = orcAba_(ORC_ABA, orcCabOrcamentos_());
+    var lin = orcLinhaPorValor_(aba, 1, data.id);
+    if (!lin) return { success: true };
+    if (String(aba.getRange(lin, 2).getDisplayValue()) !== String(cpf)) return { error: 'Este orçamento pertence a outro Diretor.' };
+    aba.deleteRow(lin);
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function orcPrecosObter(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var aba = orcAba_(ORC_ABA_PRECOS, orcCabPrecos_());
+  var lin = orcLinhaPorValor_(aba, 1, cpf);
+  if (!lin) return { success: true, precos: null };
+  var r = aba.getRange(lin, 1, 1, 4 + ORC_MAX_PARTES_PRECOS).getDisplayValues()[0];
+  return { success: true, precos: orcJuntar_(r.slice(4), orcNum_(r[3]) || 1), atualizadoEm: r[2] };
+}
+
+function orcPrecosSalvar(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  if (!data.precos || typeof data.precos !== 'object') return { error: 'Tabela de preços vazia.' };
+  var partes = orcPartir_(data.precos, ORC_MAX_PARTES_PRECOS);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var aba = orcAba_(ORC_ABA_PRECOS, orcCabPrecos_());
+    var lin = orcLinhaPorValor_(aba, 1, cpf) || (aba.getLastRow() + 1);
+    var agora = orcAgora_();
+    var linha = [String(cpf), getNomePorCPF(cpf) || '', agora, String(partes.length)];
+    for (var i = 0; i < ORC_MAX_PARTES_PRECOS; i++) linha.push(partes[i] || '');
+    var rng = aba.getRange(lin, 1, 1, linha.length);
+    rng.setNumberFormat('@');
+    rng.setValues([linha]);
+    return { success: true, atualizadoEm: agora };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Interpretação do texto livre: a tela monta o prompt completo (regras e formato);
+// aqui só se chama a IA e se devolve o JSON já convertido.
+function orcInterpretar(data, cpf) {
+  if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
+  var prompt = String(data.prompt || '');
+  if (!prompt) return { error: 'Texto vazio.' };
+  if (prompt.length > 150000) return { error: 'Texto grande demais para interpretar de uma vez. Divida em partes.' };
+  var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
+  if (!apiKey) return { error: 'Chave da API Claude não configurada (CLAUDE_API_KEY).' };
+  var sistema = 'Você converte descrições de orçamentos de inventário em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
+  var ultimoErro = '';
+  for (var tentativa = 1; tentativa <= 2; tentativa++) {
+    var conteudo = tentativa === 1 ? prompt : prompt + '\n\nATENÇÃO: a resposta anterior não era um JSON válido. Responda apenas com o objeto JSON.';
+    var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({ model: ORC_IA_MODELO, max_tokens: 16000, system: sistema, messages: [{ role: 'user', content: conteudo }] }),
+      muteHttpExceptions: true
+    });
+    var codigo = resp.getResponseCode();
+    var corpo = {};
+    try { corpo = JSON.parse(resp.getContentText()); } catch (e) { corpo = {}; }
+    if (corpo.error) {
+      ultimoErro = corpo.error.message || ('código ' + codigo);
+      if (codigo === 429 || codigo >= 500) { Utilities.sleep(2000); continue; }
+      return { error: 'IA: ' + ultimoErro };
+    }
+    var texto = (corpo.content || []).map(function(c) { return c.text || ''; }).join('');
+    var ini = texto.indexOf('{'), fim = texto.lastIndexOf('}');
+    if (ini >= 0 && fim > ini) {
+      try { return { success: true, json: JSON.parse(texto.substring(ini, fim + 1)) }; }
+      catch (e) { ultimoErro = 'resposta não veio em JSON válido'; }
+    } else ultimoErro = 'resposta sem JSON';
+    if (corpo.stop_reason === 'max_tokens') return { error: 'O texto é grande demais para interpretar de uma vez. Divida em partes (por regional, por exemplo).' };
+  }
+  return { error: 'Não foi possível interpretar (' + ultimoErro + ').' };
+}
+
