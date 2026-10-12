@@ -8,7 +8,11 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r176: fonte principal de pessoas escolhida na tela "O que eu entendi" (a prévia é refeita); funções sobem/descem (▲▼);
+<!-- r179: a descrição do orçamento (texto/ditado) e a planilha carregada são salvas no orçamento, voltam ao abrir e vão no arquivo exportado.
+     r178: botão "Importar orçamento" (antes "Importar da calculadora") e novo "Exportar orçamento" (arquivo .json do orçamento aberto).
+     r177: a fonte escolhida na prévia manda SEMPRE na distribuição das pessoas (a IA não fixa mais origens por conta própria);
+     pessoas disponíveis por cidade também ficam na prévia.
+     r176: fonte principal de pessoas escolhida na tela "O que eu entendi" (a prévia é refeita); funções sobem/descem (▲▼);
      linha de inventariantes por cidade acima das funções e total ao lado do dia; "Coletores locados" só aparece com locação informada.
      r175: interpretação com o modelo mais capaz (Opus) e raciocínio; a tela mostra qual IA leu o texto.
      r174: distâncias até a cidade da loja calculadas automaticamente (Google Maps no servidor), ao informar a cidade e após a interpretação.
@@ -136,7 +140,8 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
         <option value="">Todos</option><option value="Rascunho">Rascunhos</option><option value="Concluído">Concluídos</option>
       </select>
       <button class="verde" id="btnNovo">Novo orçamento</button>
-      <button class="ghost" id="btnImportar">Importar da calculadora</button>
+      <button class="ghost" id="btnImportar">Importar orçamento</button>
+      <button class="ghost" id="btnExportar">Exportar orçamento</button>
       <input type="file" id="arqImport" accept=".json,application/json" hidden>
     </div>
     <div class="tbl" id="lista" style="margin-top:10px"></div>
@@ -391,7 +396,7 @@ function normCompo(c){
   const ok = x=>ORIG[x] ? x : "";
   return {disp:d, principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};
 }
-function orcVazio(){ return {cliente:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
+function orcVazio(){ return {cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
 // r170: valores próprios do orçamento (sobrepõem a tabela do Diretor só neste orçamento)
 function valorValido(v){ if(v===undefined || v===null || v==="") return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) && n>=0 ? n : null; }
 function normPrecosOrc(p){
@@ -455,7 +460,9 @@ function normRegional(r){
 }
 function normOrc(o){
   o = o || {};
-  return {cliente:String(o.cliente||""), comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
+  return {cliente:String(o.cliente||""),
+    descricao:String(o.descricao||""), planilhaNome:String(o.planilhaNome||""), planilhaTexto:String(o.planilhaTexto||""),   // r179: o que foi solicitado
+    comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
 }
 /* r168: os dados ficam no servidor (planilha da calculadora), não no navegador */
 function ler(ch){ return null; }
@@ -578,7 +585,8 @@ function temLimite(){ return ORIGENS.some(o=>orc.composicao.disp[o.id]); }
 // Saldo de pessoas disponíveis (null = sem limite)
 function saldoInicial(existente, exceto){
   if(!temLimite()) return null;
-  const s = Object.assign({}, orc.composicao.disp);
+  // r177: cidade com disponibilidade vazia = sem limite (antes contava como zero quando outra tinha limite)
+  const s = {}; ORIGENS.forEach(o=>s[o.id] = orc.composicao.disp[o.id] ? orc.composicao.disp[o.id] : Infinity);
   if(existente){ const u = usoTotal(existente, exceto); ORIGENS.forEach(o=>s[o.id] = Math.max(0, s[o.id] - u[o.id])); }
   return s;
 }
@@ -850,7 +858,8 @@ function desenharUso(){
   const uso = usoTotal(orc), d = orc.composicao.disp, lim = temLimite();
   el.innerHTML = `<table style="margin-top:6px"><thead><tr><th>Origem</th><th class="n">Disponíveis</th><th class="n">Em uso no orçamento</th><th class="n">Saldo</th></tr></thead><tbody>
     ${ORIGENS.map(o=>{ const s = d[o.id] - uso[o.id];
-      return `<tr><td>${o.nome}</td><td class="n">${lim ? d[o.id] : "sem limite"}</td><td class="n">${uso[o.id]}</td><td class="n ${lim && s<0 ? "alerta" : ""}">${lim ? s : "-"}</td></tr>`; }).join("")}
+      const tem = lim && d[o.id];
+      return `<tr><td>${o.nome}</td><td class="n">${tem ? d[o.id] : "sem limite"}</td><td class="n">${uso[o.id]}</td><td class="n ${tem && s<0 ? "alerta" : ""}">${tem ? s : "-"}</td></tr>`; }).join("")}
   </tbody></table>`;
 }
 const elCompo = document.getElementById("compo");
@@ -1116,7 +1125,18 @@ function limparEntrada(){
   if(typeof pararDitado==="function") pararDitado(true);
   elMsg.textContent = "";
   aberto.clear(); aberto.add("r0");
+  // r179: devolve ao campo a descrição (e a planilha) salvas com o orçamento
+  document.getElementById("texto").value = orc.descricao || "";
+  textoPlanilha = orc.planilhaTexto || "";
+  document.getElementById("arqNome").textContent = orc.planilhaNome ? `Planilha do orçamento: ${orc.planilhaNome}` : "";
 }
+// r179: guarda no orçamento o texto da descrição (digitado, colado ou ditado)
+function guardarDescricao(){
+  const v = document.getElementById("texto").value;
+  if(orc.descricao===v) return;
+  orc.descricao = v; salvar();
+}
+document.getElementById("texto").addEventListener("input", guardarDescricao);
 function salvar(){ gravar(CH_ORC, orc); atualizar(); }
 
 /* r174: distâncias automáticas — o servidor calcula a rota de carro de Fortaleza, Natal e
@@ -1394,7 +1414,7 @@ function refeicoesTxt(c, u){
 function descritivo(o){
   const T = [];
   T.push(`Cliente: ${o.cliente || "(não informado)"}`);
-  T.push(`Fontes de pessoas: ${ordemDe(o.composicao || orc.composicao, o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id]}`).join(", ") + ")" : ""}`);
+  T.push(`Fontes de pessoas: ${ordemDe(o.composicao || orc.composicao, o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id] || "sem limite"}`).join(", ") + ")" : ""}`);
   if(o.comissaoPct) T.push(`Comissão: ${o.comissaoPct}% sobre o preço${o.comissaoNome ? " (" + o.comissaoNome + ")" : ""}`);
   o.regionais.forEach(reg=>{
     T.push("");
@@ -1478,6 +1498,7 @@ document.getElementById("arq").addEventListener("change", e=>{
       const wb = XLSX.read(new Uint8Array(ev.target.result), {type:"array"});
       textoPlanilha = wb.SheetNames.map(s=>`### Aba ${s}\n` + XLSX.utils.sheet_to_csv(wb.Sheets[s], {FS:"\t"})).join("\n\n").slice(0, 60000);
       document.getElementById("arqNome").textContent = `Planilha carregada: ${f.name}`;
+      orc.planilhaNome = f.name; orc.planilhaTexto = textoPlanilha; salvar();   // r179
     }catch(err){ document.getElementById("arqNome").textContent = "Não foi possível ler a planilha."; textoPlanilha = ""; }
   };
   r.readAsArrayBuffer(f);
@@ -1531,7 +1552,7 @@ Cada local citado vira uma linha própria, com o local em "detalhe" (ex.: "câma
 
 REGRAS
 - Um item em "dias" por dia de operação, na ordem. Supervisores entram como linha "supervisor".
-- Origem das pessoas: se o texto não disser, coloque todas em FOR (a calculadora redistribui depois). Se disser, respeite e marque "origemFixa": true.
+- Origem das pessoas: NÃO escolha origens por proximidade. Se o texto não disser explicitamente de que cidade vêm as pessoas, coloque TODAS em "FOR" e "origemFixa": false (a calculadora distribui depois conforme a fonte escolhida pelo Diretor). Só use "NAT"/"JUA" e "origemFixa": true quando o texto disser com todas as letras (ex.: "10 de Natal").
 - Dias: 1 a N são os dias de contagem; N+1 é o dia de retorno quando a equipe volta no dia seguinte à última contagem. "Voltam logo após a última contagem" = retorno no dia N. "Saem na véspera" = a equipe sai no dia 1 e a contagem começa no dia 2 (então crie o dia 1 sem contagem só se o texto pedir; senão use saída no dia 1).
 - Alimentação e hospedagem: registre em "consumo" (da unidade, ou da equipe se o texto separar por equipe) SÓ o que foi dito; o que não foi dito será sugerido automaticamente. Ex.: "almoço e jantar nos dois dias" = {"1":{"almoco":1,"jantar":1},"2":{"almoco":1,"jantar":1}}; "café da manhã no hotel no dia 2" = {"2":{"cafe":1}}; "uma noite de hotel" = {"1":{"hosp":1}}; "sem hotel" = hosp 0 em todos os dias; "lanche na volta" = lanche 1 no dia de retorno.
 - Preços: coloque em "precos" SÓ os valores ditos. Diária sem origem dita: use a origem das pessoas daquela função no texto; se não der para saber, "TODAS". Diária de "inventariante" sem área em loja que não é farmácia = "apoio"; em farmácia = "inv_farm". Diária de supervisor = "supervisor" (ou "sup_farm" em farmácia). Valores por extenso viram número ("cento e oitenta" = 180).
@@ -1562,7 +1583,9 @@ async function obterSample(){
 function mesclar(novo){
   if(document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)))){
     const cp = orc.comissaoPct, cn = orc.comissaoNome, cmp = orc.composicao, po = orc.precosOrc;
-    orc = novo; orc.comissaoPct = cp; orc.comissaoNome = cn; orc.composicao = cmp; orc.precosOrc = po || {diarias:{}}; return;
+    const ds = orc.descricao, pn = orc.planilhaNome, pt = orc.planilhaTexto;   // r179
+    orc = novo; orc.comissaoPct = cp; orc.comissaoNome = cn; orc.composicao = cmp; orc.precosOrc = po || {diarias:{}};
+    orc.descricao = ds; orc.planilhaNome = pn; orc.planilhaTexto = pt; return;
   }
   if(novo.cliente && !orc.cliente) orc.cliente = novo.cliente;
   novo.regionais.forEach(nr=>{
@@ -1572,6 +1595,7 @@ function mesclar(novo){
 }
 btnLer.addEventListener("click", async ()=>{
   if(ditando) pararDitado(true);   // r170: desliga o microfone antes de interpretar
+  guardarDescricao();   // r179
   const txt = document.getElementById("texto").value.trim();
   const tudo = [txt, textoPlanilha ? "PLANILHA CARREGADA:\n" + textoPlanilha : ""].filter(Boolean).join("\n\n");
   if(!tudo){ msgLer("Escreva a descrição ou carregue uma planilha primeiro.", true); return; }
@@ -1595,6 +1619,7 @@ btnLer.addEventListener("click", async ()=>{
     // r176: guarda a leitura "crua" para refazer as equipes quando a fonte principal mudar na prévia
     pendBase = JSON.parse(JSON.stringify(novo)); pendRaw = r; pendSubst = substitui;
     pendCompo = {principal:orc.composicao.principal || "", segunda:orc.composicao.segunda || "", terceira:orc.composicao.terceira || ""};
+    pendManterOrig = false;   // r177: por padrão a fonte escolhida manda
     montarPendente();
     pendentePrecos = lerPrecosIA(r && r.precos);   // r170
     desenharPreviaPrecos();
@@ -1642,7 +1667,7 @@ function iniciarDitado(){
     else if(ev.error==="network"){ ditErro = true; ditando = false; msgLer("O ditado precisa de internet. Verifique a conexão e tente de novo.", true); }
   };
   rec.onend = ()=>{
-    ditBase = juntarDit(ditBase, ditFinal); ditFinal = ""; elTexto.value = ditBase;
+    ditBase = juntarDit(ditBase, ditFinal); ditFinal = ""; elTexto.value = ditBase; guardarDescricao();   // r179
     if(ditando){ setTimeout(()=>{ if(!ditando) return; try{ rec.start(); }catch(e){ ditando = false; marcarDitado(); } }, 250); return; }   // pausa longa: religa sozinho
     marcarDitado();
     if(!ditErro) msgLer("Ditado encerrado. Revise o texto e clique em \"Interpretar\".", false);
@@ -1662,15 +1687,29 @@ elTexto.addEventListener("input", ()=>{ if(ditando){ ditBase = elTexto.value; di
 if(!SR){ btnDitar.title = "Ditado indisponível neste navegador (use Chrome, Edge ou Safari)"; }
 let pendente = null, pendentePrecos = [];
 /* r176: fonte principal de pessoas escolhida na prévia, antes de aplicar */
-let pendBase = null, pendRaw = null, pendSubst = false, pendCompo = {principal:"", segunda:"", terceira:""};
+let pendBase = null, pendRaw = null, pendSubst = false, pendCompo = {principal:"", segunda:"", terceira:""}, pendManterOrig = false;
+// r177: a IA indicou origens próprias (origens fixas ou equipes descritas)?
+function pendTemOrigIA(){ return !!pendBase && pendBase.regionais.some(reg=>reg.unidades.some(u=>u.origemFixa || u.equipes.length)); }
 function montarPendente(){
   if(!pendBase) return;
   const novo = JSON.parse(JSON.stringify(pendBase)), r = pendRaw;
   novo.composicao = Object.assign({}, orc.composicao, pendCompo, {disp:Object.assign({}, orc.composicao.disp)});
   const saldo = saldoInicial(pendSubst ? null : orc), ordem = ordemDe(pendCompo, novo);
   novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
-    if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
-    else { u.equipes.forEach(e=>sugerirConsumo(u, e)); if(saldo) u.equipes.forEach(e=>saldo[e.origem] = Math.max(0, saldo[e.origem] - e.pessoas)); }
+    if(pendManterOrig && (u.origemFixa || u.equipes.length)){
+      // Opção explícita do Diretor: manter as origens/equipes que o texto informou
+      if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
+      else { u.equipes.forEach(e=>sugerirConsumo(u, e)); if(saldo) u.equipes.forEach(e=>saldo[e.origem] = Math.max(0, saldo[e.origem] - e.pessoas)); }
+    } else {
+      // r177: a fonte escolhida manda — redistribui todas as funções na ordem Principal → 2ª → 3ª
+      const eqIA = u.equipes;
+      u.origemFixa = false; u.equipes = [];
+      sugerirEquipes(u, reg, saldo, ordem);
+      // aproveita o transporte que o texto descreveu, só quando a equipe é da mesma origem
+      eqIA.forEach(ea=>{ const e = u.equipes.find(x=>x.origem===ea.origem && x.saida===ea.saida); if(!e) return;
+        ["transporte","veiculos","vanTrecho","outroTipo","outroOrigem","outroValor","retorno"].forEach(c=>{ if(ea[c]!==undefined && ea[c]!==null && ea[c]!=="") e[c] = ea[c]; });
+        sugerirConsumo(u, e); });
+    }
     aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
   }));
   pendente = novo;
@@ -1687,11 +1726,19 @@ function desenharPreviaFonte(){
       <label class="f">2ª opção<select data-pf="segunda">${opt(pendCompo.segunda, "Automática (mais próxima)")}</select></label>
       <label class="f">3ª opção<select data-pf="terceira">${opt(pendCompo.terceira, "Automática (mais próxima)")}</select></label>
     </div>
-    <p class="hint">Ordem que será usada: <strong>${ordem.map(x=>ORIG[x]).join(" → ")}</strong>. Ao mudar, as equipes do texto abaixo são refeitas na hora; ao clicar em "Aplicar", a escolha vale para o orçamento.</p>`;
+    <div class="grid" style="margin-top:6px">
+      ${ORIGENS.map(o=>`<label class="f">Pessoas disponíveis – ${o.nome}<input type="number" min="0" step="1" data-pdisp="${o.id}" value="${orc.composicao.disp[o.id]||""}" placeholder="sem limite"></label>`).join("")}
+    </div>
+    ${pendTemOrigIA() ? `<label class="chk" style="margin-top:6px"><input type="checkbox" data-pmanter ${pendManterOrig?"checked":""}>Manter as origens que o texto informou (desmarcado = a fonte escolhida acima manda)</label>` : ""}
+    <p class="hint">Ordem que será usada: <strong>${ordem.map(x=>ORIG[x]).join(" → ")}</strong>. As pessoas saem primeiro da fonte principal; só passam para a 2ª e a 3ª opção quando a anterior atingir o limite de pessoas disponíveis (vazio = sem limite). Ao mudar qualquer campo, as equipes abaixo são refeitas na hora; ao clicar em "Aplicar", a escolha vale para o orçamento.</p>`;
 }
 document.getElementById("previaFonte").addEventListener("change", e=>{
-  const k = e.target.dataset.pf; if(!k) return;
-  pendCompo[k] = e.target.value; montarPendente();
+  const t = e.target;
+  if(t.dataset.pf){ pendCompo[t.dataset.pf] = t.value; }
+  else if(t.dataset.pdisp){ orc.composicao.disp[t.dataset.pdisp] = int(t.value); salvar(); }   // r177: mesma disponibilidade do passo 3
+  else if(t.hasAttribute("data-pmanter")){ pendManterOrig = t.checked; }
+  else return;
+  montarPendente();
 });
 /* r170: refeições e hospedagem ditas valem item a item sobre a sugestão automática */
 function aplicarConsumoDito(u, ru){
@@ -1761,12 +1808,13 @@ function aplicarPrecosLidos(){
 document.getElementById("btnAplicar").addEventListener("click", ()=>{
   if(!pendente) return;
   mesclar(pendente); pendente = null;
+  orc.descricao = document.getElementById("texto").value;   // r179
   orc.composicao.principal = pendCompo.principal; orc.composicao.segunda = pendCompo.segunda; orc.composicao.terceira = pendCompo.terceira;   // r176
   pendBase = null; pendRaw = null; document.getElementById("previaFonte").innerHTML = "";
   const rp = aplicarPrecosLidos();   // r170
   orc.regionais.forEach((r,ri)=>aberto.add("r"+ri));
   document.getElementById("previa").hidden = true;
-  textoPlanilha = ""; document.getElementById("arqNome").textContent = "";
+  textoPlanilha = ""; document.getElementById("arqNome").textContent = orc.planilhaNome ? `Planilha do orçamento: ${orc.planilhaNome}` : "";
   desenharOrcamento(); salvar();
   msgLer("Aplicado. Confira os campos e o descritivo do orçamento no passo 3." + (rp.nOrc ? ` ${rp.nOrc} preço(s) valendo só neste orçamento (veja no passo 2).` : "") + (rp.nTab ? ` ${rp.nTab} preço(s) gravado(s) na sua tabela.` : ""), false);
 });
@@ -1994,13 +2042,13 @@ document.getElementById("btnDuplicar").addEventListener("click", async ()=>{
   toast("Cópia criada e aberta");
 });
 
-/* ---------- importar da calculadora (arquivo exportado pela v2.8) ---------- */
+/* ---------- importar orçamento (arquivo do "Exportar orçamento" ou da calculadora antiga v2.8) ---------- */
 document.getElementById("btnImportar").addEventListener("click", ()=>document.getElementById("arqImport").click());
 document.getElementById("arqImport").addEventListener("change", async e=>{
   const f = e.target.files[0]; e.target.value = ""; if(!f) return;
   let pac;
   try{ pac = JSON.parse(await f.text()); }catch(err){ toast("Arquivo inválido."); return; }
-  if(!pac || pac.formato!=="fc-calculadora-orcamentos" || !pac.orc){ toast("Este arquivo não veio do botão \"Exportar para o Sistema\" da calculadora."); return; }
+  if(!pac || pac.formato!=="fc-calculadora-orcamentos" || !pac.orc){ toast("Este arquivo não é um orçamento exportado pelo botão \"Exportar orçamento\"."); return; }
   if(!await esperarSalvar()){ if(!await confirmar("O orçamento aberto não pôde ser salvo agora. Importar mesmo assim?", "Importar")) return; }
   if(pac.precos){
     const usar = !precosNoServidor || await confirmar("Usar a tabela de preços do arquivo no lugar da sua tabela atual?\\n\\n(Cancelar mantém a sua tabela e importa só o orçamento.)", "Usar a do arquivo");
@@ -2013,6 +2061,20 @@ document.getElementById("arqImport").addEventListener("change", async e=>{
   mostrarOrcamento(normOrc(pac.orc), null, "Rascunho", null);
   if(temConteudo(orc)){ await salvarOrcServidor("Rascunho"); toast("Orçamento importado e salvo"); }
   else toast("Tabela de preços importada (o arquivo não tinha orçamento preenchido).");
+});
+
+/* ---------- r178: exportar o orçamento aberto (arquivo que o "Importar orçamento" lê) ---------- */
+document.getElementById("btnExportar").addEventListener("click", ()=>{
+  if(!temConteudo(orc)){ toast("Abra ou preencha um orçamento antes de exportar."); return; }
+  const pac = {formato:"fc-calculadora-orcamentos", versao:1, exportadoEm:new Date().toISOString(),
+               status:orcStatus, orc:JSON.parse(JSON.stringify(orc)), precos:JSON.parse(JSON.stringify(precos))};
+  const nomeArq = "Orcamento_" + ((orc.cliente || "sem_cliente").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "sem_cliente")
+    + "_" + new Date().toISOString().slice(0,10) + ".json";
+  const url = URL.createObjectURL(new Blob([JSON.stringify(pac, null, 2)], {type:"application/json"}));
+  const a = document.createElement("a"); a.href = url; a.download = nomeArq;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast("Orçamento exportado: " + nomeArq);
 });
 
 /* ---------- recuperação de alterações não salvas ---------- */
@@ -2040,6 +2102,7 @@ atualizar();
     mostrarEstado("");
     document.getElementById("app").hidden = false;
     desenharPrecos(); desenharOrcamento(); atualizar(); aplicarBloqueio(); desenharLista(); marcarSalvo("");
+    document.getElementById("texto").value = orc.descricao || "";   // r179
     verificarBackup();
   }catch(e){ mostrarEstado("⚠️ " + e.message, true); }
 })();
