@@ -8,7 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r174: distâncias até a cidade da loja calculadas automaticamente (Google Maps no servidor), ao informar a cidade e após a interpretação.
+<!-- r175: interpretação com o modelo mais capaz (Opus) e raciocínio; a tela mostra qual IA leu o texto.
+     r174: distâncias até a cidade da loja calculadas automaticamente (Google Maps no servidor), ao informar a cidade e após a interpretação.
      r173: interpretação no servidor usa o Sonnet (como dentro do Claude), temperatura 0; espera até 5 min.
      r170: ditado por voz (botão 🎤); a IA lê preços, transporte, refeições e hospedagem por dia; preços lidos valem só no orçamento ou na tabela (escolha na conferência); Excel em maiúsculas.
      r169: funções Apoio, Supervisor farmácia e Inventariante farmácia; refeições de farmácia; marcação "Farmácia" na unidade.
@@ -182,7 +183,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       </div>
       <p class="hint">Se algo estiver errado, ajuste o texto e interprete de novo, ou aplique e corrija nos campos.</p>
     </div>
-    <p class="hint" id="hintLer">A leitura usa a IA do sistema e pode levar até 2 minutos. Depois de interpretar, você confere o que foi entendido e só então aplica. Você pode falar diárias, preços de refeições, hotel, van e combustível, e em quais dias a equipe toma café, almoça, lancha, janta e dorme fora: o que você disser vale, e o que não disser é sugerido automaticamente. Para ditar, use o Chrome ou o Edge (no iPhone, o Safari) e libere o microfone.</p>
+    <p class="hint" id="hintLer">A leitura usa a IA mais precisa do sistema, com raciocínio, e pode levar de 1 a 3 minutos. Depois de interpretar, você confere o que foi entendido e só então aplica. Você pode falar diárias, preços de refeições, hotel, van e combustível, e em quais dias a equipe toma café, almoça, lancha, janta e dorme fora: o que você disser vale, e o que não disser é sugerido automaticamente. Para ditar, use o Chrome ou o Edge (no iPhone, o Safari) e libere o microfone.</p>
   </section>
 
   <!-- 2. PREÇOS -->
@@ -1517,11 +1518,11 @@ DESCRIÇÃO
 }
 
 const elMsg = document.getElementById("msgLer"), btnLer = document.getElementById("btnLer"), btnParar = document.getElementById("btnParar");
-let ctl = null, samplePronto = null, ultimaInterpReserva = false;
+let ctl = null, samplePronto = null, ultimaInterpReserva = false, ultimaInterpModelo = "";
 function msgLer(t, erro){ elMsg.textContent = t; elMsg.className = "msg " + (erro?"err":"ok"); }
 // r168: a interpretação passa pelo servidor do sistema (mesma IA já usada nas análises)
 async function obterSample(){
-  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt}, opts && opts.signal); ultimaInterpReserva = !!r.reserva; return r.json; } };
+  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt}, opts && opts.signal); ultimaInterpReserva = !!r.reserva; ultimaInterpModelo = r.modeloNome || r.modelo || ""; return r.json; } };
 }
 
 function mesclar(novo){
@@ -1541,7 +1542,7 @@ btnLer.addEventListener("click", async ()=>{
   const tudo = [txt, textoPlanilha ? "PLANILHA CARREGADA:\n" + textoPlanilha : ""].filter(Boolean).join("\n\n");
   if(!tudo){ msgLer("Escreva a descrição ou carregue uma planilha primeiro.", true); return; }
   const sample = samplePronto || await obterSample();
-  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false; msgLer("Interpretando... isso pode levar até 2 minutos.", false);
+  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false; msgLer("Interpretando com a IA mais precisa (ela raciocina antes de responder)... isso pode levar de 1 a 3 minutos.", false);
   try{
     const r = await sample.json(montarPrompt(tudo), {signal:ctl.signal, modelTier:"complex"});
     const novo = normOrc(r);
@@ -1569,7 +1570,7 @@ btnLer.addEventListener("click", async ()=>{
     desenharPreviaPrecos();
     document.getElementById("previa").hidden = false;
     const est = novo.regionais.some(r=>r.unidades.some(u=>u.kmEstimado));
-    msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.` + (ultimaInterpReserva ? " Atenção: a IA principal não respondeu e foi usado o modo rápido, que é menos preciso; confira com mais cuidado." : ""), false);
+    msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.` + (ultimaInterpModelo ? ` (lido por: ${ultimaInterpModelo})` : "") + (ultimaInterpReserva ? " ATENÇÃO: as IAs principais não responderam e foi usado o modo rápido, que é menos preciso; confira com mais cuidado." : ""), !!ultimaInterpReserva);
   }catch(e){
     const m = {cancelled:"Interpretação interrompida.", sessao:e.message, timeout:"A interpretação demorou demais. Tente dividir o texto em partes menores."}[e.code]
       || ("Não consegui interpretar" + (e.message ? " (" + e.message + ")" : "") + ". Tente reescrever com mais detalhes ou preencha os campos.");

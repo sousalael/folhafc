@@ -611,7 +611,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-12-r174';
+const VERSAO_SCRIPT = '2026-10-12-r175';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -9006,11 +9006,31 @@ function orcDistancias(data, cpf) {
   return { success: true, distancias: res };
 }
 
-/* r173: a interpretação dentro do Claude usava um modelo mais capaz que o Haiku.
-   Agora o servidor usa o Sonnet (mais preciso para ler descrições longas/ditadas), com
-   temperatura 0 (resposta estável). Se o modelo não existir na conta ou demorar demais,
-   cai para o próximo da lista, até o Haiku, para nunca ficar sem resposta. */
-var ORC_IA_MODELOS = ['claude-sonnet-5-5', 'claude-sonnet-4-5', 'claude-haiku-4-5-20251001'];
+/* r175: a interpretação passa a usar o modelo mais capaz (Opus) COM RACIOCÍNIO (extended thinking):
+   a IA pensa antes de montar o JSON — é o que mais se aproxima da leitura feita dentro do Claude.
+   Ordem: Opus com raciocínio → Sonnet com raciocínio → Sonnet → Haiku (só como último recurso).
+   Se um modelo não existir na conta, não aceitar raciocínio ou demorar demais, passa ao próximo. */
+var ORC_IA_PLANO = [
+  { modelo: 'claude-opus-5-5',            pensar: 12000 },
+  { modelo: 'claude-sonnet-5-5',          pensar: 12000 },
+  { modelo: 'claude-sonnet-4-5',          pensar: 8000 },
+  { modelo: 'claude-haiku-4-5-20251001',  pensar: 0 }
+];
+var ORC_IA_NOMES = { 'claude-opus-5-5': 'Opus', 'claude-sonnet-5-5': 'Sonnet', 'claude-sonnet-4-5': 'Sonnet', 'claude-haiku-4-5-20251001': 'Haiku (modo rápido)' };
+
+function orcChamarIA_(apiKey, modelo, pensar, sistema, conteudo) {
+  var corpoReq = { model: modelo, max_tokens: pensar ? pensar + 20000 : 16000, system: sistema, messages: [{ role: 'user', content: conteudo }] };
+  if (pensar) corpoReq.thinking = { type: 'enabled', budget_tokens: pensar };
+  else corpoReq.temperature = 0;
+  var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post', contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify(corpoReq), muteHttpExceptions: true
+  });
+  var corpo = {};
+  try { corpo = JSON.parse(resp.getContentText()); } catch (e) { corpo = {}; }
+  return { codigo: resp.getResponseCode(), corpo: corpo };
+}
 
 function orcInterpretar(data, cpf) {
   if (!orcEhDiretor_(cpf)) return { error: 'Acesso restrito à Diretoria.' };
@@ -9019,38 +9039,35 @@ function orcInterpretar(data, cpf) {
   if (prompt.length > 150000) return { error: 'Texto grande demais para interpretar de uma vez. Divida em partes.' };
   var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
   if (!apiKey) return { error: 'Chave da API Claude não configurada (CLAUDE_API_KEY).' };
-  var sistema = 'Você é o assistente de orçamentos da Formula Code e converte descrições de orçamentos de inventário em JSON, seguindo à risca o formato e as regras do pedido. Leia o texto inteiro antes de responder; não invente quantidades nem preços que não foram ditos. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
-  var ultimoErro = '';
-  for (var m = 0; m < ORC_IA_MODELOS.length; m++) {
-    var modelo = ORC_IA_MODELOS[m];
+  var sistema = 'Você é o assistente de orçamentos da Formula Code (inventários de lojas) e converte descrições de orçamentos em JSON, seguindo à risca o formato e as regras do pedido. ' +
+    'Antes de responder, leia o texto inteiro e identifique cada unidade, cada dia, cada local/área com sua quantidade de pessoas, os horários, as origens, os transportes, os preços e as refeições/hospedagem citados. ' +
+    'Confira que a soma de pessoas de cada dia bate com o que o texto diz. Não invente quantidades nem preços que não foram ditos. ' +
+    'Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
+  var ultimoErro = '', inicio = Date.now();
+  for (var m = 0; m < ORC_IA_PLANO.length; m++) {
+    var modelo = ORC_IA_PLANO[m].modelo, pensar = ORC_IA_PLANO[m].pensar;
+    if (Date.now() - inicio > 240000 && m < ORC_IA_PLANO.length - 1) continue;   // perto do limite: vai direto ao último recurso
     for (var tentativa = 1; tentativa <= 2; tentativa++) {
       var conteudo = tentativa === 1 ? prompt : prompt + '\n\nATENÇÃO: a resposta anterior não era um JSON válido. Responda apenas com o objeto JSON.';
-      var resp;
-      try {
-        resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-          method: 'post', contentType: 'application/json',
-          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          payload: JSON.stringify({ model: modelo, max_tokens: 16000, temperature: 0, system: sistema, messages: [{ role: 'user', content: conteudo }] }),
-          muteHttpExceptions: true
-        });
-      } catch (e) {
-        ultimoErro = 'falha de conexão com ' + modelo + ': ' + e.message;   // ex.: tempo esgotado — tenta o próximo modelo (mais rápido)
-        break;
-      }
-      var codigo = resp.getResponseCode();
-      var corpo = {};
-      try { corpo = JSON.parse(resp.getContentText()); } catch (e) { corpo = {}; }
+      var r;
+      try { r = orcChamarIA_(apiKey, modelo, pensar, sistema, conteudo); }
+      catch (e) { ultimoErro = 'falha de conexão com ' + modelo + ': ' + e.message; break; }
+      var corpo = r.corpo, codigo = r.codigo;
       if (corpo.error) {
-        ultimoErro = (corpo.error.message || ('código ' + codigo)) + ' [' + modelo + ']';
-        if (codigo === 404 || (codigo === 400 && /model/i.test(String(corpo.error.message || '')))) break;   // modelo indisponível: próximo
-        if (codigo === 429 || codigo === 529 || codigo >= 500) { Utilities.sleep(2000); continue; }
+        var msg = String(corpo.error.message || ('código ' + codigo));
+        ultimoErro = msg + ' [' + modelo + ']';
+        if (codigo === 400 && pensar && /thinking|budget/i.test(msg)) { pensar = 0; tentativa--; continue; }   // modelo sem raciocínio: tenta sem
+        if (codigo === 404 || (codigo === 400 && /model/i.test(msg))) break;                                   // modelo indisponível: próximo
+        if (codigo === 429 || codigo === 529 || codigo >= 500) { Utilities.sleep(3000); continue; }
         return { error: 'IA: ' + ultimoErro };
       }
-      var texto = (corpo.content || []).map(function(c) { return c.text || ''; }).join('');
+      var texto = (corpo.content || []).filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text || ''; }).join('');
       var ini = texto.indexOf('{'), fim = texto.lastIndexOf('}');
       if (ini >= 0 && fim > ini) {
-        try { return { success: true, json: JSON.parse(texto.substring(ini, fim + 1)), modelo: modelo, reserva: modelo.indexOf('haiku') >= 0 }; }
-        catch (e) { ultimoErro = 'resposta não veio em JSON válido'; }
+        try {
+          return { success: true, json: JSON.parse(texto.substring(ini, fim + 1)), modelo: modelo,
+                   modeloNome: (ORC_IA_NOMES[modelo] || modelo) + (pensar ? ' com raciocínio' : ''), reserva: modelo.indexOf('haiku') >= 0 };
+        } catch (e) { ultimoErro = 'resposta não veio em JSON válido'; }
       } else ultimoErro = 'resposta sem JSON';
       if (corpo.stop_reason === 'max_tokens') return { error: 'O texto é grande demais para interpretar de uma vez. Divida em partes (por regional, por exemplo).' };
     }
