@@ -8,7 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r182: título do orçamento (ex.: "Queiroz Regional PB") — aparece na lista, na barra do orçamento aberto, no descritivo e nos nomes dos arquivos.
+<!-- r183: van cobrada por trecho OU por km (escolha no orçamento); R$/km por cidade de origem na tabela e por equipe; a equipe mostra os km de ida e volta.
+     r182: título do orçamento (ex.: "Queiroz Regional PB") — aparece na lista, na barra do orçamento aberto, no descritivo e nos nomes dos arquivos.
      r181: "Quantidade de Apoio" (na disponibilidade de pessoas): o Apoio assume parte das contagens críticas
      (aéreos, câmaras, ilhas/geladeiras primeiro; depois as demais áreas), com o local no Detalhe; Apoios e Supervisores sempre de Fortaleza.
      r180: Apoio sempre logo após o supervisor (fora de farmácia); equipes refeitas sozinhas a partir das quantidades/origens dos dias;
@@ -228,6 +229,9 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       <label class="f">Consumo do carro (km por litro)<input type="number" min="0" step="0.1" data-pp="kmL"></label>
       <label class="f">Lugares no carro<input type="number" min="1" step="1" data-pp="capCarro"></label>
       <label class="f">Van: valor padrão por trecho (R$)<input type="number" min="0" step="0.01" data-pp="vanTrecho"></label>
+      <label class="f">Van por km – saindo de Fortaleza (R$/km)<input type="number" min="0" step="0.01" data-pp="vanKmFOR"></label>
+      <label class="f">Van por km – saindo de Natal (R$/km)<input type="number" min="0" step="0.01" data-pp="vanKmNAT"></label>
+      <label class="f">Van por km – saindo de Juazeiro do Norte (R$/km)<input type="number" min="0" step="0.01" data-pp="vanKmJUA"></label>
       <label class="f">Lugares na van<input type="number" min="1" step="1" data-pp="capVan"></label>
       <label class="f">Equipe local até (km da origem)<input type="number" min="0" step="1" data-pp="localKm"></label>
       <label class="f">Arredondar combustível para múltiplos de (R$)<input type="number" min="0" step="1" data-pp="arredPasso"></label>
@@ -243,7 +247,8 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <section class="step" id="secOrc">
     <h2><span class="num">3</span>Orçamento</h2>
     <div class="grid"><label class="f">Título do orçamento<input type="text" id="titulo" placeholder="ex.: Queiroz Regional PB"></label>
-      <label class="f">Nome do cliente<input type="text" id="cliente"></label></div>
+      <label class="f">Nome do cliente<input type="text" id="cliente"></label>
+      <label class="f">Van cobrada por<select id="vanModo"><option value="trecho">Trecho (valor fixo por viagem)</option><option value="km">Quilômetro (R$/km por cidade de origem)</option></select></label></div>
     <details class="box" open><summary>Descritivo do orçamento</summary><div class="in">
       <textarea id="descr" class="descr" readonly rows="14"></textarea>
       <div class="toolbar" style="margin-top:8px"><button class="ghost small" id="btnCopDescr">Copiar descritivo</button></div>
@@ -420,7 +425,7 @@ function int(v){ return Math.round(num(v)); }
 function precosPadrao(){
   const d = {}; PRECO_FUNCOES.forEach(f=>d[f.id] = zeroOrig());
   return {diarias:d, cafe:15, lanche:15, almoco:30, jantar:30, lanche_farm:15, almoco_farm:30, jantar_farm:30, hosp:90,
-    combustivel:0, kmL:10, capCarro:7, vanTrecho:0, capVan:15, localKm:60, arredPasso:10, arredModo:"cima", locacao:0,
+    combustivel:0, kmL:10, capCarro:7, vanTrecho:0, vanKmFOR:0, vanKmNAT:0, vanKmJUA:0, capVan:15, localKm:60, arredPasso:10, arredModo:"cima", locacao:0,
     imposto:0, lucroUnidade:0, lucroTotal:0, rateio:"pessoadia", tolerancia:10};
 }
 function normPrecos(p){
@@ -460,7 +465,7 @@ function normCompo(c){
   const ok = x=>ORIG[x] ? x : "";
   return {disp:d, apoio:int(c.apoio), principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};   // r181: apoio
 }
-function orcVazio(){ return {titulo:"", cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
+function orcVazio(){ return {vanModo:"trecho", titulo:"", cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
 // r170: valores próprios do orçamento (sobrepõem a tabela do Diretor só neste orçamento)
 function valorValido(v){ if(v===undefined || v===null || v==="") return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) && n>=0 ? n : null; }
 function normPrecosOrc(p){
@@ -481,7 +486,8 @@ function normEquipe(e, i, origemPadrao){
     veiculos:(e.veiculos===null || e.veiculos===undefined || e.veiculos==="") ? null : int(e.veiculos),
     vanTrecho:(e.vanTrecho===null || e.vanTrecho===undefined || e.vanTrecho==="") ? null : num(e.vanTrecho),
     saida:Math.max(1,int(e.saida)||1), retorno:0, consumo:{},
-    outroTipo:String(e.outroTipo||""), outroOrigem:String(e.outroOrigem||""), outroValor:num(e.outroValor)};
+    outroTipo:String(e.outroTipo||""), outroOrigem:String(e.outroOrigem||""), outroValor:num(e.outroValor),
+    vanKm:(e.vanKm===null || e.vanKm===undefined || e.vanKm==="") ? null : num(e.vanKm)};   // r183: R$/km próprio da equipe
   b.chegada = int(e.chegada) || b.saida;   // r180: dia de chegada (identifica a equipe ao refazer pelos dias)
   b.retorno = Math.max(b.saida, int(e.retorno)||b.saida+1);
   for(let k=b.saida; k<=b.retorno; k++) b.consumo[k] = normConsumo((e.consumo||{})[k]);
@@ -530,6 +536,7 @@ function normOrc(o){
   o = o || {};
   return {titulo:String(o.titulo||""), cliente:String(o.cliente||""),   // r182: título
     descricao:String(o.descricao||""), planilhaNome:String(o.planilhaNome||""), planilhaTexto:String(o.planilhaTexto||""),   // r179: o que foi solicitado
+    vanModo:o.vanModo==="km" ? "km" : "trecho",   // r183: van por trecho (padrão) ou por km
     comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
 }
 /* r168: os dados ficam no servidor (planilha da calculadora), não no navegador */
@@ -613,6 +620,7 @@ function setPath(o, p, v){ const ks = p.split("."); let x = o; for(let i=0;i<ks.
    SUGESTÕES (equipes, alimentação, hospedagem)
    ===================================================================== */
 function kmDe(u, o){ return ((u && u.kmPor) || {})[o] || 0; }
+function vanKmDe(e){ return e.vanKm!==null && e.vanKm!==undefined ? e.vanKm : (PR()["vanKm" + e.origem] || 0); }   // r183
 function ehLocal(u, o){ return kmDe(u, o) <= precos.localKm; }
 function qtdLinha(l){ return ORIGENS.reduce((s,o)=>s + (l[o.id]||0), 0); }
 function totalDia(d){ return d.linhas.reduce((s,l)=>s + qtdLinha(l), 0); }
@@ -668,7 +676,7 @@ function equipesDosDias(u, reg){
   u.equipes.forEach(e=>{
     const v = antigas.find(x=>x.origem===e.origem && (x.chegada||x.saida)===e.chegada);
     if(!v) return;
-    ["nome","transporte","veiculos","vanTrecho","outroTipo","outroOrigem","outroValor"].forEach(c=>e[c] = v[c]);
+    ["nome","transporte","veiculos","vanTrecho","vanKm","outroTipo","outroOrigem","outroValor"].forEach(c=>e[c] = v[c]);
     e.saida = Math.min(Math.max(1, v.saida), n+1); e.retorno = Math.min(Math.max(e.saida, v.retorno), n+1);
     const c = {}; for(let k=e.saida; k<=e.retorno; k++) c[k] = v.consumo[k] ? v.consumo[k] : (e.consumo[k] || normConsumo()); e.consumo = c;
   });
@@ -745,7 +753,7 @@ function sugerirEquipes(u, reg, saldo, ordem){
   Object.values(grupos).sort((a,b)=>a.dia-b.dia || ordem.indexOf(a.o)-ordem.indexOf(b.o)).forEach(g=>{
     const local = ehLocal(u, g.o);
     const e = {nome:`Equipe ${u.equipes.length+1} – ${ORIG[g.o]}`, pessoas:g.q, origem:g.o, chegada:g.dia, transporte:local ? "nenhum" : (g.q <= precos.capCarro ? "carro" : "van"),
-      veiculos:null, vanTrecho:null, saida:g.dia, retorno:n+1, consumo:{}, outroTipo:"", outroOrigem:"", outroValor:0};
+      veiculos:null, vanTrecho:null, vanKm:null, saida:g.dia, retorno:n+1, consumo:{}, outroTipo:"", outroOrigem:"", outroValor:0};
     sugerirConsumo(u, e);
     u.equipes.push(e);
   });
@@ -794,9 +802,15 @@ function calcularUnidade(reg, u, ui){
              "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":`${km} km de ${orig} ÷ ${PP.kmL} km/l × ${brl(PP.combustivel)} = ${brl(bruto)} por carro, arredondado`});
       }
       if(e.transporte==="van" && nv){
-        const vu = e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho;
-        add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`Van – ${sentido}`, "Equipe":e.nome, "Origem":orig,
-             "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":"Por van, por trecho"});
+        if(orc.vanModo==="km"){   // r183: km da cidade de origem até a loja × R$/km
+          const km = kmDe(u, e.origem), rk = vanKmDe(e), vu = Math.round(km * rk * 100) / 100;
+          add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`Van – ${sentido}`, "Equipe":e.nome, "Origem":orig,
+               "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":`Por van: ${km} km de ${orig} × ${brl(rk)}/km`});
+        } else {
+          const vu = e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho;
+          add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`Van – ${sentido}`, "Equipe":e.nome, "Origem":orig,
+               "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":"Por van, por trecho"});
+        }
       }
     };
     trecho(e.saida, "ida");
@@ -975,6 +989,7 @@ elCompo.addEventListener("click", async e=>{
 function desenharOrcamento(){
   elCliente.value = orc.cliente;
   document.getElementById("titulo").value = orc.titulo || "";   // r182
+  document.getElementById("vanModo").value = orc.vanModo || "trecho";   // r183
   desenharCompo();
   document.getElementById("comPct").value = orc.comissaoPct || "";
   document.getElementById("comNome").value = orc.comissaoNome;
@@ -1100,7 +1115,10 @@ function desenharEquipe(u, P, A, e, ei){
       ${e.transporte==="outro" ? `<label class="f">Tipo de transporte${inp(E+".outroTipo", e.outroTipo, "text", 'placeholder="ex.: ônibus, Uber, avião"')}</label>
       <label class="f">Origem do transporte${inp(E+".outroOrigem", e.outroOrigem, "text", 'placeholder="ex.: Fortaleza"')}</label>
       <label class="f">Valor ida e volta (R$, total)${inp(E+".outroValor", e.outroValor, "number", 'min="0" step="0.01"')}</label>` : ""}
-      ${e.transporte==="van" ? `<label class="f">Van por trecho (R$)<input type="number" min="0" data-path="${E}.vanTrecho" data-t="numnull" value="${e.vanTrecho===null?"":e.vanTrecho}" placeholder="Padrão: ${PR().vanTrecho}"></label>` : ""}
+      ${e.transporte==="van" && orc.vanModo!=="km" ? `<label class="f">Van por trecho (R$)<input type="number" min="0" data-path="${E}.vanTrecho" data-t="numnull" value="${e.vanTrecho===null?"":e.vanTrecho}" placeholder="Padrão: ${PR().vanTrecho}"></label>` : ""}
+      ${e.transporte==="van" && orc.vanModo==="km" ? (()=>{ const km = kmDe(u, e.origem), rk = vanKmDe(e);
+        return `<label class="f">Van: R$ por km (saindo de ${esc(ORIG[e.origem])})<input type="number" min="0" step="0.01" data-path="${E}.vanKm" data-t="numnull" data-re="1" value="${e.vanKm===null?"":e.vanKm}" placeholder="Tabela: ${PR()["vanKm"+e.origem]||0}"></label>
+        <div class="f" style="grid-column:1/-1"><span class="tag">Distância ${esc(ORIG[e.origem])} ↔ ${esc(u.cidade || "loja")}: <strong>${km} km na ida + ${km} km na volta = ${km*2} km</strong> · por van: ida ${brl(km*rk)} + volta ${brl(km*rk)} = <strong>${brl(km*rk*2)}</strong></span></div>`; })() : ""}
       <label class="f">Dia de saída<input type="number" min="1" data-path="${E}.saida" data-t="dia" data-re="1" value="${e.saida}"></label>
       <label class="f">Dia de retorno<input type="number" min="1" data-path="${E}.retorno" data-t="dia" data-re="1" value="${e.retorno}"></label>
     </div>
@@ -1177,6 +1195,7 @@ elOrc.addEventListener("change", e=>{ if(e.target.dataset.path) aoEditar(e.targe
 elOrc.addEventListener("toggle", e=>{ const k = e.target.dataset && e.target.dataset.ab; if(k){ e.target.open ? aberto.add(k) : aberto.delete(k); } }, true);
 elCliente.addEventListener("input", ()=>{ orc.cliente = elCliente.value; salvar(); });
 document.getElementById("titulo").addEventListener("input", e=>{ orc.titulo = e.target.value; salvar(); });   // r182
+document.getElementById("vanModo").addEventListener("change", e=>{ orc.vanModo = e.target.value; salvar(); desenharOrcamento(); });   // r183
 document.getElementById("comPct").addEventListener("input", e=>{ orc.comissaoPct = num(e.target.value); salvar(); });
 document.getElementById("comNome").addEventListener("input", e=>{ orc.comissaoNome = e.target.value; salvar(); });
 
@@ -1358,7 +1377,8 @@ function avisos(R){
     u.equipes.forEach(e=>{
       if(e.transporte==="outro" && !e.outroValor) A.push(`${n}: ${e.nome} está sem o valor do transporte.`);
       if(e.transporte==="carro" && !PP.combustivel) A.push("Falta o preço do litro de combustível.");
-      if(e.transporte==="van" && !(e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho)) A.push(`${n}: valor da van por trecho está zerado.`);
+      if(e.transporte==="van" && orc.vanModo!=="km" && !(e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho)) A.push(`${n}: valor da van por trecho está zerado.`);
+      if(e.transporte==="van" && orc.vanModo==="km" && !vanKmDe(e)) A.push(`${n}: valor da van por km (saindo de ${ORIG[e.origem]}) está zerado.`);
     });
     (u.transportes||[]).forEach(t=>{ if(!t.valor) A.push(`${n}: transporte avulso "${t.tipo || "sem tipo"}" está sem valor.`); });
     if(u.dias.some(d=>d.coletores) && !(u.valorColetor!==null ? u.valorColetor : PP.locacao)) A.push("O valor de locação de coletor está zerado.");
@@ -1428,12 +1448,13 @@ function montarPlanilha(){
 
   const P = [["Parâmetro", ...ORIGENS.map(o=>o.nome)]];
   if(orc.titulo) P.push(["Título do orçamento", orc.titulo]);   // r182
+  P.push(["Van cobrada por", orc.vanModo==="km" ? "Quilômetro" : "Trecho"]);   // r183
   PRECO_FUNCOES.forEach(f=>P.push(["Diária – " + f.nome, ...ORIGENS.map(o=>PP.diarias[f.id][o.id])]));
   P.push(["Pessoas disponíveis", ...ORIGENS.map(o=>temLimite() ? orc.composicao.disp[o.id] : "sem limite")]);
   P.push(["Ordem das fontes de pessoas", origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")]);
   [["Café da manhã (por pessoa)","cafe"],["Lanche (por pessoa)","lanche"],["Almoço (por pessoa)","almoco"],["Jantar (por pessoa)","jantar"],
    ["Lanche farmácia (por pessoa)","lanche_farm"],["Almoço farmácia (por pessoa)","almoco_farm"],["Jantar farmácia (por pessoa)","jantar_farm"],["Hospedagem (por pessoa/noite)","hosp"],
-   ["Combustível (R$/litro)","combustivel"],["Consumo (km/l)","kmL"],["Lugares no carro","capCarro"],["Van padrão (por trecho)","vanTrecho"],["Lugares na van","capVan"],
+   ["Combustível (R$/litro)","combustivel"],["Consumo (km/l)","kmL"],["Lugares no carro","capCarro"],["Van padrão (por trecho)","vanTrecho"],["Van por km – Fortaleza","vanKmFOR"],["Van por km – Natal","vanKmNAT"],["Van por km – Juazeiro do Norte","vanKmJUA"],["Lugares na van","capVan"],
    ["Equipe local até (km)","localKm"],["Locação de coletor (por dia)","locacao"],["Imposto (%)","imposto"],["Lucro padrão por unidade","lucroUnidade"],["Lucro adicional do orçamento","lucroTotal"],["Tolerância de coerência (%)","tolerancia"]]
    .forEach(([n,k])=>P.push([n, PP[k], ""]));
   P.push(["Comissão (%)", orc.comissaoPct || 0, ""]);
@@ -1533,6 +1554,7 @@ function refeicoesTxt(c, u){
 function descritivo(o){
   const T = [];
   if(o.titulo) T.push(`Título: ${o.titulo}`);   // r182
+  if(o.vanModo==="km") T.push("Van cobrada por quilômetro (km da cidade de origem até a loja, na ida e na volta)");   // r183
   T.push(`Cliente: ${o.cliente || "(não informado)"}`);
   T.push(`Fontes de pessoas: ${ordemDe(o.composicao || orc.composicao, o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id] || "sem limite"}`).join(", ") + ")" : ""}`);
   if(o.comissaoPct) T.push(`Comissão: ${o.comissaoPct}% sobre o preço${o.comissaoNome ? " (" + o.comissaoNome + ")" : ""}`);
@@ -1828,7 +1850,7 @@ function montarPendente(){
       sugerirEquipes(u, reg, saldo, ordem);
       // aproveita o transporte que o texto descreveu, só quando a equipe é da mesma origem
       eqIA.forEach(ea=>{ const e = u.equipes.find(x=>x.origem===ea.origem && x.saida===ea.saida); if(!e) return;
-        ["transporte","veiculos","vanTrecho","outroTipo","outroOrigem","outroValor","retorno"].forEach(c=>{ if(ea[c]!==undefined && ea[c]!==null && ea[c]!=="") e[c] = ea[c]; });
+        ["transporte","veiculos","vanTrecho","vanKm","outroTipo","outroOrigem","outroValor","retorno"].forEach(c=>{ if(ea[c]!==undefined && ea[c]!==null && ea[c]!=="") e[c] = ea[c]; });
         sugerirConsumo(u, e); });
     }
     aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
