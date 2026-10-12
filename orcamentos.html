@@ -8,7 +8,11 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r179: a descrição do orçamento (texto/ditado) e a planilha carregada são salvas no orçamento, voltam ao abrir e vão no arquivo exportado.
+<!-- r181: "Quantidade de Apoio" (na disponibilidade de pessoas): o Apoio assume parte das contagens críticas
+     (aéreos, câmaras, ilhas/geladeiras primeiro; depois as demais áreas), com o local no Detalhe; Apoios e Supervisores sempre de Fortaleza.
+     r180: Apoio sempre logo após o supervisor (fora de farmácia); equipes refeitas sozinhas a partir das quantidades/origens dos dias;
+     contadores de inventariantes à esquerda; card "Deslocamento de Equipes" com remoção de dias; card da loja com cor mais forte.
+     r179: a descrição do orçamento (texto/ditado) e a planilha carregada são salvas no orçamento, voltam ao abrir e vão no arquivo exportado.
      r178: botão "Importar orçamento" (antes "Importar da calculadora") e novo "Exportar orçamento" (arquivo .json do orçamento aberto).
      r177: a fonte escolhida na prévia manda SEMPRE na distribuição das pessoas (a IA não fixa mais origens por conta própria);
      pessoas disponíveis por cidade também ficam na prévia.
@@ -68,7 +72,9 @@ th{color:var(--muted);font-weight:500;white-space:nowrap}
 td.n,th.n{text-align:right;white-space:nowrap}
 td input,td select{padding:4px 6px;background:var(--panel)}
 td input[type=number]{min-width:58px}
-.unit{border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0;background:var(--bg)}
+.unit{border:1px solid #b9c7d6;border-left:5px solid var(--accent);border-radius:10px;padding:12px;margin:12px 0;background:#DCE6F0}   /* r180: cor mais forte */
+.unit > .grid input,.unit > .grid select,.unit .block > .grid input{background:#fff}
+.unit-top h3{color:var(--accent)}
 .unit-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .block{margin-top:14px}
 .block-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
@@ -104,7 +110,7 @@ button.gravando{background:var(--danger);border-color:var(--danger);color:#fff;a
 .proprio{border:1px solid var(--line);border-left:4px solid var(--verde);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--soft)}
 .proprio h4{margin:0 0 6px}
 /* r176 */
-tr.totlin td{background:var(--soft);font-weight:600}
+tr.totlin td{background:var(--soft);font-weight:600;text-align:left}
 .mv{display:inline-flex;gap:2px}
 .mv button{padding:2px 7px;min-width:0}
 .salvo{font-size:.82rem;color:var(--muted)}
@@ -320,6 +326,62 @@ const FUN = Object.fromEntries(FUNCOES.map(f=>[f.id,f]));
 /* r169: farmácia — unidade marcada (ou com função de farmácia) usa só as funções e refeições de farmácia */
 const FUNCOES_FARM = FUNCOES.filter(f=>f.farm), FUNCOES_GERAIS = FUNCOES.filter(f=>!f.farm);
 function ehSupervisor(id){ return !!(FUN[id] && FUN[id].sup); }
+/* r181: QUANTIDADE DE APOIO — o Apoio faz as contagens das áreas críticas.
+   Para cada dia, até N pessoas de Apoio assumem parte das áreas, nesta prioridade; a área continua com o restante.
+   Ex.: 5 em aéreos e N=3 -> 3 Apoio ("Contagem de Aéreos…") + 2 em aéreos. Apoio e supervisor sempre de Fortaleza.
+   As linhas criadas guardam a área de origem (autoApoio) para poderem ser desfeitas/refeitas quando N muda. */
+const PRIORIDADE_APOIO = ["aereo_ret","aereo_salao","camara","ilhas","deposito","seca_salao"];
+function reverterApoio(u){
+  u.dias.forEach(d=>{
+    const fica = [];
+    d.linhas.forEach(l=>{
+      if(l.funcao==="apoio" && l.autoApoio){
+        let alvo = d.linhas.find(x=>x.funcao===l.autoApoio && !x.autoApoio && x.detalhe===(l.detalheOrig||""));
+        if(!alvo){ alvo = Object.assign({funcao:l.autoApoio, detalhe:l.detalheOrig||""}, zeroOrig()); fica.push(alvo); }
+        // devolve as pessoas à área: nas origens de onde saíram; se não se sabe, na origem que a área já usa
+        let t = l.tirado;
+        if(!t || !ORIGENS.some(o=>int(t[o.id]))){
+          const dom = ORIGENS.map(o=>o.id).sort((a,b)=>(alvo[b]||0)-(alvo[a]||0))[0];
+          t = {}; t[(alvo[dom]||0) ? dom : origensPrioridade(orc)[0]] = qtdLinha(l);
+        }
+        let sobra = qtdLinha(l);
+        ORIGENS.forEach(o=>{ const v = Math.min(sobra, int(t[o.id])); alvo[o.id] += v; sobra -= v; });
+        if(sobra>0) alvo.FOR += sobra;
+      } else fica.push(l);
+    });
+    d.linhas = fica;
+  });
+}
+function aplicarApoio(u, N){
+  if(!u || u.farmacia) return;
+  reverterApoio(u);
+  N = int(N);
+  if(N>0) u.dias.forEach(d=>{
+    let resto = N - d.linhas.filter(l=>l.funcao==="apoio").reduce((s,l)=>s + qtdLinha(l), 0);   // Apoio já informado conta
+    const novos = [];
+    PRIORIDADE_APOIO.forEach(fid=>d.linhas.filter(l=>l.funcao===fid).forEach(l=>{
+      if(resto<=0) return;
+      const q = Math.min(resto, qtdLinha(l)); if(q<=0) return;
+      let x = q; const tirado = zeroOrig();
+      ["FOR","NAT","JUA"].forEach(o=>{ const t = Math.min(x, l[o]||0); l[o] -= t; tirado[o] = t; x -= t; });
+      novos.push(Object.assign({funcao:"apoio", detalhe:"Contagem de " + (l.detalhe ? l.detalhe : FUN[fid].nome), autoApoio:fid, detalheOrig:l.detalhe, tirado}, zeroOrig(), {FOR:q}));
+      resto -= q;
+      if(!qtdLinha(l)) l.__vazia = true;
+    }));
+    d.linhas = d.linhas.filter(l=>!l.__vazia).concat(novos);
+  });
+  ordenarApoio(u);
+}
+function aplicarApoioTodas(o){ (o||orc).regionais.forEach(reg=>reg.unidades.forEach(u=>aplicarApoio(u, orc.composicao.apoio))); }
+// r180: fora de farmácia, o Apoio vem sempre logo após o(s) supervisor(es); as demais funções mantêm a ordem
+function ordenarApoio(u){
+  if(!u || u.farmacia) return;
+  u.dias.forEach(d=>{
+    const sup = d.linhas.filter(l=>ehSupervisor(l.funcao)), apo = d.linhas.filter(l=>l.funcao==="apoio"),
+          out = d.linhas.filter(l=>!ehSupervisor(l.funcao) && l.funcao!=="apoio");
+    d.linhas = [...sup, ...apo, ...out];
+  });
+}
 function funcaoParaFarmacia(id){ return ehSupervisor(id) ? "sup_farm" : "inv_farm"; }
 function funcaoParaGeral(id){ return id==="sup_farm" ? "supervisor" : id==="inv_farm" ? "apoio" : id; }
 function temFuncaoFarmacia(u){ return u.dias.some(d=>d.linhas.some(l=>FUN[l.funcao] && FUN[l.funcao].farm)); }
@@ -394,7 +456,7 @@ function normCompo(c){
   c = c || {}; const d = zeroOrig();
   ORIGENS.forEach(o=>d[o.id] = int((c.disp||{})[o.id]));
   const ok = x=>ORIG[x] ? x : "";
-  return {disp:d, principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};
+  return {disp:d, apoio:int(c.apoio), principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};   // r181: apoio
 }
 function orcVazio(){ return {cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
 // r170: valores próprios do orçamento (sobrepõem a tabela do Diretor só neste orçamento)
@@ -418,6 +480,7 @@ function normEquipe(e, i, origemPadrao){
     vanTrecho:(e.vanTrecho===null || e.vanTrecho===undefined || e.vanTrecho==="") ? null : num(e.vanTrecho),
     saida:Math.max(1,int(e.saida)||1), retorno:0, consumo:{},
     outroTipo:String(e.outroTipo||""), outroOrigem:String(e.outroOrigem||""), outroValor:num(e.outroValor)};
+  b.chegada = int(e.chegada) || b.saida;   // r180: dia de chegada (identifica a equipe ao refazer pelos dias)
   b.retorno = Math.max(b.saida, int(e.retorno)||b.saida+1);
   for(let k=b.saida; k<=b.retorno; k++) b.consumo[k] = normConsumo((e.consumo||{})[k]);
   return b;
@@ -425,7 +488,9 @@ function normEquipe(e, i, origemPadrao){
 function normDia(d){
   d = d || {};
   const linhas = (Array.isArray(d.linhas) ? d.linhas : []).map(l=>({
-    ...(()=>{ const o = {funcao:FUN[l.funcao] ? l.funcao : "apoio", detalhe:String(l.detalhe||"")}; ORIGENS.forEach(g=>o[g.id] = int(l[g.id])); return o; })()
+    ...(()=>{ const o = {funcao:FUN[l.funcao] ? l.funcao : "apoio", detalhe:String(l.detalhe||"")}; ORIGENS.forEach(g=>o[g.id] = int(l[g.id]));
+      if(o.funcao==="apoio" && l.autoApoio && FUN[l.autoApoio]){ o.autoApoio = l.autoApoio; o.detalheOrig = String(l.detalheOrig||""); o.tirado = Object.assign(zeroOrig(), l.tirado||{}); }   // r181
+      return o; })()
   }));
   return {inicio:/^\d{1,2}:\d{2}$/.test(d.inicio||"") ? d.inicio.padStart(5,"0") : "14:00", coletores:int(d.coletores), linhas};
 }
@@ -447,6 +512,7 @@ function normUnidade(u, reg){
   b.precoFinal = (u.precoFinal===null || u.precoFinal===undefined || u.precoFinal==="") ? null : num(u.precoFinal);
   b.dias = (Array.isArray(u.dias) && u.dias.length ? u.dias : [{}]).map(normDia);
   if(u.farmacia===true || temFuncaoFarmacia(b)) aplicarFarmacia(b, true);   // r169
+  ordenarApoio(b);   // r180
   b.equipes = (Array.isArray(u.equipes) ? u.equipes : []).map((e,i)=>normEquipe(e,i,reg ? reg.origem : "FOR"));
   b.transportes = (Array.isArray(u.transportes) ? u.transportes : []).map(t=>({tipo:String((t||{}).tipo||""), origem:String((t||{}).origem||""),
     dia:(t && t.dia!==undefined && t.dia!==null && t.dia!=="" && int(t.dia)) ? String(int(t.dia)) : "", valor:num((t||{}).valor)}));
@@ -591,6 +657,20 @@ function saldoInicial(existente, exceto){
   return s;
 }
 
+/* r180: monta as equipes exatamente com as quantidades e origens dos Dias de trabalho.
+   Mantém o que já foi ajustado em cada equipe (transporte, veículos, van, dias, refeições e hotel)
+   quando ela continua existindo (mesma origem e mesmo dia de chegada). */
+function equipesDosDias(u, reg){
+  const antigas = u.equipes || [], fix = u.origemFixa, n = u.dias.length;
+  u.origemFixa = true; sugerirEquipes(u, reg, null, origensPrioridade(orc)); u.origemFixa = fix;
+  u.equipes.forEach(e=>{
+    const v = antigas.find(x=>x.origem===e.origem && (x.chegada||x.saida)===e.chegada);
+    if(!v) return;
+    ["nome","transporte","veiculos","vanTrecho","outroTipo","outroOrigem","outroValor"].forEach(c=>e[c] = v[c]);
+    e.saida = Math.min(Math.max(1, v.saida), n+1); e.retorno = Math.min(Math.max(e.saida, v.retorno), n+1);
+    const c = {}; for(let k=e.saida; k<=e.retorno; k++) c[k] = v.consumo[k] ? v.consumo[k] : (e.consumo[k] || normConsumo()); e.consumo = c;
+  });
+}
 function sugerirConsumo(u, e){
   const n = u.dias.length, local = ehLocal(u, e.origem);
   e.consumo = {};
@@ -626,17 +706,23 @@ function sugerirEquipes(u, reg, saldo, ordem){
     if(saldo) chegadas.forEach(c=>saldo[c.o] = Math.max(0, saldo[c.o] - c.q));
   } else {
     // Quem chega sai primeiro da fonte principal, depois 2ª e 3ª opções
+    // r181: Apoio e supervisores sempre de Fortaleza (fora da distribuição)
+    const fixo = l=>ehSupervisor(l.funcao) || l.funcao==="apoio";
+    const totFixo = d=>d.linhas.filter(fixo).reduce((s,l)=>s + qtdLinha(l), 0);
+    let antF = 0;
+    u.dias.forEach((d,i)=>{ const t = totFixo(d); if(t>antF){ chegadas.push({dia:i+1, o:"FOR", q:t-antF}); if(saldo) saldo.FOR = Math.max(0, saldo.FOR - (t-antF)); } antF = Math.max(antF, t); });
     const presentes = zeroOrig(), porDia = [];
     let ant = 0;
     u.dias.forEach((d,i)=>{
-      let falta = totalDia(d) - ant;
+      const totOutros = totalDia(d) - totFixo(d);
+      let falta = totOutros - ant;
       for(const o of ordem){
         if(falta<=0) break;
         const q = saldo ? Math.min(falta, saldo[o]) : falta;
         if(q>0){ chegadas.push({dia:i+1, o, q}); presentes[o] += q; if(saldo) saldo[o] -= q; falta -= q; }
       }
       if(falta>0){ chegadas.push({dia:i+1, o:ordem[0], q:falta}); presentes[ordem[0]] += falta; }   // acima da disponibilidade
-      ant = Math.max(ant, totalDia(d));
+      ant = Math.max(ant, totOutros);
       porDia.push(Object.assign({}, presentes));
     });
     // Distribui as funções de cada dia entre as origens presentes (supervisores primeiro, na fonte principal)
@@ -645,6 +731,7 @@ function sugerirEquipes(u, reg, saldo, ordem){
       [...d.linhas].sort((a,b)=>(ehSupervisor(a.funcao)?0:1) - (ehSupervisor(b.funcao)?0:1)).forEach(l=>{
         let q = qtdLinha(l);
         ORIGENS.forEach(o=>l[o.id] = 0);
+        if(fixo(l)){ l.FOR = q; return; }   // r181
         for(const o of ordem){ if(q<=0) break; const x = Math.min(q, cap[o]); if(x>0){ l[o] += x; cap[o] -= x; q -= x; } }
         if(q>0) l[ordem[0]] += q;
       });
@@ -655,7 +742,7 @@ function sugerirEquipes(u, reg, saldo, ordem){
   u.equipes = [];
   Object.values(grupos).sort((a,b)=>a.dia-b.dia || ordem.indexOf(a.o)-ordem.indexOf(b.o)).forEach(g=>{
     const local = ehLocal(u, g.o);
-    const e = {nome:`Equipe ${u.equipes.length+1} – ${ORIG[g.o]}`, pessoas:g.q, origem:g.o, transporte:local ? "nenhum" : (g.q <= precos.capCarro ? "carro" : "van"),
+    const e = {nome:`Equipe ${u.equipes.length+1} – ${ORIG[g.o]}`, pessoas:g.q, origem:g.o, chegada:g.dia, transporte:local ? "nenhum" : (g.q <= precos.capCarro ? "carro" : "van"),
       veiculos:null, vanTrecho:null, saida:g.dia, retorno:n+1, consumo:{}, outroTipo:"", outroOrigem:"", outroValor:0};
     sugerirConsumo(u, e);
     u.equipes.push(e);
@@ -847,6 +934,7 @@ function desenharCompo(){
   const c = orc.composicao, sug = fonteSugerida(orc);
   const opt = (sel, vazio)=>`<option value="" ${!sel?"selected":""}>${vazio}</option>` + ORIGENS.map(o=>`<option value="${o.id}" ${sel===o.id?"selected":""}>${o.nome}</option>`).join("");
   document.getElementById("compo").innerHTML = `<div class="grid">
+    <label class="f">Quantidade de Apoio (por dia, de Fortaleza)<input type="number" min="0" step="1" data-capoio value="${c.apoio||""}" placeholder="0 = sem Apoio"></label>
     ${ORIGENS.map(o=>`<label class="f">Pessoas disponíveis – ${o.nome}<input type="number" min="0" step="1" data-c="${o.id}" value="${c.disp[o.id]||""}" placeholder="sem limite"></label>`).join("")}
   </div>
   <p class="hint">Ordem das fontes de pessoas: <strong>${origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")}</strong>${c.principal ? "" : " (automática: a mais próxima da primeira unidade)"}. A fonte principal é escolhida ao interpretar a descrição, na tela "O que eu entendi". Disponibilidades vazias = sem limite; as unidades dividem as mesmas pessoas, na ordem em que aparecem.</p>
@@ -868,6 +956,11 @@ elCompo.addEventListener("input", e=>{
   orc.composicao.disp[k] = int(e.target.value); salvar();
 });
 elCompo.addEventListener("change", e=>{
+  if(e.target.hasAttribute("data-capoio")){   // r181: refaz o Apoio de todas as unidades e as equipes
+    orc.composicao.apoio = int(e.target.value);
+    orc.regionais.forEach(reg=>reg.unidades.forEach(u=>{ aplicarApoio(u, orc.composicao.apoio); equipesDosDias(u, reg); }));
+    salvar(); desenharOrcamento(); toast(orc.composicao.apoio ? `Apoio aplicado: até ${orc.composicao.apoio} por dia em cada unidade` : "Apoio automático removido"); return;
+  }
   const k = e.target.dataset.cs; if(!k) return;
   orc.composicao[k] = e.target.value; salvar(); desenharCompo(); desenharUso();
 });
@@ -941,7 +1034,7 @@ function desenharUnidade(reg, ri, u, ui){
               <input type="time" data-path="${D}.inicio" data-t="txt" value="${esc(d.inicio)}" style="width:auto"></label>
               <button class="danger small" data-acao="remDia" ${A} data-d="${di}" ${n<2?"disabled":""}>Remover dia</button></div></div>
           <div class="tbl"><table><thead><tr><th>Função</th><th>Detalhe</th>${ORIGENS.map(o=>`<th>${o.nome}</th>`).join("")}<th></th></tr></thead><tbody>
-          <tr class="totlin"><td>Inventariantes</td><td class="tag">sem supervisores</td>${ORIGENS.map(o=>`<td class="n" data-totcol="${o.id}">${totalInvOrig(d, o.id)}</td>`).join("")}<td></td></tr>
+          <tr class="totlin"><td>Inventariantes</td><td class="tag">sem supervisores</td>${ORIGENS.map(o=>`<td data-totcol="${o.id}" style="text-align:left">${totalInvOrig(d, o.id)}</td>`).join("")}<td></td></tr>
           ${d.linhas.map((l,li)=>{
             const Lp = `${D}.linhas.${li}`;
             return `<tr><td><select data-path="${Lp}.funcao" data-re="1">${opcoesFuncao(u, l.funcao)}</select></td>
@@ -959,10 +1052,10 @@ function desenharUnidade(reg, ri, u, ui){
     </div>
 
     <div class="block">
-      <div class="block-h"><h4>Equipes de deslocamento</h4>
+      <div class="block-h"><h4>Deslocamento de Equipes</h4>
         <div class="toolbar"><button class="ghost small" data-acao="sugEq" ${A}>Sugerir equipes e alimentação</button>
         <button class="ghost small" data-acao="addEq" ${A}>Adicionar equipe</button></div></div>
-      ${u.equipes.length ? "" : '<p class="hint">Nenhuma equipe. Use "Sugerir equipes e alimentação" para montar a partir dos dias de trabalho.</p>'}
+      ${u.equipes.length ? '<p class="hint" style="margin-top:0">As equipes acompanham sozinhas as quantidades e origens dos Dias de trabalho; os ajustes de transporte, dias, refeições e hotel de cada equipe são mantidos.</p>' : '<p class="hint">Nenhuma equipe. Informe as quantidades nos Dias de trabalho ou use "Sugerir equipes e alimentação".</p>'}
       ${u.equipes.map((e,ei)=>desenharEquipe(u, P, A, e, ei)).join("")}
     </div>
 
@@ -1008,14 +1101,15 @@ function desenharEquipe(u, P, A, e, ei){
       <label class="f">Dia de saída<input type="number" min="1" data-path="${E}.saida" data-t="dia" data-re="1" value="${e.saida}"></label>
       <label class="f">Dia de retorno<input type="number" min="1" data-path="${E}.retorno" data-t="dia" data-re="1" value="${e.retorno}"></label>
     </div>
-    <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Dia</th>${refeicoesDe(u).map(r=>`<th>${r.nome}</th>`).join("")}<th>Hospedagem</th></tr></thead><tbody>
+    <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Dia</th>${refeicoesDe(u).map(r=>`<th>${r.nome}</th>`).join("")}<th>Hospedagem</th><th></th></tr></thead><tbody>
       ${dias.map(k=>{
         const c = e.consumo[k] || normConsumo(); e.consumo[k] = c;
         const C = `${E}.consumo.${k}`;
         const ini = k<=n ? ` <span class="tag">(início ${esc(u.dias[k-1].inicio)})</span>` : "";
         return `<tr><td style="white-space:nowrap">${nomeDia(k,n)}${ini}</td>
           ${refeicoesDe(u).map(r=>`<td>${inp(C+"."+r.id, c[r.id], "number", 'min="0" step="1" style="width:60px"')}</td>`).join("")}
-          <td><input type="checkbox" data-path="${C}.hosp" data-t="bool01" ${c.hosp?"checked":""} aria-label="Hospedagem"></td></tr>`;
+          <td><input type="checkbox" data-path="${C}.hosp" data-t="bool01" ${c.hosp?"checked":""} aria-label="Hospedagem"></td>
+          <td><button class="danger small" data-acao="remDiaEq" ${A} data-e="${ei}" data-k="${k}" ${e.saida===e.retorno?"disabled":""} title="${k===e.saida||k===e.retorno ? "Encurtar a viagem" : "Zerar refeições e hotel deste dia"}" aria-label="Remover dia">×</button></td></tr>`;
       }).join("")}
     </tbody></table></div>
     <p class="hint">Refeições = quantidade por pessoa no dia. Hospedagem = pernoite no fim desse dia.</p>
@@ -1040,7 +1134,8 @@ function aoEditar(el, evento){
   const mf = p.match(/^(regionais\.\d+\.unidades\.\d+)\.farmacia$/);
   if(mf){ const uu = getPath(orc, mf[1]); aplicarFarmacia(uu, uu.farmacia); toast(uu.farmacia ? "Unidade marcada como farmácia" : "Unidade desmarcada como farmácia"); }
   const ml = p.match(/^(regionais\.\d+\.unidades\.\d+)\.dias\.\d+\.linhas\.\d+\.funcao$/);
-  if(ml){ const uu = getPath(orc, ml[1]); if(!uu.farmacia && FUN[el.value] && FUN[el.value].farm){ aplicarFarmacia(uu, true); toast("Unidade marcada como farmácia"); } }
+  if(ml){ const ll = getPath(orc, p.replace(/\.funcao$/, "")); if(ll && ll.funcao!=="apoio"){ delete ll.autoApoio; delete ll.detalheOrig; delete ll.tirado; } }   // r181
+  if(ml){ const uu = getPath(orc, ml[1]); if(!uu.farmacia && FUN[el.value] && FUN[el.value].farm){ aplicarFarmacia(uu, true); toast("Unidade marcada como farmácia"); } ordenarApoio(uu); }
   const mk = p.match(/^(regionais\.\d+\.unidades\.\d+)\.kmPor\.\w+$/);
   if(mk){ const uu = getPath(orc, mk[1]); uu.kmEstimado = false; uu.kmFonte = ""; }
   const mc = p.match(/^(regionais\.\d+\.unidades\.\d+)\.cidade$/);   // r174: cidade informada -> calcula as distâncias
@@ -1053,6 +1148,16 @@ function aoEditar(el, evento){
     const c = {}; for(let k=e.saida; k<=e.retorno; k++) c[k] = e.consumo[k] || normConsumo(); e.consumo = c;
   }
   salvar();
+  const mq = p.match(/^(regionais\.(\d+)\.unidades\.\d+)\.dias\.\d+\.linhas\.\d+\.(FOR|NAT|JUA)$/);
+  if(mq && evento==="change"){   // r180: refaz as equipes e redesenha sem perder o campo em que você está
+    equipesDosDias(getPath(orc, mq[1]), orc.regionais[Number(mq[2])]); salvar();
+    setTimeout(()=>{
+      const ae = document.activeElement, ap = ae && ae.dataset ? ae.dataset.path : null;
+      desenharOrcamento();
+      if(ap){ const nx = elOrc.querySelector(`[data-path="${ap}"]`); if(nx){ nx.focus(); try{ nx.select && nx.select(); }catch(_){ } } }
+    }, 0);
+    return;
+  }
   if(/\.(FOR|NAT|JUA)$/.test(p)){
     const dia = el.closest(".day"), di = p.match(/^(regionais\.\d+\.unidades\.\d+\.dias\.\d+)/);
     if(dia && di){
@@ -1083,10 +1188,10 @@ elOrc.addEventListener("click", async e=>{
     case "remUni":
       if(!await confirmar("Remover esta unidade?", "Remover")) return;
       reg.unidades.splice(ui,1); if(!reg.unidades.length) reg.unidades.push(unidadeVazia(kmPadrao(reg))); break;
-    case "addDia": u.dias.push(diaVazio(u)); break;
-    case "remDia": u.dias.splice(di,1); break;
-    case "addLinha": u.dias[di].linhas.push(linhaVazia(u)); break;
-    case "remLinha": u.dias[di].linhas.splice(Number(e.target.dataset.l),1); break;
+    case "addDia": u.dias.push(diaVazio(u)); equipesDosDias(u, reg); break;
+    case "remDia": u.dias.splice(di,1); equipesDosDias(u, reg); break;
+    case "addLinha": u.dias[di].linhas.push(linhaVazia(u)); ordenarApoio(u); break;
+    case "remLinha": u.dias[di].linhas.splice(Number(e.target.dataset.l),1); equipesDosDias(u, reg); break;
     case "sobeLinha": case "desceLinha": {   // r176: muda a ordem das funções do dia
       const L = u.dias[di].linhas, i = Number(e.target.dataset.l), j = a==="sobeLinha" ? i-1 : i+1;
       if(j<0 || j>=L.length) return;
@@ -1099,12 +1204,21 @@ elOrc.addEventListener("click", async e=>{
     case "calcDist": calcularDistancias([u], true, true); return;
     case "sugEq":
       if(u.equipes.length && !await confirmar("Substituir as equipes atuais pelas sugeridas?", "Substituir")) return;
-      sugerirEquipes(u, reg, saldoInicial(orc, u), origensPrioridade(orc)); toast("Equipes e alimentação sugeridas"); break;
+      { const fix = u.origemFixa; u.origemFixa = true; sugerirEquipes(u, reg, null, origensPrioridade(orc)); u.origemFixa = fix; }   // r180: quantidades e origens dos dias
+      toast("Equipes e alimentação sugeridas a partir dos dias de trabalho"); break;
     case "addEq": {
       const e2 = normEquipe({pessoas:0, saida:1, retorno:u.dias.length+1, transporte:ehLocal(u, reg.origem)?"nenhum":"van"}, u.equipes.length, reg.origem);
       sugerirConsumo(u, e2); u.equipes.push(e2); break;
     }
     case "remEq": u.equipes.splice(ei,1); break;
+    case "remDiaEq": {   // r180: 1º/último dia encurtam a viagem; dia do meio zera refeições e hotel
+      const eq = u.equipes[ei], k = Number(e.target.dataset.k);
+      if(!eq || eq.saida===eq.retorno) return;
+      if(k===eq.saida){ delete eq.consumo[k]; eq.saida++; }
+      else if(k===eq.retorno){ delete eq.consumo[k]; eq.retorno--; }
+      else eq.consumo[k] = normConsumo();
+      break;
+    }
     case "sugCons": sugerirConsumo(u, u.equipes[ei]); toast("Alimentação e hospedagem sugeridas"); break;
     case "addTr": u.transportes.push({tipo:"", origem:"", dia:"", valor:0}); break;
     case "remTr": u.transportes.splice(Number(e.target.dataset.ti),1); break;
@@ -1447,7 +1561,7 @@ function descritivo(o){
         if(d.coletores) T.push(`- Coletores locados: ${d.coletores}`);
       });
       T.push("");
-      T.push("Equipes de deslocamento");
+      T.push("Deslocamento de Equipes");
       if(!u.equipes.length) T.push("- Nenhuma");
       u.equipes.forEach(e=>{
         const nv = veiculosDe(e);
@@ -1538,7 +1652,7 @@ FORMATO
 
 FUNÇÕES (campo "funcao")
 - supervisor: supervisor(es) de operação (lojas que NÃO são farmácia).
-- apoio: inventariante de apoio, faz qualquer área. Em loja que NÃO é farmácia, use "apoio" sempre que o texto falar em inventariantes/auditores/pessoas sem dizer a área, ou disser "apoio".
+- apoio: use SOMENTE se o texto disser "apoio" com todas as letras (a calculadora distribui o Apoio sozinha nas áreas críticas). Pessoas sem área definida: use "deposito" se for retaguarda/depósito e "seca_salao" se for área de vendas/loja.
 - sup_farm: supervisor(es) em farmácia/drogaria.
 - inv_farm: inventariante(s) em farmácia/drogaria.
 - aereo_ret: aéreos no dia/contexto de depósito ou retaguarda.
@@ -1563,7 +1677,7 @@ REGRAS
 - Siglas: QA = Queiroz Atacadão; HQ = Hiper Queiroz; CD = Centro de Distribuição. Use o nome por extenso + cidade (ex.: "Queiroz Atacadão - Nova Parnamirim").
 - Regionais conhecidas do Grupo Queiroz: MOSSORÓ (origem FOR; ex.: Mossoró, Assú, Macau, Caraúbas, Patu, Alto da Conceição, Boa Vista, Nova Betânia), NATAL (origem NAT; ex.: Natal, Parnamirim/Nova Parnamirim, Ceará-Mirim, João Câmara, São Gonçalo do Amarante, Monte Castelo, Satélite), PB (origem FOR; Paraíba: Patos, Sousa, Catolé do Rocha, Itaporanga, Monteiro, Bananeiras, São Bento, Brejo do Cruz). Se a regional não for dita, deduza pela cidade.
 - Unidades de regionais diferentes ficam em regionais diferentes; unidades da mesma regional ficam juntas.
-- Texto pode vir em formato livre/ditado, em formato de script (REGIONAL X / unidade / 1º dia ...) ou como planilha (tabela com unidades e dias). Uma planilha com "Qde auditores" por "1º DIA", "2º DIA" traz o total de pessoas de cada dia sem função: nesse caso use "apoio" (ou "inv_farm" se for farmácia) com "detalhe": "total da planilha – conferir função".
+- Texto pode vir em formato livre/ditado, em formato de script (REGIONAL X / unidade / 1º dia ...) ou como planilha (tabela com unidades e dias). Uma planilha com "Qde auditores" por "1º DIA", "2º DIA" traz o total de pessoas de cada dia sem função: nesse caso use "deposito" para o 1º dia e "seca_salao" para os demais (ou "inv_farm" se for farmácia), com "detalhe": "total da planilha – conferir função".
 - Se o tipo não for dito: "${TIPOS[0]}". Quantidades não ditas = 0.
 - Valores de transporte informados no texto são sempre o total de ida e volta.
 ${orc.cliente ? `- Cliente atual do orçamento: ${orc.cliente} (use se o texto não disser outro).` : ""}
@@ -1696,6 +1810,7 @@ function montarPendente(){
   novo.composicao = Object.assign({}, orc.composicao, pendCompo, {disp:Object.assign({}, orc.composicao.disp)});
   const saldo = saldoInicial(pendSubst ? null : orc), ordem = ordemDe(pendCompo, novo);
   novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
+    aplicarApoio(u, orc.composicao.apoio);   // r181: Apoio nas áreas críticas, antes de montar as equipes
     if(pendManterOrig && (u.origemFixa || u.equipes.length)){
       // Opção explícita do Diretor: manter as origens/equipes que o texto informou
       if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
@@ -1711,6 +1826,7 @@ function montarPendente(){
         sugerirConsumo(u, e); });
     }
     aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
+    u.dias.forEach(d=>d.linhas.forEach(l=>{ if(l.autoApoio) delete l.tirado; }));   // r181: origens redistribuídas; ao desfazer, volta para a origem da área
   }));
   pendente = novo;
   document.getElementById("previaTxt").value = descritivo(novo);
@@ -1727,16 +1843,18 @@ function desenharPreviaFonte(){
       <label class="f">3ª opção<select data-pf="terceira">${opt(pendCompo.terceira, "Automática (mais próxima)")}</select></label>
     </div>
     <div class="grid" style="margin-top:6px">
+      <label class="f">Quantidade de Apoio (por dia, de Fortaleza)<input type="number" min="0" step="1" data-papoio value="${orc.composicao.apoio||""}" placeholder="0 = sem Apoio"></label>
       ${ORIGENS.map(o=>`<label class="f">Pessoas disponíveis – ${o.nome}<input type="number" min="0" step="1" data-pdisp="${o.id}" value="${orc.composicao.disp[o.id]||""}" placeholder="sem limite"></label>`).join("")}
     </div>
     ${pendTemOrigIA() ? `<label class="chk" style="margin-top:6px"><input type="checkbox" data-pmanter ${pendManterOrig?"checked":""}>Manter as origens que o texto informou (desmarcado = a fonte escolhida acima manda)</label>` : ""}
-    <p class="hint">Ordem que será usada: <strong>${ordem.map(x=>ORIG[x]).join(" → ")}</strong>. As pessoas saem primeiro da fonte principal; só passam para a 2ª e a 3ª opção quando a anterior atingir o limite de pessoas disponíveis (vazio = sem limite). Ao mudar qualquer campo, as equipes abaixo são refeitas na hora; ao clicar em "Aplicar", a escolha vale para o orçamento.</p>`;
+    <p class="hint">Ordem que será usada: <strong>${ordem.map(x=>ORIG[x]).join(" → ")}</strong>. Apoios e supervisores vêm sempre de Fortaleza; o Apoio assume primeiro aéreos, câmaras e ilhas/geladeiras, com o local no Detalhe. As demais pessoas saem primeiro da fonte principal; só passam para a 2ª e a 3ª opção quando a anterior atingir o limite de pessoas disponíveis (vazio = sem limite). Ao mudar qualquer campo, as equipes abaixo são refeitas na hora; ao clicar em "Aplicar", a escolha vale para o orçamento.</p>`;
 }
 document.getElementById("previaFonte").addEventListener("change", e=>{
   const t = e.target;
   if(t.dataset.pf){ pendCompo[t.dataset.pf] = t.value; }
   else if(t.dataset.pdisp){ orc.composicao.disp[t.dataset.pdisp] = int(t.value); salvar(); }   // r177: mesma disponibilidade do passo 3
   else if(t.hasAttribute("data-pmanter")){ pendManterOrig = t.checked; }
+  else if(t.hasAttribute("data-papoio")){ orc.composicao.apoio = int(t.value); salvar(); }   // r181
   else return;
   montarPendente();
 });
