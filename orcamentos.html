@@ -8,7 +8,9 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r175: interpretação com o modelo mais capaz (Opus) e raciocínio; a tela mostra qual IA leu o texto.
+<!-- r176: fonte principal de pessoas escolhida na tela "O que eu entendi" (a prévia é refeita); funções sobem/descem (▲▼);
+     linha de inventariantes por cidade acima das funções e total ao lado do dia; "Coletores locados" só aparece com locação informada.
+     r175: interpretação com o modelo mais capaz (Opus) e raciocínio; a tela mostra qual IA leu o texto.
      r174: distâncias até a cidade da loja calculadas automaticamente (Google Maps no servidor), ao informar a cidade e após a interpretação.
      r173: interpretação no servidor usa o Sonnet (como dentro do Claude), temperatura 0; espera até 5 min.
      r170: ditado por voz (botão 🎤); a IA lê preços, transporte, refeições e hospedagem por dia; preços lidos valem só no orçamento ou na tabela (escolha na conferência); Excel em maiúsculas.
@@ -97,6 +99,10 @@ button.gravando{background:var(--danger);border-color:var(--danger);color:#fff;a
 @media (prefers-reduced-motion:reduce){button.gravando{animation:none}}
 .proprio{border:1px solid var(--line);border-left:4px solid var(--verde);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--soft)}
 .proprio h4{margin:0 0 6px}
+/* r176 */
+tr.totlin td{background:var(--soft);font-weight:600}
+.mv{display:inline-flex;gap:2px}
+.mv button{padding:2px 7px;min-width:0}
 .salvo{font-size:.82rem;color:var(--muted)}
 .salvo.erro{color:var(--warn);font-weight:600}
 section[inert]{opacity:.62}
@@ -174,6 +180,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
     <div class="msg" id="msgLer"></div>
     <div id="previa" hidden class="block">
       <h4>O que eu entendi</h4>
+      <div id="previaFonte"></div>
       <textarea id="previaTxt" class="descr" readonly rows="16" style="margin-top:6px"></textarea>
       <div id="previaPrecos"></div>
       <div class="toolbar" style="margin-top:8px">
@@ -376,7 +383,7 @@ function precosIniciais(){
 function linhaVazia(u){ return Object.assign({funcao:(u && u.farmacia) ? "inv_farm" : "apoio", detalhe:""}, zeroOrig()); }   // r169: Apoio é o padrão fora de farmácia
 function diaVazio(u){ return {inicio:"14:00", coletores:0, linhas:[Object.assign({funcao:(u && u.farmacia) ? "sup_farm" : "supervisor", detalhe:""}, zeroOrig(), {FOR:1})]}; }
 function kmPadrao(reg){ const k = zeroOrig(); if(reg && reg.km) k[reg.origem] = reg.km; return k; }
-function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, kmFonte:"", origemFixa:false, clienteAlimenta:true, farmacia:false, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
+function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, kmFonte:"", locaColetores:false, valorColetor:null, origemFixa:false, clienteAlimenta:true, farmacia:false, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
 function regionalVazia(){ return {nome:"", origem:"FOR", km:0, unidades:[unidadeVazia()]}; }
 function normCompo(c){
   c = c || {}; const d = zeroOrig();
@@ -426,7 +433,10 @@ function normUnidade(u, reg){
   else if(u.km!==undefined) b.kmPor[reg ? reg.origem : "FOR"] = num(u.km);     // compatibilidade com versões anteriores
   b.origemFixa = !!u.origemFixa;
   b.kmEstimado = !!u.kmEstimado;
-  b.kmFonte = typeof u.kmFonte==="string" ? u.kmFonte : "";   // r174: "Google Maps" / "OpenStreetMap" quando calculado
+  b.kmFonte = typeof u.kmFonte==="string" ? u.kmFonte : "";
+  // r176: locação de coletores (o campo só aparece quando há locação informada)
+  b.valorColetor = valorValido(u.valorColetor);
+  b.locaColetores = !!u.locaColetores || b.dias.some(d=>d.coletores>0) || b.valorColetor!==null;   // r174: "Google Maps" / "OpenStreetMap" quando calculado
   b.clienteAlimenta = u.clienteAlimenta===false ? false : true;
   b.lucro = (u.lucro===null || u.lucro===undefined || u.lucro==="") ? null : num(u.lucro);
   b.precoFinal = (u.precoFinal===null || u.precoFinal===undefined || u.precoFinal==="") ? null : num(u.precoFinal);
@@ -531,6 +541,9 @@ function kmDe(u, o){ return ((u && u.kmPor) || {})[o] || 0; }
 function ehLocal(u, o){ return kmDe(u, o) <= precos.localKm; }
 function qtdLinha(l){ return ORIGENS.reduce((s,o)=>s + (l[o.id]||0), 0); }
 function totalDia(d){ return d.linhas.reduce((s,l)=>s + qtdLinha(l), 0); }
+// r176: inventariantes = todas as funções, menos supervisores
+function totalInvOrig(d, oid){ return d.linhas.filter(l=>!ehSupervisor(l.funcao)).reduce((s,l)=>s + (l[oid]||0), 0); }
+function totalInvDia(d){ return ORIGENS.reduce((s,o)=>s + totalInvOrig(d, o.id), 0); }
 
 /* ---------- Composição das equipes (fontes de pessoas) ---------- */
 function primeiraUnidade(o){ return o && o.regionais[0] && o.regionais[0].unidades[0]; }
@@ -542,8 +555,10 @@ function fonteSugerida(o){
   return melhor || (o && o.regionais[0] ? o.regionais[0].origem : "FOR");
 }
 function fonteAtual(o){ return orc.composicao.principal || fonteSugerida(o); }
-function origensPrioridade(o){
-  const c = orc.composicao, l = [fonteAtual(o)], u1 = primeiraUnidade(o);
+function origensPrioridade(o){ return ordemDe(orc.composicao, o); }
+// r176: ordem das fontes para uma composição qualquer (usada também na prévia da interpretação)
+function ordemDe(c, o){
+  const l = [(c && c.principal) || fonteSugerida(o)], u1 = primeiraUnidade(o);
   [c.segunda, c.terceira].forEach(x=>{ if(ORIG[x] && !l.includes(x)) l.push(x); });
   ORIGENS.map(x=>x.id).filter(x=>!l.includes(x)).sort((a,b)=>kmOrd(u1,a)-kmOrd(u1,b)).forEach(x=>l.push(x));
   return l;
@@ -669,8 +684,9 @@ function calcularUnidade(reg, u, ui){
              "Quantidade":q, "Valor unitário":vu, "Total":q*vu, "Observação":`Início ${d.inicio}`});
       });
     });
-    if(d.coletores) add({"Dia":dia, "Etapa":"Geral", "Categoria":"Equipamento", "Item":"Locação de coletor",
-      "Quantidade":d.coletores, "Valor unitário":PP.locacao, "Total":d.coletores*PP.locacao, "Observação":"Por coletor/dia"});
+    if(d.coletores){ const vc = u.valorColetor!==null ? u.valorColetor : PP.locacao;   // r176: valor próprio da unidade, se informado
+      add({"Dia":dia, "Etapa":"Geral", "Categoria":"Equipamento", "Item":"Locação de coletor",
+      "Quantidade":d.coletores, "Valor unitário":vc, "Total":d.coletores*vc, "Observação":"Por coletor/dia"}); }
   });
   u.equipes.forEach(e=>{
     const nv = veiculosDe(e), orig = ORIG[e.origem];
@@ -824,11 +840,8 @@ function desenharCompo(){
   const opt = (sel, vazio)=>`<option value="" ${!sel?"selected":""}>${vazio}</option>` + ORIGENS.map(o=>`<option value="${o.id}" ${sel===o.id?"selected":""}>${o.nome}</option>`).join("");
   document.getElementById("compo").innerHTML = `<div class="grid">
     ${ORIGENS.map(o=>`<label class="f">Pessoas disponíveis – ${o.nome}<input type="number" min="0" step="1" data-c="${o.id}" value="${c.disp[o.id]||""}" placeholder="sem limite"></label>`).join("")}
-    <label class="f">Fonte principal<select data-cs="principal">${opt(c.principal, `Automática (sugerida: ${ORIG[sug]})`)}</select></label>
-    <label class="f">2ª opção<select data-cs="segunda">${opt(c.segunda, "Automática (mais próxima)")}</select></label>
-    <label class="f">3ª opção<select data-cs="terceira">${opt(c.terceira, "Automática (mais próxima)")}</select></label>
   </div>
-  <p class="hint">Ordem usada: ${origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")}. A fonte sugerida é a origem mais próxima da primeira unidade e vale para todas. Disponibilidades vazias = sem limite; as unidades dividem as mesmas pessoas, na ordem em que aparecem.</p>
+  <p class="hint">Ordem das fontes de pessoas: <strong>${origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")}</strong>${c.principal ? "" : " (automática: a mais próxima da primeira unidade)"}. A fonte principal é escolhida ao interpretar a descrição, na tela "O que eu entendi". Disponibilidades vazias = sem limite; as unidades dividem as mesmas pessoas, na ordem em que aparecem.</p>
   <div class="tbl" id="compoUso"></div>
   <div class="toolbar" style="margin-top:8px"><button class="ghost small" id="btnSugTodas">Sugerir equipes de todas as unidades</button></div>`;
 }
@@ -906,23 +919,29 @@ function desenharUnidade(reg, ri, u, ui){
     </div>
 
     <div class="block">
-      <div class="block-h"><h4>Dias de trabalho</h4><button class="ghost small" data-acao="addDia" ${A}>Adicionar dia</button></div>
+      <div class="block-h"><h4>Dias de trabalho</h4><div class="toolbar">
+        ${u.locaColetores ? `<button class="danger small" data-acao="semColetor" ${A}>Sem locação de coletores</button>` : `<button class="ghost small" data-acao="locaColetor" ${A}>📟 Locar coletores</button>`}
+        <button class="ghost small" data-acao="addDia" ${A}>Adicionar dia</button></div></div>
+      ${u.locaColetores ? `<div class="grid" style="margin-bottom:8px"><label class="f">Valor da locação (R$ por coletor/dia)${inp(P+".valorColetor", u.valorColetor===null ? "" : u.valorColetor, "number", `min="0" step="0.01" placeholder="tabela: ${PR().locacao}"`)}</label>
+        <p class="hint" style="align-self:end;margin:0">Informe a quantidade de coletores locados em cada dia. Sem valor aqui, vale o da tabela de preços.</p></div>` : ""}
       ${u.dias.map((d,di)=>{
         const D = `${P}.dias.${di}`;
         return `<div class="day">
-          <div class="block-h"><strong>${di+1}º dia</strong>
+          <div class="block-h"><strong>${di+1}º dia <span class="tag" data-totcab>· ${totalInvDia(d)} inventariante${totalInvDia(d)===1?"":"s"}</span></strong>
             <div class="toolbar"><label class="f" style="flex-direction:row;align-items:center;gap:6px">Início
               <input type="time" data-path="${D}.inicio" data-t="txt" value="${esc(d.inicio)}" style="width:auto"></label>
               <button class="danger small" data-acao="remDia" ${A} data-d="${di}" ${n<2?"disabled":""}>Remover dia</button></div></div>
           <div class="tbl"><table><thead><tr><th>Função</th><th>Detalhe</th>${ORIGENS.map(o=>`<th>${o.nome}</th>`).join("")}<th></th></tr></thead><tbody>
+          <tr class="totlin"><td>Inventariantes</td><td class="tag">sem supervisores</td>${ORIGENS.map(o=>`<td class="n" data-totcol="${o.id}">${totalInvOrig(d, o.id)}</td>`).join("")}<td></td></tr>
           ${d.linhas.map((l,li)=>{
             const Lp = `${D}.linhas.${li}`;
             return `<tr><td><select data-path="${Lp}.funcao" data-re="1">${opcoesFuncao(u, l.funcao)}</select></td>
               <td>${inp(Lp+".detalhe", l.detalhe, "text", 'placeholder="ex.: câmara de congelados" style="min-width:150px"')}</td>
               ${ORIGENS.map(o=>`<td>${inp(Lp+"."+o.id, l[o.id], "number", 'min="0" step="1"')}</td>`).join("")}
-              <td><button class="danger small" data-acao="remLinha" ${A} data-d="${di}" data-l="${li}" aria-label="Remover linha">×</button></td></tr>`;
+              <td style="white-space:nowrap"><span class="mv"><button class="ghost small" data-acao="sobeLinha" ${A} data-d="${di}" data-l="${li}" ${li===0?"disabled":""} aria-label="Subir função" title="Subir">▲</button><button class="ghost small" data-acao="desceLinha" ${A} data-d="${di}" data-l="${li}" ${li===d.linhas.length-1?"disabled":""} aria-label="Descer função" title="Descer">▼</button></span>
+                <button class="danger small" data-acao="remLinha" ${A} data-d="${di}" data-l="${li}" aria-label="Remover linha">×</button></td></tr>`;
           }).join("")}
-          <tr><td>Coletores locados</td><td></td><td colspan="${ORIGENS.length}">${inp(D+".coletores", d.coletores, "number", 'min="0" step="1"')}</td><td></td></tr>
+          ${u.locaColetores ? `<tr><td>Coletores locados</td><td></td><td colspan="${ORIGENS.length}">${inp(D+".coletores", d.coletores, "number", 'min="0" step="1"')}</td><td></td></tr>` : ""}
           </tbody></table></div>
           <div class="toolbar" style="margin-top:6px"><button class="ghost small" data-acao="addLinha" ${A} data-d="${di}">Adicionar função</button>${u.farmacia ? '<span class="tag">farmácia</span>' : ""}
             <span class="tag" data-tot>Total do dia: ${totalDia(d)} pessoas</span></div>
@@ -1007,6 +1026,7 @@ function aoEditar(el, evento){
   const p = el.dataset.path; if(!p) return;
   if(el.dataset.t==="dia" && evento==="input") return;   // aplica só ao sair do campo
   setPath(orc, p, lerValor(el));
+  if(/\.valorColetor$/.test(p)) setPath(orc, p, valorValido(el.value));   // r176: vazio = usa a tabela
   // r169: marcar/desmarcar farmácia converte as funções; escolher função de farmácia marca a unidade
   const mf = p.match(/^(regionais\.\d+\.unidades\.\d+)\.farmacia$/);
   if(mf){ const uu = getPath(orc, mf[1]); aplicarFarmacia(uu, uu.farmacia); toast(uu.farmacia ? "Unidade marcada como farmácia" : "Unidade desmarcada como farmácia"); }
@@ -1026,7 +1046,12 @@ function aoEditar(el, evento){
   salvar();
   if(/\.(FOR|NAT|JUA)$/.test(p)){
     const dia = el.closest(".day"), di = p.match(/^(regionais\.\d+\.unidades\.\d+\.dias\.\d+)/);
-    if(dia && di) dia.querySelector("[data-tot]").textContent = `Total do dia: ${totalDia(getPath(orc, di[1]))} pessoas`;
+    if(dia && di){
+      const dd = getPath(orc, di[1]), ti = totalInvDia(dd);
+      dia.querySelector("[data-tot]").textContent = `Total do dia: ${totalDia(dd)} pessoas`;
+      const cab = dia.querySelector("[data-totcab]"); if(cab) cab.textContent = `· ${ti} inventariante${ti===1?"":"s"}`;
+      ORIGENS.forEach(o=>{ const c = dia.querySelector(`[data-totcol="${o.id}"]`); if(c) c.textContent = totalInvOrig(dd, o.id); });
+    }
   }
   if(el.dataset.re || (/\.km(Por\.\w+)?$/.test(p) && evento==="change") || /origemFixa$/.test(p)) desenharOrcamento();
 }
@@ -1053,6 +1078,15 @@ elOrc.addEventListener("click", async e=>{
     case "remDia": u.dias.splice(di,1); break;
     case "addLinha": u.dias[di].linhas.push(linhaVazia(u)); break;
     case "remLinha": u.dias[di].linhas.splice(Number(e.target.dataset.l),1); break;
+    case "sobeLinha": case "desceLinha": {   // r176: muda a ordem das funções do dia
+      const L = u.dias[di].linhas, i = Number(e.target.dataset.l), j = a==="sobeLinha" ? i-1 : i+1;
+      if(j<0 || j>=L.length) return;
+      [L[i], L[j]] = [L[j], L[i]]; break;
+    }
+    case "locaColetor": u.locaColetores = true; break;
+    case "semColetor":
+      if(u.dias.some(d=>d.coletores) && !await confirmar("Tirar a locação de coletores desta unidade? As quantidades informadas serão zeradas.", "Tirar")) return;
+      u.locaColetores = false; u.valorColetor = null; u.dias.forEach(d=>d.coletores = 0); break;
     case "calcDist": calcularDistancias([u], true, true); return;
     case "sugEq":
       if(u.equipes.length && !await confirmar("Substituir as equipes atuais pelas sugeridas?", "Substituir")) return;
@@ -1189,7 +1223,7 @@ function avisos(R){
       if(e.transporte==="van" && !(e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho)) A.push(`${n}: valor da van por trecho está zerado.`);
     });
     (u.transportes||[]).forEach(t=>{ if(!t.valor) A.push(`${n}: transporte avulso "${t.tipo || "sem tipo"}" está sem valor.`); });
-    if(u.dias.some(d=>d.coletores) && !PP.locacao) A.push("O valor de locação de coletor está zerado.");
+    if(u.dias.some(d=>d.coletores) && !(u.valorColetor!==null ? u.valorColetor : PP.locacao)) A.push("O valor de locação de coletor está zerado.");
     if(r.lucro < 0) A.push(`${n}: o preço final dá prejuízo.`);
   });
   if(temLimite()){
@@ -1360,7 +1394,7 @@ function refeicoesTxt(c, u){
 function descritivo(o){
   const T = [];
   T.push(`Cliente: ${o.cliente || "(não informado)"}`);
-  T.push(`Fontes de pessoas: ${origensPrioridade(o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id]}`).join(", ") + ")" : ""}`);
+  T.push(`Fontes de pessoas: ${ordemDe(o.composicao || orc.composicao, o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id]}`).join(", ") + ")" : ""}`);
   if(o.comissaoPct) T.push(`Comissão: ${o.comissaoPct}% sobre o preço${o.comissaoNome ? " (" + o.comissaoNome + ")" : ""}`);
   o.regionais.forEach(reg=>{
     T.push("");
@@ -1472,7 +1506,7 @@ FORMATO
      "consumo": {} ou, SOMENTE se o texto disser refeições/hospedagem que valem para todas as equipes desta unidade: {"<nº do dia>": {"cafe": refeições por pessoa, "almoco": ..., "lanche": ..., "jantar": ..., "hosp": 1 se dormem fora na noite desse dia ou 0 se não}} — inclua SÓ os dias e itens ditos,
      "dias": [{
        "inicio": "HH:MM" horário de início da contagem,
-       "coletores": coletores locados no dia (0 se não dito),
+       "coletores": quantidade de coletores LOCADOS no dia, SOMENTE se o texto disser que haverá locação de coletores (senão 0); se disser o valor da locação, coloque em "precos"."locacao",
        "linhas": [{"funcao": "<id>", "detalhe": "como o texto descreveu o local", "FOR": qtd de Fortaleza, "NAT": qtd de Natal, "JUA": qtd de Juazeiro do Norte}]
      }],
      "equipes": [] ou, SOMENTE se o texto descrever as viagens, [{"nome","pessoas","origem":"FOR|NAT|JUA","transporte":"carro|van|outro|nenhum","outroTipo":"tipo do transporte, só se transporte=outro (ex.: ônibus, avião)","outroOrigem":"cidade de onde sai, só se outro","outroValor": valor total de ida e volta, só se outro,"saida": nº do dia,"retorno": nº do dia,"veiculos": nº de carros/vans se dito,"vanTrecho": valor da van por trecho se dito,"consumo": {} ou o mesmo formato do "consumo" da unidade, só desta equipe}],
@@ -1557,16 +1591,12 @@ btnLer.addEventListener("click", async ()=>{
       try{ const D = await buscarDistancias(precisa.map(u=>u.cidade)); precisa.forEach(u=>aplicarDistancia(u, D[u.cidade.trim()])); }
       catch(e){ /* mantém as estimativas da IA */ }
     }
-    const saldo = saldoInicial(substitui ? null : orc), ordem = origensPrioridade(novo);
-    novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
-      nU++;
-      if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
-      else { u.equipes.forEach(e=>sugerirConsumo(u, e)); if(saldo) u.equipes.forEach(e=>saldo[e.origem] = Math.max(0, saldo[e.origem] - e.pessoas)); }
-      aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
-    }));
-    pendente = novo;
+    novo.regionais.forEach(reg=>nU += reg.unidades.length);
+    // r176: guarda a leitura "crua" para refazer as equipes quando a fonte principal mudar na prévia
+    pendBase = JSON.parse(JSON.stringify(novo)); pendRaw = r; pendSubst = substitui;
+    pendCompo = {principal:orc.composicao.principal || "", segunda:orc.composicao.segunda || "", terceira:orc.composicao.terceira || ""};
+    montarPendente();
     pendentePrecos = lerPrecosIA(r && r.precos);   // r170
-    document.getElementById("previaTxt").value = descritivo(novo);
     desenharPreviaPrecos();
     document.getElementById("previa").hidden = false;
     const est = novo.regionais.some(r=>r.unidades.some(u=>u.kmEstimado));
@@ -1631,6 +1661,38 @@ btnDitar.addEventListener("click", ()=>{ if(ditando) pararDitado(); else iniciar
 elTexto.addEventListener("input", ()=>{ if(ditando){ ditBase = elTexto.value; ditFinal = ""; } });   // se você digitar durante o ditado, o que digitou é mantido
 if(!SR){ btnDitar.title = "Ditado indisponível neste navegador (use Chrome, Edge ou Safari)"; }
 let pendente = null, pendentePrecos = [];
+/* r176: fonte principal de pessoas escolhida na prévia, antes de aplicar */
+let pendBase = null, pendRaw = null, pendSubst = false, pendCompo = {principal:"", segunda:"", terceira:""};
+function montarPendente(){
+  if(!pendBase) return;
+  const novo = JSON.parse(JSON.stringify(pendBase)), r = pendRaw;
+  novo.composicao = Object.assign({}, orc.composicao, pendCompo, {disp:Object.assign({}, orc.composicao.disp)});
+  const saldo = saldoInicial(pendSubst ? null : orc), ordem = ordemDe(pendCompo, novo);
+  novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
+    if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
+    else { u.equipes.forEach(e=>sugerirConsumo(u, e)); if(saldo) u.equipes.forEach(e=>saldo[e.origem] = Math.max(0, saldo[e.origem] - e.pessoas)); }
+    aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
+  }));
+  pendente = novo;
+  document.getElementById("previaTxt").value = descritivo(novo);
+  desenharPreviaFonte();
+}
+function desenharPreviaFonte(){
+  const el = document.getElementById("previaFonte"); if(!pendente){ el.innerHTML = ""; return; }
+  const sug = fonteSugerida(pendente), ordem = ordemDe(pendCompo, pendente);
+  const opt = (sel, vazio)=>`<option value="" ${!sel?"selected":""}>${vazio}</option>` + ORIGENS.map(o=>`<option value="${o.id}" ${sel===o.id?"selected":""}>${o.nome}</option>`).join("");
+  el.innerHTML = `<h4 class="block">Fonte de pessoas</h4>
+    <div class="grid">
+      <label class="f">Fonte principal<select data-pf="principal">${opt(pendCompo.principal, `Automática (sugerida: ${ORIG[sug]})`)}</select></label>
+      <label class="f">2ª opção<select data-pf="segunda">${opt(pendCompo.segunda, "Automática (mais próxima)")}</select></label>
+      <label class="f">3ª opção<select data-pf="terceira">${opt(pendCompo.terceira, "Automática (mais próxima)")}</select></label>
+    </div>
+    <p class="hint">Ordem que será usada: <strong>${ordem.map(x=>ORIG[x]).join(" → ")}</strong>. Ao mudar, as equipes do texto abaixo são refeitas na hora; ao clicar em "Aplicar", a escolha vale para o orçamento.</p>`;
+}
+document.getElementById("previaFonte").addEventListener("change", e=>{
+  const k = e.target.dataset.pf; if(!k) return;
+  pendCompo[k] = e.target.value; montarPendente();
+});
 /* r170: refeições e hospedagem ditas valem item a item sobre a sugestão automática */
 function aplicarConsumoDito(u, ru){
   const eqRaw = Array.isArray(ru.equipes) ? ru.equipes : [];
@@ -1699,6 +1761,8 @@ function aplicarPrecosLidos(){
 document.getElementById("btnAplicar").addEventListener("click", ()=>{
   if(!pendente) return;
   mesclar(pendente); pendente = null;
+  orc.composicao.principal = pendCompo.principal; orc.composicao.segunda = pendCompo.segunda; orc.composicao.terceira = pendCompo.terceira;   // r176
+  pendBase = null; pendRaw = null; document.getElementById("previaFonte").innerHTML = "";
   const rp = aplicarPrecosLidos();   // r170
   orc.regionais.forEach((r,ri)=>aberto.add("r"+ri));
   document.getElementById("previa").hidden = true;
@@ -1708,6 +1772,7 @@ document.getElementById("btnAplicar").addEventListener("click", ()=>{
 });
 document.getElementById("btnDescartar").addEventListener("click", ()=>{
   pendente = null; pendentePrecos = []; document.getElementById("previaPrecos").innerHTML = "";
+  pendBase = null; pendRaw = null; document.getElementById("previaFonte").innerHTML = "";   // r176
   document.getElementById("previa").hidden = true;
   msgLer("Interpretação descartada. Nada foi alterado.", false);
 });
