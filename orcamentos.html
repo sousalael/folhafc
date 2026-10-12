@@ -8,7 +8,9 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r168: Calculadora de Orçamentos de inventário (somente Diretor).
+<!-- r170: ditado por voz (botão 🎤); a IA lê preços, transporte, refeições e hospedagem por dia; preços lidos valem só no orçamento ou na tabela (escolha na conferência); Excel em maiúsculas.
+     r169: funções Apoio, Supervisor farmácia e Inventariante farmácia; refeições de farmácia; marcação "Farmácia" na unidade.
+     r168: Calculadora de Orçamentos de inventário (somente Diretor).
      Aberta pelo botão 🧮 da tela principal do Sistema de Gestão (?token&cpf).
      Orçamentos e tabela de preços ficam na planilha própria da calculadora (por Diretor);
      o Excel é gerado na hora, no computador, sem passar pelo Drive. -->
@@ -86,6 +88,12 @@ button.verde{background:var(--verde);border-color:var(--verde);color:#001528;fon
 .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.78rem;font-weight:600;white-space:nowrap}
 .chip.rasc{background:#FFF4D6;color:#8a6200}
 .chip.conc{background:#E3F6D3;color:#2d6a00}
+/* r170 */
+button.gravando{background:var(--danger);border-color:var(--danger);color:#fff;animation:pulsa 1.4s ease-in-out infinite}
+@keyframes pulsa{0%,100%{opacity:1}50%{opacity:.65}}
+@media (prefers-reduced-motion:reduce){button.gravando{animation:none}}
+.proprio{border:1px solid var(--line);border-left:4px solid var(--verde);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--soft)}
+.proprio h4{margin:0 0 6px}
 .salvo{font-size:.82rem;color:var(--muted)}
 .salvo.erro{color:var(--warn);font-weight:600}
 section[inert]{opacity:.62}
@@ -140,8 +148,10 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <!-- 1. ENTRADA -->
   <section class="step" id="secEntrada">
     <h2><span class="num">1</span>Descrever o orçamento</h2>
-    <textarea id="texto" rows="6" placeholder="Ex.: Queiroz Atacadão, Nova Parnamirim. No primeiro dia, depósito e aéreos: 5 inventariantes nos aéreos, 10 no depósito, 2 na câmara resfriada... No segundo dia, área de vendas e aéreos..."></textarea>
+    <textarea id="texto" rows="6" placeholder="Ex.: Queiroz Atacadão, Nova Parnamirim. No primeiro dia, depósito e aéreos: 5 inventariantes nos aéreos, 10 no depósito, 2 na câmara resfriada... No segundo dia, área de vendas e aéreos. Dez de Fortaleza, diária de 180, van a 900 por trecho, almoço e jantar a 35 nos dois dias, uma noite de hotel a 110..."></textarea>
     <div class="toolbar" style="margin-top:8px">
+      <button class="ghost small" id="btnDitar" aria-pressed="false">🎤 Ditar</button>
+      <span class="tag" id="ditStatus" aria-live="polite"></span>
       <button class="ghost small" id="btnArq">Carregar planilha</button>
       <input type="file" id="arq" accept=".xlsx,.xls,.csv" hidden>
       <span class="tag" id="arqNome"></span>
@@ -162,6 +172,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
     <div id="previa" hidden class="block">
       <h4>O que eu entendi</h4>
       <textarea id="previaTxt" class="descr" readonly rows="16" style="margin-top:6px"></textarea>
+      <div id="previaPrecos"></div>
       <div class="toolbar" style="margin-top:8px">
         <button id="btnAplicar">Aplicar</button>
         <button class="ghost" id="btnCopPrev">Copiar</button>
@@ -169,13 +180,14 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       </div>
       <p class="hint">Se algo estiver errado, ajuste o texto e interprete de novo, ou aplique e corrija nos campos.</p>
     </div>
-    <p class="hint" id="hintLer">A leitura usa a mesma IA do sistema e pode levar até um minuto. Depois de interpretar, você confere o que foi entendido e só então aplica. Equipes e alimentação são sugeridas automaticamente quando o texto não detalhar.</p>
+    <p class="hint" id="hintLer">A leitura usa a mesma IA do sistema e pode levar até um minuto. Depois de interpretar, você confere o que foi entendido e só então aplica. Você pode falar diárias, preços de refeições, hotel, van e combustível, e em quais dias a equipe toma café, almoça, lancha, janta e dorme fora: o que você disser vale, e o que não disser é sugerido automaticamente. Para ditar, use o Chrome ou o Edge (no iPhone, o Safari) e libere o microfone.</p>
   </section>
 
   <!-- 2. PREÇOS -->
   <section class="step" id="secPrecos">
     <h2><span class="num">2</span>Tabela de preços</h2>
-    <p class="hint" style="margin-top:0">Sua tabela de preços (cada Diretor tem a sua), salva automaticamente. Os valores de alimentação e hospedagem vêm sugeridos; ajuste para a sua realidade.</p>
+    <p class="hint" style="margin-top:0">Sua tabela de preços (cada Diretor tem a sua), salva automaticamente. Os valores de alimentação e hospedagem vêm sugeridos; ajuste para a sua realidade. Unidades marcadas como farmácia usam só as funções e as refeições de farmácia.</p>
+    <div id="precosOrcBox"></div>
     <details class="box" open><summary>Diárias</summary><div class="in tbl">
       <table><thead><tr><th>Função</th><th>Fortaleza (R$)</th><th>Natal (R$)</th><th>Juazeiro do Norte (R$)</th></tr></thead><tbody id="tbDiarias"></tbody></table>
     </div></details>
@@ -184,6 +196,9 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       <label class="f">Lanche (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="lanche"></label>
       <label class="f">Almoço (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="almoco"></label>
       <label class="f">Jantar (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="jantar"></label>
+      <label class="f">Lanche farmácia (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="lanche_farm"></label>
+      <label class="f">Almoço farmácia (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="almoco_farm"></label>
+      <label class="f">Jantar farmácia (R$ por pessoa)<input type="number" min="0" step="0.01" data-pp="jantar_farm"></label>
       <label class="f">Hospedagem (R$ por pessoa por noite)<input type="number" min="0" step="0.01" data-pp="hosp"></label>
     </div></details>
     <details class="box"><summary>Transporte e equipamentos</summary><div class="in grid">
@@ -266,27 +281,55 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
    ===================================================================== */
 const PRECO_FUNCOES = [
   {id:"supervisor", nome:"Supervisor de operação"},
+  {id:"apoio",      nome:"Apoio (inventariante)"},                 // r169
   {id:"aereo",      nome:"Inventariante de aéreos"},
   {id:"picking",    nome:"Inventariante de depósito/picking"},
   {id:"camara",     nome:"Inventariante de área fria (câmaras, ilhas, geladeiras)"},
-  {id:"seca_salao", nome:"Inventariante da parte seca da área de vendas"}
+  {id:"seca_salao", nome:"Inventariante da parte seca da área de vendas"},
+  {id:"sup_farm",   nome:"Supervisor farmácia"},                   // r169
+  {id:"inv_farm",   nome:"Inventariante farmácia"}                 // r169
 ];
 const FUNCOES = [
-  {id:"supervisor",  nome:"Supervisor de operação",               preco:"supervisor", etapa:"Geral"},
+  {id:"supervisor",  nome:"Supervisor de operação",               preco:"supervisor", etapa:"Geral", sup:true},
+  {id:"apoio",       nome:"Apoio (inventariante)",                preco:"apoio",      etapa:"Geral"},   // r169: prioridade fora de farmácia
   {id:"aereo_ret",   nome:"Aéreos da retaguarda",                 preco:"aereo",      etapa:"Aéreos"},
   {id:"aereo_salao", nome:"Aéreos da área de vendas",             preco:"aereo",      etapa:"Aéreos"},
   {id:"deposito",    nome:"Depósito / picking (seca retaguarda)", preco:"picking",    etapa:"Retaguarda"},
   {id:"camara",      nome:"Câmaras frias (retaguarda)",           preco:"camara",     etapa:"Retaguarda"},
   {id:"ilhas",       nome:"Ilhas e geladeiras (salão)",           preco:"camara",     etapa:"Salão de Vendas"},
-  {id:"seca_salao",  nome:"Parte seca da área de vendas",         preco:"seca_salao", etapa:"Salão de Vendas"}
+  {id:"seca_salao",  nome:"Parte seca da área de vendas",         preco:"seca_salao", etapa:"Salão de Vendas"},
+  {id:"sup_farm",    nome:"Supervisor farmácia",                  preco:"sup_farm",   etapa:"Geral", sup:true, farm:true},   // r169
+  {id:"inv_farm",    nome:"Inventariante farmácia",               preco:"inv_farm",   etapa:"Loja",  farm:true}              // r169
 ];
 const FUN = Object.fromEntries(FUNCOES.map(f=>[f.id,f]));
+/* r169: farmácia — unidade marcada (ou com função de farmácia) usa só as funções e refeições de farmácia */
+const FUNCOES_FARM = FUNCOES.filter(f=>f.farm), FUNCOES_GERAIS = FUNCOES.filter(f=>!f.farm);
+function ehSupervisor(id){ return !!(FUN[id] && FUN[id].sup); }
+function funcaoParaFarmacia(id){ return ehSupervisor(id) ? "sup_farm" : "inv_farm"; }
+function funcaoParaGeral(id){ return id==="sup_farm" ? "supervisor" : id==="inv_farm" ? "apoio" : id; }
+function temFuncaoFarmacia(u){ return u.dias.some(d=>d.linhas.some(l=>FUN[l.funcao] && FUN[l.funcao].farm)); }
+function aplicarFarmacia(u, sim){
+  u.farmacia = !!sim;
+  u.dias.forEach(d=>d.linhas.forEach(l=>{
+    if(sim && !FUN[l.funcao].farm) l.funcao = funcaoParaFarmacia(l.funcao);
+    if(!sim && FUN[l.funcao].farm) l.funcao = funcaoParaGeral(l.funcao);
+  }));
+}
 const ORIGENS = [{id:"FOR", nome:"Fortaleza"}, {id:"NAT", nome:"Natal"}, {id:"JUA", nome:"Juazeiro do Norte"}];
 function zeroOrig(){ const o = {}; ORIGENS.forEach(x=>o[x.id] = 0); return o; }
 const ORIG = Object.fromEntries(ORIGENS.map(o=>[o.id,o.nome]));
 const TIPOS = ["Equipe completa Formula Code","Equipe mista (cliente + Formula Code)","Supervisão + locação de equipamentos"];
 const TRANSPORTES = [{id:"carro",nome:"Carro"},{id:"van",nome:"Van"},{id:"outro",nome:"Outro (valor ida e volta)"},{id:"nenhum",nome:"Sem transporte"}];
-const REFEICOES = [{id:"cafe",nome:"Café da manhã",hora:7},{id:"almoco",nome:"Almoço",hora:12},{id:"lanche",nome:"Lanche",hora:16},{id:"jantar",nome:"Jantar",hora:21}];
+const REFEICOES = [{id:"cafe",nome:"Café da manhã",hora:7,preco:"cafe"},{id:"almoco",nome:"Almoço",hora:12,preco:"almoco"},{id:"lanche",nome:"Lanche",hora:16,preco:"lanche"},{id:"jantar",nome:"Jantar",hora:21,preco:"jantar"}];
+// r169: refeições de farmácia (sem café da manhã); a quantidade fica no mesmo campo, só o preço muda
+const REFEICOES_FARM = [{id:"almoco",nome:"Almoço farmácia",hora:12,preco:"almoco_farm"},{id:"lanche",nome:"Lanche farmácia",hora:16,preco:"lanche_farm"},{id:"jantar",nome:"Jantar farmácia",hora:21,preco:"jantar_farm"}];
+function refeicoesDe(u){ return u && u.farmacia ? REFEICOES_FARM : REFEICOES; }
+// r170: preços que podem valer só para um orçamento (lidos da descrição)
+const PRECO_ITENS = [["cafe","Café da manhã (por pessoa)"],["lanche","Lanche (por pessoa)"],["almoco","Almoço (por pessoa)"],["jantar","Jantar (por pessoa)"],
+  ["lanche_farm","Lanche farmácia (por pessoa)"],["almoco_farm","Almoço farmácia (por pessoa)"],["jantar_farm","Jantar farmácia (por pessoa)"],
+  ["hosp","Hospedagem (por pessoa por noite)"],["combustivel","Combustível (R$ por litro)"],["kmL","Consumo do carro (km por litro)"],
+  ["vanTrecho","Van por trecho"],["locacao","Locação de coletor (por coletor/dia)"]];
+const PRECO_ITEM = Object.fromEntries(PRECO_ITENS);
 const CH_PRECOS = "calc_orcamento_precos_v2", CH_ORC = "calc_orcamento_atual_v2";
 
 /* =====================================================================
@@ -297,7 +340,7 @@ function int(v){ return Math.round(num(v)); }
 
 function precosPadrao(){
   const d = {}; PRECO_FUNCOES.forEach(f=>d[f.id] = zeroOrig());
-  return {diarias:d, cafe:15, lanche:15, almoco:30, jantar:30, hosp:90,
+  return {diarias:d, cafe:15, lanche:15, almoco:30, jantar:30, lanche_farm:15, almoco_farm:30, jantar_farm:30, hosp:90,
     combustivel:0, kmL:10, capCarro:7, vanTrecho:0, capVan:15, localKm:60, arredPasso:10, arredModo:"cima", locacao:0,
     imposto:0, lucroUnidade:0, lucroTotal:0, rateio:"pessoadia", tolerancia:10};
 }
@@ -327,10 +370,10 @@ function precosIniciais(){
   return normPrecos(b);
 }
 
-function linhaVazia(){ return Object.assign({funcao:"deposito", detalhe:""}, zeroOrig()); }
-function diaVazio(){ return {inicio:"14:00", coletores:0, linhas:[Object.assign({funcao:"supervisor", detalhe:""}, zeroOrig(), {FOR:1})]}; }
+function linhaVazia(u){ return Object.assign({funcao:(u && u.farmacia) ? "inv_farm" : "apoio", detalhe:""}, zeroOrig()); }   // r169: Apoio é o padrão fora de farmácia
+function diaVazio(u){ return {inicio:"14:00", coletores:0, linhas:[Object.assign({funcao:(u && u.farmacia) ? "sup_farm" : "supervisor", detalhe:""}, zeroOrig(), {FOR:1})]}; }
 function kmPadrao(reg){ const k = zeroOrig(); if(reg && reg.km) k[reg.origem] = reg.km; return k; }
-function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, origemFixa:false, clienteAlimenta:true, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
+function unidadeVazia(kmPor){ return {nome:"", cidade:"", tipo:TIPOS[0], kmPor:Object.assign(zeroOrig(), kmPor||{}), kmEstimado:false, origemFixa:false, clienteAlimenta:true, farmacia:false, lucro:null, precoFinal:null, dias:[diaVazio()], equipes:[], transportes:[]}; }
 function regionalVazia(){ return {nome:"", origem:"FOR", km:0, unidades:[unidadeVazia()]}; }
 function normCompo(c){
   c = c || {}; const d = zeroOrig();
@@ -338,7 +381,18 @@ function normCompo(c){
   const ok = x=>ORIG[x] ? x : "";
   return {disp:d, principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};
 }
-function orcVazio(){ return {cliente:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), regionais:[regionalVazia()]}; }
+function orcVazio(){ return {cliente:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
+// r170: valores próprios do orçamento (sobrepõem a tabela do Diretor só neste orçamento)
+function valorValido(v){ if(v===undefined || v===null || v==="") return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) && n>=0 ? n : null; }
+function normPrecosOrc(p){
+  p = p || {}; const b = {diarias:{}};
+  Object.entries(p.diarias||{}).forEach(([f,x])=>{
+    if(!PRECO_FUNCOES.some(z=>z.id===f) || !x) return;
+    ORIGENS.forEach(o=>{ const v = valorValido(x[o.id]); if(v!==null){ (b.diarias[f] = b.diarias[f] || {})[o.id] = v; } });
+  });
+  PRECO_ITENS.forEach(([k])=>{ const v = valorValido(p[k]); if(v!==null) b[k] = v; });
+  return b;
+}
 
 function normConsumo(c){ const b = {}; ["cafe","almoco","lanche","jantar"].forEach(k=>b[k]=int((c||{})[k])); b.hosp = (c||{}).hosp ? 1 : 0; return b; }
 function normEquipe(e, i, origemPadrao){
@@ -356,7 +410,7 @@ function normEquipe(e, i, origemPadrao){
 function normDia(d){
   d = d || {};
   const linhas = (Array.isArray(d.linhas) ? d.linhas : []).map(l=>({
-    ...(()=>{ const o = {funcao:FUN[l.funcao] ? l.funcao : "deposito", detalhe:String(l.detalhe||"")}; ORIGENS.forEach(g=>o[g.id] = int(l[g.id])); return o; })()
+    ...(()=>{ const o = {funcao:FUN[l.funcao] ? l.funcao : "apoio", detalhe:String(l.detalhe||"")}; ORIGENS.forEach(g=>o[g.id] = int(l[g.id])); return o; })()
   }));
   return {inicio:/^\d{1,2}:\d{2}$/.test(d.inicio||"") ? d.inicio.padStart(5,"0") : "14:00", coletores:int(d.coletores), linhas};
 }
@@ -373,6 +427,7 @@ function normUnidade(u, reg){
   b.lucro = (u.lucro===null || u.lucro===undefined || u.lucro==="") ? null : num(u.lucro);
   b.precoFinal = (u.precoFinal===null || u.precoFinal===undefined || u.precoFinal==="") ? null : num(u.precoFinal);
   b.dias = (Array.isArray(u.dias) && u.dias.length ? u.dias : [{}]).map(normDia);
+  if(u.farmacia===true || temFuncaoFarmacia(b)) aplicarFarmacia(b, true);   // r169
   b.equipes = (Array.isArray(u.equipes) ? u.equipes : []).map((e,i)=>normEquipe(e,i,reg ? reg.origem : "FOR"));
   b.transportes = (Array.isArray(u.transportes) ? u.transportes : []).map(t=>({tipo:String((t||{}).tipo||""), origem:String((t||{}).origem||""),
     dia:(t && t.dia!==undefined && t.dia!==null && t.dia!=="" && int(t.dia)) ? String(int(t.dia)) : "", valor:num((t||{}).valor)}));
@@ -386,7 +441,7 @@ function normRegional(r){
 }
 function normOrc(o){
   o = o || {};
-  return {cliente:String(o.cliente||""), comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
+  return {cliente:String(o.cliente||""), comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
 }
 /* r168: os dados ficam no servidor (planilha da calculadora), não no navegador */
 function ler(ch){ return null; }
@@ -395,6 +450,42 @@ function gravar(ch, v){ if(ch===CH_PRECOS) agendarPrecos(); else agendarOrc(); }
 let precos = precosIniciais();
 let precosDiretor = precos;          // tabela de preços do Diretor (a que se edita)
 let orc = normOrc(ler(CH_ORC));
+
+/* r170: preços efetivos = tabela (ou a tabela travada do orçamento concluído) + valores próprios do orçamento */
+function PR(){
+  const o = orc && orc.precosOrc; if(!o) return precos;
+  const ks = PRECO_ITENS.map(x=>x[0]).filter(k=>o[k]!==undefined), dk = Object.keys(o.diarias||{});
+  if(!ks.length && !dk.length) return precos;
+  const r = Object.assign({}, precos);
+  ks.forEach(k=>r[k] = o[k]);
+  if(dk.length){ r.diarias = Object.assign({}, precos.diarias); dk.forEach(f=>{ r.diarias[f] = Object.assign({}, precos.diarias[f] || zeroOrig(), o.diarias[f]); }); }
+  return r;
+}
+function rotuloPreco(ch){
+  const p = ch.split(".");
+  if(p[0]==="diarias"){ const f = PRECO_FUNCOES.find(x=>x.id===p[1]); return `Diária – ${f ? f.nome : p[1]} (${ORIG[p[2]] || p[2]})`; }
+  return PRECO_ITEM[ch] || ch;
+}
+function fmtPreco(ch, v){ return ch==="kmL" ? `${String(v).replace(".",",")} km/l` : brl(v); }
+function valorDe(obj, ch){ const p = ch.split("."); return p[0]==="diarias" ? ((obj.diarias||{})[p[1]]||{})[p[2]] : obj[ch]; }
+function proprioDe(ch){ const v = valorDe(orc.precosOrc || {}, ch); return v===undefined ? null : v; }
+function definirProprio(ch, v){
+  orc.precosOrc = orc.precosOrc || {diarias:{}}; const p = ch.split(".");
+  if(p[0]==="diarias"){ orc.precosOrc.diarias = orc.precosOrc.diarias || {}; (orc.precosOrc.diarias[p[1]] = orc.precosOrc.diarias[p[1]] || {})[p[2]] = v; }
+  else orc.precosOrc[ch] = v;
+}
+function removerProprio(ch){
+  const o = orc.precosOrc; if(!o) return; const p = ch.split(".");
+  if(p[0]==="diarias"){ if(o.diarias && o.diarias[p[1]]){ delete o.diarias[p[1]][p[2]]; if(!Object.keys(o.diarias[p[1]]).length) delete o.diarias[p[1]]; } }
+  else delete o[ch];
+}
+function definirTabela(ch, v){ const p = ch.split("."); if(p[0]==="diarias") precosDiretor.diarias[p[1]][p[2]] = v; else precosDiretor[ch] = v; }
+function listaProprios(){
+  const o = orc.precosOrc || {}, L = [];
+  PRECO_FUNCOES.forEach(f=>ORIGENS.forEach(g=>{ const v = ((o.diarias||{})[f.id]||{})[g.id]; if(v!==undefined) L.push({ch:`diarias.${f.id}.${g.id}`, v}); }));
+  PRECO_ITENS.forEach(([k])=>{ if(o[k]!==undefined) L.push({ch:k, v:o[k]}); });
+  return L;
+}
 
 /* =====================================================================
    UTILITÁRIOS
@@ -524,7 +615,7 @@ function sugerirEquipes(u, reg, saldo, ordem){
     // Distribui as funções de cada dia entre as origens presentes (supervisores primeiro, na fonte principal)
     u.dias.forEach((d,i)=>{
       const cap = Object.assign({}, porDia[i]);
-      [...d.linhas].sort((a,b)=>(a.funcao==="supervisor"?0:1) - (b.funcao==="supervisor"?0:1)).forEach(l=>{
+      [...d.linhas].sort((a,b)=>(ehSupervisor(a.funcao)?0:1) - (ehSupervisor(b.funcao)?0:1)).forEach(l=>{
         let q = qtdLinha(l);
         ORIGENS.forEach(o=>l[o.id] = 0);
         for(const o of ordem){ if(q<=0) break; const x = Math.min(q, cap[o]); if(x>0){ l[o] += x; cap[o] -= x; q -= x; } }
@@ -558,7 +649,7 @@ function veiculosDe(e){
    CÁLCULO
    ===================================================================== */
 function calcularUnidade(reg, u, ui){
-  const L = [], n = u.dias.length;
+  const L = [], n = u.dias.length, PP = PR();   // r170: preços efetivos do orçamento
   const base = {"Cliente":orc.cliente, "Regional":reg.nome, "Unidade":u.nome || ("Unidade " + (ui+1)), "Cidade":u.cidade, "Tipo de inventário":u.tipo};
   const add = (o)=>L.push(Object.assign({}, base, {"Detalhe":"", "Equipe":"", "Origem":"-", "Observação":""}, o));
   let pessoasDia = 0;
@@ -569,24 +660,24 @@ function calcularUnidade(reg, u, ui){
       ORIGENS.forEach(o=>{
         const q = l[o.id]; if(!q) return;
         pessoasDia += q;
-        const vu = precos.diarias[f.preco][o.id];
+        const vu = PP.diarias[f.preco][o.id];
         add({"Dia":dia, "Etapa":f.etapa, "Categoria":"Mão de obra", "Item":f.nome, "Detalhe":l.detalhe, "Origem":o.nome,
              "Quantidade":q, "Valor unitário":vu, "Total":q*vu, "Observação":`Início ${d.inicio}`});
       });
     });
     if(d.coletores) add({"Dia":dia, "Etapa":"Geral", "Categoria":"Equipamento", "Item":"Locação de coletor",
-      "Quantidade":d.coletores, "Valor unitário":precos.locacao, "Total":d.coletores*precos.locacao, "Observação":"Por coletor/dia"});
+      "Quantidade":d.coletores, "Valor unitário":PP.locacao, "Total":d.coletores*PP.locacao, "Observação":"Por coletor/dia"});
   });
   u.equipes.forEach(e=>{
     const nv = veiculosDe(e), orig = ORIG[e.origem];
     const trecho = (k, sentido)=>{
       if(e.transporte==="carro" && nv){
-        const km = kmDe(u, e.origem), bruto = precos.kmL ? km / precos.kmL * precos.combustivel : 0, vu = arredCombustivel(bruto);
+        const km = kmDe(u, e.origem), bruto = PP.kmL ? km / PP.kmL * PP.combustivel : 0, vu = arredCombustivel(bruto);
         add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`Combustível – ${sentido}`, "Equipe":e.nome, "Origem":orig,
-             "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":`${km} km de ${orig} ÷ ${precos.kmL} km/l × ${brl(precos.combustivel)} = ${brl(bruto)} por carro, arredondado`});
+             "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":`${km} km de ${orig} ÷ ${PP.kmL} km/l × ${brl(PP.combustivel)} = ${brl(bruto)} por carro, arredondado`});
       }
       if(e.transporte==="van" && nv){
-        const vu = e.vanTrecho!==null ? e.vanTrecho : precos.vanTrecho;
+        const vu = e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho;
         add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`Van – ${sentido}`, "Equipe":e.nome, "Origem":orig,
              "Quantidade":nv, "Valor unitário":vu, "Total":nv*vu, "Observação":"Por van, por trecho"});
       }
@@ -599,15 +690,15 @@ function calcularUnidade(reg, u, ui){
     }
     for(let k=e.saida; k<=e.retorno; k++){
       const c = e.consumo[k]; if(!c) continue;
-      REFEICOES.forEach(r=>{
+      refeicoesDe(u).forEach(r=>{
         if(!c[r.id] || !e.pessoas) return;
-        const q = c[r.id]*e.pessoas, vu = precos[r.id];
+        const q = c[r.id]*e.pessoas, vu = PP[r.preco];
         add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Alimentação", "Item":r.nome, "Equipe":e.nome, "Origem":orig,
              "Quantidade":q, "Valor unitário":vu, "Total":q*vu, "Observação":`${c[r.id]} por pessoa × ${e.pessoas} pessoas`});
       });
       if(c.hosp && e.pessoas){
         add({"Dia":nomeDia(k,n), "Etapa":"Logística", "Categoria":"Hospedagem", "Item":"Hospedagem", "Equipe":e.nome, "Origem":orig,
-             "Quantidade":e.pessoas, "Valor unitário":precos.hosp, "Total":e.pessoas*precos.hosp, "Observação":"Por pessoa, noite deste dia"});
+             "Quantidade":e.pessoas, "Valor unitário":PP.hosp, "Total":e.pessoas*PP.hosp, "Observação":"Por pessoa, noite deste dia"});
       }
     }
   });
@@ -666,9 +757,41 @@ function calcularTudo(){
    ===================================================================== */
 function desenharPrecos(){
   document.getElementById("tbDiarias").innerHTML = PRECO_FUNCOES.map(f=>`<tr><td>${esc(f.nome)}</td>
-    ${ORIGENS.map(o=>`<td><input type="number" min="0" step="0.01" data-pd="${f.id}.${o.id}" value="${precos.diarias[f.id][o.id]}"></td>`).join("")}</tr>`).join("");
+    ${ORIGENS.map(o=>{ const pr = proprioDe(`diarias.${f.id}.${o.id}`);
+      return `<td><input type="number" min="0" step="0.01" data-pd="${f.id}.${o.id}" value="${precos.diarias[f.id][o.id]}">${pr!==null ? `<div class="tag">neste orçamento: ${brl(pr)}</div>` : ""}</td>`; }).join("")}</tr>`).join("");
   document.querySelectorAll("[data-pp]").forEach(el=>{ el.value = precos[el.dataset.pp]; });
+  desenharProprios();
 }
+// r170: valores que valem só para o orçamento aberto
+function desenharProprios(){
+  const el = document.getElementById("precosOrcBox"); if(!el) return;
+  const L = listaProprios();
+  if(!L.length){ el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="proprio"><h4>Valores só deste orçamento</h4>
+    <p class="hint" style="margin-top:0">Estes valores substituem a sua tabela apenas no orçamento aberto.</p>
+    <div class="tbl"><table><thead><tr><th>Item</th><th class="n">Neste orçamento</th><th class="n">Sua tabela</th><th></th></tr></thead><tbody>
+    ${L.map(x=>`<tr><td>${esc(rotuloPreco(x.ch))}</td><td class="n">${fmtPreco(x.ch, x.v)}</td><td class="n">${fmtPreco(x.ch, valorDe(precos, x.ch) || 0)}</td>
+      <td style="white-space:nowrap"><button class="ghost small" data-prop-tab="${x.ch}">Levar para minha tabela</button>
+      <button class="danger small" data-prop-rem="${x.ch}">Remover</button></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="toolbar" style="margin-top:8px"><button class="ghost small" data-prop-tab="*">Levar todos para minha tabela</button>
+      <button class="danger small" data-prop-rem="*">Remover todos</button></div></div>`;
+}
+document.getElementById("precosOrcBox").addEventListener("click", async e=>{
+  const t = e.target, tab = t.dataset.propTab, rem = t.dataset.propRem;
+  if(!tab && !rem) return;
+  const chaves = (tab || rem)==="*" ? listaProprios().map(x=>x.ch) : [tab || rem];
+  if(tab){
+    if(precos!==precosDiretor){ toast("Orçamento concluído: reabra para alterar a tabela."); return; }
+    if(!await confirmar(`Gravar ${chaves.length===1 ? "este valor" : "estes " + chaves.length + " valores"} na sua tabela de preços? Passa a valer também nos próximos orçamentos.`, "Gravar")) return;
+    chaves.forEach(ch=>{ definirTabela(ch, proprioDe(ch)); removerProprio(ch); });
+    gravar(CH_PRECOS, precos); toast("Gravado na sua tabela de preços");
+  } else {
+    if(chaves.length>1 && !await confirmar("Remover todos os valores próprios deste orçamento? Ele volta a usar a sua tabela.", "Remover")) return;
+    chaves.forEach(removerProprio); toast("O orçamento volta a usar a sua tabela nesse item");
+  }
+  desenharPrecos(); desenharOrcamento(); salvar();
+});
 document.getElementById("tbDiarias").addEventListener("input", e=>{
   const k = e.target.dataset.pd; if(!k) return;
   const [f,o] = k.split("."); precos.diarias[f][o] = num(e.target.value);
@@ -772,6 +895,7 @@ function desenharUnidade(reg, ri, u, ui){
       <label class="chk"><input type="checkbox" data-path="${P}.origemFixa" data-t="bool" ${u.origemFixa?"checked":""}>Origens definidas por mim (não redistribuir)</label>
       <label class="f">Lucro desta unidade (R$)<input type="number" min="0" data-path="${P}.lucro" data-t="numnull" value="${u.lucro===null?"":u.lucro}" placeholder="Padrão: ${precos.lucroUnidade}"></label>
       <label class="chk" style="align-self:end"><input type="checkbox" data-path="${P}.clienteAlimenta" data-t="bool" ${u.clienteAlimenta?"checked":""}>Cliente fornece alimentação durante a operação</label>
+      <label class="chk" style="align-self:end"><input type="checkbox" data-path="${P}.farmacia" data-t="bool" data-re="1" ${u.farmacia?"checked":""}>Farmácia (só funções e refeições de farmácia)</label>
     </div>
 
     <div class="block">
@@ -786,14 +910,14 @@ function desenharUnidade(reg, ri, u, ui){
           <div class="tbl"><table><thead><tr><th>Função</th><th>Detalhe</th>${ORIGENS.map(o=>`<th>${o.nome}</th>`).join("")}<th></th></tr></thead><tbody>
           ${d.linhas.map((l,li)=>{
             const Lp = `${D}.linhas.${li}`;
-            return `<tr><td><select data-path="${Lp}.funcao">${FUNCOES.map(f=>`<option value="${f.id}" ${f.id===l.funcao?"selected":""}>${esc(f.nome)}</option>`).join("")}</select></td>
+            return `<tr><td><select data-path="${Lp}.funcao" data-re="1">${opcoesFuncao(u, l.funcao)}</select></td>
               <td>${inp(Lp+".detalhe", l.detalhe, "text", 'placeholder="ex.: câmara de congelados" style="min-width:150px"')}</td>
               ${ORIGENS.map(o=>`<td>${inp(Lp+"."+o.id, l[o.id], "number", 'min="0" step="1"')}</td>`).join("")}
               <td><button class="danger small" data-acao="remLinha" ${A} data-d="${di}" data-l="${li}" aria-label="Remover linha">×</button></td></tr>`;
           }).join("")}
           <tr><td>Coletores locados</td><td></td><td colspan="${ORIGENS.length}">${inp(D+".coletores", d.coletores, "number", 'min="0" step="1"')}</td><td></td></tr>
           </tbody></table></div>
-          <div class="toolbar" style="margin-top:6px"><button class="ghost small" data-acao="addLinha" ${A} data-d="${di}">Adicionar função</button>
+          <div class="toolbar" style="margin-top:6px"><button class="ghost small" data-acao="addLinha" ${A} data-d="${di}">Adicionar função</button>${u.farmacia ? '<span class="tag">farmácia</span>' : ""}
             <span class="tag" data-tot>Total do dia: ${totalDia(d)} pessoas</span></div>
         </div>`;
       }).join("")}
@@ -823,6 +947,12 @@ function desenharUnidade(reg, ri, u, ui){
     </div>
   </div>`;
 }
+// r169: farmácia mostra só funções de farmácia; nas demais, Apoio vem primeiro e as de farmácia ficam num grupo à parte
+function opcoesFuncao(u, sel){
+  const op = f=>`<option value="${f.id}" ${f.id===sel?"selected":""}>${esc(f.nome)}</option>`;
+  if(u.farmacia) return FUNCOES_FARM.map(op).join("");
+  return FUNCOES_GERAIS.map(op).join("") + `<optgroup label="Farmácia (marca a unidade como farmácia)">${FUNCOES_FARM.map(op).join("")}</optgroup>`;
+}
 function desenharEquipe(u, P, A, e, ei){
   const E = `${P}.equipes.${ei}`, n = u.dias.length, nv = veiculosDe(e);
   const dias = []; for(let k=e.saida; k<=e.retorno; k++) dias.push(k);
@@ -839,17 +969,17 @@ function desenharEquipe(u, P, A, e, ei){
       ${e.transporte==="outro" ? `<label class="f">Tipo de transporte${inp(E+".outroTipo", e.outroTipo, "text", 'placeholder="ex.: ônibus, Uber, avião"')}</label>
       <label class="f">Origem do transporte${inp(E+".outroOrigem", e.outroOrigem, "text", 'placeholder="ex.: Fortaleza"')}</label>
       <label class="f">Valor ida e volta (R$, total)${inp(E+".outroValor", e.outroValor, "number", 'min="0" step="0.01"')}</label>` : ""}
-      ${e.transporte==="van" ? `<label class="f">Van por trecho (R$)<input type="number" min="0" data-path="${E}.vanTrecho" data-t="numnull" value="${e.vanTrecho===null?"":e.vanTrecho}" placeholder="Padrão: ${precos.vanTrecho}"></label>` : ""}
+      ${e.transporte==="van" ? `<label class="f">Van por trecho (R$)<input type="number" min="0" data-path="${E}.vanTrecho" data-t="numnull" value="${e.vanTrecho===null?"":e.vanTrecho}" placeholder="Padrão: ${PR().vanTrecho}"></label>` : ""}
       <label class="f">Dia de saída<input type="number" min="1" data-path="${E}.saida" data-t="dia" data-re="1" value="${e.saida}"></label>
       <label class="f">Dia de retorno<input type="number" min="1" data-path="${E}.retorno" data-t="dia" data-re="1" value="${e.retorno}"></label>
     </div>
-    <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Dia</th>${REFEICOES.map(r=>`<th>${r.nome}</th>`).join("")}<th>Hospedagem</th></tr></thead><tbody>
+    <div class="tbl" style="margin-top:8px"><table><thead><tr><th>Dia</th>${refeicoesDe(u).map(r=>`<th>${r.nome}</th>`).join("")}<th>Hospedagem</th></tr></thead><tbody>
       ${dias.map(k=>{
         const c = e.consumo[k] || normConsumo(); e.consumo[k] = c;
         const C = `${E}.consumo.${k}`;
         const ini = k<=n ? ` <span class="tag">(início ${esc(u.dias[k-1].inicio)})</span>` : "";
         return `<tr><td style="white-space:nowrap">${nomeDia(k,n)}${ini}</td>
-          ${REFEICOES.map(r=>`<td>${inp(C+"."+r.id, c[r.id], "number", 'min="0" step="1" style="width:60px"')}</td>`).join("")}
+          ${refeicoesDe(u).map(r=>`<td>${inp(C+"."+r.id, c[r.id], "number", 'min="0" step="1" style="width:60px"')}</td>`).join("")}
           <td><input type="checkbox" data-path="${C}.hosp" data-t="bool01" ${c.hosp?"checked":""} aria-label="Hospedagem"></td></tr>`;
       }).join("")}
     </tbody></table></div>
@@ -870,6 +1000,11 @@ function aoEditar(el, evento){
   const p = el.dataset.path; if(!p) return;
   if(el.dataset.t==="dia" && evento==="input") return;   // aplica só ao sair do campo
   setPath(orc, p, lerValor(el));
+  // r169: marcar/desmarcar farmácia converte as funções; escolher função de farmácia marca a unidade
+  const mf = p.match(/^(regionais\.\d+\.unidades\.\d+)\.farmacia$/);
+  if(mf){ const uu = getPath(orc, mf[1]); aplicarFarmacia(uu, uu.farmacia); toast(uu.farmacia ? "Unidade marcada como farmácia" : "Unidade desmarcada como farmácia"); }
+  const ml = p.match(/^(regionais\.\d+\.unidades\.\d+)\.dias\.\d+\.linhas\.\d+\.funcao$/);
+  if(ml){ const uu = getPath(orc, ml[1]); if(!uu.farmacia && FUN[el.value] && FUN[el.value].farm){ aplicarFarmacia(uu, true); toast("Unidade marcada como farmácia"); } }
   const mk = p.match(/^(regionais\.\d+\.unidades\.\d+)\.kmPor\.\w+$/);
   if(mk) getPath(orc, mk[1]).kmEstimado = false;
   // Ajusta faixa de dias da equipe
@@ -905,9 +1040,9 @@ elOrc.addEventListener("click", async e=>{
     case "remUni":
       if(!await confirmar("Remover esta unidade?", "Remover")) return;
       reg.unidades.splice(ui,1); if(!reg.unidades.length) reg.unidades.push(unidadeVazia(kmPadrao(reg))); break;
-    case "addDia": u.dias.push(diaVazio()); break;
+    case "addDia": u.dias.push(diaVazio(u)); break;
     case "remDia": u.dias.splice(di,1); break;
-    case "addLinha": u.dias[di].linhas.push(linhaVazia()); break;
+    case "addLinha": u.dias[di].linhas.push(linhaVazia(u)); break;
     case "remLinha": u.dias[di].linhas.splice(Number(e.target.dataset.l),1); break;
     case "sugEq":
       if(u.equipes.length && !await confirmar("Substituir as equipes atuais pelas sugeridas?", "Substituir")) return;
@@ -933,6 +1068,8 @@ function limparEntrada(){
   pendente = null;
   document.getElementById("previa").hidden = true;
   document.getElementById("previaTxt").value = "";
+  pendentePrecos = []; document.getElementById("previaPrecos").innerHTML = "";
+  if(typeof pararDitado==="function") pararDitado(true);
   elMsg.textContent = "";
   aberto.clear(); aberto.add("r0");
 }
@@ -997,7 +1134,7 @@ elCoe.addEventListener("click", e=>{
 });
 
 function avisos(R){
-  const A = [];
+  const A = [], PP = PR();
   if(!orc.cliente.trim()) A.push("Informe o nome do cliente.");
   if(!precos.imposto) A.push("O imposto está em 0%.");
   R.forEach(r=>{
@@ -1005,16 +1142,16 @@ function avisos(R){
     u.equipes.forEach(e=>{ if((e.transporte==="carro" || e.transporte==="van") && !kmDe(u, e.origem)) A.push(`${n}: falta a distância de ${ORIG[e.origem]} até a loja.`); });
     if(u.kmEstimado) A.push(`${n}: as distâncias foram estimadas, confira.`);
     u.dias.forEach(d=>d.linhas.forEach(l=>ORIGENS.forEach(o=>{
-      if(l[o.id] && !precos.diarias[FUN[l.funcao].preco][o.id]) A.push(`Diária de "${PRECO_FUNCOES.find(f=>f.id===FUN[l.funcao].preco).nome}" (${o.nome}) está zerada.`);
+      if(l[o.id] && !PP.diarias[FUN[l.funcao].preco][o.id]) A.push(`Diária de "${PRECO_FUNCOES.find(f=>f.id===FUN[l.funcao].preco).nome}" (${o.nome}) está zerada.`);
     })));
     if(!u.equipes.length) A.push(`${n}: sem equipes de deslocamento.`);
     u.equipes.forEach(e=>{
       if(e.transporte==="outro" && !e.outroValor) A.push(`${n}: ${e.nome} está sem o valor do transporte.`);
-      if(e.transporte==="carro" && !precos.combustivel) A.push("Falta o preço do litro de combustível.");
-      if(e.transporte==="van" && !(e.vanTrecho!==null ? e.vanTrecho : precos.vanTrecho)) A.push(`${n}: valor da van por trecho está zerado.`);
+      if(e.transporte==="carro" && !PP.combustivel) A.push("Falta o preço do litro de combustível.");
+      if(e.transporte==="van" && !(e.vanTrecho!==null ? e.vanTrecho : PP.vanTrecho)) A.push(`${n}: valor da van por trecho está zerado.`);
     });
     (u.transportes||[]).forEach(t=>{ if(!t.valor) A.push(`${n}: transporte avulso "${t.tipo || "sem tipo"}" está sem valor.`); });
-    if(u.dias.some(d=>d.coletores) && !precos.locacao) A.push("O valor de locação de coletor está zerado.");
+    if(u.dias.some(d=>d.coletores) && !PP.locacao) A.push("O valor de locação de coletor está zerado.");
     if(r.lucro < 0) A.push(`${n}: o preço final dá prejuízo.`);
   });
   if(temLimite()){
@@ -1029,8 +1166,11 @@ function avisos(R){
    ===================================================================== */
 const COLUNAS = ["Cliente","Regional","Loja","Cidade","Tipo de inventário","Dia","Etapa","Categoria","Descrição","Detalhe","Equipe","Origem","Qde","Unit","Custo","Preço","Observação"];
 // Colunas (letra): M = Qde, N = Unit, O = Custo, P = Preço
+// r170: tudo em letras maiúsculas no Excel (textos; números e fórmulas não mudam)
+function MAI(v){ return typeof v==="string" ? v.toLocaleUpperCase("pt-BR") : v; }
+function maiusculas(aoa){ return aoa.map(l=>l.map(MAI)); }
 function montarPlanilha(){
-  const {R, M, t, c} = calcularTudo();
+  const {R, M, t, c} = calcularTudo(), PP = PR();
   const aoa = [COLUNAS], formulas = [];
   R.forEach(r=>{
     const b = r.base;
@@ -1052,7 +1192,7 @@ function montarPlanilha(){
     }
   });
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const ws = XLSX.utils.aoa_to_sheet(maiusculas(aoa));
   const fmt = '"R$" #,##0.00';
   for(let i=2; i<=aoa.length; i++){
     if(ws["O"+i]) ws["O"+i].f = `M${i}*N${i}`;            // Custo = Qde × Unit
@@ -1061,35 +1201,38 @@ function montarPlanilha(){
   formulas.forEach(([a,f])=>{ if(ws[a]) ws[a].f = f; });
   ws["!cols"] = [18,12,30,16,30,15,16,12,30,26,11,10,7,13,13,13,50].map(w=>({wch:w}));
   ws["!autofilter"] = {ref:ws["!ref"]};
-  XLSX.utils.book_append_sheet(wb, ws, "Orçamento");
+  XLSX.utils.book_append_sheet(wb, ws, MAI("Orçamento"));
 
   const H = ["Cliente","Regional","Loja","Cidade","Tipo de inventário","Custos","Lucro planejado","Preço sugerido","Preço final","Imposto","Comissão","Lucro real","Pessoas","Pessoas-dia","R$/pessoa-dia","Desvio R$/pessoa-dia","R$/pessoa","Desvio R$/pessoa","R$/pessoa-dia sem logística","Desvio sem logística","Preço coerente sugerido"];
   const rows = R.map(r=>[orc.cliente, r.reg.nome, r.base["Unidade"], r.u.cidade, r.u.tipo, r.custo, r.lucroPlanejado, r.precoSugerido, r.preco, r.imposto, r.comissao, r.lucro,
     r.pessoas, r.pessoasDia, r.m1, r.d1, r.m2, r.d2, r.m3, r.d3, r.sugCoerencia===null ? "" : r.sugCoerencia]);
   rows.push(["Média","","","","","","","","","","","","","",M.m1,"",M.m2,"",M.m3,"",""]);
-  const wc = XLSX.utils.aoa_to_sheet([H, ...rows]);
+  const wc = XLSX.utils.aoa_to_sheet(maiusculas([H, ...rows]));
   const rc = XLSX.utils.decode_range(wc["!ref"]);
   for(let i=1; i<=rc.e.r; i++){
     [5,6,7,8,9,10,11,14,16,18,20].forEach(cc=>{ const x = wc[XLSX.utils.encode_cell({r:i,c:cc})]; if(x && typeof x.v==="number") x.z = fmt; });
     [15,17,19].forEach(cc=>{ const x = wc[XLSX.utils.encode_cell({r:i,c:cc})]; if(x && typeof x.v==="number") x.z = "0.0%"; });
   }
   wc["!cols"] = H.map(h=>({wch:Math.max(12, h.length+2)}));
-  XLSX.utils.book_append_sheet(wb, wc, "Preço e coerência");
+  XLSX.utils.book_append_sheet(wb, wc, MAI("Preço e coerência"));
 
   const P = [["Parâmetro", ...ORIGENS.map(o=>o.nome)]];
-  PRECO_FUNCOES.forEach(f=>P.push(["Diária – " + f.nome, ...ORIGENS.map(o=>precos.diarias[f.id][o.id])]));
+  PRECO_FUNCOES.forEach(f=>P.push(["Diária – " + f.nome, ...ORIGENS.map(o=>PP.diarias[f.id][o.id])]));
   P.push(["Pessoas disponíveis", ...ORIGENS.map(o=>temLimite() ? orc.composicao.disp[o.id] : "sem limite")]);
   P.push(["Ordem das fontes de pessoas", origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")]);
-  [["Café da manhã (por pessoa)","cafe"],["Lanche (por pessoa)","lanche"],["Almoço (por pessoa)","almoco"],["Jantar (por pessoa)","jantar"],["Hospedagem (por pessoa/noite)","hosp"],
+  [["Café da manhã (por pessoa)","cafe"],["Lanche (por pessoa)","lanche"],["Almoço (por pessoa)","almoco"],["Jantar (por pessoa)","jantar"],
+   ["Lanche farmácia (por pessoa)","lanche_farm"],["Almoço farmácia (por pessoa)","almoco_farm"],["Jantar farmácia (por pessoa)","jantar_farm"],["Hospedagem (por pessoa/noite)","hosp"],
    ["Combustível (R$/litro)","combustivel"],["Consumo (km/l)","kmL"],["Lugares no carro","capCarro"],["Van padrão (por trecho)","vanTrecho"],["Lugares na van","capVan"],
    ["Equipe local até (km)","localKm"],["Locação de coletor (por dia)","locacao"],["Imposto (%)","imposto"],["Lucro padrão por unidade","lucroUnidade"],["Lucro adicional do orçamento","lucroTotal"],["Tolerância de coerência (%)","tolerancia"]]
-   .forEach(([n,k])=>P.push([n, precos[k], ""]));
+   .forEach(([n,k])=>P.push([n, PP[k], ""]));
   P.push(["Comissão (%)", orc.comissaoPct || 0, ""]);
   P.push(["Comissionado", orc.comissaoNome || "-", ""]);
   P.push(["Arredondamento do combustível", precos.arredPasso ? `Múltiplos de R$ ${precos.arredPasso}, ${ {cima:"para cima",proximo:"para o mais próximo",baixo:"para baixo"}[precos.arredModo] }` : "Sem arredondamento", ""]);
   P.push(["Rateio do lucro do orçamento", {pessoadia:"Por pessoa-dia",custo:"Pelo custo",igual:"Igual entre unidades"}[precos.rateio], ""]);
-  const wp = XLSX.utils.aoa_to_sheet(P); wp["!cols"] = [{wch:44},{wch:22},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, wp, "Parâmetros");
+  const prop = listaProprios();
+  if(prop.length){ P.push(["Valores próprios deste orçamento (já incluídos acima)", "", ""]); prop.forEach(x=>P.push([rotuloPreco(x.ch), x.v, ""])); }
+  const wp = XLSX.utils.aoa_to_sheet(maiusculas(P)); wp["!cols"] = [{wch:52},{wch:22},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wp, MAI("Parâmetros"));
   return {wb, n:aoa.length-1};
 }
 function nomeArquivo(){
@@ -1114,6 +1257,7 @@ function tituloDia(d){
   if(tem("Retaguarda")) partes.push("Depósito e retaguarda");
   if(tem("Aéreos")) partes.push(partes.length ? "aéreos" : "Aéreos");
   if(tem("Salão de Vendas")) partes.push("Salão de Vendas" + (hora(d.inicio) >= 18 ? " (após o fechamento da loja)" : ""));
+  if(!partes.length && fs.some(f=>!f.sup)) partes.push("Inventário da loja");   // r169: farmácia ou só Apoio
   if(partes.length<2) return partes.join("");
   return partes.slice(0,-1).join(", ") + (partes[0].includes(" e ") && partes.length===2 ? ", " : " e ") + partes[partes.length-1];
 }
@@ -1125,7 +1269,7 @@ function textoRegionalCliente(reg){
     L.push(u.nome || `Unidade ${ui+1}`);
     u.dias.forEach((d,di)=>{
       if(di>0) L.push("");
-      const sup = d.linhas.filter(l=>l.funcao==="supervisor").reduce((s,l)=>s + qtdLinha(l), 0);
+      const sup = d.linhas.filter(l=>ehSupervisor(l.funcao)).reduce((s,l)=>s + qtdLinha(l), 0);
       const aud = totalDia(d) - sup;
       const tit = tituloDia(d);
       L.push(`${di+1}º dia${tit ? " - " + tit : ""}`);
@@ -1170,9 +1314,9 @@ document.getElementById("btnCopTxtTodos").addEventListener("click", ()=>{
 const REF_SING = {cafe:"café da manhã", almoco:"almoço", lanche:"lanche", jantar:"jantar"};
 const REF_PLUR = {cafe:"cafés da manhã", almoco:"almoços", lanche:"lanches", jantar:"jantares"};
 function juntar(a){ return a.length<2 ? a.join("") : a.slice(0,-1).join(", ") + " e " + a[a.length-1]; }
-function refeicoesTxt(c){
-  const p = [];
-  REFEICOES.forEach(r=>{ const q = c[r.id]; if(q) p.push(q>1 ? `${q} ${REF_PLUR[r.id]}` : REF_SING[r.id]); });
+function refeicoesTxt(c, u){
+  const p = [], f = u && u.farmacia ? " farmácia" : "";
+  refeicoesDe(u).forEach(r=>{ const q = c[r.id]; if(q) p.push((q>1 ? `${q} ${REF_PLUR[r.id]}` : REF_SING[r.id]) + f); });
   return p;
 }
 function descritivo(o){
@@ -1191,7 +1335,7 @@ function descritivo(o){
       if(u.cidade) loc.push(u.cidade);
       loc.push("distâncias: " + ORIGENS.map(x=>`${x.nome} ${kmDe(u, x.id)} km`).join(", ") + (u.kmEstimado ? " (estimadas)" : ""));
       T.push(`- Cidade: ${loc.join(", ")}`);
-      T.push(`- Tipo: ${u.tipo}`);
+      T.push(`- Tipo: ${u.tipo}${u.farmacia ? " (farmácia)" : ""}`);
       T.push(`- Alimentação durante a operação: ${u.clienteAlimenta ? "fornecida pelo cliente" : "por conta da Formula Code"}`);
       u.dias.forEach((d,di)=>{
         T.push("");
@@ -1221,7 +1365,7 @@ function descritivo(o){
         T.push(`- ${e.nome}: ${e.pessoas} pessoas de ${ORIG[e.origem]}, ${tr}, do dia ${e.saida} ao dia ${e.retorno}`);
         for(let k=e.saida; k<=e.retorno; k++){
           const c = e.consumo[k]; if(!c) continue;
-          const it = refeicoesTxt(c);
+          const it = refeicoesTxt(c, u);
           if(c.hosp) it.push("hospedagem");
           if(it.length) T.push(`  - ${nomeDia(k,n)}: ${juntar(it)}`);
         }
@@ -1274,6 +1418,7 @@ Responda SOMENTE com o JSON, sem comentários nem crases.
 FORMATO
 {
  "cliente": "nome do cliente (ex.: Grupo Queiroz)",
+ "precos": {} ou SOMENTE os preços ditos no texto: {"diarias": [{"funcao": "<id da função>", "origem": "FOR" | "NAT" | "JUA" | "TODAS", "valor": R$ por pessoa por dia}], "cafe", "lanche", "almoco", "jantar": R$ por pessoa (em farmácia use "lanche_farm", "almoco_farm", "jantar_farm"), "hosp": R$ por pessoa por noite, "combustivel": R$ por litro, "kmL": km por litro, "vanTrecho": R$ por van por trecho, "locacao": R$ por coletor por dia},
  "regionais": [{
    "nome": "nome da regional em maiúsculas",
    "origem": "FOR", "NAT" ou "JUA" (base de equipe mais próxima dessa regional),
@@ -1285,35 +1430,47 @@ FORMATO
      "kmEstimado": true se você estimou alguma distância, false se todas vieram no texto,
      "origemFixa": true SOMENTE se o texto disser de onde vêm as pessoas (ex.: "10 de Natal"); senão false,
      "clienteAlimenta": true, salvo se o texto disser que o cliente NÃO fornece alimentação,
+     "farmacia": true se a loja for farmácia/drogaria (inventário de farmácia); senão false,
+     "consumo": {} ou, SOMENTE se o texto disser refeições/hospedagem que valem para todas as equipes desta unidade: {"<nº do dia>": {"cafe": refeições por pessoa, "almoco": ..., "lanche": ..., "jantar": ..., "hosp": 1 se dormem fora na noite desse dia ou 0 se não}} — inclua SÓ os dias e itens ditos,
      "dias": [{
        "inicio": "HH:MM" horário de início da contagem,
        "coletores": coletores locados no dia (0 se não dito),
        "linhas": [{"funcao": "<id>", "detalhe": "como o texto descreveu o local", "FOR": qtd de Fortaleza, "NAT": qtd de Natal, "JUA": qtd de Juazeiro do Norte}]
      }],
-     "equipes": [] ou, SOMENTE se o texto descrever as viagens, [{"nome","pessoas","origem":"FOR|NAT|JUA","transporte":"carro|van|outro|nenhum","outroTipo":"tipo do transporte, só se transporte=outro (ex.: ônibus, avião)","outroOrigem":"cidade de onde sai, só se outro","outroValor": valor total de ida e volta, só se outro,"saida": nº do dia,"retorno": nº do dia}],
+     "equipes": [] ou, SOMENTE se o texto descrever as viagens, [{"nome","pessoas","origem":"FOR|NAT|JUA","transporte":"carro|van|outro|nenhum","outroTipo":"tipo do transporte, só se transporte=outro (ex.: ônibus, avião)","outroOrigem":"cidade de onde sai, só se outro","outroValor": valor total de ida e volta, só se outro,"saida": nº do dia,"retorno": nº do dia,"veiculos": nº de carros/vans se dito,"vanTrecho": valor da van por trecho se dito,"consumo": {} ou o mesmo formato do "consumo" da unidade, só desta equipe}],
      "transportes": [] ou os transportes avulsos citados que não pertencem a uma equipe (Uber, táxi, ônibus, passagens etc.): [{"tipo":"texto","origem":"cidade","dia": nº do dia ou "","valor": valor total de ida e volta}]
    }]
  }]
 }
 
 FUNÇÕES (campo "funcao")
-- supervisor: supervisor(es) de operação.
+- supervisor: supervisor(es) de operação (lojas que NÃO são farmácia).
+- apoio: inventariante de apoio, faz qualquer área. Em loja que NÃO é farmácia, use "apoio" sempre que o texto falar em inventariantes/auditores/pessoas sem dizer a área, ou disser "apoio".
+- sup_farm: supervisor(es) em farmácia/drogaria.
+- inv_farm: inventariante(s) em farmácia/drogaria.
 - aereo_ret: aéreos no dia/contexto de depósito ou retaguarda.
 - aereo_salao: aéreos no dia/contexto de área de vendas/salão. Decida pelo que mais está sendo feito no mesmo dia.
 - deposito: depósito, depósito seco, picking, retaguarda seca.
 - camara: câmaras (resfriada, congelados, frigorífica) e áreas frias da retaguarda.
 - ilhas: ilhas, geladeiras, freezers e expositores refrigerados da área de vendas (laticínios, frios, bebidas etc.).
 - seca_salao: parte seca da área de vendas, "restante da área seca", gôndolas do salão.
+Em farmácia/drogaria ("farmacia": true) use SOMENTE sup_farm e inv_farm, nunca as demais funções.
 Cada local citado vira uma linha própria, com o local em "detalhe" (ex.: "câmara de congelados", "3 ilhas", "geladeira de laticínios").
 
 REGRAS
 - Um item em "dias" por dia de operação, na ordem. Supervisores entram como linha "supervisor".
 - Origem das pessoas: se o texto não disser, coloque todas em FOR (a calculadora redistribui depois). Se disser, respeite e marque "origemFixa": true.
+- Dias: 1 a N são os dias de contagem; N+1 é o dia de retorno quando a equipe volta no dia seguinte à última contagem. "Voltam logo após a última contagem" = retorno no dia N. "Saem na véspera" = a equipe sai no dia 1 e a contagem começa no dia 2 (então crie o dia 1 sem contagem só se o texto pedir; senão use saída no dia 1).
+- Alimentação e hospedagem: registre em "consumo" (da unidade, ou da equipe se o texto separar por equipe) SÓ o que foi dito; o que não foi dito será sugerido automaticamente. Ex.: "almoço e jantar nos dois dias" = {"1":{"almoco":1,"jantar":1},"2":{"almoco":1,"jantar":1}}; "café da manhã no hotel no dia 2" = {"2":{"cafe":1}}; "uma noite de hotel" = {"1":{"hosp":1}}; "sem hotel" = hosp 0 em todos os dias; "lanche na volta" = lanche 1 no dia de retorno.
+- Preços: coloque em "precos" SÓ os valores ditos. Diária sem origem dita: use a origem das pessoas daquela função no texto; se não der para saber, "TODAS". Diária de "inventariante" sem área em loja que não é farmácia = "apoio"; em farmácia = "inv_farm". Diária de supervisor = "supervisor" (ou "sup_farm" em farmácia). Valores por extenso viram número ("cento e oitenta" = 180).
+- Van: valor dito "por trecho" vai direto em "vanTrecho"; valor dito como ida e volta (ou sem dizer) vai dividido por 2.
+- O texto pode ter vindo de ditado por voz: sem pontuação, com números por extenso e palavras parecidas trocadas. Interprete pelo sentido.
+- Farmácia/drogaria: em geral um único dia, loja inteira; se o horário não for dito, use "21:00".
 - Horário de início: use o do texto. Se não houver: dia com depósito/retaguarda/câmaras = "14:00"; dia com área de vendas/salão = "21:00".
 - Siglas: QA = Queiroz Atacadão; HQ = Hiper Queiroz; CD = Centro de Distribuição. Use o nome por extenso + cidade (ex.: "Queiroz Atacadão - Nova Parnamirim").
 - Regionais conhecidas do Grupo Queiroz: MOSSORÓ (origem FOR; ex.: Mossoró, Assú, Macau, Caraúbas, Patu, Alto da Conceição, Boa Vista, Nova Betânia), NATAL (origem NAT; ex.: Natal, Parnamirim/Nova Parnamirim, Ceará-Mirim, João Câmara, São Gonçalo do Amarante, Monte Castelo, Satélite), PB (origem FOR; Paraíba: Patos, Sousa, Catolé do Rocha, Itaporanga, Monteiro, Bananeiras, São Bento, Brejo do Cruz). Se a regional não for dita, deduza pela cidade.
 - Unidades de regionais diferentes ficam em regionais diferentes; unidades da mesma regional ficam juntas.
-- Texto pode vir em formato livre/ditado, em formato de script (REGIONAL X / unidade / 1º dia ...) ou como planilha (tabela com unidades e dias). Uma planilha com "Qde auditores" por "1º DIA", "2º DIA" traz o total de pessoas de cada dia sem função: nesse caso use "deposito" para o 1º dia e "seca_salao" para os demais, com detalhe "total da planilha", e avise isso colocando "detalhe": "total da planilha – conferir função".
+- Texto pode vir em formato livre/ditado, em formato de script (REGIONAL X / unidade / 1º dia ...) ou como planilha (tabela com unidades e dias). Uma planilha com "Qde auditores" por "1º DIA", "2º DIA" traz o total de pessoas de cada dia sem função: nesse caso use "apoio" (ou "inv_farm" se for farmácia) com "detalhe": "total da planilha – conferir função".
 - Se o tipo não for dito: "${TIPOS[0]}". Quantidades não ditas = 0.
 - Valores de transporte informados no texto são sempre o total de ida e volta.
 ${orc.cliente ? `- Cliente atual do orçamento: ${orc.cliente} (use se o texto não disser outro).` : ""}
@@ -1332,8 +1489,8 @@ async function obterSample(){
 
 function mesclar(novo){
   if(document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)))){
-    const cp = orc.comissaoPct, cn = orc.comissaoNome, cmp = orc.composicao;
-    orc = novo; orc.comissaoPct = cp; orc.comissaoNome = cn; orc.composicao = cmp; return;
+    const cp = orc.comissaoPct, cn = orc.comissaoNome, cmp = orc.composicao, po = orc.precosOrc;
+    orc = novo; orc.comissaoPct = cp; orc.comissaoNome = cn; orc.composicao = cmp; orc.precosOrc = po || {diarias:{}}; return;
   }
   if(novo.cliente && !orc.cliente) orc.cliente = novo.cliente;
   novo.regionais.forEach(nr=>{
@@ -1342,6 +1499,7 @@ function mesclar(novo){
   });
 }
 btnLer.addEventListener("click", async ()=>{
+  if(ditando) pararDitado(true);   // r170: desliga o microfone antes de interpretar
   const txt = document.getElementById("texto").value.trim();
   const tudo = [txt, textoPlanilha ? "PLANILHA CARREGADA:\n" + textoPlanilha : ""].filter(Boolean).join("\n\n");
   if(!tudo){ msgLer("Escreva a descrição ou carregue uma planilha primeiro.", true); return; }
@@ -1354,13 +1512,16 @@ btnLer.addEventListener("click", async ()=>{
     let nU = 0;
     const substitui = document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)));
     const saldo = saldoInicial(substitui ? null : orc), ordem = origensPrioridade(novo);
-    novo.regionais.forEach(reg=>reg.unidades.forEach(u=>{
+    novo.regionais.forEach((reg,ri)=>reg.unidades.forEach((u,ui)=>{
       nU++;
       if(!u.equipes.length) sugerirEquipes(u, reg, saldo, ordem);
       else { u.equipes.forEach(e=>sugerirConsumo(u, e)); if(saldo) u.equipes.forEach(e=>saldo[e.origem] = Math.max(0, saldo[e.origem] - e.pessoas)); }
+      aplicarConsumoDito(u, ((((r && r.regionais) || [])[ri] || {}).unidades || [])[ui] || {});   // r170
     }));
     pendente = novo;
+    pendentePrecos = lerPrecosIA(r && r.precos);   // r170
     document.getElementById("previaTxt").value = descritivo(novo);
+    desenharPreviaPrecos();
     document.getElementById("previa").hidden = false;
     const est = novo.regionais.some(r=>r.unidades.some(u=>u.kmEstimado));
     msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.`, false);
@@ -1371,18 +1532,136 @@ btnLer.addEventListener("click", async ()=>{
   }finally{ btnLer.disabled = false; btnParar.hidden = true; ctl = null; }
 });
 btnParar.addEventListener("click", ()=>ctl && ctl.abort());
-let pendente = null;
+
+/* =====================================================================
+   r170: DITADO POR VOZ (reconhecimento de voz do próprio navegador)
+   ===================================================================== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const btnDitar = document.getElementById("btnDitar"), elDit = document.getElementById("ditStatus"), elTexto = document.getElementById("texto");
+const ANDROID = /Android/i.test(navigator.userAgent);   // no Android o modo contínuo repete frases; lá religa a cada frase
+let rec = null, ditando = false, ditBase = "", ditFinal = "", ditErro = false;
+function juntarDit(){ return [...arguments].map(x=>String(x||"").trim()).filter(Boolean).join(" "); }
+function marcarDitado(){
+  btnDitar.textContent = ditando ? "⏹ Parar ditado" : "🎤 Ditar";
+  btnDitar.classList.toggle("gravando", ditando);
+  btnDitar.setAttribute("aria-pressed", ditando ? "true" : "false");
+  elDit.textContent = ditando ? "Ouvindo… pode falar." : "";
+}
+function iniciarDitado(){
+  if(!SR){ msgLer("Este navegador não tem ditado por voz. Use o Chrome ou o Edge (no iPhone, o Safari).", true); return; }
+  ditBase = elTexto.value; ditFinal = ""; ditErro = false;
+  rec = new SR();
+  rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = !ANDROID; rec.maxAlternatives = 1;
+  rec.onresult = ev=>{
+    let inter = "";
+    for(let i=ev.resultIndex; i<ev.results.length; i++){
+      const r = ev.results[i];
+      if(r.isFinal) ditFinal = juntarDit(ditFinal, r[0].transcript); else inter += " " + r[0].transcript;
+    }
+    elTexto.value = juntarDit(ditBase, ditFinal, inter);
+  };
+  rec.onerror = ev=>{
+    if(ev.error==="not-allowed" || ev.error==="service-not-allowed"){ ditErro = true; ditando = false; msgLer("O microfone está bloqueado. Libere o acesso ao microfone para esta página (no cadeado da barra de endereço) e tente de novo.", true); }
+    else if(ev.error==="audio-capture"){ ditErro = true; ditando = false; msgLer("Nenhum microfone encontrado.", true); }
+    else if(ev.error==="network"){ ditErro = true; ditando = false; msgLer("O ditado precisa de internet. Verifique a conexão e tente de novo.", true); }
+  };
+  rec.onend = ()=>{
+    ditBase = juntarDit(ditBase, ditFinal); ditFinal = ""; elTexto.value = ditBase;
+    if(ditando){ setTimeout(()=>{ if(!ditando) return; try{ rec.start(); }catch(e){ ditando = false; marcarDitado(); } }, 250); return; }   // pausa longa: religa sozinho
+    marcarDitado();
+    if(!ditErro) msgLer("Ditado encerrado. Revise o texto e clique em \"Interpretar\".", false);
+  };
+  try{ rec.start(); }catch(e){ msgLer("Não foi possível ligar o microfone.", true); return; }
+  ditando = true; marcarDitado();
+  msgLer("Ouvindo… fale o orçamento. Pausas são normais; clique em \"Parar ditado\" quando terminar.", false);
+}
+function pararDitado(silencioso){
+  if(!ditando && !rec) return;
+  ditando = false;
+  if(rec){ if(silencioso) ditErro = true; try{ rec.stop(); }catch(e){} }
+  marcarDitado();
+}
+btnDitar.addEventListener("click", ()=>{ if(ditando) pararDitado(); else iniciarDitado(); });
+elTexto.addEventListener("input", ()=>{ if(ditando){ ditBase = elTexto.value; ditFinal = ""; } });   // se você digitar durante o ditado, o que digitou é mantido
+if(!SR){ btnDitar.title = "Ditado indisponível neste navegador (use Chrome, Edge ou Safari)"; }
+let pendente = null, pendentePrecos = [];
+/* r170: refeições e hospedagem ditas valem item a item sobre a sugestão automática */
+function aplicarConsumoDito(u, ru){
+  const eqRaw = Array.isArray(ru.equipes) ? ru.equipes : [];
+  u.equipes.forEach((e,k)=>{
+    [ru.consumo, (eqRaw[k] || {}).consumo].forEach(cons=>{
+      if(!cons || typeof cons!=="object") return;
+      Object.entries(cons).forEach(([dia, c])=>{
+        const d = int(dia); if(!d || !c || typeof c!=="object" || d<e.saida || d>e.retorno) return;
+        const alvo = e.consumo[d] || (e.consumo[d] = normConsumo());
+        ["cafe","almoco","lanche","jantar","hosp"].forEach(it=>{
+          const v = c[it]; if(v===undefined || v===null || v==="") return;
+          alvo[it] = it==="hosp" ? ((v===true || Number(v)>0) ? 1 : 0) : int(v);
+        });
+      });
+    });
+  });
+}
+/* r170: preços lidos na descrição — o Diretor escolhe onde valem */
+function lerPrecosIA(p){
+  const L = {}; if(!p || typeof p!=="object") return [];
+  (Array.isArray(p.diarias) ? p.diarias : []).forEach(d=>{
+    const f = FUN[(d||{}).funcao], v = valorValido((d||{}).valor); if(!f || v===null) return;
+    const origs = ORIG[d.origem] ? [d.origem] : ORIGENS.map(o=>o.id);
+    origs.forEach(o=>L[`diarias.${f.preco}.${o}`] = v);
+  });
+  PRECO_ITENS.forEach(([k])=>{ const v = valorValido(p[k]); if(v!==null) L[k] = v; });
+  return Object.entries(L).map(([ch, v])=>({ch, v, onde:"orc"}));
+}
+function desenharPreviaPrecos(){
+  const el = document.getElementById("previaPrecos");
+  if(!pendentePrecos.length){ el.innerHTML = ""; return; }
+  const PP = PR();
+  el.innerHTML = `<h4 class="block">Preços que você informou</h4>
+    <div class="tbl"><table><thead><tr><th>Item</th><th class="n">Valor informado</th><th class="n">Valor atual</th><th>Onde vale</th></tr></thead><tbody>
+    ${pendentePrecos.map((x,i)=>`<tr><td>${esc(rotuloPreco(x.ch))}</td><td class="n">${fmtPreco(x.ch, x.v)}</td><td class="n">${fmtPreco(x.ch, valorDe(PP, x.ch) || 0)}</td>
+      <td><select data-pp-onde="${i}">
+        <option value="orc" ${x.onde==="orc"?"selected":""}>Só neste orçamento</option>
+        <option value="tab" ${x.onde==="tab"?"selected":""}>Também na minha tabela</option>
+        <option value="ign" ${x.onde==="ign"?"selected":""}>Ignorar</option></select></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="toolbar" style="margin-top:6px"><span class="tag">Mudar todos para:</span>
+      <button class="ghost small" data-pp-todos="orc">Só neste orçamento</button>
+      <button class="ghost small" data-pp-todos="tab">Também na minha tabela</button>
+      <button class="ghost small" data-pp-todos="ign">Ignorar</button></div>
+    <p class="hint">"Também na minha tabela" grava o valor na sua tabela de preços e passa a valer nos próximos orçamentos.</p>`;
+}
+document.getElementById("previaPrecos").addEventListener("change", e=>{
+  const i = e.target.dataset.ppOnde; if(i===undefined) return;
+  pendentePrecos[Number(i)].onde = e.target.value;
+});
+document.getElementById("previaPrecos").addEventListener("click", e=>{
+  const v = e.target.dataset.ppTodos; if(!v) return;
+  pendentePrecos.forEach(x=>x.onde = v); desenharPreviaPrecos();
+});
+function aplicarPrecosLidos(){
+  let nTab = 0, nOrc = 0;
+  pendentePrecos.forEach(x=>{
+    if(x.onde==="orc"){ definirProprio(x.ch, x.v); nOrc++; }
+    else if(x.onde==="tab" && precos===precosDiretor){ definirTabela(x.ch, x.v); removerProprio(x.ch); nTab++; }
+  });
+  if(nTab) gravar(CH_PRECOS, precos);
+  pendentePrecos = [];
+  desenharPrecos();
+  return {nTab, nOrc};
+}
 document.getElementById("btnAplicar").addEventListener("click", ()=>{
   if(!pendente) return;
   mesclar(pendente); pendente = null;
+  const rp = aplicarPrecosLidos();   // r170
   orc.regionais.forEach((r,ri)=>aberto.add("r"+ri));
   document.getElementById("previa").hidden = true;
   textoPlanilha = ""; document.getElementById("arqNome").textContent = "";
   desenharOrcamento(); salvar();
-  msgLer("Aplicado. Confira os campos e o descritivo do orçamento no passo 3.", false);
+  msgLer("Aplicado. Confira os campos e o descritivo do orçamento no passo 3." + (rp.nOrc ? ` ${rp.nOrc} preço(s) valendo só neste orçamento (veja no passo 2).` : "") + (rp.nTab ? ` ${rp.nTab} preço(s) gravado(s) na sua tabela.` : ""), false);
 });
 document.getElementById("btnDescartar").addEventListener("click", ()=>{
-  pendente = null;
+  pendente = null; pendentePrecos = []; document.getElementById("previaPrecos").innerHTML = "";
   document.getElementById("previa").hidden = true;
   msgLer("Interpretação descartada. Nada foi alterado.", false);
 });
