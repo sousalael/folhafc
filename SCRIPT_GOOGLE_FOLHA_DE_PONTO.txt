@@ -611,7 +611,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-12-r181';
+const VERSAO_SCRIPT = '2026-10-12-r182';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -8772,6 +8772,7 @@ function orcPlanilha_() {
 function orcCabOrcamentos_() {
   var c = ['ID','CPF','Diretor','Cliente','Status','CriadoEm','AtualizadoEm','ConcluidoEm','Unidades','Regionais','Custo','Preco','Partes'];
   for (var i = 1; i <= ORC_MAX_PARTES; i++) c.push('Dados' + i);
+  c.push('Titulo');   // r182: coluna nova no fim (não desloca as partes já gravadas)
   return c;
 }
 function orcCabPrecos_() {
@@ -8817,10 +8818,12 @@ function orcListar(data, cpf) {
   var n = aba.getLastRow();
   if (n < 2) return { success: true, lista: [] };
   var v = aba.getRange(2, 1, n - 1, 13).getDisplayValues();
+  var colTit = 14 + ORC_MAX_PARTES;   // r182
+  var tit = aba.getLastColumn() >= colTit ? aba.getRange(2, colTit, n - 1, 1).getDisplayValues() : [];
   var lista = [];
-  v.forEach(function(r) {
+  v.forEach(function(r, i) {
     if (!r[0] || String(r[1]) !== String(cpf)) return;
-    lista.push({ id: r[0], cliente: r[3], status: r[4], criadoEm: r[5], atualizadoEm: r[6], concluidoEm: r[7],
+    lista.push({ id: r[0], titulo: tit[i] ? tit[i][0] : '', cliente: r[3], status: r[4], criadoEm: r[5], atualizadoEm: r[6], concluidoEm: r[7],
                  unidades: orcNum_(r[8]), regionais: orcNum_(r[9]), custo: orcNum_(r[10]), preco: orcNum_(r[11]) });
   });
   lista.sort(function(a, b) { return String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)); });
@@ -8867,6 +8870,8 @@ function orcSalvar(data, cpf) {
     var linha = [id, String(cpf), getNomePorCPF(cpf) || '', String(resumo.cliente || data.orc.cliente || ''), status, criado, agora, concluido,
                  String(orcNum_(resumo.unidades)), String(orcNum_(resumo.regionais)), String(orcNum_(resumo.custo)), String(orcNum_(resumo.preco)), String(partes.length)];
     for (var i = 0; i < ORC_MAX_PARTES; i++) linha.push(partes[i] || '');
+    linha.push(String(resumo.titulo || data.orc.titulo || ''));   // r182: título
+    if (!aba.getRange(1, linha.length).getDisplayValue()) aba.getRange(1, linha.length).setValue('Titulo').setFontWeight('bold').setBackground('#001528').setFontColor('#FFFFFF');
     var rng = aba.getRange(lin, 1, 1, linha.length);
     rng.setNumberFormat('@');
     rng.setValues([linha]);

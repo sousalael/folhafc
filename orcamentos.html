@@ -8,7 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r181: "Quantidade de Apoio" (na disponibilidade de pessoas): o Apoio assume parte das contagens críticas
+<!-- r182: título do orçamento (ex.: "Queiroz Regional PB") — aparece na lista, na barra do orçamento aberto, no descritivo e nos nomes dos arquivos.
+     r181: "Quantidade de Apoio" (na disponibilidade de pessoas): o Apoio assume parte das contagens críticas
      (aéreos, câmaras, ilhas/geladeiras primeiro; depois as demais áreas), com o local no Detalhe; Apoios e Supervisores sempre de Fortaleza.
      r180: Apoio sempre logo após o supervisor (fora de farmácia); equipes refeitas sozinhas a partir das quantidades/origens dos dias;
      contadores de inventariantes à esquerda; card "Deslocamento de Equipes" com remoção de dias; card da loja com cor mais forte.
@@ -141,7 +142,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <section class="step" id="secLista">
     <h2>Meus orçamentos</h2>
     <div class="toolbar">
-      <input type="text" id="filtroLista" placeholder="Buscar cliente…" style="max-width:260px">
+      <input type="text" id="filtroLista" placeholder="Buscar título ou cliente…" style="max-width:260px">
       <select id="filtroStatus" style="max-width:170px">
         <option value="">Todos</option><option value="Rascunho">Rascunhos</option><option value="Concluído">Concluídos</option>
       </select>
@@ -241,7 +242,8 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <!-- 3. ORÇAMENTO -->
   <section class="step" id="secOrc">
     <h2><span class="num">3</span>Orçamento</h2>
-    <div class="grid"><label class="f">Nome do cliente<input type="text" id="cliente"></label></div>
+    <div class="grid"><label class="f">Título do orçamento<input type="text" id="titulo" placeholder="ex.: Queiroz Regional PB"></label>
+      <label class="f">Nome do cliente<input type="text" id="cliente"></label></div>
     <details class="box" open><summary>Descritivo do orçamento</summary><div class="in">
       <textarea id="descr" class="descr" readonly rows="14"></textarea>
       <div class="toolbar" style="margin-top:8px"><button class="ghost small" id="btnCopDescr">Copiar descritivo</button></div>
@@ -458,7 +460,7 @@ function normCompo(c){
   const ok = x=>ORIG[x] ? x : "";
   return {disp:d, apoio:int(c.apoio), principal:ok(c.principal), segunda:ok(c.segunda), terceira:ok(c.terceira)};   // r181: apoio
 }
-function orcVazio(){ return {cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
+function orcVazio(){ return {titulo:"", cliente:"", descricao:"", planilhaNome:"", planilhaTexto:"", comissaoPct:0, comissaoNome:"", composicao:normCompo(), precosOrc:{diarias:{}}, regionais:[regionalVazia()]}; }
 // r170: valores próprios do orçamento (sobrepõem a tabela do Diretor só neste orçamento)
 function valorValido(v){ if(v===undefined || v===null || v==="") return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) && n>=0 ? n : null; }
 function normPrecosOrc(p){
@@ -526,7 +528,7 @@ function normRegional(r){
 }
 function normOrc(o){
   o = o || {};
-  return {cliente:String(o.cliente||""),
+  return {titulo:String(o.titulo||""), cliente:String(o.cliente||""),   // r182: título
     descricao:String(o.descricao||""), planilhaNome:String(o.planilhaNome||""), planilhaTexto:String(o.planilhaTexto||""),   // r179: o que foi solicitado
     comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
 }
@@ -972,6 +974,7 @@ elCompo.addEventListener("click", async e=>{
 
 function desenharOrcamento(){
   elCliente.value = orc.cliente;
+  document.getElementById("titulo").value = orc.titulo || "";   // r182
   desenharCompo();
   document.getElementById("comPct").value = orc.comissaoPct || "";
   document.getElementById("comNome").value = orc.comissaoNome;
@@ -1173,6 +1176,7 @@ elOrc.addEventListener("input", e=>{ if(e.target.dataset.path && e.target.type!=
 elOrc.addEventListener("change", e=>{ if(e.target.dataset.path) aoEditar(e.target, "change"); });
 elOrc.addEventListener("toggle", e=>{ const k = e.target.dataset && e.target.dataset.ab; if(k){ e.target.open ? aberto.add(k) : aberto.delete(k); } }, true);
 elCliente.addEventListener("input", ()=>{ orc.cliente = elCliente.value; salvar(); });
+document.getElementById("titulo").addEventListener("input", e=>{ orc.titulo = e.target.value; salvar(); });   // r182
 document.getElementById("comPct").addEventListener("input", e=>{ orc.comissaoPct = num(e.target.value); salvar(); });
 document.getElementById("comNome").addEventListener("input", e=>{ orc.comissaoNome = e.target.value; salvar(); });
 
@@ -1423,6 +1427,7 @@ function montarPlanilha(){
   XLSX.utils.book_append_sheet(wb, wc, MAI("Preço e coerência"));
 
   const P = [["Parâmetro", ...ORIGENS.map(o=>o.nome)]];
+  if(orc.titulo) P.push(["Título do orçamento", orc.titulo]);   // r182
   PRECO_FUNCOES.forEach(f=>P.push(["Diária – " + f.nome, ...ORIGENS.map(o=>PP.diarias[f.id][o.id])]));
   P.push(["Pessoas disponíveis", ...ORIGENS.map(o=>temLimite() ? orc.composicao.disp[o.id] : "sem limite")]);
   P.push(["Ordem das fontes de pessoas", origensPrioridade(orc).map(x=>ORIG[x]).join(" → ")]);
@@ -1442,7 +1447,7 @@ function montarPlanilha(){
   return {wb, n:aoa.length-1};
 }
 function nomeArquivo(){
-  const c = (orc.cliente||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w]+/g,"_").replace(/^_|_$/g,"");
+  const c = (orc.titulo||orc.cliente||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w]+/g,"_").replace(/^_|_$/g,"");
   const d = new Date(), p = x=>String(x).padStart(2,"0");
   return `Orcamento_${c}_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.xlsx`;
 }
@@ -1527,6 +1532,7 @@ function refeicoesTxt(c, u){
 }
 function descritivo(o){
   const T = [];
+  if(o.titulo) T.push(`Título: ${o.titulo}`);   // r182
   T.push(`Cliente: ${o.cliente || "(não informado)"}`);
   T.push(`Fontes de pessoas: ${ordemDe(o.composicao || orc.composicao, o).map(x=>ORIG[x]).join(" → ")}${temLimite() ? " (disponíveis: " + ORIGENS.map(x=>`${x.nome} ${orc.composicao.disp[x.id] || "sem limite"}`).join(", ") + ")" : ""}`);
   if(o.comissaoPct) T.push(`Comissão: ${o.comissaoPct}% sobre o preço${o.comissaoNome ? " (" + o.comissaoNome + ")" : ""}`);
@@ -1995,7 +2001,7 @@ function marcarSalvo(tipo, info){
                    tipo==="erro" ? "Não foi possível salvar: " + info + " (guardado neste navegador)" : (orcId ? "Salvo" : "Ainda não salvo");
 }
 function atualizarBarra(){
-  document.getElementById("atualNome").textContent = (orc.cliente||"").trim() || (orcId ? "Orçamento sem cliente" : "Novo orçamento");
+  document.getElementById("atualNome").textContent = (orc.titulo||"").trim() || (orc.cliente||"").trim() || (orcId ? "Orçamento sem título" : "Novo orçamento");   // r182
   const ch = document.getElementById("atualStatus");
   ch.textContent = orcStatus; ch.className = "chip " + (bloqueado() ? "conc" : "rasc");
   document.getElementById("btnConcluir").hidden = bloqueado();
@@ -2010,7 +2016,7 @@ function aplicarBloqueio(){
 }
 function resumoAtual(){
   const {R} = calcularTudo();
-  return {cliente:orc.cliente, unidades:R.length, regionais:orc.regionais.filter(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)))).length,
+  return {titulo:orc.titulo, cliente:orc.cliente, unidades:R.length, regionais:orc.regionais.filter(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)))).length,
           custo:Math.round(R.reduce((s,r)=>s+r.custo,0)*100)/100, preco:Math.round(R.reduce((s,r)=>s+r.preco,0)*100)/100};
 }
 function backupLocal(pendenteFlag){
@@ -2037,7 +2043,7 @@ async function salvarOrcServidor(status){
     const r = await chamar({action:"orcSalvar", id:orcId, status:status || orcStatus, orc, precos, resumo:resumoAtual()});
     orcId = r.id; orcStatus = r.status;
     marcarSalvo("salvo", r.atualizadoEm); backupLocal(false);
-    const item = {id:r.id, cliente:orc.cliente, status:r.status, criadoEm:r.criadoEm, atualizadoEm:r.atualizadoEm, concluidoEm:r.concluidoEm, ...resumoAtual()};
+    const item = {id:r.id, titulo:orc.titulo, cliente:orc.cliente, status:r.status, criadoEm:r.criadoEm, atualizadoEm:r.atualizadoEm, concluidoEm:r.concluidoEm, ...resumoAtual()};
     const i = lista.findIndex(x=>x.id===r.id); if(i>=0) lista[i] = item; else lista.unshift(item);
     desenharLista(); atualizarBarra();
     return true;
@@ -2069,11 +2075,11 @@ const elLista = document.getElementById("lista");
 function desenharLista(){
   const f = (document.getElementById("filtroLista").value||"").trim().toLowerCase();
   const st = document.getElementById("filtroStatus").value;
-  const L = lista.filter(x=>(!st || x.status===st) && (!f || String(x.cliente||"").toLowerCase().includes(f)));
+  const L = lista.filter(x=>(!st || x.status===st) && (!f || (String(x.titulo||"") + " " + String(x.cliente||"")).toLowerCase().includes(f)));
   if(!lista.length){ elLista.innerHTML = '<p class="hint">Nenhum orçamento salvo ainda. Comece um novo abaixo ou importe da calculadora.</p>'; return; }
   if(!L.length){ elLista.innerHTML = '<p class="hint">Nenhum orçamento com esse filtro.</p>'; return; }
-  elLista.innerHTML = `<table><thead><tr><th>Cliente</th><th class="n">Unidades</th><th class="n">Preço</th><th>Status</th><th>Atualizado</th><th></th></tr></thead><tbody>
-    ${L.map(x=>`<tr class="${x.id===orcId ? "atual-linha" : ""}"><td>${esc(x.cliente || "(sem cliente)")}</td><td class="n">${x.unidades||0}</td><td class="n">${brl(x.preco)}</td>
+  elLista.innerHTML = `<table><thead><tr><th>Título</th><th>Cliente</th><th class="n">Unidades</th><th class="n">Preço</th><th>Status</th><th>Atualizado</th><th></th></tr></thead><tbody>
+    ${L.map(x=>`<tr class="${x.id===orcId ? "atual-linha" : ""}"><td><strong>${esc(x.titulo || "(sem título)")}</strong></td><td>${esc(x.cliente || "(sem cliente)")}</td><td class="n">${x.unidades||0}</td><td class="n">${brl(x.preco)}</td>
       <td><span class="chip ${x.status==="Concluído" ? "conc" : "rasc"}">${esc(x.status)}</span></td><td style="white-space:nowrap">${esc(dataBR(x.atualizadoEm))}</td>
       <td style="white-space:nowrap"><button class="ghost small" data-abrir="${esc(x.id)}">Abrir</button>
         <button class="ghost small" data-duplicar="${esc(x.id)}">Duplicar</button>
@@ -2099,7 +2105,7 @@ async function abrirOrcamento(id, duplicar){
     mostrarEstado("");
     const o = normOrc(r.orc);
     if(duplicar){
-      o.cliente = (o.cliente || "Orçamento") + " (cópia)";
+      if(o.titulo) o.titulo += " (cópia)"; else o.cliente = (o.cliente || "Orçamento") + " (cópia)";   // r182
       mostrarOrcamento(o, null, "Rascunho", null);
       await salvarOrcServidor("Rascunho");
       toast("Cópia criada");
@@ -2154,7 +2160,7 @@ document.getElementById("btnDuplicar").addEventListener("click", async ()=>{
   if(!orcId) return;
   await esperarSalvar();
   const o = JSON.parse(JSON.stringify(orc));
-  o.cliente = (o.cliente || "Orçamento") + " (cópia)";
+  if(o.titulo) o.titulo += " (cópia)"; else o.cliente = (o.cliente || "Orçamento") + " (cópia)";   // r182
   mostrarOrcamento(normOrc(o), null, "Rascunho", null);
   await salvarOrcServidor("Rascunho");
   toast("Cópia criada e aberta");
@@ -2186,7 +2192,7 @@ document.getElementById("btnExportar").addEventListener("click", ()=>{
   if(!temConteudo(orc)){ toast("Abra ou preencha um orçamento antes de exportar."); return; }
   const pac = {formato:"fc-calculadora-orcamentos", versao:1, exportadoEm:new Date().toISOString(),
                status:orcStatus, orc:JSON.parse(JSON.stringify(orc)), precos:JSON.parse(JSON.stringify(precos))};
-  const nomeArq = "Orcamento_" + ((orc.cliente || "sem_cliente").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "sem_cliente")
+  const nomeArq = "Orcamento_" + ((orc.titulo || orc.cliente || "sem_cliente").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "sem_cliente")
     + "_" + new Date().toISOString().slice(0,10) + ".json";
   const url = URL.createObjectURL(new Blob([JSON.stringify(pac, null, 2)], {type:"application/json"}));
   const a = document.createElement("a"); a.href = url; a.download = nomeArq;
