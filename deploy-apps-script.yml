@@ -1,0 +1,217 @@
+name: Deploy Apps Script
+
+# r171: o robô deixou de confiar no "Script is already up to date" do clasp.
+#  - .clasp.json agora fica na RAIZ do repositório (rootDir "apps-script"), layout
+#    padrão do clasp, sem ambiguidade de pasta entre versões do clasp;
+#  - antes de enviar, confere se o script da raiz e o index.html esperam a MESMA versão;
+#  - depois de enviar, baixa o código que ficou no Google e confere a versão;
+#    se não bater, tenta enviar de novo e, se ainda assim não bater, PARA COM ERRO
+#    (vermelho) em vez de publicar código antigo;
+#  - a prova final da URL agora deixa a execução vermelha quando falha.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps-script/**"
+      - "SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar clasp
+        run: |
+          npm install -g @google/clasp
+          echo "Versão do clasp instalada: $(clasp --version 2>/dev/null || echo '?')"
+
+      - name: Configurar credenciais do clasp
+        run: echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
+
+      - name: Sincronizar Code.gs com o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt da raiz
+        run: cp SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt apps-script/Code.gs
+
+      # r171: trava de segurança — script e site precisam esperar a mesma versão
+      - name: Conferir versões antes de publicar
+        run: |
+          set -e
+          V_SCRIPT=$(grep -oE "VERSAO_SCRIPT = '[^']*'" SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt | grep -oE "'[^']*'" | tr -d "'" | head -1)
+          V_CODE=$(grep -oE "VERSAO_SCRIPT = '[^']*'" apps-script/Code.gs | grep -oE "'[^']*'" | tr -d "'" | head -1)
+          V_SITE=$(grep -oE "VERSAO_ESPERADA = '[^']*'" index.html | grep -oE "'[^']*'" | tr -d "'" | head -1 || true)
+          echo "Script da raiz (SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt): $V_SCRIPT"
+          echo "apps-script/Code.gs (após sincronizar):           $V_CODE"
+          echo "Site (index.html espera):                          $V_SITE"
+          if [ -z "$V_SCRIPT" ] || [ "$V_SCRIPT" != "$V_CODE" ]; then
+            echo "ERRO: o Code.gs não ficou igual ao script da raiz."
+            exit 1
+          fi
+          if [ -n "$V_SITE" ] && [ "$V_SITE" != "$V_SCRIPT" ]; then
+            echo "ERRO: o site espera $V_SITE, mas o script da raiz é $V_SCRIPT. Suba os dois arquivos da mesma versão."
+            exit 1
+          fi
+          if ! grep -q "function doGet" apps-script/Code.gs; then
+            echo "ERRO: o Code.gs não tem a função doGet (arquivo incompleto?)."
+            exit 1
+          fi
+          echo "ESPERADA=$V_SCRIPT" >> "$GITHUB_ENV"
+
+      # r171: .clasp.json na raiz (antes ficava dentro de apps-script)
+      - name: Gerar .clasp.json
+        run: |
+          rm -f apps-script/.clasp.json
+          echo '{"scriptId":"${{ secrets.APPS_SCRIPT_ID }}","rootDir":"apps-script"}' > .clasp.json
+          echo "Arquivos que serão enviados:"
+          ls -la apps-script
+
+      - name: Enviar código ao Apps Script
+        run: clasp push --force 2>&1 | tee /tmp/push.txt
+
+      # r171: baixa o que ficou no Google e confere a versão; tenta de novo se precisar
+      - name: Conferir o código que ficou no Google
+        env:
+          SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
+        run: |
+          set -o pipefail
+          conferir() {
+            rm -rf /tmp/remoto && mkdir -p /tmp/remoto
+            ( cd /tmp/remoto && echo "{\"scriptId\":\"$SCRIPT_ID\",\"rootDir\":\".\"}" > .clasp.json && clasp pull > /tmp/pull.txt 2>&1 ) || { cat /tmp/pull.txt; return 1; }
+            REMOTA=$(grep -rhoE "VERSAO_SCRIPT = '[^']*'" /tmp/remoto --include='*.js' --include='*.gs' | grep -oE "'[^']*'" | tr -d "'" | head -1)
+            echo "Versão no Google: ${REMOTA:-(não encontrada)} | esperada: $ESPERADA"
+            [ "$REMOTA" = "$ESPERADA" ]
+          }
+          if conferir; then echo "OK: o Google recebeu a versão certa."; exit 0; fi
+          echo "O código no Google não é o esperado. Enviando de novo..."
+          clasp push --force 2>&1 | tee /tmp/push2.txt
+          sleep 5
+          if conferir; then echo "OK na segunda tentativa."; exit 0; fi
+          echo "ERRO: o clasp não enviou o código novo ao Google (saída do envio abaixo)."
+          cat /tmp/push.txt /tmp/push2.txt
+          echo "Nada foi publicado. Publique manualmente: cole o SCRIPT_GOOGLE_FOLHA_DE_PONTO.txt no Apps Script e implante uma Nova versão."
+          exit 1
+
+      - name: Criar nova versão
+        run: |
+          set -e -o pipefail
+          echo "--- Criando versão ---"
+          clasp version "Auto $(date +'%Y-%m-%d %H:%M') $ESPERADA" 2>&1 | tee /tmp/ver.txt
+          VER=$(grep -oE 'Created version [0-9]+' /tmp/ver.txt | grep -oE '[0-9]+' | tail -1)
+          echo "Versão detectada: $VER"
+          if [ -z "$VER" ]; then
+            echo "ERRO: não conseguiu extrair número da versão. Saída completa do 'clasp version':"
+            cat /tmp/ver.txt
+            exit 1
+          fi
+          echo "VER=$VER" >> "$GITHUB_ENV"
+
+      # r135d: este pipeline mantém uma implantação PRÓPRIA (ID guardado em
+      # apps-script/.site_deployment_id). Na primeira vez cria uma nova; nas
+      # próximas, reaproveita o ID salvo.
+      - name: Atualizar (ou criar) a implantação do site
+        run: |
+          set -e -o pipefail
+          MARKER="apps-script/.site_deployment_id"
+          if [ -f "$MARKER" ] && [ -s "$MARKER" ]; then
+            SITE_DEP_ID=$(tr -d '[:space:]' < "$MARKER")
+            echo "Usando implantação já criada por este pipeline: $SITE_DEP_ID"
+            clasp deploy -i "$SITE_DEP_ID" -V "$VER" --description "Auto (site) v$VER $ESPERADA" 2>&1 | tee /tmp/deploy_out.txt
+          else
+            echo "Nenhuma implantação própria ainda — criando uma NOVA para o site."
+            clasp deploy -V "$VER" --description "Site FC (auto) v$VER $ESPERADA" 2>&1 | tee /tmp/deploy_out.txt
+            SITE_DEP_ID=$(grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deploy_out.txt | tail -1)
+            if [ -z "$SITE_DEP_ID" ]; then
+              echo "ERRO: não consegui extrair o ID da implantação nova criada."
+              exit 1
+            fi
+            echo "Implantação nova criada: $SITE_DEP_ID"
+            echo -n "$SITE_DEP_ID" > "$MARKER"
+          fi
+          echo "SITE_DEP_ID=$SITE_DEP_ID" >> "$GITHUB_ENV"
+
+      - name: Atualizar as demais implantações do projeto (melhor esforço)
+        continue-on-error: true
+        run: |
+          echo "--- Listando implantações ---"
+          clasp deployments 2>&1 | tee /tmp/deps.txt
+          grep -oE 'AKfycb[A-Za-z0-9_-]+' /tmp/deps.txt | sort -u | while read DEP_ID; do
+            if [ "$DEP_ID" = "$SITE_DEP_ID" ]; then
+              echo "Pulando $DEP_ID (já atualizada no passo anterior)"
+              continue
+            fi
+            echo "Atualizando deployment extra: $DEP_ID -> versão $VER"
+            clasp deploy -i "$DEP_ID" -V "$VER" --description "Auto v$VER $ESPERADA" || echo "ERRO ao atualizar $DEP_ID (não crítico)"
+          done
+          echo "--- Concluído ---"
+
+      # r171: sem continue-on-error — se a URL não servir a versão nova, a execução fica VERMELHA
+      - name: Provar que a URL da implantação do pipeline foi atualizada
+        run: |
+          set -o pipefail
+          URL="https://script.google.com/macros/s/$SITE_DEP_ID/exec"
+          echo "Versão esperada: $ESPERADA"
+          echo "URL verificada (implantação do pipeline): $URL"
+          {
+            echo "=== PROVA DE PUBLICACAO — $(date -u +'%Y-%m-%d %H:%M:%S UTC') ==="
+            echo "Versao esperada: $ESPERADA"
+            echo "VER (numero interno do clasp): $VER"
+            echo "SITE_DEP_ID (implantacao do pipeline): $SITE_DEP_ID"
+            echo "URL: $URL"
+            echo ""
+          } > /tmp/prova.txt
+          OK=0
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            RESP=$(curl -sL --max-time 20 "$URL" || echo "FALHA_CURL")
+            echo "--- tentativa $i ---" >> /tmp/prova.txt
+            echo "$RESP" | grep -oE '"versao":"[^"]*"' >> /tmp/prova.txt || echo "$RESP" | head -c 300 >> /tmp/prova.txt
+            echo "" >> /tmp/prova.txt
+            if echo "$RESP" | grep -q "\"$ESPERADA\""; then
+              echo "OK na tentativa $i"
+              echo ">>> RESULTADO: SUCESSO na tentativa $i <<<" >> /tmp/prova.txt
+              OK=1
+              break
+            fi
+            sleep 10
+          done
+          cp /tmp/prova.txt _PROVA_DEPLOY.txt
+          if [ "$OK" != "1" ]; then
+            echo ">>> RESULTADO: FALHOU apos 12 tentativas (~2 min) <<<" >> _PROVA_DEPLOY.txt
+          fi
+          cat _PROVA_DEPLOY.txt
+          exit $((1 - OK))
+
+      - name: Publicar arquivos de controle no repositório (marcador + prova)
+        if: always()
+        continue-on-error: true
+        run: |
+          git config user.name "fc-deploy-bot"
+          git config user.email "actions@github.com"
+          git add -f apps-script/.site_deployment_id 2>/dev/null || true
+          if [ -f _PROVA_DEPLOY.txt ]; then git add _PROVA_DEPLOY.txt; fi
+          if git diff --cached --quiet; then
+            echo "nada para commitar"
+            exit 0
+          fi
+          git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)"
+          # r136b: se outra execução já publicou nesse meio-tempo, faz rebase e tenta de novo.
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "push OK na tentativa $i"
+              exit 0
+            fi
+            echo "push falhou (tentativa $i) — rebase e tenta de novo"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; git reset --soft origin/main; git add -f apps-script/.site_deployment_id _PROVA_DEPLOY.txt 2>/dev/null; git commit -m "debug: marcador de implantacao + prova de publicacao (automatico)"; }
+            sleep 3
+          done
+          echo "AVISO: nao consegui publicar o log de debug apos 5 tentativas (nao critico)"
