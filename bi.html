@@ -217,6 +217,16 @@
         .rec-analise li span { color: var(--fc-texto-suave); font-size: .86rem; }
         .sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+        /* r186: painel de escolha das abas para o PDF das telas */
+        .painel-pdf-telas { position: fixed; inset: 0; z-index: 1000; background: rgba(0,21,40,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .pdf-telas-caixa { background: #fff; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,21,40,.3); padding: 18px 20px; width: 100%; max-width: 440px; }
+        .pdf-telas-caixa h3 { font-size: 1.05rem; font-weight: 700; color: var(--fc-primaria); margin: 0 0 6px; }
+        .pdf-telas-dica { font-size: .82rem; color: var(--fc-texto-suave); margin-bottom: 10px; }
+        .pdf-telas-lista { border: 1px solid var(--fc-borda); border-radius: 10px; padding: 6px; max-height: 300px; overflow-y: auto; }
+        .pdf-telas-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: .9rem; cursor: pointer; margin: 0; }
+        .pdf-telas-item:hover { background: var(--fc-fundo); }
+        .pdf-telas-item input { accent-color: var(--fc-acao); }
+        .pdf-telas-msg { font-size: .84rem; color: var(--fc-primaria); min-height: 1.2em; margin-top: 8px; }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
     </style>
 </head>
@@ -228,11 +238,31 @@
             <div class="topo-dir d-flex align-items-center gap-2">
                 <div class="info-dados" id="info-dados">Carregando dados…</div>
                 <button class="btn-topo" id="btn-atualizar" onclick="atualizarDados(true)" disabled>⟳ Atualizar dados</button>
+                <!-- r186: exportar as telas (abas) em PDF -->
+                <button class="btn-topo" id="btn-pdf-telas" onclick="abrirPainelPDFTelas()" aria-haspopup="dialog" disabled>⬇ PDF</button>
             </div>
         </div>
     </div>
 
     <div class="dica-obs hidden" id="dica-obs" role="tooltip"></div>
+
+    <!-- r186: escolha das abas para o PDF das telas -->
+    <div class="painel-pdf-telas hidden" id="painel-pdf-telas" role="dialog" aria-modal="true" aria-labelledby="pdf-telas-titulo">
+        <div class="pdf-telas-caixa">
+            <h3 id="pdf-telas-titulo">Exportar telas em PDF</h3>
+            <p class="pdf-telas-dica">Escolha as abas. Cada aba sai como está na tela agora: mesmos filtros, cards e tabelas abertas ou fechadas.</p>
+            <div class="d-flex gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-fc-contorno" onclick="marcarTodasPDFTelas(true)">Marcar todas</button>
+                <button type="button" class="btn btn-sm btn-fc-contorno" onclick="marcarTodasPDFTelas(false)">Desmarcar todas</button>
+            </div>
+            <div id="pdf-telas-lista" class="pdf-telas-lista"></div>
+            <div class="pdf-telas-msg" id="pdf-telas-msg" role="status" aria-live="polite"></div>
+            <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fecharPainelPDFTelas()">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-verde" id="btn-pdf-telas-gerar" onclick="gerarPDFTelas()">Gerar PDF</button>
+            </div>
+        </div>
+    </div>
 
     <!-- r146: painel da analise economico-financeira -->
     <div class="painel-analise hidden" id="painel-analise" role="dialog" aria-modal="true" aria-labelledby="analise-titulo">
@@ -1353,6 +1383,8 @@ async function atualizarDados(forcar, silencioso) {
     } finally {
         carregandoAgora = false;
         btn.disabled = false;
+        const btnPdf = document.getElementById('btn-pdf-telas');   // r186
+        if (btnPdf) btnPdf.disabled = !estado.db;
         document.getElementById('carregando').style.display = 'none';
     }
 }
@@ -3532,6 +3564,403 @@ function graficosGenericos(a) {
     });
     return out;
 }
+// =====================================================================
+// r186: EXPORTAR TELAS EM PDF (uma ou várias abas no mesmo arquivo)
+// O PDF é remontado peça por peça a partir do que está na tela:
+// cards e tabelas entram como TEXTO (nítido e leve) e os gráficos como
+// imagem comprimida (PNG ou JPEG, o que ficar menor) em resolução de
+// impressão. Tabelas com níveis saem do jeito que estão (aberto/fechado).
+// Nada aqui altera cálculos, filtros ou a análise de IA.
+// =====================================================================
+const PDF_TELAS = { M: 12, TOPO: 16, DPI_GRAFICO: 165, QUALIDADE_JPEG: 0.82 };
+
+function abrirPainelPDFTelas() {
+    const p = document.getElementById('painel-pdf-telas');
+    document.getElementById('pdf-telas-lista').innerHTML = ABAS.map(a =>
+        '<label class="pdf-telas-item"><input type="checkbox" value="' + a.id + '"' + (a.id === estado.aba ? ' checked' : '') + '> ' + esc(a.titulo) + '</label>').join('');
+    document.getElementById('pdf-telas-msg').textContent = '';
+    document.getElementById('btn-pdf-telas-gerar').disabled = false;
+    p.classList.remove('hidden');
+    const primeiro = p.querySelector('input[type=checkbox]');
+    if (primeiro) primeiro.focus();
+}
+function fecharPainelPDFTelas() {
+    document.getElementById('painel-pdf-telas').classList.add('hidden');
+    const b = document.getElementById('btn-pdf-telas');
+    if (b) b.focus();
+}
+function marcarTodasPDFTelas(v) {
+    document.querySelectorAll('#pdf-telas-lista input[type=checkbox]').forEach(c => { c.checked = v; });
+}
+
+// Ajusta o texto para as fontes padrão do PDF sem perder quebras de linha nem células mescladas
+function prepararDocPDFTelas(doc) {
+    const san = t => Array.isArray(t) ? t.map(sanearPDF) : sanearPDF(t);
+    const sanCel = c => (c && typeof c === 'object') ? Object.assign({}, c, { content: sanearPDF(c.content) }) : sanearPDF(c);
+    const txt = doc.text.bind(doc), quebra = doc.splitTextToSize.bind(doc), larg = doc.getTextWidth.bind(doc), tab = doc.autoTable.bind(doc);
+    doc.text = (t, ...r) => txt(san(t), ...r);
+    doc.splitTextToSize = (t, ...r) => quebra(san(t), ...r);
+    doc.getTextWidth = t => larg(sanearPDF(t));
+    doc.autoTable = o => tab(Object.assign({}, o, { head: (o.head || []).map(l => l.map(sanCel)), body: (o.body || []).map(l => l.map(sanCel)) }));
+    return doc;
+}
+function esperarQuadros(ms) {
+    return new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(ok, ms || 60))));
+}
+function corHexParaRGB(cor, padrao) {
+    const m = String(cor || '').trim().match(/^#?([0-9a-f]{6})$/i);
+    if (!m) return padrao || [0, 21, 40];
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function textoLimpo(el) {
+    if (!el) return '';
+    const c = el.cloneNode(true);
+    c.querySelectorAll('button, .barra-part, .kpi-alca, script, style').forEach(x => x.remove());
+    // partes que na tela ficam em linha própria (ex.: % abaixo do valor na DRE) viram quebra de linha
+    c.querySelectorAll('br').forEach(x => x.replaceWith('\n'));
+    c.querySelectorAll('div, p, li, .pct-dre, .sub').forEach(x => x.before('\n'));
+    return (c.textContent || '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+function cortarTextoPDF(doc, t, largura) {
+    t = String(t || '');
+    if (doc.getTextWidth(t) <= largura) return t;
+    while (t.length > 1 && doc.getTextWidth(t + '…') > largura) t = t.slice(0, -1);
+    return t + '…';
+}
+// Filtros ativos visíveis agora (globais + locais da aba), com os nomes escolhidos
+function filtrosAtivosTexto() {
+    const partes = [];
+    Object.keys(filtros).forEach(id => {
+        const ctl = filtros[id];
+        const b = document.getElementById('btn-' + id);
+        if (!b || !document.body.contains(b)) return;
+        const sel = ctl.selecionados;
+        if (!sel || !sel.size) return;
+        const nomes = ctl.opcoes.filter(o => sel.has(o.k)).map(o => o.l);
+        const lista = nomes.length > 6 ? nomes.slice(0, 6).join(', ') + ' e mais ' + (nomes.length - 6) : nomes.join(', ');
+        partes.push(ctl.rotulo + ': ' + (lista || sel.size + ' selecionados'));
+    });
+    const barra = document.getElementById('barra-selecao');
+    if (barra && !barra.classList.contains('hidden')) {
+        const b = barra.querySelector('b');
+        if (b) partes.push('Filtrado pelo gráfico: ' + b.textContent.trim());
+    }
+    return partes.length ? partes.join('  ·  ') : 'Sem filtros (todos os dados)';
+}
+function lerCards(seletor) {
+    return Array.from(document.querySelectorAll(seletor)).map(c => {
+        const valorEl = c.querySelector('.kpi-valor');
+        return {
+            rot: textoLimpo(c.querySelector('.kpi-rotulo')),
+            valor: textoLimpo(valorEl),
+            sub: textoLimpo(c.querySelector('.kpi-sub')),
+            cor: (c.style.getPropertyValue('--kpi-cor') || '').trim(),
+            neg: valorEl ? valorEl.classList.contains('kpi-negativo') : false,
+            pos: valorEl ? valorEl.classList.contains('kpi-positivo') : false
+        };
+    }).filter(c => c.rot || c.valor);
+}
+function lerTabela(t) {
+    const cab = Array.from(t.querySelectorAll('thead th')).map(th => textoLimpo(th));
+    const numCols = Array.from(t.querySelectorAll('thead th')).map(th => th.classList.contains('num'));
+    const linhas = [];
+    t.querySelectorAll('tbody tr').forEach(tr => {
+        if (tr.offsetParent === null && getComputedStyle(tr).display === 'none') return;
+        const tds = Array.from(tr.children).filter(x => x.tagName === 'TD' || x.tagName === 'TH');
+        if (!tds.length) return;
+        let nivel = 0;
+        const m = tr.className.match(/nivel-(\d)/);
+        if (m) nivel = Number(m[1]);
+        linhas.push({
+            cel: tds.map(td => textoLimpo(td)),
+            num: tds.map((td, i) => td.classList.contains('num') || !!numCols[i]),
+            neg: tds.map(td => td.classList.contains('valor-neg') || !!td.querySelector('.valor-neg, .kpi-negativo')),
+            span: tds.map(td => Number(td.getAttribute('colspan') || 1)),
+            total: tr.classList.contains('total') || tr.classList.contains('linha-total'),
+            sel: tr.classList.contains('selecionada'),
+            nivel: nivel,
+            grupo: tr.classList.contains('nivel-0') || tr.classList.contains('linha-grupo')
+        });
+    });
+    return { cab: cab, numCols: numCols, linhas: linhas };
+}
+// Lê o conteúdo da aba aberta, na ordem da tela
+function lerConteudoAba() {
+    const raiz = document.getElementById('conteudo-aba');
+    const blocos = [];
+    const cardsAba = lerCards('#conteudo-aba .kpi-card');
+    raiz.querySelectorAll('.bi-painel').forEach(p => {
+        if (p.closest('.painel-analise')) return;
+        const h3 = p.querySelector('h3');
+        const info = p.querySelector('.painel-cabeca .small');
+        const titulo = textoLimpo(h3) + (info && textoLimpo(info) ? ' — ' + textoLimpo(info) : '');
+        const explica = textoLimpo(p.querySelector('.explica'));
+        const itens = [];
+        p.querySelectorAll('canvas, table.tabela-bi, .aviso-vazio').forEach(el => {
+            if (el.tagName === 'CANVAS') {
+                const ch = (window.Chart && Chart.getChart) ? Chart.getChart(el) : null;
+                if (ch && el.width && el.height) itens.push({ tipo: 'grafico', chart: ch, canvas: el });
+            } else if (el.tagName === 'TABLE') {
+                if (el.closest('table.tabela-bi') !== el) return;
+                itens.push({ tipo: 'tabela', dados: lerTabela(el) });
+            } else itens.push({ tipo: 'texto', texto: textoLimpo(el) });
+        });
+        if (!itens.length) return;
+        const pai = p.parentElement;
+        const lado = pai && (pai.classList.contains('grade-2')) ? pai : null;
+        blocos.push({ titulo: titulo, explica: explica, itens: itens, lado: lado });
+    });
+    return { cardsAba: cardsAba, blocos: blocos };
+}
+// Imagem do gráfico em resolução de impressão; escolhe o formato que ficar menor
+function imagemGraficoPDF(ch, larguraMM) {
+    const alvoPx = Math.round(larguraMM / 25.4 * PDF_TELAS.DPI_GRAFICO);
+    const cssW = ch.width || ch.canvas.clientWidth || 600;
+    const ratio = Math.max(1, Math.min(3, alvoPx / cssW));
+    const dprAntes = ch.options.devicePixelRatio;
+    ch.options.devicePixelRatio = ratio;
+    ch.resize();
+    ch.update('none');
+    const src = ch.canvas;
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(src, 0, 0);
+    const png = c.toDataURL('image/png');
+    const jpg = c.toDataURL('image/jpeg', PDF_TELAS.QUALIDADE_JPEG);
+    ch.options.devicePixelRatio = dprAntes;
+    const usarJpg = jpg.length < png.length * 0.85;
+    return { data: usarJpg ? jpg : png, formato: usarJpg ? 'JPEG' : 'PNG', w: c.width, h: c.height };
+}
+
+async function gerarPDFTelas() {
+    const escolhidas = Array.from(document.querySelectorAll('#pdf-telas-lista input:checked')).map(c => c.value);
+    const msg = document.getElementById('pdf-telas-msg');
+    if (!escolhidas.length) { msg.textContent = 'Escolha pelo menos uma aba.'; return; }
+    const btn = document.getElementById('btn-pdf-telas-gerar');
+    btn.disabled = true;
+    const abaOriginal = estado.aba, rolagem = window.scrollY;
+    const animAntes = Chart.defaults.animation;
+    try {
+        msg.textContent = 'Preparando…';
+        await carregarLib('jspdf'); await carregarLib('autotable');
+        const { jsPDF } = window.jspdf;
+        const doc = prepararDocPDFTelas(new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true }));
+        const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+        const M = PDF_TELAS.M, LW = W - 2 * M, TOPO = PDF_TELAS.TOPO, YINI = TOPO + 8, YMAX = H - M - 4;
+        const logoEl = document.querySelector('.rel-topo img.topo-logo');
+        let logoProp = 0, logoDados = '';
+        if (logoEl && logoEl.naturalWidth) {
+            logoProp = logoEl.naturalWidth / logoEl.naturalHeight;
+            // logomarca reduzida para a resolução de impressão (arquivo menor), mesma proporção
+            const lw = Math.min(logoEl.naturalWidth, 720), lh = Math.round(lw / logoProp);
+            const lc = document.createElement('canvas'); lc.width = lw; lc.height = lh;
+            lc.getContext('2d').drawImage(logoEl, 0, 0, lw, lh);
+            logoDados = lc.toDataURL('image/png');
+        }
+        const geradoEm = new Date().toLocaleString('pt-BR');
+        let tituloAbaAtual = '';
+        function cabecalho() {
+            doc.setFillColor(0, 21, 40); doc.rect(0, 0, W, TOPO, 'F');
+            if (logoProp) {
+                let h = 9, w = h * logoProp;           // logomarca sempre na proporção original
+                if (w > 60) { w = 60; h = w / logoProp; }
+                doc.addImage(logoDados, 'PNG', M, (TOPO - h) / 2, w, h, 'logo-fc', 'FAST');
+            }
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5);
+            doc.text('B.I. Formula Code' + (tituloAbaAtual ? ' — ' + tituloAbaAtual : ''), W - M, TOPO / 2 + 1.5, { align: 'right' });
+            doc.setTextColor(31, 43, 56); doc.setFont('helvetica', 'normal');
+        }
+        let y = YINI, primeiraPagina = true;
+        const comCabecalho = {};
+        function cabecalhoSeFaltar() {
+            const pg = doc.internal.getCurrentPageInfo().pageNumber;
+            if (!comCabecalho[pg]) { comCabecalho[pg] = true; cabecalho(); }
+        }
+        function novaPagina() {
+            if (!primeiraPagina) doc.addPage();
+            primeiraPagina = false;
+            cabecalhoSeFaltar();
+            y = YINI;
+        }
+        function garantir(altura) { if (y + altura > YMAX) novaPagina(); }
+        function desenharCards(cards, porLinha) {
+            if (!cards.length) return;
+            const gap = 3, cw = (LW - (porLinha - 1) * gap) / porLinha, chh = 15.5;
+            const linhas = Math.ceil(cards.length / porLinha);
+            for (let l = 0; l < linhas; l++) {
+                garantir(chh + gap);
+                cards.slice(l * porLinha, (l + 1) * porLinha).forEach((c, i) => {
+                    const x = M + i * (cw + gap);
+                    doc.setDrawColor(230, 234, 240); doc.setFillColor(255, 255, 255); doc.setLineWidth(0.2);
+                    doc.roundedRect(x, y, cw, chh, 1.6, 1.6, 'FD');
+                    const rgb = corHexParaRGB(c.cor, [0, 21, 40]);
+                    doc.setFillColor(rgb[0], rgb[1], rgb[2]); doc.rect(x + 0.4, y, cw - 0.8, 1.1, 'F');
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.3); doc.setTextColor(107, 123, 141);
+                    doc.text(cortarTextoPDF(doc, String(c.rot).toUpperCase(), cw - 5), x + 2.5, y + 5);
+                    doc.setFontSize(10.5);
+                    if (c.neg) doc.setTextColor(192, 57, 43); else if (c.pos) doc.setTextColor(63, 143, 0); else doc.setTextColor(0, 21, 40);
+                    doc.text(cortarTextoPDF(doc, c.valor, cw - 5), x + 2.5, y + 10);
+                    if (c.sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(107, 123, 141); doc.text(cortarTextoPDF(doc, c.sub, cw - 5), x + 2.5, y + 13.6); }
+                });
+                y += chh + gap;
+            }
+            doc.setTextColor(31, 43, 56); doc.setFont('helvetica', 'normal');
+            y += 2;
+        }
+        function tituloBloco(b, largura, x, yy) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0, 21, 40);
+            doc.text(cortarTextoPDF(doc, b.titulo || '', largura), x, yy + 3.5);
+            let alt = 5;
+            if (b.explica) {
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(107, 123, 141);
+                const ls = doc.splitTextToSize(b.explica, largura).slice(0, 3);
+                doc.text(ls, x, yy + 7.5);
+                alt += ls.length * 3 + 1;
+            }
+            doc.setTextColor(31, 43, 56); doc.setFont('helvetica', 'normal');
+            return alt;
+        }
+        function alturaTitulo(b, largura) {
+            if (!b.explica) return 5;
+            doc.setFontSize(7);
+            return 5 + Math.min(3, doc.splitTextToSize(b.explica, largura).length) * 3 + 1;
+        }
+        function graficoNoPDF(it, larguraMM, maxAlt) {
+            const img = imagemGraficoPDF(it.chart, larguraMM);
+            let w = larguraMM, h = w * img.h / img.w;
+            if (h > maxAlt) { h = maxAlt; w = h * img.w / img.h; }
+            return { img: img, w: w, h: h };
+        }
+        function tabelaNoPDF(td) {
+            if (!td.linhas.length) return;
+            const nCols = Math.max(td.cab.length, ...td.linhas.map(l => l.span.reduce((a, b) => a + b, 0)));
+            const head = td.cab.length ? [td.cab] : undefined;
+            const body = td.linhas.map(l => l.cel.map((t, i) => (l.span[i] > 1 ? { content: t, colSpan: l.span[i] } : t)));
+            const colStyles = {};
+            for (let i = 0; i < nCols; i++) if (td.numCols[i]) colStyles[i] = { halign: 'right' };
+            garantir(14);
+            doc.autoTable({
+                startY: y, head: head, body: body, theme: 'plain',
+                margin: { left: M, right: M, top: YINI, bottom: M + 4 },
+                styles: { font: 'helvetica', fontSize: 7.2, cellPadding: { top: 1.1, bottom: 1.1, left: 1.6, right: 1.6 }, textColor: [31, 43, 56], lineColor: [238, 241, 245], lineWidth: { bottom: 0.15 }, overflow: 'linebreak' },
+                headStyles: { fillColor: [244, 246, 249], textColor: [0, 21, 40], fontStyle: 'bold', fontSize: 6.6, lineWidth: { bottom: 0.4 }, lineColor: [230, 234, 240] },
+                columnStyles: colStyles,
+                didParseCell: d => {
+                    if (d.section !== 'body') { if (td.numCols[d.column.index]) d.cell.styles.halign = 'right'; return; }
+                    const l = td.linhas[d.row.index];
+                    if (!l) return;
+                    const idx = d.column.index;
+                    if (l.num[idx]) d.cell.styles.halign = 'right';
+                    if (idx === 0 && l.nivel) d.cell.styles.cellPadding = { top: 1.1, bottom: 1.1, left: 1.6 + l.nivel * 4, right: 1.6 };
+                    if (l.nivel === 1) d.cell.styles.fillColor = [252, 253, 254];
+                    if (l.nivel >= 2) { d.cell.styles.fillColor = [246, 248, 250]; d.cell.styles.textColor = [71, 83, 95]; }
+                    if (l.grupo) d.cell.styles.fontStyle = 'bold';
+                    if (l.sel) d.cell.styles.fillColor = [234, 246, 222];
+                    if (l.total) { d.cell.styles.fontStyle = 'bold'; d.cell.styles.textColor = [0, 21, 40]; d.cell.styles.fillColor = [250, 251, 253]; d.cell.styles.lineWidth = { top: 0.4 }; d.cell.styles.lineColor = [200, 208, 218]; }
+                    if (l.neg[idx]) d.cell.styles.textColor = [192, 57, 43];
+                },
+                didDrawPage: () => { cabecalhoSeFaltar(); }   // páginas novas abertas pela tabela ganham o cabeçalho
+            });
+            y = doc.lastAutoTable.finalY + 6;
+        }
+
+        Chart.defaults.animation = false;
+        for (let n = 0; n < escolhidas.length; n++) {
+            const id = escolhidas[n];
+            const def = ABAS.find(a => a.id === id);
+            msg.textContent = 'Montando “' + def.titulo + '” (' + (n + 1) + ' de ' + escolhidas.length + ')…';
+            trocarAba(id);
+            await esperarQuadros(120);
+            tituloAbaAtual = def.titulo;
+            novaPagina();
+            // Título da aba e filtros
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(0, 21, 40);
+            doc.text(def.titulo, M, y + 4); y += 7.5;
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(107, 123, 141);
+            const fl = doc.splitTextToSize('Filtros: ' + filtrosAtivosTexto(), LW);
+            doc.text(fl, M, y + 2); y += fl.length * 3.2 + 3;
+            doc.setTextColor(31, 43, 56);
+            // Cards principais (na ordem da tela) e cards da aba
+            desenharCards(lerCards('#kpi-linha .kpi-card'), 6);
+            const cont = lerConteudoAba();
+            desenharCards(cont.cardsAba, 4);
+            // Blocos (gráficos e tabelas)
+            for (let i = 0; i < cont.blocos.length; i++) {
+                const b = cont.blocos[i], prox = cont.blocos[i + 1];
+                const soGrafico = x => x && x.itens.length === 1 && x.itens[0].tipo === 'grafico';
+                if (b.lado && prox && prox.lado === b.lado && soGrafico(b) && soGrafico(prox)) {
+                    // dois gráficos lado a lado (como na tela)
+                    const gap = 6, w2 = (LW - gap) / 2, maxAlt = 74;
+                    const g1 = graficoNoPDF(b.itens[0], w2, maxAlt), g2 = graficoNoPDF(prox.itens[0], w2, maxAlt);
+                    const tAlt = Math.max(alturaTitulo(b, w2), alturaTitulo(prox, w2));
+                    garantir(tAlt + Math.max(g1.h, g2.h) + 4);
+                    tituloBloco(b, w2, M, y); tituloBloco(prox, w2, M + w2 + gap, y);
+                    doc.addImage(g1.img.data, g1.img.formato, M + (w2 - g1.w) / 2, y + tAlt, g1.w, g1.h, undefined, 'FAST');
+                    doc.addImage(g2.img.data, g2.img.formato, M + w2 + gap + (w2 - g2.w) / 2, y + tAlt, g2.w, g2.h, undefined, 'FAST');
+                    y += tAlt + Math.max(g1.h, g2.h) + 6;
+                    i++;
+                    continue;
+                }
+                // gráfico que na tela ocupa meia largura (grade de 2 colunas) sai com meia largura
+                const larguraG = b.lado ? (LW - 6) / 2 : LW, altMaxG = b.lado ? 74 : 92;
+                const tAlt = alturaTitulo(b, LW);
+                const primeiro = b.itens[0];
+                let gPrim = null;
+                if (primeiro.tipo === 'grafico') { gPrim = graficoNoPDF(primeiro, larguraG, altMaxG); garantir(tAlt + gPrim.h + 4); }
+                else garantir(tAlt + 16);
+                tituloBloco(b, LW, M, y); y += tAlt;
+                for (const it of b.itens) {
+                    if (it.tipo === 'grafico') {
+                        const g = (it === primeiro && gPrim) ? gPrim : graficoNoPDF(it, larguraG, altMaxG);
+                        garantir(g.h + 4);
+                        doc.addImage(g.img.data, g.img.formato, M + (larguraG - g.w) / 2, y, g.w, g.h, undefined, 'FAST');
+                        y += g.h + 6;
+                    } else if (it.tipo === 'tabela') {
+                        tabelaNoPDF(it.dados);
+                    } else if (it.texto) {
+                        doc.setFontSize(8); doc.setTextColor(107, 123, 141);
+                        const ls = doc.splitTextToSize(it.texto, LW);
+                        garantir(ls.length * 3.6 + 3);
+                        doc.text(ls, M, y + 3); y += ls.length * 3.6 + 4;
+                        doc.setTextColor(31, 43, 56);
+                    }
+                }
+            }
+        }
+        // Rodapé em todas as páginas
+        const total = doc.internal.getNumberOfPages();
+        for (let pg = 1; pg <= total; pg++) {
+            doc.setPage(pg);
+            doc.setFontSize(7); doc.setTextColor(107, 123, 141); doc.setFont('helvetica', 'normal');
+            doc.text('Gerado em ' + geradoEm, M, H - 5);
+            doc.text('Página ' + pg + ' de ' + total, W - M, H - 5, { align: 'right' });
+        }
+        msg.textContent = 'Salvando…';
+        const h = new Date();
+        const nome = 'BI_Formula_Code_' + h.getFullYear() + String(h.getMonth() + 1).padStart(2, '0') + String(h.getDate()).padStart(2, '0') + '_' +
+            String(h.getHours()).padStart(2, '0') + String(h.getMinutes()).padStart(2, '0') + '.pdf';
+        doc.save(nome);
+        msg.textContent = 'PDF gerado.';
+        setTimeout(fecharPainelPDFTelas, 900);
+    } catch (e) {
+        msg.textContent = 'Erro ao gerar o PDF: ' + e.message;
+    } finally {
+        Chart.defaults.animation = animAntes;
+        trocarAba(abaOriginal);
+        await esperarQuadros(30);
+        window.scrollTo(0, rolagem);
+        btn.disabled = false;
+    }
+}
+
+document.addEventListener('keydown', e => {   // r186: Esc fecha o painel do PDF
+    const p = document.getElementById('painel-pdf-telas');
+    if (e.key === 'Escape' && p && !p.classList.contains('hidden')) fecharPainelPDFTelas();
+});
+
 // ---------------- Inicio ----------------
 function iniciar() {
     if (!tokenSessao || !cpfLogado) {
