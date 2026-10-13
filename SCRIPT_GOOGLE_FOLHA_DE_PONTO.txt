@@ -612,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-13-r186';
+const VERSAO_SCRIPT = '2026-10-13-r188';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3570,8 +3570,12 @@ function enviarPesquisaNps(dados, cpf) {
   try {
     if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Apenas diretores podem enviar a pesquisa' };
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
-    var email = String((d && d.email) || '').trim();
-    if (!email || !d.auditoriaId) return { ok: false, erro: 'E-mail e ID obrigatórios' };
+    // r187: vários destinatários vão num ÚNICO e-mail, com um ÚNICO link.
+    // Aceita d.emails (lista) ou d.email (texto, podendo ter vários separados por vírgula/;).
+    var brutos = (d && Array.isArray(d.emails)) ? d.emails.join(',') : String((d && d.email) || '');
+    var listaEmails = [];
+    perfSepararEmails(brutos).forEach(function (x) { if (listaEmails.indexOf(x) === -1) listaEmails.push(x); });
+    if (!listaEmails.length || !d.auditoriaId) return { ok: false, erro: 'E-mail e ID obrigatórios' };
     var aba = getOuCriarAbaAuditoria();
     var todas = aba.getDataRange().getValues();
     var achou = false, cliente = '', unidade = '', dataAud = '', tipoAv = '', status = '';
@@ -3581,7 +3585,11 @@ function enviarPesquisaNps(dados, cpf) {
     if (!achou) return { ok: false, erro: 'Auditoria não encontrada' };
     if (status !== 'CONCLUIDO') return { ok: false, erro: 'A pesquisa só pode ser enviada para análises concluídas' };
     if (!npsTipoPermiteEnvio(tipoAv)) return { ok: false, erro: 'A pesquisa CSAT/NPS só é enviada em análises DURANTE A OPERAÇÃO' };
-    var link = npsGerarLinkEnvio(d.auditoriaId, cliente, unidade, dataAud, email, d.urlBaseApp);
+    // r187: a pesquisa de cada análise aceita UMA resposta. Já respondida = não envia de novo.
+    var respondida = npsRespostaDaAuditoria(d.auditoriaId);
+    if (respondida) return { ok: false, erro: 'A pesquisa desta análise já foi respondida' + (respondida.dataResposta ? ' em ' + formatarDataBR(respondida.dataResposta.slice(0, 10)) : '') + '. Ela aceita uma única resposta.' };
+    var chaveEmails = listaEmails.slice().sort().join(', ');
+    var link = npsGerarLinkEnvio(d.auditoriaId, cliente, unidade, dataAud, chaveEmails, d.urlBaseApp);
     if (!link) return { ok: false, erro: 'Não foi possível gerar o link da pesquisa (endereço do app inválido)' };
     var dataBR = formatarDataBR(dataAud);
     var assunto = 'Pesquisa de satisfação — inventário ' + cliente + ' / ' + unidade + (dataBR ? ' (' + dataBR + ')' : '');
@@ -3597,9 +3605,9 @@ function enviarPesquisaNps(dados, cpf) {
       + '<a href="' + link + '" style="display:inline-block;padding:12px 28px;background:#5DC500;color:#001528;text-decoration:none;border-radius:8px;font-weight:700">Responder a pesquisa</a></div>'
       + '</div><div style="background:#001528;padding:16px 24px;text-align:center;color:rgba(255,255,255,.4);font-size:11px">'
       + '<strong style="color:#5DC500">Formula Code</strong> — Tecnologia, Gestão e Automação ao Seu Alcance</div></div>';
-    MailApp.sendEmail(email, assunto, '', { htmlBody: corpoHTML, inlineImages: { fclogo: fcLogoEmailBlob() }, name: 'Formula Code — Pesquisa de Satisfação', replyTo: 'lael@formulacode.tec.br' });
-    try { registrarClienteFC(cliente, unidade, email); } catch (eReg) { Logger.log('registrarClienteFC (pesquisa): ' + eReg.message); }
-    return { ok: true, mensagem: 'Pesquisa enviada para ' + email };
+    MailApp.sendEmail(listaEmails.join(','), assunto, '', { htmlBody: corpoHTML, inlineImages: { fclogo: fcLogoEmailBlob() }, name: 'Formula Code — Pesquisa de Satisfação', replyTo: 'lael@formulacode.tec.br' });
+    try { registrarClienteFC(cliente, unidade, listaEmails.join(', ')); } catch (eReg) { Logger.log('registrarClienteFC (pesquisa): ' + eReg.message); }
+    return { ok: true, mensagem: 'Pesquisa enviada em um único e-mail para ' + listaEmails.join(', '), emails: listaEmails };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
@@ -5265,6 +5273,15 @@ function npsLerRespostas() {
   return npsAtualizarNomes(out);
 }
 
+// r187: a pesquisa de cada análise aceita UMA resposta, qualquer que seja o link usado
+// (inclui links de envios anteriores). Devolve o envio já respondido, se houver.
+function npsRespostaDaAuditoria(auditoriaId, envios) {
+  var lista = envios || npsLerEnvios();
+  var id = String(auditoriaId);
+  for (var i = 0; i < lista.length; i++) { if (lista[i].auditoriaId === id && lista[i].respondida) return lista[i]; }
+  return null;
+}
+
 function npsBuscarEnvio(token) {
   var envios = npsLerEnvios();
   for (var i = 0; i < envios.length; i++) { if (envios[i].token === token) return envios[i]; }
@@ -5307,7 +5324,8 @@ function npsObterPesquisa(dados) {
     if (!t) return { ok: false, erro: 'Link inválido.' };
     var env = npsBuscarEnvio(t);
     if (!env) return { ok: false, erro: 'Link inválido ou expirado.' };
-    return { ok: true, cliente: env.cliente, unidade: env.unidade, dataAuditoria: formatarDataBR(env.dataAuditoria), respondida: env.respondida };
+    var jaRespondida = env.respondida || !!npsRespostaDaAuditoria(env.auditoriaId);   // r187: uma resposta por análise
+    return { ok: true, cliente: env.cliente, unidade: env.unidade, dataAuditoria: formatarDataBR(env.dataAuditoria), respondida: jaRespondida };
   } catch (e) {
     Logger.log('npsObterPesquisa: ' + e.message);
     return { ok: false, erro: 'Não foi possível carregar a pesquisa. Tente novamente em instantes.' };
@@ -5355,7 +5373,7 @@ function npsGravarResposta(dados) {
     lock.waitLock(15000);
     var env = npsBuscarEnvio(t);
     if (!env) return { ok: false, erro: 'Link inválido ou expirado.' };
-    if (env.respondida) return { ok: false, jaRespondida: true, erro: 'Esta pesquisa já foi respondida.' };
+    if (env.respondida || npsRespostaDaAuditoria(env.auditoriaId)) return { ok: false, jaRespondida: true, erro: 'Esta pesquisa já foi respondida.' };   // r187: uma resposta por análise
 
     var agora = new Date();
     var diag = npsDiagnostico(csat, nota);

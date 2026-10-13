@@ -455,7 +455,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r186';
+const VERSAO = 'r188';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -4865,18 +4865,15 @@ function audPesqAdicionar() {
   if (novo) novo.focus();
   return true;
 }
-// Envia a pesquisa, um e-mail por destinatário (cada um com seu link), usando o mesmo envio do botão avulso.
+// r187: a pesquisa vai num ÚNICO e-mail para todos os destinatários, com um único link
+// (aceita uma só resposta; depois de respondida, fica bloqueada).
 async function audEnviarPesquisas(auditoriaId, emails) {
   const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
-  const falhas = [];
-  for (let i = 0; i < emails.length; i++) {
-    showLoading('Enviando a pesquisa CSAT/NPS (' + (i + 1) + ' de ' + emails.length + ')...');
-    const re = await apiCall('enviarPesquisaNps', { auditoriaId, email: emails[i], urlBaseApp });
-    if (!re.ok) falhas.push(emails[i] + (re.erro ? ' (' + re.erro + ')' : ''));
-  }
+  showLoading('Enviando a pesquisa CSAT/NPS...');
+  const re = await apiCall('enviarPesquisaNps', { auditoriaId, emails: emails, email: emails.join(', '), urlBaseApp });
   hideLoading();
-  if (!falhas.length) toast('Relatório enviado e pesquisa CSAT/NPS enviada para ' + emails.length + ' destinatário(s)', 5000);
-  else toast('Relatório enviado. A pesquisa NÃO foi para: ' + falhas.join('; ') + '. Use o botão "Enviar pesquisa CSAT/NPS" do histórico para tentar de novo.', 9000);
+  if (re.ok) toast('Relatório enviado e pesquisa CSAT/NPS enviada em um único e-mail para ' + emails.length + ' destinatário(s)', 5000);
+  else toast('Relatório enviado. A pesquisa NÃO foi enviada' + (re.erro ? ' (' + re.erro + ')' : '') + '. Use o botão "Enviar pesquisa CSAT/NPS" do histórico para tentar de novo.', 9000);
 }
 async function audEnvConfirmar() {
   const e = state.audEnvio;
@@ -4970,13 +4967,18 @@ async function prepararEnvioPesquisa(auditoriaId) {
   const a = (state.histLista || []).find(x => x.id === auditoriaId);
   if (!a) { toast('Análise não encontrada no histórico. Atualize a lista e tente de novo.', 4000); return; }
   if (String(a.tipoAvaliacao || '').toUpperCase().indexOf('DURANTE') === -1) { toast('A pesquisa CSAT/NPS só é enviada em análises DURANTE A OPERAÇÃO', 4000); return; }
-  const email = prompt('E-mail do cliente para receber a pesquisa CSAT/NPS\n(' + a.cliente + ' — ' + a.unidade + '):', a.emailCliente || '');
-  if (!email || !email.includes('@')) return;
+  // r187: aceita vários e-mails (separados por vírgula); todos recebem o MESMO e-mail, com um único link
+  const txt = prompt('E-mail(s) do cliente para receber a pesquisa CSAT/NPS\n(' + a.cliente + ' — ' + a.unidade + ')\nVários e-mails: separe por vírgula. Todos recebem um único e-mail e a pesquisa aceita uma só resposta (o cliente não é avisado disso).', a.emailCliente || '');
+  if (!txt) return;
+  const emails = [];
+  String(txt).split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean).forEach(x => { if (emails.indexOf(x) === -1) emails.push(x); });
+  const invalidos = emails.filter(x => !PF_EMAIL_RE.test(x));
+  if (!emails.length || invalidos.length) { toast('E-mail inválido: ' + (invalidos.join(', ') || txt), 4000); return; }
   showLoading('Enviando a pesquisa CSAT/NPS...');
   const urlBaseApp = window.location.href.split('?')[0].split('#')[0].replace(/[^\/]*$/, '');
-  const re = await apiCall('enviarPesquisaNps', { auditoriaId, email: email.trim(), urlBaseApp });
+  const re = await apiCall('enviarPesquisaNps', { auditoriaId, emails: emails, email: emails.join(', '), urlBaseApp });
   hideLoading();
-  if (re.ok) toast('Pesquisa CSAT/NPS enviada para ' + email.trim(), 4000);
+  if (re.ok) toast('Pesquisa CSAT/NPS enviada em um único e-mail para ' + emails.join(', '), 5000);
   else if (/nao reconhecida|não reconhecida/i.test(String(re.erro || ''))) toast('O script do servidor ainda não tem o envio da pesquisa. Publique a nova versão no Apps Script.', 6000);
   else toast('Erro: ' + (re.erro || 'falha'), 5000);
 }
