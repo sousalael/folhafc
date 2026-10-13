@@ -65,6 +65,7 @@ function doPost(e) {
     else if (action === 'editarDespesa') { result = editarDespesa(data.cpf, data.despesa); }
     else if (action === 'pesquisarProjetos') { result = pesquisarProjetos(data.cpf, data.termo); }
     else if (action === 'getBiFinanceiro') { result = getBiFinanceiro(data.cpf, data.filtros); }
+    else if (action === 'biDespProvDados') { result = biDespProvDados(data.cpf); }
     else if (action === 'getContadoresFinanceiro') { result = getContadoresFinanceiro(data.cpf, data.filtros); }
     else if (action === 'getVersaoScript') { result = getVersaoScript(); }
     else if (action === 'diagnosticoDesempenho') { result = diagnosticoDesempenho(data.cpf); }
@@ -611,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-12-r183';
+const VERSAO_SCRIPT = '2026-10-13-r185';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -626,7 +627,7 @@ function doGet(e) {
     'lancarDespesa', 'getDespesas', 'excluirDespesa', 'setSessaoDespesas',
     'getDespesasRelatorio', 'pesquisarPessoaFinanceiro', 'lancarProvisionamento',
     'getProvisionamentos', 'lancarAdiantamento', 'getAdiantamentos', 'getAcertoContas',
-    'editarDespesa', 'pesquisarProjetos', 'getBiFinanceiro', 'getContadoresFinanceiro', 'getVersaoScript',
+    'editarDespesa', 'pesquisarProjetos', 'getBiFinanceiro', 'biDespProvDados', 'getContadoresFinanceiro', 'getVersaoScript',
     'solicitarCodigoAcesso', 'validarCodigoAcesso', 'getComprovanteImagem',
     'getLancamentosRevisao', 'marcarRevisado', 'gravarRevisoes',
     'verificarAcesso', 'definirSenhaPrimeiroAcesso', 'entrarComSenha',
@@ -911,7 +912,22 @@ function ehRecursoProprio(mapaProprio, forma) {
   if (mapaProprio === null) return true; // sem Config_Pagamento: tudo e recurso proprio
   const f = String(forma || '').trim().toUpperCase();
   if (!f) return true; // vazio = presuncao de recurso proprio (lancamentos antigos)
+  // r185: forma que NAO esta cadastrada na Config_Pagamento tambem conta como
+  // recurso proprio (presuncao conservadora: a empresa nunca deixa de reconhecer
+  // um gasto do bolso). Formas cadastradas como NAO continuam fora.
+  if (!Object.prototype.hasOwnProperty.call(mapaProprio, f)) return true;
   return !!mapaProprio[f];
+}
+
+// r185: listas para a tela explicar quais formas contam como "do bolso"
+function formasDoBolsoInfo(mapaProprio, formasEncontradas) {
+  const cadastradasSim = [], semCadastro = [];
+  if (mapaProprio) Object.keys(mapaProprio).forEach(f => { if (mapaProprio[f]) cadastradasSim.push(f); });
+  (formasEncontradas || []).forEach(f => {
+    const u = String(f || '').trim().toUpperCase();
+    if (u && mapaProprio && !Object.prototype.hasOwnProperty.call(mapaProprio, u) && semCadastro.indexOf(u) === -1) semCadastro.push(u);
+  });
+  return { formasBolso: cadastradasSim, formasSemCadastro: semCadastro };
 }
 
 // Verifica se o CPF pertence a um SUPERVISOR na base de Colaboradores.
@@ -2007,7 +2023,9 @@ function getAcertoContas(cpf, filtros) {
       const perfilDaLinha = mapaPerfis[cpfLinha] || '(nao encontrado na Colaboradores)';
       const amostra = r[7] + ' = ' + perfilDaLinha;
       if (diagnostico.perfisEncontrados.indexOf(amostra) === -1) diagnostico.perfisEncontrados.push(amostra);
-      if (perfilDaLinha !== 'SUPERVISOR') continue;
+      // r185: Diretores tambem entram no confronto (despesa e provisionamento),
+      // pela mesma regra dos dois lados. Antes so a despesa filtrava por perfil
+      // SUPERVISOR e o provisionamento nao — o Diretor aparecia "devendo".
       diagnostico.saoSupervisor++;
 
       if (!ctx.ehDiretor && cpfLinha !== ctx.cpfLimpo) continue;
@@ -2039,6 +2057,10 @@ function getAcertoContas(cpf, filtros) {
     return p;
   });
   lista.sort((a, b) => a.saldo - b.saldo);
+
+  const infoFormas = formasDoBolsoInfo(mapaProprio, diagnostico.formasEncontradas);
+  diagnostico.formasBolso = infoFormas.formasBolso;
+  diagnostico.formasSemCadastro = infoFormas.formasSemCadastro;
 
   return { lista: lista, perfil: ctx.perfil, diagnostico: diagnostico };
 }
@@ -2089,8 +2111,7 @@ function getBiFinanceiro(cpf, filtros) {
         const amostra = r[7] + ' = ' + perfilDaLinha;
         if (diagnostico.perfisEncontrados.indexOf(amostra) === -1) diagnostico.perfisEncontrados.push(amostra);
       }
-      if (perfilDaLinha !== 'SUPERVISOR') continue;
-      diagnostico.saoSupervisor++;
+      diagnostico.saoSupervisor++; // r185: Diretores tambem entram
 
       const p = garantir(cpfLinha, r[7]);
       const valor = despesaValorParaNumero(r[5]);
@@ -2128,6 +2149,89 @@ function getBiFinanceiro(cpf, filtros) {
   lista.sort((a, b) => b.gastou - a.gastou);
 
   return { lista: lista, diagnostico: diagnostico };
+}
+
+// =============================================================================
+// r185: B.I. FINANCEIRO — DESPESAS × PROVISIONAMENTO (bifin.html, so Diretor)
+// Devolve TODAS as despesas e TODOS os provisionamentos, ja com nome, perfil,
+// grupo e se a forma de pagamento conta como "do bolso". Os filtros, cards,
+// graficos e tabelas sao calculados no navegador (respondem na hora).
+// Regra do confronto: a mesma de getAcertoContas — Diretores e Supervisores
+// entram dos dois lados; so despesas "do bolso" entram no confronto.
+// =============================================================================
+function biDespProvDados(cpf) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito a Diretoria.' };
+
+  const mapaProprio = getMapaRecursoProprio();
+  let mapaGrupo = {};
+  lerConfigDespesas().forEach(t => { mapaGrupo[t.tipo.toUpperCase()] = t.grupo; });
+
+  // Colaboradores lido uma vez: cpf -> { nome, perfil }; nome -> cpf
+  const dadosColab = getColabDados();
+  const idx = getColabIndices();
+  let porCpf = {}, porNome = {};
+  for (let i = 1; i < dadosColab.length; i++) {
+    const c = normalizarCPF(dadosColab[i][idx.cpf]);
+    if (!c) continue;
+    const nome = String(dadosColab[i][idx.nome] || '').trim();
+    porCpf[c] = { nome: nome, perfil: String(dadosColab[i][idx.perfil] || '').trim().toUpperCase() };
+    if (nome) porNome[nome.toUpperCase()] = c;
+  }
+  function pessoa(cpfBruto, nomeBruto) {
+    let c = normalizarCPF(cpfBruto);
+    if (!c) c = porNome[String(nomeBruto || '').trim().toUpperCase()] || '';
+    const info = c ? porCpf[c] : null;
+    const nome = (info && info.nome) || String(nomeBruto || '').trim() || 'NAO IDENTIFICADO';
+    return { id: c || ('NOME:' + nome.toUpperCase()), nome: nome.toUpperCase(), perfil: (info && info.perfil) || 'NAO CADASTRADO' };
+  }
+
+  let despesas = [], formasVistas = [];
+  const sheetD = getSheet('Despesas');
+  if (sheetD) {
+    const dados = sheetD.getDataRange().getDisplayValues();
+    for (let i = 1; i < dados.length; i++) {
+      const r = dados[i];
+      if (!r[1]) continue;
+      const di = ddmmyyyyToInt(r[1]);
+      if (!di) continue;
+      const forma = String(r[10] || '').trim();
+      if (forma && formasVistas.indexOf(forma) === -1) formasVistas.push(forma);
+      const tipo = String(r[4] || '').trim();
+      const p = pessoa(r[9], r[7]);
+      despesas.push({
+        di: di, cli: String(r[2] || '').trim() || '(SEM CLIENTE)', uni: String(r[3] || '').trim() || '(SEM UNIDADE)',
+        tipo: tipo || '(SEM TIPO)', grupo: mapaGrupo[tipo.toUpperCase()] || 'SEM GRUPO',
+        valor: despesaValorParaNumero(r[5]), obs: String(r[6] || ''), pid: p.id, nome: p.nome, perfil: p.perfil,
+        url: String(r[8] || ''), forma: forma ? forma.toUpperCase() : '(NAO INFORMADA)', bolso: ehRecursoProprio(mapaProprio, forma)
+      });
+    }
+  }
+
+  let provs = [];
+  const sheetP = getSheet('Provisionamentos');
+  if (sheetP) {
+    const dados = sheetP.getDataRange().getDisplayValues();
+    for (let i = 1; i < dados.length; i++) {
+      const r = dados[i];
+      if (!r[1]) continue;
+      const di = ddmmyyyyToInt(r[1]);
+      if (!di) continue;
+      const p = pessoa(r[2], r[3]);
+      provs.push({
+        di: di, pid: p.id, nome: p.nome, perfil: p.perfil, valor: despesaValorParaNumero(r[4]),
+        forma: String(r[5] || '').trim().toUpperCase() || '(NAO INFORMADA)', obs: String(r[6] || ''),
+        url: String(r[7] || ''), por: String(r[8] || '').trim().toUpperCase()
+      });
+    }
+  }
+
+  const info = formasDoBolsoInfo(mapaProprio, formasVistas);
+  return {
+    success: true, despesas: despesas, provisionamentos: provs,
+    formasBolso: mapaProprio === null ? ['(TODAS — Config_Pagamento vazia)'] : info.formasBolso,
+    formasSemCadastro: info.formasSemCadastro,
+    geradoEm: Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm')
+  };
 }
 
 // ============================================================================= //
@@ -9011,12 +9115,11 @@ function orcDistancias(data, cpf) {
   return { success: true, distancias: res };
 }
 
-/* r175: a interpretação passa a usar o modelo mais capaz (Opus) COM RACIOCÍNIO (extended thinking):
-   a IA pensa antes de montar o JSON — é o que mais se aproxima da leitura feita dentro do Claude.
-   Ordem: Opus com raciocínio → Sonnet com raciocínio → Sonnet → Haiku (só como último recurso).
+/* r184: padrão volta a ser o Sonnet COM RACIOCÍNIO (escolha de Lael: o Opus custava bem mais).
+   (r175 usava Opus com raciocínio.) A IA pensa antes de montar o JSON.
+   Ordem: Sonnet 5.5 com raciocínio → Sonnet 4.5 com raciocínio → Haiku (só como último recurso).
    Se um modelo não existir na conta, não aceitar raciocínio ou demorar demais, passa ao próximo. */
 var ORC_IA_PLANO = [
-  { modelo: 'claude-opus-5-5',            pensar: 12000 },
   { modelo: 'claude-sonnet-5-5',          pensar: 12000 },
   { modelo: 'claude-sonnet-4-5',          pensar: 8000 },
   { modelo: 'claude-haiku-4-5-20251001',  pensar: 0 }

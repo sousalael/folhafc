@@ -835,7 +835,8 @@
         <hr class="my-4">
         <h6 class="fw-bold text-primary mb-3">Relatórios e Análise</h6>
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
-            <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-bi-financeiro" data-bs-toggle="modal" data-bs-target="#modalBiFinanceiro" onclick="prepararBiFinanceiro()">📊 BI Financeiro (Despesas × Provisionamento)</button>
+            <!-- r185: abre o B.I. Financeiro (bifin.html) em nova aba — somente Diretor -->
+            <button class="btn btn-outline-primary w-100 py-2 fw-bold hidden" id="btn-bi-financeiro" onclick="abrirBiFinanceiro()">📊 B.I. Financeiro (Despesas × Provisionamento)</button>
         </div>
         <!-- r140: B.I. Formula Code (somente Diretor) — abre bi.html em nova aba (r141: renomeado) -->
         <div class="d-flex flex-column flex-md-row gap-2 mb-2">
@@ -1449,42 +1450,6 @@
             <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-gravar-adto" onclick="gravarAdiantamento()">💾 Gravar Adiantamento</button>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ############ NOVO: MODAL BI FINANCEIRO (DIRETORIA) ############ -->
-<div class="modal fade" id="modalBiFinanceiro" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
-        <h5 class="modal-title fw-bold">BI Financeiro — Despesas × Provisionamento</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <label class="form-label fw-bold text-primary mb-1">Período:</label>
-        <select id="bifin-mes" class="form-select form-select-sm mb-2"></select>
-        <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
-          <div class="col-6">
-            <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
-            <input type="date" id="bifin-ini" class="form-control form-control-sm">
-          </div>
-          <div class="col-6">
-            <label class="form-label text-sm fw-bold text-primary">Data Final:</label>
-            <input type="date" id="bifin-fim" class="form-control form-control-sm">
-          </div>
-          <div class="col-12 mt-3">
-            <button class="btn btn-primary btn-sm w-100 fw-bold py-2" id="btn-buscar-bifin" onclick="buscarBiFinanceiro()">🔍 Carregar</button>
-          </div>
-        </div>
-
-        <div id="bifin-resultado" class="hidden">
-          <div id="bifin-trilha" class="d-flex flex-wrap align-items-center gap-1 mb-2 p-2 rounded bg-light small"></div>
-          <div id="bifin-corpo"></div>
-          <button class="btn btn-secondary w-100 py-2 fw-bold mt-3" onclick="exportarBiFinanceiro()">📊 Exportar</button>
-        </div>
-        <div id="bifin-vazio" class="text-center text-muted py-3">Escolha o período e clique em Carregar.</div>
       </div>
     </div>
   </div>
@@ -4015,6 +3980,15 @@
         window.open(url, '_blank');
     }
 
+    // r185: B.I. Financeiro — Despesas × Provisionamento (bifin.html), nova aba, só Diretor.
+    function abrirBiFinanceiro() {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'bifin.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir o B.I. Financeiro.'); return; }
+        const url = base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado());
+        window.open(url, '_blank');
+    }
+
     // r168: Calculadora de Orçamentos (orcamentos.html), mesmo padrão do B.I.
     function abrirOrcamentos() {
         const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'orcamentos.html';
@@ -4301,7 +4275,7 @@
                 msg = '⚠️ O servidor não enviou informações de diagnóstico. Isso indica que o Apps Script publicado é uma versão anterior — confira o indicador de versão na tela de login.';
             } else {
                 const d = acertoDiagnostico;
-                msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
+                msg = 'Nenhuma despesa paga com recurso próprio por supervisores ou diretores neste período.';
                 if (d.totalLidas === 0) msg = 'A aba Despesas está vazia.';
                 else if (d.noPerido === 0) msg = d.totalLidas + ' despesas na base, mas nenhuma no período selecionado.';
                 else if (d.comRecursoProprio === 0) msg = d.noPerido + ' despesas no período, mas nenhuma com forma de pagamento reconhecida como recurso próprio.';
@@ -4344,6 +4318,12 @@
         acertoDados.forEach(p => { if (p.saldo < 0) devo += -p.saldo; });
         document.getElementById('fin-resumo').innerText = acertoDados.length + (acertoDados.length === 1 ? ' pessoa' : ' pessoas');
         document.getElementById('fin-saldo').innerText = 'A pagar: ' + formatarReal(devo);
+        // r185: mostra quais formas de pagamento contam como "do bolso"
+        const d = acertoDiagnostico || {};
+        let notaFormas = '';
+        if (d.formasBolso && d.formasBolso.length) notaFormas += 'Contam como gasto do bolso: ' + d.formasBolso.join(', ') + '.';
+        if (d.formasSemCadastro && d.formasSemCadastro.length) notaFormas += ' Formas sem cadastro na Config_Pagamento (contadas como do bolso): ' + d.formasSemCadastro.join(', ') + '.';
+        if (notaFormas) cont.insertAdjacentHTML('beforeend', '<div class="small text-muted mt-2">' + escaparHtml(notaFormas.trim()) + '</div>');
         rodape.classList.remove('hidden');
         btnExp.classList.remove('hidden');
     }
@@ -4357,120 +4337,6 @@
                       escCsv(p.recebeu.toFixed(2).replace('.', ',')), escCsv(p.saldo.toFixed(2).replace('.', ',')), escCsv(sit)].join(";"));
         });
         baixarCsv(csv, 'Acerto_de_Contas_' + document.getElementById('fin-ini').value + '_a_' + document.getElementById('fin-fim').value + '.csv');
-    }
-
-    // ---------- BI Financeiro (despesas recurso próprio x provisionamento por supervisor) ----------
-    let biFinDados = [];
-    let biFinSupervisorAtual = null;
-
-    function prepararBiFinanceiro() {
-        popularSeletorMes('bifin-mes', 'bifin-ini', 'bifin-fim', buscarBiFinanceiro);
-    }
-
-    async function buscarBiFinanceiro() {
-        const ini = document.getElementById('bifin-ini').value;
-        const fim = document.getElementById('bifin-fim').value;
-        if (!ini || !fim) return alert('Preencha o período.');
-        const btn = document.getElementById('btn-buscar-bifin');
-        btn.innerText = 'Carregando...'; btn.disabled = true;
-        try {
-            const res = await chamarApi({ action: 'getBiFinanceiro', cpf: getCpfLogado(), filtros: { dataIni: ini, dataFim: fim } });
-            biFinDados = res.lista || [];
-            biFinSupervisorAtual = null;
-            if (!biFinDados.length) {
-                document.getElementById('bifin-resultado').classList.add('hidden');
-                document.getElementById('bifin-vazio').classList.remove('hidden');
-                const dd = res.diagnostico;
-                let msg, detalhe = '';
-                if (!dd) {
-                    msg = '⚠️ O servidor não enviou informações de diagnóstico. Isso indica que o Apps Script publicado é uma versão anterior — confira o indicador de versão na tela de login.';
-                } else {
-                    msg = 'Nenhuma despesa paga com recurso próprio por supervisores neste período.';
-                    if (dd.totalLidas === 0) msg = 'A aba Despesas está vazia.';
-                    else if (dd.noPerido === 0) msg = dd.totalLidas + ' despesas na base, mas nenhuma no período selecionado.';
-                    else if (dd.comRecursoProprio === 0) msg = dd.noPerido + ' despesas no período, mas nenhuma com forma de pagamento reconhecida como recurso próprio.';
-                    else if (dd.comCpf === 0) msg = dd.comRecursoProprio + ' despesas com recurso próprio, mas nenhuma com CPF identificável.';
-                    else if (dd.saoSupervisor === 0) msg = dd.comCpf + ' despesas com recurso próprio identificadas, mas nenhuma lançada por perfil SUPERVISOR (todas são de DIRETOR).';
-
-                    if (dd.formasEncontradas) {
-                        detalhe += '<div class="small text-start mt-2 p-2 bg-white border rounded">';
-                        detalhe += '<strong>Formas de pagamento encontradas na Despesas:</strong> ' + (dd.formasEncontradas.length ? escaparHtml(dd.formasEncontradas.join(', ')) : '(nenhuma)') + '<br>';
-                        detalhe += '<strong>Formas marcadas como recurso próprio na Config_Pagamento:</strong> ' + (dd.formasConfiguradas.length ? escaparHtml(dd.formasConfiguradas.join(', ')) : '(nenhuma cadastrada — todas tratadas como recurso próprio)') + '<br>';
-                        if (dd.perfisEncontrados && dd.perfisEncontrados.length) {
-                            detalhe += '<strong>Supervisores/perfis encontrados nas despesas com recurso próprio:</strong> ' + escaparHtml(dd.perfisEncontrados.join(' · '));
-                        }
-                        detalhe += '</div>';
-                    }
-                }
-                document.getElementById('bifin-vazio').innerHTML = escaparHtml(msg) + detalhe;
-                return;
-            }
-            document.getElementById('bifin-vazio').classList.add('hidden');
-            document.getElementById('bifin-resultado').classList.remove('hidden');
-            renderBiFinanceiro();
-        } catch (err) {
-            alert('Erro ao carregar o BI Financeiro: ' + err.message);
-        } finally {
-            btn.innerText = '🔍 Carregar'; btn.disabled = false;
-        }
-    }
-
-    function renderBiFinanceiro() {
-        const trilha = document.getElementById('bifin-trilha');
-        const corpo = document.getElementById('bifin-corpo');
-
-        if (!biFinSupervisorAtual) {
-            trilha.innerHTML = '<span class="fw-bold">Todos os supervisores</span>';
-            const maior = Math.max(...biFinDados.map(p => p.gastou), 0.01);
-            corpo.innerHTML = biFinDados.map(p => {
-                const larg = p.gastou / maior * 100;
-                const selo = montarSeloStatus(p.saldo);
-                return `
-                    <div class="border-bottom py-2" style="cursor:pointer;" onclick="abrirDetalheBiFinanceiro(this.dataset.cpf)" data-cpf="${escaparHtml(p.cpf)}">
-                        <div class="d-flex align-items-center mb-1">
-                            <span class="fw-bold" style="color: var(--fc-primaria);">${escaparHtml(p.nome)}</span>
-                            <span class="ms-auto">${selo}</span>
-                        </div>
-                        <div class="progress mb-1" style="height:5px;"><div class="progress-bar" style="width:${larg.toFixed(0)}%; background-color: var(--fc-primaria);"></div></div>
-                        <div class="d-flex small text-muted"><span>Gastou ${formatarReal(p.gastou)}</span><span class="ms-auto">Recebeu ${formatarReal(p.recebeu)} ›</span></div>
-                    </div>`;
-            }).join('');
-            return;
-        }
-
-        const p = biFinDados.find(x => x.cpf === biFinSupervisorAtual);
-        if (!p) { biFinSupervisorAtual = null; return renderBiFinanceiro(); }
-
-        trilha.innerHTML = '<a href="javascript:void(0)" onclick="voltarBiFinanceiro()" class="fw-bold text-decoration-none">Todos os supervisores</a> <span class="text-muted">&rsaquo;</span> <span class="fw-bold">' + escaparHtml(p.nome) + '</span>';
-
-        const maiorG = Math.max(...p.porGrupo.map(g => g.valor), 0.01);
-        let html = '<h6 class="fw-bold text-primary mb-2">Gasto por Grupo</h6>';
-        html += p.porGrupo.length ? [...p.porGrupo].sort((a, b) => b.valor - a.valor).map(g => `
-            <div class="border-bottom py-2">
-                <div class="d-flex"><span class="fw-bold">${escaparHtml(g.grupo)}</span><span class="ms-auto fw-bold">${formatarReal(g.valor)}</span></div>
-                <div class="progress mt-1" style="height:5px;"><div class="progress-bar" style="width:${(g.valor / maiorG * 100).toFixed(0)}%; background-color: var(--fc-primaria);"></div></div>
-            </div>`).join('') : '<div class="text-muted small">Nenhum gasto com recurso próprio.</div>';
-
-        html += '<h6 class="fw-bold text-primary mb-2 mt-3">Provisionamentos Recebidos</h6>';
-        html += p.provisionamentos.length ? p.provisionamentos.map(pr => `
-            <div class="border-bottom py-2 d-flex align-items-center">
-                <div><div class="small">${escaparHtml(pr.data)} · ${escaparHtml(pr.formaPagamento)}</div>${pr.obs ? '<div class="text-muted small">' + escaparHtml(pr.obs) + '</div>' : ''}</div>
-                <span class="ms-auto fw-bold">${formatarReal(pr.valor)}</span>
-            </div>`).join('') : '<div class="text-muted small">Nenhum provisionamento no período.</div>';
-
-        corpo.innerHTML = html;
-    }
-
-    function abrirDetalheBiFinanceiro(cpf) { biFinSupervisorAtual = cpf; renderBiFinanceiro(); }
-    function voltarBiFinanceiro() { biFinSupervisorAtual = null; renderBiFinanceiro(); }
-
-    function exportarBiFinanceiro() {
-        if (!biFinDados.length) return alert('Não há dados para exportar.');
-        let csv = [["CPF", "Nome", "Gastou (recurso próprio)", "Recebeu (provisionamento)", "Saldo"].join(";")];
-        biFinDados.forEach(p => {
-            csv.push([escCsv(p.cpf), escCsv(p.nome), escCsv(p.gastou.toFixed(2).replace('.', ',')), escCsv(p.recebeu.toFixed(2).replace('.', ',')), escCsv(p.saldo.toFixed(2).replace('.', ','))].join(";"));
-        });
-        baixarCsv(csv, 'BI_Financeiro_' + document.getElementById('bifin-ini').value + '_a_' + document.getElementById('bifin-fim').value + '.csv');
     }
 
     // ---------- Relatório de Provisionamento ----------
@@ -4722,7 +4588,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-12-r183';
+    const VERSAO_ESPERADA = '2026-10-13-r185';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
