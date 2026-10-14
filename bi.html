@@ -2238,6 +2238,7 @@ function desenharAbaFinanceira(aba) {
           '<div class="explica" id="explica-tab-custo"></div>' +
           '<div class="tabela-rolagem tabela-alta" id="tab-custo"></div>' +
         '</section>' +
+        (aba.id === 'op' ? painelCustoPorPessoaHTML() : '') +   // r190: custo por pessoa
         (aba.receitas ? '<section class="bi-painel"><h3>Receitas administrativas e financeiras</h3>' +
           '<div class="explica">Aparecem separadas e não alteram o custo desta aba.</div><div class="tabela-rolagem" id="tab-receitas"></div></section>' : '');
 
@@ -2411,6 +2412,7 @@ function atualizarDependentesFin(aba) {
     document.getElementById('explica-tab-custo').textContent = 'Custo × Faturamento sobre o faturamento de ' + brl(fatTotal) +
         '. Participação sobre o custo total desta aba. Custo por unidade: só conta as unidades atendidas que tiveram aquele custo. Passe o mouse numa loja para ver as observações.';
     desenharTabelaCusto(aba);
+    if (aba.id === 'op') desenharCustoPorPessoa(db, linhasG, linhasCusto);   // r190
 
     if (aba.receitas) {
         const rec = receitasAdmin(db, linhasG, ctx.papel);
@@ -2421,6 +2423,153 @@ function atualizarDependentesFin(aba) {
               '<tr class="total"><td>Total</td><td class="num">' + num(rec.total) + '</td></tr></tbody></table>'
             : '<div class="aviso-vazio">Nenhuma receita para os filtros escolhidos.</div>';
     }
+}
+
+
+// =====================================================================
+// r190: CUSTO POR PESSOA (aba Operacional × Faturamento)
+// Pessoas da operação = pessoas diferentes (Equipe/Descrição) pagas em PESSOAL
+// na mesma unidade e na mesma data da operação. Unidade de medida: pessoa-dia
+// (7 pessoas em 2 dias = 14 pessoas-dia). Cada custo da aba (com data da operação)
+// é dividido pelas pessoas daquele dia, por categoria (Setor; lanche, almoço,
+// jantar, café e refeição somam em "Alimentação").
+// =====================================================================
+const CPP_ALIMENTACAO = /LANCHE|ALMOC|JANTAR|CAFE|REFEI|ALIMENT|MARMIT|QUENTINHA|LANCHONETE/;
+function cppNorm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim(); }
+function cppCategoria(db, setorIdx) {
+    const nome = db.dic.setor[setorIdx] || '(sem setor)';
+    return CPP_ALIMENTACAO.test(cppNorm(nome)) ? 'Alimentação' : nome;
+}
+function calcularCustoPorPessoa(db, linhasG, linhasCusto) {
+    // 1) pessoas por operação (unidade + mês + dia)
+    const pessoasOp = new Map();
+    for (let j = 0; j < linhasG.length; j++) {
+        const i = linhasG[j];
+        if (!db.dia[i] || !db.custo[i] || db.chaves.conta[db.conta[i]] !== 'PESSOAL') continue;
+        const k = db.uni[i] + '|' + db.mes[i] + '|' + db.dia[i];
+        let s = pessoasOp.get(k); if (!s) { s = new Set(); pessoasOp.set(k, s); }
+        s.add(db.det[i]);
+    }
+    // 2) custos da aba ligados a essas operações
+    const ops = new Map(), cats = new Map();
+    let semData = 0, semPessoas = 0, ligado = 0;
+    for (let j = 0; j < linhasCusto.length; j++) {
+        const i = linhasCusto[j], v = db.custo[i];
+        if (!v) continue;
+        if (!db.dia[i]) { semData += v; continue; }
+        const k = db.uni[i] + '|' + db.mes[i] + '|' + db.dia[i];
+        const ps = pessoasOp.get(k);
+        if (!ps || !ps.size) { semPessoas += v; continue; }
+        ligado += v;
+        let o = ops.get(k);
+        if (!o) { o = { k: k, uni: db.uni[i], cli: db.cli[i], loja: db.loja[i], mes: db.mes[i], dia: db.dia[i], pessoas: ps.size, custo: 0, cats: new Map() }; ops.set(k, o); }
+        const cat = cppCategoria(db, db.setor[i]);
+        o.custo += v; o.cats.set(cat, (o.cats.get(cat) || 0) + v);
+        let c = cats.get(cat);
+        if (!c) { c = { nome: cat, custo: 0, ops: new Set(), pessoasDia: 0 }; cats.set(cat, c); }
+        c.custo += v;
+        if (!c.ops.has(k)) { c.ops.add(k); c.pessoasDia += ps.size; }
+    }
+    const lista = Array.from(cats.values()).map(c => Object.assign(c, { qtdOps: c.ops.size, porPessoa: c.pessoasDia ? c.custo / c.pessoasDia : null }))
+        .sort((a, b) => (b.porPessoa || 0) - (a.porPessoa || 0));
+    const operacoes = Array.from(ops.values()).sort((a, b) => (b.mes - a.mes) || (b.dia - a.dia));
+    const pessoasDia = operacoes.reduce((s, o) => s + o.pessoas, 0);
+    // por mês: custo ligado ÷ pessoas-dia das operações do mês
+    const porMes = new Map();
+    operacoes.forEach(o => { let m = porMes.get(o.mes); if (!m) { m = { custo: 0, pessoasDia: 0 }; porMes.set(o.mes, m); } m.custo += o.custo; m.pessoasDia += o.pessoas; });
+    const meses = Array.from(porMes.keys()).sort((a, b) => a - b);
+    return { cats: lista, operacoes: operacoes, pessoasDia: pessoasDia, ligado: ligado, semData: semData, semPessoas: semPessoas,
+             porPessoa: pessoasDia ? ligado / pessoasDia : null, meses: meses, porMes: porMes };
+}
+function painelCustoPorPessoaHTML() {
+    return '<div class="grade-2">' +
+        '<section class="bi-painel"><h3>Custo por pessoa por categoria</h3>' +
+          '<div class="explica">Cada custo da operação ÷ pessoas que trabalharam naquele dia (pessoas diferentes pagas em PESSOAL na mesma unidade e data). Valor por pessoa-dia: 7 pessoas em 2 dias = 14.</div>' +
+          '<div class="grafico-caixa" id="cx-cpp-cat"></div></section>' +
+        '<section class="bi-painel"><h3>Custo por pessoa por mês</h3>' +
+          '<div class="explica">Linha: custo da aba ligado às operações ÷ pessoas-dia do mês. Colunas: pessoas-dia do mês.</div>' +
+          '<div class="grafico-caixa" id="cx-cpp-mes"></div></section>' +
+        '</div>' +
+        '<section class="bi-painel"><h3>Custo por pessoa — por categoria</h3>' +
+          '<div class="explica" id="explica-cpp"></div><div class="tabela-rolagem" id="tab-cpp-cat"></div></section>' +
+        '<section class="bi-painel"><h3>Custo por pessoa — por operação</h3>' +
+          '<div class="explica" id="explica-cpp-ops"></div><div class="tabela-rolagem tabela-alta" id="tab-cpp-ops"></div></section>';
+}
+// rótulo com o valor acima de cada ponto da linha
+const pluginRotuloLinha = {
+    id: 'fcRotuloLinha',
+    afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        chart.data.datasets.forEach((ds, di) => {
+            if (!ds.fcRotuloLinha) return;
+            const meta = chart.getDatasetMeta(di); if (meta.hidden) return;
+            meta.data.forEach((pt, i) => {
+                const v = ds.data[i]; if (!v) return;
+                ctx.save(); ctx.font = '700 11px system-ui, -apple-system, sans-serif'; ctx.fillStyle = ds.borderColor || '#001528';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(ds.fcRotuloLinha(v), pt.x, pt.y - 6); ctx.restore();
+            });
+        });
+    }
+};
+function desenharCustoPorPessoa(db, linhasG, linhasCusto) {
+    if (!document.getElementById('cx-cpp-cat')) return;
+    const r = calcularCustoPorPessoa(db, linhasG, linhasCusto);
+    estado.cppAtual = r;
+    ['cppCat', 'cppMes'].forEach(g => { if (estado.graficos[g]) { estado.graficos[g].destroy(); delete estado.graficos[g]; } });
+    const vazio = '<div class="aviso-vazio">Nenhum custo ligado a operações com pessoas identificadas (é preciso a data da operação e lançamentos de PESSOAL na mesma unidade e data).</div>';
+    const fora = (r.semData ? ' Sem data da operação (fora do cálculo): ' + brl(r.semData) + '.' : '') +
+                 (r.semPessoas ? ' Com data, mas sem pessoas pagas em PESSOAL na mesma unidade e data (fora do cálculo): ' + brl(r.semPessoas) + '.' : '');
+    document.getElementById('explica-cpp').textContent = 'Total ligado às operações: ' + brl(r.ligado) + ' em ' + fmtNum.format(r.pessoasDia) + ' pessoas-dia' +
+        (r.porPessoa !== null ? ' = ' + brl(r.porPessoa) + ' por pessoa-dia.' : '.') + ' Em cada categoria, o custo é dividido pelas pessoas-dia das operações que tiveram aquele custo.' + fora;
+    if (!r.cats.length) {
+        ['cx-cpp-cat', 'cx-cpp-mes', 'tab-cpp-cat', 'tab-cpp-ops'].forEach(id => document.getElementById(id).innerHTML = vazio);
+        document.getElementById('explica-cpp-ops').textContent = '';
+        return;
+    }
+    // gráfico por categoria (barras horizontais)
+    const cats = r.cats.slice(0, 15);
+    document.getElementById('cx-cpp-cat').innerHTML = '<canvas id="gr-cpp-cat" role="img" aria-label="Custo por pessoa-dia por categoria"></canvas>';
+    estado.graficos.cppCat = new Chart(document.getElementById('gr-cpp-cat'), {
+        type: 'bar',
+        data: { labels: cats.map(c => c.nome), datasets: [{ label: 'Custo por pessoa-dia', data: cats.map(c => c.porPessoa || 0), backgroundColor: '#E8872B', borderRadius: 3,
+                fcRotulo: { externo: v => brl(v) } }] },
+        options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } },
+            plugins: { legend: { display: false },
+                tooltip: { callbacks: { label: c => brl(c.raw) + ' por pessoa-dia', footer: it => { const x = cats[it[0].dataIndex]; return 'Custo ' + brl(x.custo) + ' ÷ ' + fmtNum.format(x.pessoasDia) + ' pessoas-dia (' + fmtNum.format(x.qtdOps) + ' operações)'; } } } },
+            scales: { y: Object.assign(eixoMoeda(), { grace: '12%' }), x: { grid: { display: false } } } }
+    });
+    // gráfico por mês
+    document.getElementById('cx-cpp-mes').innerHTML = '<canvas id="gr-cpp-mes" role="img" aria-label="Custo por pessoa-dia por mês"></canvas>';
+    estado.graficos.cppMes = new Chart(document.getElementById('gr-cpp-mes'), {
+        data: { labels: r.meses.map(m => rotuloMes(db.meses[m])),
+            datasets: [
+                { type: 'line', label: 'Custo por pessoa-dia', data: r.meses.map(m => { const x = r.porMes.get(m); return x.pessoasDia ? x.custo / x.pessoasDia : 0; }), borderColor: '#E8872B', backgroundColor: '#E8872B', yAxisID: 'y', tension: .25, order: 0,
+                  fcRotuloLinha: v => brl(v) },
+                { type: 'bar', label: 'Pessoas-dia', data: r.meses.map(m => r.porMes.get(m).pessoasDia), backgroundColor: 'rgba(0,21,40,.18)', yAxisID: 'y2', borderRadius: 3, order: 1,
+                  fcRotulo: { interno: v => fmtNum.format(v) } }
+            ] },
+        plugins: [pluginRotuloLinha],
+        options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } },
+            plugins: { tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y' ? 'Custo por pessoa-dia: ' + brl(c.raw) : 'Pessoas-dia: ' + fmtNum.format(c.raw) } } },
+            scales: { y: Object.assign(eixoMoeda(), { position: 'left' }), y2: { position: 'right', grid: { display: false }, beginAtZero: true }, x: { grid: { display: false } } } }
+    });
+    // tabela por categoria
+    document.getElementById('tab-cpp-cat').innerHTML = '<table class="tabela-bi"><thead><tr><th>Categoria</th><th class="num">Custo (R$)</th><th class="num">Operações</th><th class="num">Pessoas-dia</th><th class="num">Custo por pessoa-dia (R$)</th></tr></thead><tbody>' +
+        r.cats.map(c => '<tr><td>' + esc(c.nome) + '</td><td class="num">' + num(c.custo) + '</td><td class="num">' + fmtNum.format(c.qtdOps) + '</td><td class="num">' + fmtNum.format(c.pessoasDia) + '</td><td class="num"><strong>' + num(c.porPessoa || 0) + '</strong></td></tr>').join('') +
+        '<tr class="total"><td>Total</td><td class="num">' + num(r.ligado) + '</td><td class="num">' + fmtNum.format(r.operacoes.length) + '</td><td class="num">' + fmtNum.format(r.pessoasDia) + '</td><td class="num">' + num(r.porPessoa || 0) + '</td></tr></tbody></table>';
+    // tabela por operação: as maiores categorias viram colunas
+    const colunas = r.cats.slice().sort((a, b) => b.custo - a.custo).slice(0, 6).map(c => c.nome);
+    const LIM = 200, ops = r.operacoes.slice(0, LIM);
+    document.getElementById('explica-cpp-ops').textContent = 'Valores por pessoa (custo do dia ÷ pessoas do dia). Colunas: as ' + colunas.length + ' categorias de maior custo; as demais em "Outras".' +
+        (r.operacoes.length > LIM ? ' Mostrando as ' + LIM + ' operações mais recentes de ' + fmtNum.format(r.operacoes.length) + '.' : '');
+    document.getElementById('tab-cpp-ops').innerHTML = '<table class="tabela-bi"><thead><tr><th>Data</th><th>Cliente</th><th>Unidade</th><th class="num">Pessoas</th>' +
+        colunas.map(c => '<th class="num">' + esc(c) + '</th>').join('') + '<th class="num">Outras</th><th class="num">Total por pessoa</th><th class="num">Custo do dia (R$)</th></tr></thead><tbody>' +
+        ops.map(o => {
+            let outras = o.custo;
+            const cel = colunas.map(c => { const v = o.cats.get(c) || 0; outras -= v; return '<td class="num">' + (v ? num(v / o.pessoas) : '—') + '</td>'; }).join('');
+            return '<tr><td>' + dataOperacaoTexto(db, o.mes, o.dia) + '</td><td>' + esc(db.dic.cli[o.cli]) + '</td><td>' + esc(db.dic.loja[o.loja]) + '</td><td class="num">' + o.pessoas + '</td>' +
+                cel + '<td class="num">' + (outras > 0.005 ? num(outras / o.pessoas) : '—') + '</td><td class="num"><strong>' + num(o.custo / o.pessoas) + '</strong></td><td class="num">' + num(o.custo) + '</td></tr>';
+        }).join('') + '</tbody></table>';
 }
 
 // Detalhamento do Custo: Conta > Setor > Cliente > Unidade

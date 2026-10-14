@@ -612,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-13-r188';
+const VERSAO_SCRIPT = '2026-10-13-r190';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -9170,9 +9170,11 @@ function orcInterpretar(data, cpf) {
     'Confira que a soma de pessoas de cada dia bate com o que o texto diz. Não invente quantidades nem preços que não foram ditos. ' +
     'Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases.';
   var ultimoErro = '', inicio = Date.now();
-  for (var m = 0; m < ORC_IA_PLANO.length; m++) {
-    var modelo = ORC_IA_PLANO[m].modelo, pensar = ORC_IA_PLANO[m].pensar;
-    if (Date.now() - inicio > 240000 && m < ORC_IA_PLANO.length - 1) continue;   // perto do limite: vai direto ao último recurso
+  // r189: modo "economica" usa só o Haiku (barato); "precisa" (padrão) usa o plano completo
+  var plano = String(data.modo || '') === 'economica' ? [{ modelo: 'claude-haiku-4-5-20251001', pensar: 0 }] : ORC_IA_PLANO;
+  for (var m = 0; m < plano.length; m++) {
+    var modelo = plano[m].modelo, pensar = plano[m].pensar;
+    if (Date.now() - inicio > 240000 && m < plano.length - 1) continue;   // perto do limite: vai direto ao último recurso
     for (var tentativa = 1; tentativa <= 2; tentativa++) {
       var conteudo = tentativa === 1 ? prompt : prompt + '\n\nATENÇÃO: a resposta anterior não era um JSON válido. Responda apenas com o objeto JSON.';
       var r;

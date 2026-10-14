@@ -8,7 +8,9 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r184: a interpretação usa o Sonnet com raciocínio como padrão (o Opus saiu; reservas Sonnet 4.5 → Haiku).
+<!-- r189: IA com 3 posições (Desligada / Econômica = Haiku / Precisa = Sonnet), sempre começa Desligada;
+     desligada usa a leitura simples sem IA (frases padronizadas), o resto se preenche à mão.
+     r184: a interpretação usa o Sonnet com raciocínio como padrão (o Opus saiu; reservas Sonnet 4.5 → Haiku).
      r183: van cobrada por trecho OU por km (escolha no orçamento); R$/km por cidade de origem na tabela e por equipe; a equipe mostra os km de ida e volta.
      r182: título do orçamento (ex.: "Queiroz Regional PB") — aparece na lista, na barra do orçamento aberto, no descritivo e nos nomes dos arquivos.
      r181: "Quantidade de Apoio" (na disponibilidade de pessoas): o Apoio assume parte das contagens críticas
@@ -107,6 +109,11 @@ button.verde{background:var(--verde);border-color:var(--verde);color:#001528;fon
 .chip.rasc{background:#FFF4D6;color:#8a6200}
 .chip.conc{background:#E3F6D3;color:#2d6a00}
 /* r170 */
+/* r189: seletor de IA */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg .segb{border:0;border-radius:0;background:transparent;color:var(--ink);padding:6px 12px}
+.seg .segb + .segb{border-left:1px solid var(--line)}
+.seg .segb.on{background:var(--accent);color:#fff}
 button.gravando{background:var(--danger);border-color:var(--danger);color:#fff;animation:pulsa 1.4s ease-in-out infinite}
 @keyframes pulsa{0%,100%{opacity:1}50%{opacity:.65}}
 @media (prefers-reduced-motion:reduce){button.gravando{animation:none}}
@@ -188,6 +195,14 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
       </label>
     </div>
     <div class="toolbar" style="margin-top:10px">
+      <div class="seg" role="radiogroup" aria-label="Uso de IA na interpretação">
+        <button type="button" class="segb on" data-ia="off" role="radio" aria-checked="true">IA desligada</button>
+        <button type="button" class="segb" data-ia="economica" role="radio" aria-checked="false">IA econômica</button>
+        <button type="button" class="segb" data-ia="precisa" role="radio" aria-checked="false">IA precisa</button>
+      </div>
+    </div>
+    <p class="hint" id="hintIA"></p>
+    <div class="toolbar" style="margin-top:6px">
       <button id="btnLer">Interpretar</button>
       <button class="ghost" id="btnParar" hidden>Parar</button>
     </div>
@@ -1719,8 +1734,128 @@ const elMsg = document.getElementById("msgLer"), btnLer = document.getElementByI
 let ctl = null, samplePronto = null, ultimaInterpReserva = false, ultimaInterpModelo = "";
 function msgLer(t, erro){ elMsg.textContent = t; elMsg.className = "msg " + (erro?"err":"ok"); }
 // r168: a interpretação passa pelo servidor do sistema (mesma IA já usada nas análises)
+/* =====================================================================
+   r189: LEITURA SEM IA (custo zero) — entende frases padronizadas.
+   Unidade/loja, cidade, cliente, regional, farmácia, dias (1º dia, dia 2, segundo dia…),
+   horário (14h, 21:00), "N + função" (supervisor, apoio, aéreos, câmaras, ilhas/geladeiras,
+   depósito, loja/salão/área de vendas, inventariantes), coletores e alguns preços.
+   Devolve o mesmo formato da IA; o que não entender fica para preencher à mão.
+   ===================================================================== */
+const NUM_EXT = {um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,
+  catorze:14,quatorze:14,quinze:15,dezesseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30,quarenta:40,cinquenta:50,
+  sessenta:60,setenta:70,oitenta:80,noventa:90,cem:100,cento:100,duzentos:200,trezentos:300};
+const ORDINAL = {primeiro:1,segundo:2,terceiro:3,quarto:4,quinto:5,sexto:6,setimo:7,oitavo:8,nono:9,decimo:10};
+function semAcento(t){ return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
+// "cento e oitenta" -> 180 ; "vinte e cinco" -> 25 (só por extenso; números com algarismos ficam como estão)
+function extensoParaNumero(t){
+  return t.replace(/\b((?:um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos)(?:\s+e\s+(?:um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa))*)\b/g,
+    m=>String(m.split(/\s+e\s+/).reduce((s,p)=>s + (NUM_EXT[p]||0), 0)));
+}
+// palavras -> função (ordem importa: o mais específico primeiro)
+const SEMIA_FUNCOES = [
+  [/supervis/, "supervisor"],
+  [/apoio/, "apoio"],
+  [/aereo.{0,25}(loja|salao|area de vendas|vendas)/, "aereo_salao"],
+  [/aereo/, "aereo_ret"],
+  [/camara|frigorif|resfriad|congelad|\bfrios?\b/, "camara"],
+  [/ilha|geladeira|freezer/, "ilhas"],
+  [/deposito|picking|retaguarda|estoque/, "deposito"],
+  [/salao|area de vendas|\bloja\b|seca|mercearia|gondola/, "seca_salao"],
+  [/inventariante|auditor|pessoa|contador/, "geral"]
+];
+function lerSemIA(texto){
+  const res = {cliente:"", regionais:[], precos:{}}, lidos = {unidades:0, dias:0, funcoes:0, precos:0};
+  let reg = null, uni = null, dia = null;
+  const novaReg = nome=>{ reg = {nome:nome||"", origem:"", unidades:[]}; res.regionais.push(reg); return reg; };
+  const novaUni = nome=>{ if(!reg) novaReg(""); uni = {nome:nome||"", cidade:"", tipo:TIPOS[0], farmacia:false, kmPor:{}, origemFixa:false, clienteAlimenta:true, dias:[], equipes:[]}; reg.unidades.push(uni); dia = null; lidos.unidades++; return uni; };
+  const garanteUni = ()=>uni || novaUni("");
+  const novoDia = n=>{ garanteUni(); while(uni.dias.length < n-1) uni.dias.push({inicio:"14:00", coletores:0, linhas:[]}); dia = uni.dias[n-1] || (uni.dias[n-1] = {inicio:"14:00", coletores:0, linhas:[]}); lidos.dias++; return dia; };
+  const addLinha = (fid, q, det)=>{
+    if(!dia) novoDia((uni && uni.dias.length ? uni.dias.length : 0) + (uni && uni.dias.length ? 0 : 1));
+    if(fid==="geral") fid = uni.farmacia ? "inv_farm" : (dia.linhas.some(l=>l.funcao==="deposito") || uni.dias.indexOf(dia)===0 ? "deposito" : "seca_salao");
+    if(uni.farmacia){ if(fid==="supervisor") fid = "sup_farm"; else if(fid!=="sup_farm") fid = "inv_farm"; }
+    const ex = dia.linhas.find(l=>l.funcao===fid && (l.detalhe||"")===(det||""));
+    if(ex) ex.FOR += q; else dia.linhas.push({funcao:fid, detalhe:det||"", FOR:q});
+    lidos.funcoes++;
+  };
+  const preco = (k, v)=>{ const n = Number(String(v).replace(/\./g,"").replace(",", ".")); if(isFinite(n) && n>0){ res.precos[k] = n; lidos.precos++; } };
+  // quebra em frases (linha, ponto final, ponto e vírgula)
+  const frases = extensoParaNumero(semAcento(texto)).split(/\n|;|\.(?=\s|$)/).map(s=>s.trim()).filter(Boolean);
+  const original = String(texto||"").split(/\n|;|\.(?=\s|$)/).map(s=>s.trim()).filter(Boolean);
+  frases.forEach((f, i)=>{
+    const orig = original[i] || f;
+    let m;
+    if((m = f.match(/^cliente\s*[:\-]\s*(.+)$/))){ res.cliente = orig.replace(/^[^:\-]*[:\-]\s*/,""); return; }
+    if((m = f.match(/^regional\s*[:\-]?\s*(.+)$/))){ novaReg(orig.replace(/^regional\s*[:\-]?\s*/i,"")); uni = null; dia = null; return; }
+    if((m = f.match(/^(unidade|loja|filial)\s*[:\-]\s*(.+)$/))){ novaUni(orig.replace(/^[^:\-]*[:\-]\s*/,"")); if(/farmacia|drogaria/.test(f)) uni.farmacia = true; return; }
+    if((m = f.match(/^cidade\s*[:\-]?\s*(.+)$/))){ garanteUni().cidade = orig.replace(/^cidade\s*[:\-]?\s*/i,""); return; }
+    if(/farmacia|drogaria/.test(f)) garanteUni().farmacia = true;
+    // preços: "almoço 35", "jantar a 35", "hotel 110", "van 900 por trecho", "coletor 30", "diária de apoio 150"
+    if(/r\$|\breais\b|diaria|almoco|jantar|lanche|cafe|hotel|hosped|van|combustivel|gasolina|coletor/.test(f) && /\d/.test(f)){
+      let achou = false;
+      const v = (re)=>{ const x = f.match(re); return x ? x[1] : null; };
+      const num = "(\\d+(?:[.,]\\d+)?)";
+      [["almoco","almoco"],["jantar","jantar"],["lanche","lanche"],["cafe","cafe(?: da manha)?"],["hosp","(?:hotel|hospedagem)"]].forEach(([k,p])=>{
+        const x = v(new RegExp(p + "[^\\d]{0,20}?(?:r\\$\\s*)?" + num + "(?!\\s*(?:pessoa|dia|noite)s?\\b(?:\\s|$)(?=.*" + p + "))"));
+        if(x && !new RegExp(num + "\\s*" + p).test(f)){ preco(uni && uni.farmacia && k!=="cafe" && k!=="hosp" ? k + "_farm" : k, x); achou = true; }
+      });
+      let x;
+      if((x = v(/van[^\d]{0,25}?(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:reais\s*)?por\s*km/))) { /* valor por km: vai na equipe pela tela */ }
+      else if((x = v(/van[^\d]{0,25}?(?:r\$\s*)?(\d+(?:[.,]\d+)?)/))){ preco("vanTrecho", /ida e volta/.test(f) ? Number(x.replace(",","."))/2 : x); achou = true; }
+      if((x = v(/(?:combustivel|gasolina|litro)[^\d]{0,20}?(?:r\$\s*)?(\d+(?:[.,]\d+)?)/))){ preco("combustivel", x); achou = true; }
+      if((x = v(/coletor(?:es)?[^\d]{0,25}?(?:r\$|a|por)\s*(\d+(?:[.,]\d+)?)/))){ preco("locacao", x); achou = true; }
+      if((m = f.match(/diaria[^\d]{0,40}?(?:r\$\s*)?(\d+(?:[.,]\d+)?)/))){
+        const alvo = SEMIA_FUNCOES.find(([re])=>re.test(f));
+        const fid = alvo ? (alvo[1]==="geral" ? "apoio" : alvo[1]) : null;
+        const origem = /natal/.test(f) ? "NAT" : /juazeiro/.test(f) ? "JUA" : /fortaleza/.test(f) ? "FOR" : "TODAS";
+        if(fid){ (res.precos.diarias = res.precos.diarias || []).push({funcao:fid, origem, valor:Number(m[1].replace(",","."))}); lidos.precos++; achou = true; }
+      }
+      if(achou && !/\bdia\b|supervis|apoio|aereo|camara|ilha|deposito|salao|inventariante/.test(f.replace(/diaria[^\d]*\d+/,""))) return;
+    }
+    // dia: "1º dia", "dia 2", "segundo dia", "1o dia"
+    if((m = f.match(/(\d+)\s*(?:º|o|°)?\s*dia\b/)) || (m = f.match(/\bdia\s*(\d+)\b/))) novoDia(Number(m[1]));
+    else { const o = Object.keys(ORDINAL).find(k=>new RegExp("\\b" + k + "\\s+dia\\b").test(f)); if(o) novoDia(ORDINAL[o]); }
+    // horário
+    if(dia && (m = f.match(/(?:as|a partir das|inicio|comeca|começa)?\s*(\d{1,2})(?:[:h](\d{2}))?\s*h(?:oras|rs)?\b/) || (m = f.match(/\b(\d{1,2}):(\d{2})\b/)))){
+      const hh = Number(m[1]); if(hh>=0 && hh<24) dia.inicio = String(hh).padStart(2,"0") + ":" + (m[2] || "00");
+    }
+    // coletores do dia
+    if((m = f.match(/(\d+)\s*coletor(?:es)?/))){ if(!dia) novoDia(1); dia.coletores = Number(m[1]); }
+    // "N função": pega cada número seguido de palavras até o próximo número
+    const re = /(\d+)\s+([^\d,]+)/g; let p;
+    while((p = re.exec(f))){
+      const q = Number(p[1]), resto = p[2];
+      if(!q || /^\s*(?:º|o|°)?\s*dia\b|^\s*(h|hrs|horas|:|km|reais|coletor)/.test(resto)) continue;
+      const alvo = SEMIA_FUNCOES.find(([r])=>r.test(resto));
+      if(!alvo) continue;
+      const det = /resfriad|congelad|frigorif/.test(resto) ? orig.match(/(resfriad\w*|congelad\w*|frigor\w*)/i)?.[0] || "" : "";
+      addLinha(alvo[1], q, det ? det.charAt(0).toUpperCase() + det.slice(1) : "");
+    }
+  });
+  // limpa dias vazios no fim e unidades sem nada
+  res.regionais.forEach(r=>r.unidades.forEach((u,ui)=>{ if(!u.nome) u.nome = "Unidade " + (ui+1); u.dias = u.dias.filter(d=>d.linhas.length); }));
+  res.regionais.forEach(r=>{ r.unidades = r.unidades.filter(u=>u.dias.length || u.cidade); });
+  res.regionais = res.regionais.filter(r=>r.unidades.length);
+  res.regionais.forEach((r,i)=>{ if(!r.nome) r.nome = "Regional " + (i+1); });
+  return {json:res, lidos};
+}
+
+/* r189: posição do seletor de IA — sempre começa desligada (não fica guardada) */
+let modoIA = "off";
+const TXT_IA = {
+  off:"IA desligada (sem custo): entende frases padronizadas, uma informação por frase. Ex.: \"Unidade: QA Mossoró. Cidade: Mossoró-RN. 1º dia às 14h: 1 supervisor, 5 aéreos, 10 depósito, 4 câmaras. 2º dia às 21h: 1 supervisor, 5 aéreos da loja, 2 ilhas, 30 loja. Almoço 35. Hotel 110.\" O que não for entendido, preencha no passo 3. Planilhas só são lidas com a IA ligada.",
+  economica:"IA econômica (Haiku): bem mais barata e rápida, entende texto livre e ditado; pode errar mais em descrições longas — confira a prévia.",
+  precisa:"IA precisa (Sonnet com raciocínio): a leitura mais fiel, para descrições longas e complicadas; é a opção mais cara e leva de 1 a 3 minutos."
+};
+function marcarIA(){
+  document.querySelectorAll("[data-ia]").forEach(b=>{ const on = b.dataset.ia===modoIA; b.classList.toggle("on", on); b.setAttribute("aria-checked", on ? "true" : "false"); });
+  document.getElementById("hintIA").textContent = TXT_IA[modoIA];
+}
+document.querySelectorAll("[data-ia]").forEach(b=>b.addEventListener("click", ()=>{ modoIA = b.dataset.ia; marcarIA(); }));
+marcarIA();
+
 async function obterSample(){
-  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt}, opts && opts.signal); ultimaInterpReserva = !!r.reserva; ultimaInterpModelo = r.modeloNome || r.modelo || ""; return r.json; } };
+  return { json: async (prompt, opts)=>{ const r = await chamar({action:"orcInterpretar", prompt, modo:modoIA}, opts && opts.signal); ultimaInterpReserva = !!r.reserva; ultimaInterpModelo = r.modeloNome || r.modelo || ""; return r.json; } };
 }
 
 function mesclar(novo){
@@ -1742,10 +1877,21 @@ btnLer.addEventListener("click", async ()=>{
   const txt = document.getElementById("texto").value.trim();
   const tudo = [txt, textoPlanilha ? "PLANILHA CARREGADA:\n" + textoPlanilha : ""].filter(Boolean).join("\n\n");
   if(!tudo){ msgLer("Escreva a descrição ou carregue uma planilha primeiro.", true); return; }
-  const sample = samplePronto || await obterSample();
-  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false; msgLer("Interpretando com a IA mais precisa (ela raciocina antes de responder)... isso pode levar de 1 a 3 minutos.", false);
+  // r189: IA desligada -> leitura simples, sem custo
+  let semIA = null;
+  if(modoIA==="off"){
+    if(!txt){ msgLer("Com a IA desligada só a descrição em texto é lida. Para ler a planilha, escolha IA econômica ou precisa.", true); return; }
+    semIA = lerSemIA(txt);
+    if(!semIA.json.regionais.length && !semIA.lidos.precos){
+      msgLer("Sem IA, não consegui entender a descrição. Use frases como no exemplo abaixo do seletor, preencha à mão no passo 3 ou ligue a IA.", true); return;
+    }
+  }
+  const sample = semIA ? null : (samplePronto || await obterSample());
+  ctl = new AbortController(); btnLer.disabled = true; btnParar.hidden = false;
+  msgLer(semIA ? "Lendo sem IA…" : modoIA==="economica" ? "Interpretando com a IA econômica... leva poucos segundos." : "Interpretando com a IA precisa (ela raciocina antes de responder)... isso pode levar de 1 a 3 minutos.", false);
+  if(semIA){ ultimaInterpModelo = "leitura sem IA"; ultimaInterpReserva = false; }
   try{
-    const r = await sample.json(montarPrompt(tudo), {signal:ctl.signal, modelTier:"complex"});
+    const r = semIA ? semIA.json : await sample.json(montarPrompt(tudo), {signal:ctl.signal, modelTier:"complex"});
     const novo = normOrc(r);
     if(!novo.cliente) novo.cliente = orc.cliente;
     let nU = 0;
@@ -1768,6 +1914,7 @@ btnLer.addEventListener("click", async ()=>{
     desenharPreviaPrecos();
     document.getElementById("previa").hidden = false;
     const est = novo.regionais.some(r=>r.unidades.some(u=>u.kmEstimado));
+    if(semIA){ msgLer(`Leitura sem IA: ${nU} unidade(s), ${semIA.lidos.dias} dia(s), ${semIA.lidos.funcoes} quantidade(s) de pessoas e ${semIA.lidos.precos} preço(s). Confira a prévia e clique em "Aplicar"; o que faltar, preencha no passo 3.`, false); return; }
     msgLer(`Entendi ${nU} unidade(s) em ${novo.regionais.length} regional(is). Confira o descritivo e clique em "Aplicar"${est ? " (há distâncias estimadas)" : ""}.` + (ultimaInterpModelo ? ` (lido por: ${ultimaInterpModelo})` : "") + (ultimaInterpReserva ? " ATENÇÃO: as IAs principais não responderam e foi usado o modo rápido, que é menos preciso; confira com mais cuidado." : ""), !!ultimaInterpReserva);
   }catch(e){
     const m = {cancelled:"Interpretação interrompida.", sessao:e.message, timeout:"A interpretação demorou demais. Tente dividir o texto em partes menores."}[e.code]
