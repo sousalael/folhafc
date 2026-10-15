@@ -127,6 +127,10 @@
         .barra-selecao .dica-sel { font-size: .76rem; color: var(--fc-texto-suave); }
         .tabela-bi tr.nivel-3 td:first-child { padding-left: 74px; color: #47535f; }
         .tabela-bi tr.nivel-3 td { background: #f4f7fa; font-size: .8rem; }
+        /* r192: 5º nível (Descrição) do Admin e cabeçalho dos lançamentos da operação */
+        .tabela-bi tr.nivel-4 td:first-child { padding-left: 98px; color: #5b6672; }
+        .tabela-bi tr.nivel-4 td { background: #fafcfd; font-size: .78rem; }
+        .tabela-bi tr.cab-lanc td { background: #eef3f8; font-size: .78rem; }
         .tabela-bi tr.linha-loja { cursor: help; }
         .tabela-bi tr.linha-loja:hover td, .tabela-bi tr.linha-loja:focus td { background: #e9f3fb; }
         .tabela-bi tr.linha-loja:focus { outline: 2px solid var(--fc-acao); outline-offset: -2px; }
@@ -1092,7 +1096,7 @@ function calcularOperacoes(db, linhas) {
         const k = db.uni[i] + '|' + db.mes[i] + '|' + db.dia[i];
         let o = ops.get(k);
         if (!o) { o = { uni: db.uni[i], cli: db.cli[i], loja: db.loja[i], neg: db.neg[i], mes: db.mes[i], dia: db.dia[i], fat: 0, custo: 0, pessoal: 0,
-                        tipos: new Map(), pessoas: new Map(), contas: new Map() }; ops.set(k, o); }
+                        tipos: new Map(), pessoas: new Map(), contas: new Map(), lancs: new Map() }; ops.set(k, o); }
         o.fat += db.fat[i];
         o.tipos.set(db.tipo[i], (o.tipos.get(db.tipo[i]) || 0) + db.fat[i]);
     }
@@ -1105,6 +1109,10 @@ function calcularOperacoes(db, linhas) {
         if (!o) continue;
         o.custo += db.custo[i]; custoLigado += db.custo[i];
         o.contas.set(db.conta[i], (o.contas.get(db.conta[i]) || 0) + db.custo[i]);
+        // r192: todos os lançamentos de custo da operação (Conta, Setor, Descrição)
+        const kl = db.conta[i] + '|' + db.setor[i] + '|' + db.det[i];
+        const ln = o.lancs.get(kl);
+        if (ln) ln.v += db.custo[i]; else o.lancs.set(kl, { conta: db.conta[i], setor: db.setor[i], det: db.det[i], v: db.custo[i] });
         if (db.chaves.conta[db.conta[i]] === 'PESSOAL') { o.pessoal += db.custo[i]; o.pessoas.set(db.det[i], (o.pessoas.get(db.det[i]) || 0) + db.custo[i]); }
     }
     const lista = Array.from(ops.values());
@@ -2278,7 +2286,7 @@ function desenharAbaFinanceira(aba) {
     document.getElementById('btn-expandir-c').addEventListener('click', () => {
         const f = estado.finAtual;
         if (!f) return;
-        f.contas.forEach(c => { ab.add('c' + c.id); c.filhos.forEach(s2 => ab.add('c' + c.id + '/s' + s2.id)); });
+        f.contas.forEach(c => { ab.add('c' + c.id); c.filhos.forEach(s2 => ab.add('c' + c.id + (aba.id === 'adm' ? '/k' : '/s') + s2.id)); });   // r192: no Admin o 2º nível é o cliente
         desenharTabelaCusto(aba);
     });
     document.getElementById('btn-recolher-c').addEventListener('click', () => { ab.clear(); desenharTabelaCusto(aba); });
@@ -2401,7 +2409,7 @@ function atualizarDependentesFin(aba) {
     }
 
     // Arvore de custo e cards da aba
-    const arv = arvoreCusto(db, linhasCusto, ctx.papel);
+    const arv = aba.id === 'adm' ? arvoreCustoAdm(db, linhasCusto, ctx.papel) : arvoreCusto(db, linhasCusto, ctx.papel);   // r192
     const atendidas = unidadesAtendidas(db, linhasG);
     estado.finAtual = { aba: aba.id, arv: arv, fatTotal: fatTotal, atendidas: atendidas, mesesSel: sel,
                         contas: Array.from(arv.raiz.values()).sort((a, b) => b.custo - a.custo) };
@@ -2583,10 +2591,72 @@ function desenharCustoPorPessoa(db, linhasG, linhasCusto) {
         }).join('') + '</tbody></table>';
 }
 
+// r192: Admin × Faturamento — Conta > Cliente > Unidade > Setor > Descrição
+function arvoreCustoAdm(db, linhas, papel) {
+    const raiz = new Map(), porUniTotal = new Map();
+    let total = 0;
+    const no = (mapa, id) => { let x = mapa.get(id); if (!x) { x = { id: id, custo: 0, porUni: new Map(), filhos: new Map() }; mapa.set(id, x); } return x; };
+    for (let j = 0; j < linhas.length; j++) {
+        const i = linhas[j];
+        if (!papel.custo[db.conta[i]]) continue;
+        const v = db.custo[i]; if (!v) continue;
+        const a = no(raiz, db.conta[i]), b = no(a.filhos, db.cli[i]), c = no(b.filhos, db.loja[i]), d = no(c.filhos, db.setor[i]), e = no(d.filhos, db.det[i]);
+        const u = db.uni[i];
+        [a, b, c, d, e].forEach(x => { x.custo += v; x.porUni.set(u, (x.porUni.get(u) || 0) + v); });
+        total += v; porUniTotal.set(u, (porUniTotal.get(u) || 0) + v);
+    }
+    return { raiz: raiz, total: total, porUni: porUniTotal };
+}
+function desenharTabelaCustoAdm(aba) {
+    const db = estado.db, f = estado.finAtual;
+    esconderObs();
+    const ab = estado.abertosCusto[aba.id];
+    const linhaC = (nome, no, classe, extra) => {
+        const cpu = custoPorUnidade(no.porUni, f.atendidas);
+        return '<tr class="' + (classe || '') + '"' + (extra || '') + '><td>' + nome + '</td>' +
+            '<td class="num' + classeValor(no.custo) + '">' + num(no.custo) + '</td>' +
+            '<td class="num">' + (f.fatTotal ? pct(no.custo / f.fatTotal) : '—') + '</td>' +
+            '<td class="num">' + (f.arv.total ? pct(no.custo / f.arv.total) : '—') + '</td>' +
+            '<td class="num">' + (cpu.valor === null ? '—' : num(cpu.valor)) + '</td></tr>';
+    };
+    const botao = (k, aberto, nome) => '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
+    const porCusto = (a, b) => b.custo - a.custo;
+    const partes = [];
+    f.contas.forEach(c => {
+        const kC = 'c' + c.id, abC = ab.has(kC), nC = db.dic.conta[c.id];
+        partes.push(linhaC(botao(kC, abC, nC) + esc(nC), c, 'nivel-0'));
+        if (!abC) return;
+        Array.from(c.filhos.values()).sort(porCusto).forEach(k => {
+            const kK = kC + '/k' + k.id, abK = ab.has(kK), nK = db.dic.cli[k.id];
+            partes.push(linhaC(botao(kK, abK, nK) + esc(nK), k, 'nivel-1'));
+            if (!abK) return;
+            Array.from(k.filhos.values()).sort(porCusto).forEach(l => {
+                const kL = kK + '/l' + l.id, abL = ab.has(kL), nL = db.dic.loja[l.id];
+                partes.push(linhaC(botao(kL, abL, nL) + esc(nL), l, 'nivel-2'));
+                if (!abL) return;
+                Array.from(l.filhos.values()).sort(porCusto).forEach(s2 => {
+                    const kS = kL + '/s' + s2.id, abS = ab.has(kS), nS = db.dic.setor[s2.id];
+                    partes.push(linhaC(botao(kS, abS, nS) + esc(nS), s2, 'nivel-3 linha-loja',
+                        ' tabindex="0" data-conta="' + c.id + '" data-setor="' + s2.id + '" data-cli="' + k.id + '" data-loja="' + l.id + '"'));
+                    if (!abS) return;
+                    Array.from(s2.filhos.values()).sort(porCusto).forEach(dd => {
+                        partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.det[dd.id] || '(sem descrição)'), dd, 'nivel-4'));
+                    });
+                });
+            });
+        });
+    });
+    document.getElementById('tab-custo').innerHTML = f.contas.length
+        ? '<table class="tabela-bi"><thead><tr><th>Conta / Cliente / Unidade / Setor / Descrição</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
+          '<th class="num">Participação no custo total (%)</th><th class="num">Custo por unidade (R$)</th></tr></thead><tbody>' +
+          partes.join('') + linhaC('Total', { custo: f.arv.total, porUni: f.arv.porUni }, 'total') + '</tbody></table>'
+        : '<div class="aviso-vazio">Nenhum custo para os filtros escolhidos.</div>';
+}
 // Detalhamento do Custo: Conta > Setor > Cliente > Unidade
 function desenharTabelaCusto(aba) {
     const db = estado.db, f = estado.finAtual;
     if (!f || f.aba !== aba.id) return;
+    if (aba.id === 'adm') return desenharTabelaCustoAdm(aba);   // r192
     esconderObs();
     const ab = estado.abertosCusto[aba.id];
     const linhaC = (nome, no, classe, extra) => {
@@ -3423,13 +3493,17 @@ function desenharTabelaOps() {
     const partes = [];
     lista.slice(0, estado.opsLimite).forEach(o => {
         const k = o.uni + '|' + o.mes + '|' + o.dia, aberto = estado.opsAbertas.has(k);
-        partes.push('<tr class="nivel-0"><td>' + (o.qtdPessoas ? '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="Pessoas da operação">' + (aberto ? '▾' : '▸') + '</button>' : '<span class="espaco-drill"></span>') +
+        partes.push('<tr class="nivel-0"><td>' + (o.lancs.size ? '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="Custos da operação">' + (aberto ? '▾' : '▸') + '</button>' : '<span class="espaco-drill"></span>') +
             dataOperacaoTexto(db, o.mes, o.dia) + '</td><td>' + esc(db.dic.cli[o.cli]) + '</td><td>' + esc(db.dic.loja[o.loja]) + '</td><td>' + esc(db.dic.tipo[o.tipo]) + '</td>' +
             '<td class="num">' + num(o.fat) + '</td><td class="num">' + num(o.custo) + '</td><td class="num' + classeValor(o.margem) + '">' + num(o.margem) + '</td>' +
             '<td class="num' + classeValor(o.margem) + '">' + pct(o.margemPct) + '</td><td class="num">' + o.qtdPessoas + '</td><td class="num">' + (o.custoPessoa === null ? '—' : num(o.custoPessoa)) + '</td></tr>');
-        if (aberto) Array.from(o.pessoas.entries()).sort((a, b) => b[1] - a[1]).forEach(([p, v]) => {
-            partes.push('<tr class="nivel-1"><td colspan="4">' + esc(db.dic.det[p]) + '</td><td></td><td class="num">' + num(v) + '</td><td colspan="4"></td></tr>');
-        });
+        // r192: ao abrir, todos os custos da operação — uma linha por lançamento (Conta, Setor, Descrição, Valor)
+        if (aberto) {
+            partes.push('<tr class="nivel-1 cab-lanc"><td><strong>Conta</strong></td><td><strong>Setor</strong></td><td colspan="2"><strong>Descrição</strong></td><td></td><td class="num"><strong>Valor (R$)</strong></td><td colspan="4"></td></tr>');
+            Array.from(o.lancs.values()).sort((a, b) => db.dic.conta[a.conta].localeCompare(db.dic.conta[b.conta]) || b.v - a.v).forEach(l => {
+                partes.push('<tr class="nivel-1"><td>' + esc(db.dic.conta[l.conta]) + '</td><td>' + esc(db.dic.setor[l.setor]) + '</td><td colspan="2">' + esc(db.dic.det[l.det]) + '</td><td></td><td class="num' + classeValor(-l.v) + '">' + num(l.v) + '</td><td colspan="4"></td></tr>');
+            });
+        }
     });
     document.getElementById('tab-ops').innerHTML = lista.length
         ? '<table class="tabela-bi"><thead><tr><th>Data da operação</th><th>Cliente</th><th>Loja</th><th>Tipo</th><th class="num">Faturamento (R$)</th><th class="num">Custo direto (R$)</th>' +
@@ -3439,18 +3513,22 @@ function desenharTabelaOps() {
 }
 
 // ---------------- DRE Gerencial ----------------
+// r192: lucro operacional antes do investimento = lucro líquido + investimento
+const IDX_INV_DRE = CAMADAS_DRE.findIndex(c => c[0] === 'INVESTIMENTO');
+function lucroAntesInv(x) { return x.ll + (x.camadas[IDX_INV_DRE] || 0); }
 function desenharAbaDRE() {
     const db = estado.db, L = linhasTodasContas(db, estado.cascata.efetivo, null);
     const d = calcularDRE(db, L), t = d.total;
     const alvo = document.getElementById('conteudo-aba');
     alvo.innerHTML = esqueletoNova('Do faturamento ao lucro líquido', 'Lucro líquido mês a mês',
-        'Lucro Líquido = Faturamento − Imposto − Pessoal − Desp. Op. − Desp. Tec. − Desp. Adm. − Desp. Fin. − Doação − Viagem APAS − Investimento.',
+        'Lucro operacional antes do investimento = Faturamento − Imposto − Pessoal − Desp. Op. − Desp. Tec. − Desp. Adm. − Desp. Fin. − Doação − Viagem APAS. Lucro Líquido = esse resultado − Investimento.',
         'Colunas: lucro líquido do mês. Linha: margem líquida (eixo à direita).') +
         '<section class="bi-painel"><h3>DRE por negócio</h3><div class="explica">Cada célula mostra o valor e, abaixo, o percentual sobre o faturamento do negócio. ' +
         '“Estrutura sem receita ligada” = custos lançados em clientes que nunca faturaram (ex.: DESPESA ADMINISTRATIVA, INVESTIMENTO).</div>' +
         '<div class="tabela-rolagem" id="tab-dre"></div></section>';
     document.getElementById('cards-aba').innerHTML =
         cardAba('Faturamento', brl(t.fat), '', '#5DC500') +
+        cardAba('Lucro operacional antes do investimento', brl(lucroAntesInv(t)), t.fat ? pct(lucroAntesInv(t) / t.fat) + ' do faturamento' : '', '#2f6ea3', lucroAntesInv(t) < 0 ? 'kpi-negativo' : '') +   // r192
         cardAba('Lucro líquido', brl(t.ll), '', '#001528', t.ll < 0 ? 'kpi-negativo' : '') +
         cardAba('Margem líquida', pct(t.margem), '', '#0a3a68', t.margem !== null && t.margem < 0 ? 'kpi-negativo' : '') +
         cardAba('Estrutura sem receita ligada', brl(t.estrutura), t.custo8 ? pct(t.estrutura / t.custo8) + ' do custo' : '', '#E8872B');
@@ -3462,7 +3540,9 @@ function desenharAbaDRE() {
     // Cascata
     const rot = ['Faturamento', 'Imposto'], barras = [[0, t.fat]], vals = [t.fat, -t.imp], cores = ['#5DC500', '#E8872B'];
     let corre = t.fat - t.imp; barras.push([t.fat, corre]);
-    CAMADAS_DRE.forEach((c, k) => { const v = t.camadas[k]; if (Math.abs(v) < 0.005) return; rot.push(c[1]); barras.push([corre, corre - v]); vals.push(-v); cores.push('#E8872B'); corre -= v; });
+    CAMADAS_DRE.forEach((c, k) => {
+        if (k === IDX_INV_DRE) { rot.push('Lucro oper. antes do invest.'); barras.push([0, corre]); vals.push(corre); cores.push(corre < 0 ? '#c0392b' : '#2f6ea3'); }   // r192
+        const v = t.camadas[k]; if (Math.abs(v) < 0.005) return; rot.push(c[1]); barras.push([corre, corre - v]); vals.push(-v); cores.push('#E8872B'); corre -= v; });
     rot.push('Lucro líquido'); barras.push([0, t.ll]); vals.push(t.ll); cores.push(t.ll < 0 ? '#c0392b' : '#001528');
     estado.graficos.dreCascata = new Chart(canvasEm('cx-nova-esq', 'gr-dre-cascata', 'Cascata do faturamento ao lucro líquido'), {
         type: 'bar',
@@ -3488,7 +3568,9 @@ function desenharAbaDRE() {
     const cel = (v, base, destaque) => '<td class="num' + classeValor(v) + (destaque ? ' fw-bold' : '') + '">' + num(v) + (base ? '<span class="pct-dre">' + pct(v / base) + '</span>' : '') + '</td>';
     const linha = (rotulo, f, classe, semPct) => '<tr class="' + (classe || '') + '"><td>' + rotulo + '</td>' + colunas.map(c => cel(f(c.x), semPct ? 0 : c.x.fat, c.total)).join('') + '</tr>';
     const linhas = [linha('Faturamento', x => x.fat, 'nivel-0', true), linha('(−) Imposto', x => -x.imp)];
-    CAMADAS_DRE.forEach((c, k) => { if (colunas.some(col => Math.abs(col.x.camadas[k]) > 0.005)) linhas.push(linha('(−) ' + c[1], x => -x.camadas[k])); });
+    CAMADAS_DRE.forEach((c, k) => {
+        if (k === IDX_INV_DRE) linhas.push(linha('= Lucro operacional antes do investimento', x => lucroAntesInv(x), 'total'));   // r192
+        if (colunas.some(col => Math.abs(col.x.camadas[k]) > 0.005)) linhas.push(linha('(−) ' + c[1], x => -x.camadas[k])); });
     linhas.push(linha('= Lucro líquido', x => x.ll, 'total'));
     linhas.push('<tr><td>Margem líquida</td>' + colunas.map(c => '<td class="num' + classeValor(c.x.margem || 0) + '">' + pct(c.x.margem) + '</td>').join('') + '</tr>');
     linhas.push(linha('dos custos: estrutura sem receita ligada', x => x.estrutura, 'nivel-2'));
