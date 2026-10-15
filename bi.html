@@ -546,18 +546,20 @@ function passaGlobais(db, ef, i) {
 }
 function totaisCardsPrincipais(db, cascata, mesesSel) {
     const ef = cascata.efetivo;
-    let fat = 0, custo = 0, imp = 0;
+    let fat = 0, custo = 0, imp = 0, folha = 0;
     const fatUni = new Map();
     for (let i = 0; i < db.n; i++) {
         if (mesesSel && !mesesSel.has(db.mes[i])) continue;
         if (!passaGlobais(db, ef, i)) continue;
         fat += db.fat[i]; custo += db.custo[i]; imp += db.imp[i];
+        if (db.chaves.conta[db.conta[i]] === 'PESSOAL') folha += db.custo[i];   // r191: folha = conta PESSOAL
         if (db.fat[i]) fatUni.set(db.uni[i], (fatUni.get(db.uni[i]) || 0) + db.fat[i]);
     }
     let unidades = 0;
     fatUni.forEach(v => { if (v > 0.005) unidades++; });
     const lucro = fat - custo - imp;
-    return { fat: fat, custo: custo, imp: imp, lucro: lucro, margem: fat ? lucro / fat : null, unidades: unidades };
+    return { fat: fat, custo: custo, imp: imp, lucro: lucro, margem: fat ? lucro / fat : null, unidades: unidades,
+             folha: folha, fatFolha: folha ? fat / folha : null, lucroFolha: folha ? lucro / folha : null };   // r191
 }
 
 // Totais dos cards. escopoCusto: 'oper' (3 contas) ou 'total' (8 contas)
@@ -1227,10 +1229,13 @@ const CARDS = {
     custo:  { rotulo: 'Custo', cor: '#E8872B' },
     imp:    { rotulo: 'Imposto', cor: '#6B7B8D' },
     margem: { rotulo: 'Margem', cor: '#001528' },
+    lucro:  { rotulo: 'Lucro', cor: '#001528' },                                   // r191
+    fatFolha:   { rotulo: 'Faturamento por R$ de folha', cor: '#5DC500' },         // r191
+    lucroFolha: { rotulo: 'Lucro por R$ de folha', cor: '#2f6ea3' },               // r191
     unid:   { rotulo: 'Unidades atendidas', cor: '#0a3a68' },
     yoy:    { rotulo: 'Crescimento YoY', cor: '#5DC500' }
 };
-const CARDS_PADRAO = ['fat', 'custo', 'imp', 'margem', 'unid', 'yoy'];
+const CARDS_PADRAO = ['fat', 'custo', 'imp', 'margem', 'lucro', 'fatFolha', 'lucroFolha', 'unid', 'yoy'];
 // Sem o verde da marca: ele fica reservado para a linha de Unidades atendidas
 const CORES_PILHA = ['#001528', '#E8872B', '#2f6ea3', '#b86416', '#7fa6c9', '#3d5a73', '#f2b37a', '#9fb4c8', '#5c7d99'];
 const COR_OUTROS = '#c3ccd6';
@@ -1657,6 +1662,11 @@ function desenharCards() {
         custo:  { valor: brl(t.custo), sub: 'Todas as contas, exceto Adiantamento' },
         imp:    { valor: brl(t.imp), sub: 'Coluna Imposto' },
         margem: { valor: pct(t.margem), sub: 'Lucro ' + brl(t.lucro), classe: t.margem !== null && t.margem < 0 ? 'kpi-negativo' : '' },
+        // r191: lucro e retorno sobre a folha (conta PESSOAL)
+        lucro:  { valor: brl(t.lucro), sub: 'Faturamento − custo − imposto', classe: t.lucro < 0 ? 'kpi-negativo' : '' },
+        fatFolha:   { valor: t.fatFolha === null ? '—' : brl(t.fatFolha), sub: t.folha ? 'Faturamento ' + brl(t.fat) + ' ÷ folha (Pessoal) ' + brl(t.folha) : 'Sem custo de folha no período' },
+        lucroFolha: { valor: t.lucroFolha === null ? '—' : brl(t.lucroFolha), sub: t.folha ? 'Lucro ' + brl(t.lucro) + ' ÷ folha (Pessoal) ' + brl(t.folha) : 'Sem custo de folha no período',
+                      classe: t.lucroFolha !== null && t.lucroFolha < 0 ? 'kpi-negativo' : '' },
         unid:   { valor: fmtNum.format(t.unidades), sub: 'Cliente + loja com faturamento' },
         yoy:    {
             valor: y.yoy === null ? '—' : (y.yoy > 0 ? '▲ ' : y.yoy < 0 ? '▼ ' : '') + pct(Math.abs(y.yoy)),
@@ -1668,7 +1678,7 @@ function desenharCards() {
     const focado = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.card : null;
     linha.innerHTML = visiveis.map((id, pos) => {
         const c = CARDS[id], d = dados[id];
-        return '<div class="kpi-card" role="listitem" tabindex="0" data-card="' + id + '" style="--kpi-cor:' + (d.cor || c.cor) + '" ' +
+        return '<div class="kpi-card" role="listitem" tabindex="0" data-card="' + id + '" title="' + esc(d.sub) + '" style="--kpi-cor:' + (d.cor || c.cor) + '" ' +   // r191: conta ao passar o mouse
                'aria-label="' + esc(c.rotulo + ': ' + d.valor + '. ' + d.sub + '. Posição ' + (pos + 1) + ' de ' + visiveis.length + '. Setas esquerda e direita movem o card.') + '">' +
                '<span class="kpi-alca" aria-hidden="true" title="Arrastar">⠿</span>' +
                '<div class="kpi-rotulo">' + esc(c.rotulo) + '</div>' +
@@ -1799,8 +1809,9 @@ function copiaCards() { return { ordem: estado.cards.ordem.slice(), visiveis: es
 function validarCards(cfg) {
     if (!cfg) return null;
     const ordem = (cfg.ordem || []).filter(x => CARDS[x]);
-    CARDS_PADRAO.forEach(x => { if (ordem.indexOf(x) < 0) ordem.push(x); });
-    const visiveis = Array.isArray(cfg.visiveis) ? cfg.visiveis.filter(x => CARDS[x]) : CARDS_PADRAO.slice();
+    const novos = CARDS_PADRAO.filter(x => ordem.indexOf(x) < 0);   // r191: cards que surgiram depois desta arrumação
+    novos.forEach(x => ordem.push(x));
+    const visiveis = Array.isArray(cfg.visiveis) ? cfg.visiveis.filter(x => CARDS[x]).concat(novos) : CARDS_PADRAO.slice();
     return { ordem: ordem, visiveis: visiveis };
 }
 const CHAVE_LOCAL = 'fcBiCards_' + cpfLogado;
