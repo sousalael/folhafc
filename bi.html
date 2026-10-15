@@ -131,6 +131,10 @@
         .tabela-bi tr.nivel-4 td:first-child { padding-left: 98px; color: #5b6672; }
         .tabela-bi tr.nivel-4 td { background: #fafcfd; font-size: .78rem; }
         .tabela-bi tr.cab-lanc td { background: #eef3f8; font-size: .78rem; }
+        /* r193: coluna Obs e gráficos de rendimento */
+        .tabela-bi td.obs-col { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #47535f; font-size: .78rem; }
+        .rend-sel { max-height: 280px; overflow: auto; border: 1px solid #dfe5ec; border-radius: 6px; padding: 6px 8px; margin-top: 6px; }
+        .rend-sel label { display: flex; gap: 6px; align-items: center; font-size: .8rem; padding: 2px 0; }
         .tabela-bi tr.linha-loja { cursor: help; }
         .tabela-bi tr.linha-loja:hover td, .tabela-bi tr.linha-loja:focus td { background: #e9f3fb; }
         .tabela-bi tr.linha-loja:focus { outline: 2px solid var(--fc-acao); outline-offset: -2px; }
@@ -677,7 +681,7 @@ function obsDaLoja(db, cascata, mesesSel, localEf, conta, setor, cli, loja, limi
     const O = db.obs, ef = cascata.efetivo, uni = db.mapaUni[cli + '|' + loja];
     const porTexto = new Map();
     for (let i = 0; i < O.n; i++) {
-        if (O.conta[i] !== conta || O.setor[i] !== setor || O.cli[i] !== cli || O.loja[i] !== loja) continue;
+        if ((conta === null ? !(estado.finCtx && estado.finCtx.papel.custo[O.conta[i]]) : O.conta[i] !== conta) || O.setor[i] !== setor || O.cli[i] !== cli || O.loja[i] !== loja) continue;   // r193
         const m = O.mes[i];
         if (mesesSel && !mesesSel.has(m)) continue;
         if (ef.ano && !ef.ano.has(db.anoDoMes[m])) continue;
@@ -748,27 +752,18 @@ function arvoreResultado(db, linhas) {
 
 // Arvore de custo: Conta > Setor (abas financeiras), com filtros locais
 function arvoreCusto(db, linhas, papel) {
-    const raiz = new Map();
+    // r193: Detalhamento do Custo sem a Conta — Setor > Cliente > Unidade
+    const raiz = new Map(), porUniTotal = new Map();
     let total = 0;
-    const porUniTotal = new Map();   // r141: custo de cada unidade (cliente + loja)
-    const somaUni = (mapa, u, v) => mapa.set(u, (mapa.get(u) || 0) + v);
+    const no = (mapa, id) => { let x = mapa.get(id); if (!x) { x = { id: id, custo: 0, porUni: new Map(), filhos: new Map() }; mapa.set(id, x); } return x; };
     for (let j = 0; j < linhas.length; j++) {
         const i = linhas[j];
         if (!papel.custo[db.conta[i]]) continue;
-        const v = db.custo[i];
-        if (!v) continue;
-        let a = raiz.get(db.conta[i]);
-        if (!a) { a = { id: db.conta[i], custo: 0, filhos: new Map(), porUni: new Map() }; raiz.set(db.conta[i], a); }
-        let b = a.filhos.get(db.setor[i]);
-        if (!b) { b = { id: db.setor[i], custo: 0, porUni: new Map(), filhos: new Map() }; a.filhos.set(db.setor[i], b); }
-        // r142: Cliente e Unidade (loja) abaixo do setor
-        let c = b.filhos.get(db.cli[i]);
-        if (!c) { c = { id: db.cli[i], custo: 0, porUni: new Map(), filhos: new Map() }; b.filhos.set(db.cli[i], c); }
-        let d = c.filhos.get(db.loja[i]);
-        if (!d) { d = { id: db.loja[i], custo: 0, porUni: new Map() }; c.filhos.set(db.loja[i], d); }
-        a.custo += v; b.custo += v; c.custo += v; d.custo += v; total += v;
+        const v = db.custo[i]; if (!v) continue;
+        const s2 = no(raiz, db.setor[i]), k = no(s2.filhos, db.cli[i]), l = no(k.filhos, db.loja[i]);
         const u = db.uni[i];
-        somaUni(a.porUni, u, v); somaUni(b.porUni, u, v); somaUni(c.porUni, u, v); somaUni(d.porUni, u, v); somaUni(porUniTotal, u, v);
+        [s2, k, l].forEach(x => { x.custo += v; x.porUni.set(u, (x.porUni.get(u) || 0) + v); });
+        total += v; porUniTotal.set(u, (porUniTotal.get(u) || 0) + v);
     }
     return { raiz: raiz, total: total, porUni: porUniTotal };
 }
@@ -1110,9 +1105,9 @@ function calcularOperacoes(db, linhas) {
         o.custo += db.custo[i]; custoLigado += db.custo[i];
         o.contas.set(db.conta[i], (o.contas.get(db.conta[i]) || 0) + db.custo[i]);
         // r192: todos os lançamentos de custo da operação (Conta, Setor, Descrição)
-        const kl = db.conta[i] + '|' + db.setor[i] + '|' + db.det[i];
+        const kl = db.conta[i] + '|' + db.setor[i];   // r193: sem a Descrição
         const ln = o.lancs.get(kl);
-        if (ln) ln.v += db.custo[i]; else o.lancs.set(kl, { conta: db.conta[i], setor: db.setor[i], det: db.det[i], v: db.custo[i] });
+        if (ln) ln.v += db.custo[i]; else o.lancs.set(kl, { conta: db.conta[i], setor: db.setor[i], v: db.custo[i] });
         if (db.chaves.conta[db.conta[i]] === 'PESSOAL') { o.pessoal += db.custo[i]; o.pessoas.set(db.det[i], (o.pessoas.get(db.det[i]) || 0) + db.custo[i]); }
     }
     const lista = Array.from(ops.values());
@@ -1849,6 +1844,11 @@ async function carregarConfigsCards() {
         }
         const v = validarCards(res.atual);
         if (v) { estado.cards = v; if (estado.db) desenharCards(); }
+        if (res.pessoas) {   // r193: pessoas dos gráficos de rendimento
+            estado.rend = { sup: Array.isArray(res.pessoas.sup) ? res.pessoas.sup : null, apo: Array.isArray(res.pessoas.apo) ? res.pessoas.apo : null };
+            try { localStorage.setItem(CHAVE_REND, JSON.stringify(estado.rend)); } catch (e) {}
+            if (estado.db && estado.finCtx && estado.finCtx.aba === 'folha') desenharRendimento(estado.db, estado.finCtx.linhasCusto);
+        }
         if (!document.getElementById('painel-cards').classList.contains('hidden')) desenharPainelCards();
     } catch (e) {}
 }
@@ -2250,6 +2250,7 @@ function desenharAbaFinanceira(aba) {
             '<div class="explica" id="explica-pilha"></div>' +
             '<div class="grafico-caixa" id="cx-pilha"></div></section>' +
         '</div>' +
+        (aba.id === 'folha' ? painelRendimentoHTML() : '') +   // r193: rendimento de supervisores e apoios
         '<section class="bi-painel">' +
           '<div class="painel-cabeca"><h3>Detalhamento do Custo</h3>' +
             '<div class="d-flex gap-2"><button class="btn btn-sm btn-fc-contorno" id="btn-expandir-c">Expandir tudo</button>' +
@@ -2286,7 +2287,7 @@ function desenharAbaFinanceira(aba) {
     document.getElementById('btn-expandir-c').addEventListener('click', () => {
         const f = estado.finAtual;
         if (!f) return;
-        f.contas.forEach(c => { ab.add('c' + c.id); c.filhos.forEach(s2 => ab.add('c' + c.id + (aba.id === 'adm' ? '/k' : '/s') + s2.id)); });   // r192: no Admin o 2º nível é o cliente
+        f.contas.forEach(s2 => ab.add('s' + s2.id));   // r193: abre os setores (raiz sem a Conta)
         desenharTabelaCusto(aba);
     });
     document.getElementById('btn-recolher-c').addEventListener('click', () => { ab.clear(); desenharTabelaCusto(aba); });
@@ -2409,7 +2410,7 @@ function atualizarDependentesFin(aba) {
     }
 
     // Arvore de custo e cards da aba
-    const arv = aba.id === 'adm' ? arvoreCustoAdm(db, linhasCusto, ctx.papel) : arvoreCusto(db, linhasCusto, ctx.papel);   // r192
+    const arv = (aba.id === 'adm' || aba.id === 'inv') ? arvoreCustoAdm(db, linhasCusto, ctx.papel) : arvoreCusto(db, linhasCusto, ctx.papel);   // r193
     const atendidas = unidadesAtendidas(db, linhasG);
     estado.finAtual = { aba: aba.id, arv: arv, fatTotal: fatTotal, atendidas: atendidas, mesesSel: sel,
                         contas: Array.from(arv.raiz.values()).sort((a, b) => b.custo - a.custo) };
@@ -2432,6 +2433,7 @@ function atualizarDependentesFin(aba) {
         '. Participação sobre o custo total desta aba. Custo por unidade: só conta as unidades atendidas que tiveram aquele custo. Passe o mouse numa loja para ver as observações.';
     desenharTabelaCusto(aba);
     if (aba.id === 'op') desenharCustoPorPessoa(db, linhasG, linhasCusto);   // r190
+    if (aba.id === 'folha') desenharRendimento(db, linhasCusto);              // r193
 
     if (aba.receitas) {
         const rec = receitasAdmin(db, linhasG, ctx.papel);
@@ -2446,6 +2448,127 @@ function atualizarDependentesFin(aba) {
 
 
 // =====================================================================
+// (r193 abaixo)
+
+// =====================================================================
+// r193: RENDIMENTO DE SUPERVISORES E APOIOS (aba Folha × Faturamento)
+// Rendimento = total pago à pessoa na conta PESSOAL (mesmos filtros da aba).
+// As pessoas de cada gráfico podem ser escolhidas (⚙) e a escolha fica gravada.
+// =====================================================================
+const REND_PADRAO = {
+    sup: ['BRUNA', 'FRANCISCO', 'DAVI NOGUEIRA', 'MATHEUS SILVA', 'LANNIN', 'JOHN', 'LUCAS NEGREIROS', 'MOISES GOMES', 'MAYCON', 'WESLEY ARES', 'KEVIN'],
+    apo: ['JONATHAN ALBUQUERQUE', 'HYAN MARTINS', 'WEBSON', 'PAULO CESAR COELHO', 'DANIELA ARES']
+};
+const REND_TIT = { sup: 'Rendimento Supervisores', apo: 'Rendimento Apoios' };
+const CHAVE_REND = 'fcBiRend_' + cpfLogado;
+function rendNorm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+function rendNomesPessoal(db) {   // todas as pessoas pagas em PESSOAL (base inteira)
+    const s = new Set();
+    for (let i = 0; i < db.n; i++) if (db.custo[i] && db.chaves.conta[db.conta[i]] === 'PESSOAL') s.add(db.dic.det[db.det[i]]);
+    return Array.from(s).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+function rendPadraoResolvido(db, tipo) {   // nomes da lista padrão: igual ou começando pelo nome listado
+    const todos = rendNomesPessoal(db), out = [];
+    REND_PADRAO[tipo].forEach(p => { const P = rendNorm(p); todos.forEach(n => { const N = rendNorm(n); if ((N === P || N.indexOf(P + ' ') === 0) && out.indexOf(n) < 0) out.push(n); }); });
+    return out;
+}
+function rendSelecao(db, tipo) {
+    const s = estado.rend && estado.rend[tipo];
+    return Array.isArray(s) ? s : rendPadraoResolvido(db, tipo);
+}
+function rendCarregarLocal() {
+    try { const l = JSON.parse(localStorage.getItem(CHAVE_REND) || 'null'); if (l && typeof l === 'object') estado.rend = { sup: Array.isArray(l.sup) ? l.sup : null, apo: Array.isArray(l.apo) ? l.apo : null }; } catch (e) {}
+}
+function rendSalvar() {
+    try { localStorage.setItem(CHAVE_REND, JSON.stringify(estado.rend)); } catch (e) {}
+    chamar({ action: 'biFinConfigSalvar', cpf: cpfLogado, nome: '__PESSOAS__', config: estado.rend }).catch(() => {});
+}
+function painelRendimentoHTML() {
+    const p = tipo => '<section class="bi-painel"><div class="painel-cabeca"><h3>' + REND_TIT[tipo] + '</h3>' +
+        '<button class="btn btn-sm btn-fc-contorno" data-rend-sel="' + tipo + '" aria-expanded="false">⚙ Pessoas</button></div>' +
+        '<div class="explica" id="explica-rend-' + tipo + '"></div>' +
+        '<div class="rend-sel hidden" id="sel-rend-' + tipo + '"></div>' +
+        '<div class="grafico-caixa" id="cx-rend-' + tipo + '"></div></section>';
+    return '<div class="grade-2">' + p('sup') + p('apo') + '</div>';
+}
+const pluginRotuloDentroH = {
+    id: 'fcRotuloDentroH',
+    afterDatasetsDraw(chart) {
+        const ctx = chart.ctx, meta = chart.getDatasetMeta(0), ds = chart.data.datasets[0];
+        meta.data.forEach((bar, i) => {
+            const v = ds.data[i]; if (!v) return;
+            const txt = brl(v);
+            ctx.save(); ctx.font = '700 11px system-ui, -apple-system, sans-serif'; ctx.textBaseline = 'middle';
+            const w = ctx.measureText(txt).width, larg = bar.x - bar.base;
+            if (larg > w + 12) { ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(txt, bar.x - 6, bar.y); }
+            else { ctx.fillStyle = '#001528'; ctx.textAlign = 'left'; ctx.fillText(txt, bar.x + 4, bar.y); }
+            ctx.restore();
+        });
+    }
+};
+function desenharRendimento(db, linhasCusto) {
+    ['sup', 'apo'].forEach(tipo => {
+        const caixa = document.getElementById('cx-rend-' + tipo); if (!caixa) return;
+        const sel = rendSelecao(db, tipo), setSel = new Set(sel), soma = new Map();
+        for (let j = 0; j < linhasCusto.length; j++) {
+            const i = linhasCusto[j];
+            if (!db.custo[i] || db.chaves.conta[db.conta[i]] !== 'PESSOAL') continue;
+            const nome = db.dic.det[db.det[i]];
+            if (setSel.has(nome)) soma.set(nome, (soma.get(nome) || 0) + db.custo[i]);
+        }
+        const lista = Array.from(soma.entries()).filter(x => x[1] > 0.005).sort((a, b) => b[1] - a[1]);
+        const semPag = sel.filter(n => !soma.get(n));
+        document.getElementById('explica-rend-' + tipo).textContent = 'Total pago na conta Pessoal a cada pessoa, nos filtros escolhidos.' +
+            (lista.length ? ' Soma: ' + brl(lista.reduce((s, x) => s + x[1], 0)) + '.' : '') +
+            (semPag.length ? ' Sem pagamento no período: ' + semPag.join(', ') + '.' : '');
+        const g = 'rend_' + tipo;
+        if (estado.graficos[g]) { estado.graficos[g].destroy(); delete estado.graficos[g]; }
+        if (!lista.length) { caixa.style.height = ''; caixa.innerHTML = '<div class="aviso-vazio">' + (sel.length ? 'Nenhum pagamento para as pessoas escolhidas nos filtros atuais.' : 'Nenhuma pessoa escolhida. Use ⚙ Pessoas.') + '</div>'; return; }
+        caixa.style.height = Math.max(160, lista.length * 30 + 40) + 'px';
+        caixa.innerHTML = '<canvas id="gr-rend-' + tipo + '" role="img" aria-label="' + REND_TIT[tipo] + '"></canvas>';
+        estado.graficos[g] = new Chart(document.getElementById('gr-rend-' + tipo), {
+            type: 'bar',
+            data: { labels: lista.map(x => x[0]), datasets: [{ label: 'Rendimento', data: lista.map(x => x[1]), backgroundColor: tipo === 'sup' ? '#001528' : '#5DC500', borderRadius: 3 }] },
+            plugins: [pluginRotuloDentroH],
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.raw) } } },
+                scales: { x: Object.assign(eixoMoeda(), { grace: '8%' }), y: { grid: { display: false }, ticks: { autoSkip: false } } } }
+        });
+    });
+}
+function desenharSeletorRend(tipo) {
+    const db = estado.db, alvo = document.getElementById('sel-rend-' + tipo);
+    const sel = new Set(rendSelecao(db, tipo)), todos = rendNomesPessoal(db);
+    alvo.innerHTML = '<div class="d-flex gap-2 mb-1" style="flex-wrap:wrap"><input type="search" class="form-control form-control-sm" placeholder="Buscar pessoa…" data-rend-busca="' + tipo + '" style="max-width:220px">' +
+        '<button class="btn btn-sm btn-fc-contorno" data-rend-padrao="' + tipo + '">Voltar à lista padrão</button>' +
+        '<button class="btn btn-sm btn-fc-contorno" data-rend-nenhum="' + tipo + '">Desmarcar todas</button></div>' +
+        todos.map(n => '<label data-nome="' + esc(rendNorm(n)) + '"><input type="checkbox" data-rend-pessoa="' + tipo + '" value="' + esc(n) + '"' + (sel.has(n) ? ' checked' : '') + '>' + esc(n) + '</label>').join('');
+}
+function ligarRendimento() {
+    const raiz = document.getElementById('conteudo-aba');
+    raiz.addEventListener('click', e => {
+        const b = e.target.closest('[data-rend-sel]');
+        if (b) { const t = b.dataset.rendSel, alvo = document.getElementById('sel-rend-' + t), abrir = alvo.classList.contains('hidden');
+                 if (abrir) desenharSeletorRend(t); alvo.classList.toggle('hidden', !abrir); b.setAttribute('aria-expanded', abrir ? 'true' : 'false'); return; }
+        const pd = e.target.closest('[data-rend-padrao]');
+        if (pd) { const t = pd.dataset.rendPadrao; estado.rend = estado.rend || {}; estado.rend[t] = null; rendSalvar(); desenharSeletorRend(t); desenharRendimento(estado.db, estado.finCtx.linhasCusto); return; }
+        const nn = e.target.closest('[data-rend-nenhum]');
+        if (nn) { const t = nn.dataset.rendNenhum; estado.rend = estado.rend || {}; estado.rend[t] = []; rendSalvar(); desenharSeletorRend(t); desenharRendimento(estado.db, estado.finCtx.linhasCusto); }
+    });
+    raiz.addEventListener('change', e => {
+        const c = e.target.closest('[data-rend-pessoa]'); if (!c) return;
+        const t = c.dataset.rendPessoa;
+        estado.rend = estado.rend || {};
+        estado.rend[t] = Array.from(document.querySelectorAll('[data-rend-pessoa="' + t + '"]:checked')).map(x => x.value);
+        rendSalvar(); desenharRendimento(estado.db, estado.finCtx.linhasCusto);
+    });
+    raiz.addEventListener('input', e => {
+        const s = e.target.closest('[data-rend-busca]'); if (!s) return;
+        const q = rendNorm(s.value);
+        document.querySelectorAll('#sel-rend-' + s.dataset.rendBusca + ' label[data-nome]').forEach(l => { l.style.display = !q || l.dataset.nome.indexOf(q) >= 0 ? '' : 'none'; });
+    });
+}
+
 // r190: CUSTO POR PESSOA (aba Operacional × Faturamento)
 // Pessoas da operação = pessoas diferentes (Equipe/Descrição) pagas em PESSOAL
 // na mesma unidade e na mesma data da operação. Unidade de medida: pessoa-dia
@@ -2593,6 +2716,7 @@ function desenharCustoPorPessoa(db, linhasG, linhasCusto) {
 
 // r192: Admin × Faturamento — Conta > Cliente > Unidade > Setor > Descrição
 function arvoreCustoAdm(db, linhas, papel) {
+    // r193: Admin e Investimento — Setor > Descrição (a coluna Obs vem das observações)
     const raiz = new Map(), porUniTotal = new Map();
     let total = 0;
     const no = (mapa, id) => { let x = mapa.get(id); if (!x) { x = { id: id, custo: 0, porUni: new Map(), filhos: new Map() }; mapa.set(id, x); } return x; };
@@ -2600,20 +2724,43 @@ function arvoreCustoAdm(db, linhas, papel) {
         const i = linhas[j];
         if (!papel.custo[db.conta[i]]) continue;
         const v = db.custo[i]; if (!v) continue;
-        const a = no(raiz, db.conta[i]), b = no(a.filhos, db.cli[i]), c = no(b.filhos, db.loja[i]), d = no(c.filhos, db.setor[i]), e = no(d.filhos, db.det[i]);
+        const s2 = no(raiz, db.setor[i]), d = no(s2.filhos, db.det[i]);
         const u = db.uni[i];
-        [a, b, c, d, e].forEach(x => { x.custo += v; x.porUni.set(u, (x.porUni.get(u) || 0) + v); });
+        [s2, d].forEach(x => { x.custo += v; x.porUni.set(u, (x.porUni.get(u) || 0) + v); });
         total += v; porUniTotal.set(u, (porUniTotal.get(u) || 0) + v);
     }
     return { raiz: raiz, total: total, porUni: porUniTotal };
 }
+// r193: observações por Setor + Descrição (todas as contas da aba, mesmos filtros)
+function obsPorSetorDet(db, cascata, mesesSel, localEf, papel) {
+    const O = db.obs, ef = cascata.efetivo, out = new Map();
+    for (let i = 0; i < O.n; i++) {
+        if (!papel.custo[O.conta[i]]) continue;
+        const m = O.mes[i];
+        if (mesesSel && !mesesSel.has(m)) continue;
+        if (ef.ano && !ef.ano.has(db.anoDoMes[m])) continue;
+        if (ef.mes && !ef.mes.has(m)) continue;
+        if (ef.neg && !ef.neg.has(O.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(O.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(db.mapaUni[O.cli[i] + '|' + O.loja[i]])) continue;
+        if (ef.tipo && !ef.tipo.has(O.tipo[i])) continue;
+        if (localEf && localEf.setor && !localEf.setor.has(O.setor[i])) continue;
+        if (localEf && localEf.det && !localEf.det.has(O.det[i])) continue;
+        const k = O.setor[i] + '|' + O.det[i];
+        let s = out.get(k); if (!s) { s = new Map(); out.set(k, s); }
+        s.set(O.txt[i], (s.get(O.txt[i]) || 0) + O.custo[i]);
+    }
+    return out;
+}
 function desenharTabelaCustoAdm(aba) {
-    const db = estado.db, f = estado.finAtual;
+    const db = estado.db, f = estado.finAtual, ctx = estado.finCtx;
     esconderObs();
     const ab = estado.abertosCusto[aba.id];
-    const linhaC = (nome, no, classe, extra) => {
+    const obs = obsPorSetorDet(db, estado.cascata, f.mesesSel, ctx ? ctx.localEf : null, ctx ? ctx.papel : db.papelAba[aba.id]);
+    const linhaC = (nome, no, classe, obsTxt) => {
         const cpu = custoPorUnidade(no.porUni, f.atendidas);
-        return '<tr class="' + (classe || '') + '"' + (extra || '') + '><td>' + nome + '</td>' +
+        return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' +
+            '<td class="obs-col"' + (obsTxt ? ' title="' + esc(obsTxt) + '"' : '') + '>' + (obsTxt ? esc(obsTxt) : '') + '</td>' +
             '<td class="num' + classeValor(no.custo) + '">' + num(no.custo) + '</td>' +
             '<td class="num">' + (f.fatTotal ? pct(no.custo / f.fatTotal) : '—') + '</td>' +
             '<td class="num">' + (f.arv.total ? pct(no.custo / f.arv.total) : '—') + '</td>' +
@@ -2622,41 +2769,27 @@ function desenharTabelaCustoAdm(aba) {
     const botao = (k, aberto, nome) => '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
     const porCusto = (a, b) => b.custo - a.custo;
     const partes = [];
-    f.contas.forEach(c => {
-        const kC = 'c' + c.id, abC = ab.has(kC), nC = db.dic.conta[c.id];
-        partes.push(linhaC(botao(kC, abC, nC) + esc(nC), c, 'nivel-0'));
-        if (!abC) return;
-        Array.from(c.filhos.values()).sort(porCusto).forEach(k => {
-            const kK = kC + '/k' + k.id, abK = ab.has(kK), nK = db.dic.cli[k.id];
-            partes.push(linhaC(botao(kK, abK, nK) + esc(nK), k, 'nivel-1'));
-            if (!abK) return;
-            Array.from(k.filhos.values()).sort(porCusto).forEach(l => {
-                const kL = kK + '/l' + l.id, abL = ab.has(kL), nL = db.dic.loja[l.id];
-                partes.push(linhaC(botao(kL, abL, nL) + esc(nL), l, 'nivel-2'));
-                if (!abL) return;
-                Array.from(l.filhos.values()).sort(porCusto).forEach(s2 => {
-                    const kS = kL + '/s' + s2.id, abS = ab.has(kS), nS = db.dic.setor[s2.id];
-                    partes.push(linhaC(botao(kS, abS, nS) + esc(nS), s2, 'nivel-3 linha-loja',
-                        ' tabindex="0" data-conta="' + c.id + '" data-setor="' + s2.id + '" data-cli="' + k.id + '" data-loja="' + l.id + '"'));
-                    if (!abS) return;
-                    Array.from(s2.filhos.values()).sort(porCusto).forEach(dd => {
-                        partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.det[dd.id] || '(sem descrição)'), dd, 'nivel-4'));
-                    });
-                });
-            });
+    f.contas.forEach(s2 => {
+        const kS = 's' + s2.id, abS = ab.has(kS), nS = db.dic.setor[s2.id];
+        partes.push(linhaC(botao(kS, abS, nS) + esc(nS), s2, 'nivel-0', ''));
+        if (!abS) return;
+        Array.from(s2.filhos.values()).sort(porCusto).forEach(d => {
+            const ob = obs.get(s2.id + '|' + d.id);
+            const txt = ob ? Array.from(ob.entries()).sort((x, y) => y[1] - x[1]).map(([t]) => db.obsDic[t]).filter(Boolean).join(' · ') : '';
+            partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.det[d.id] || '(sem descrição)'), d, 'nivel-1', txt));
         });
     });
     document.getElementById('tab-custo').innerHTML = f.contas.length
-        ? '<table class="tabela-bi"><thead><tr><th>Conta / Cliente / Unidade / Setor / Descrição</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
+        ? '<table class="tabela-bi"><thead><tr><th>Setor / Descrição</th><th>Obs</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
           '<th class="num">Participação no custo total (%)</th><th class="num">Custo por unidade (R$)</th></tr></thead><tbody>' +
-          partes.join('') + linhaC('Total', { custo: f.arv.total, porUni: f.arv.porUni }, 'total') + '</tbody></table>'
+          partes.join('') + linhaC('Total', { custo: f.arv.total, porUni: f.arv.porUni }, 'total', '') + '</tbody></table>'
         : '<div class="aviso-vazio">Nenhum custo para os filtros escolhidos.</div>';
 }
 // Detalhamento do Custo: Conta > Setor > Cliente > Unidade
 function desenharTabelaCusto(aba) {
     const db = estado.db, f = estado.finAtual;
     if (!f || f.aba !== aba.id) return;
-    if (aba.id === 'adm') return desenharTabelaCustoAdm(aba);   // r192
+    if (aba.id === 'adm' || aba.id === 'inv') return desenharTabelaCustoAdm(aba);   // r193
     esconderObs();
     const ab = estado.abertosCusto[aba.id];
     const linhaC = (nome, no, classe, extra) => {
@@ -2670,27 +2803,23 @@ function desenharTabelaCusto(aba) {
     const botao = (k, aberto, nome) => '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
     const porCusto = (a, b) => b.custo - a.custo;
     const partes = [];
-    f.contas.forEach(c => {
-        const kC = 'c' + c.id, abC = ab.has(kC), nomeC = db.dic.conta[c.id];
-        partes.push(linhaC(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-0'));
-        if (!abC) return;
-        Array.from(c.filhos.values()).sort(porCusto).forEach(s2 => {
-            const kS = kC + '/s' + s2.id, abS = ab.has(kS), nomeS = db.dic.setor[s2.id];
-            partes.push(linhaC(botao(kS, abS, nomeS) + esc(nomeS), s2, 'nivel-1'));
-            if (!abS) return;
-            Array.from(s2.filhos.values()).sort(porCusto).forEach(k => {
-                const kK = kS + '/k' + k.id, abK = ab.has(kK), nomeK = db.dic.cli[k.id];
-                partes.push(linhaC(botao(kK, abK, nomeK) + esc(nomeK), k, 'nivel-2'));
-                if (!abK) return;
-                Array.from(k.filhos.values()).sort(porCusto).forEach(l => {
-                    partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-3 linha-loja',
-                        ' tabindex="0" data-conta="' + c.id + '" data-setor="' + s2.id + '" data-cli="' + k.id + '" data-loja="' + l.id + '"'));
-                });
+    // r193: sem a Conta — Setor > Cliente > Unidade
+    f.contas.forEach(s2 => {
+        const kS = 's' + s2.id, abS = ab.has(kS), nomeS = db.dic.setor[s2.id];
+        partes.push(linhaC(botao(kS, abS, nomeS) + esc(nomeS), s2, 'nivel-0'));
+        if (!abS) return;
+        Array.from(s2.filhos.values()).sort(porCusto).forEach(k => {
+            const kK = kS + '/k' + k.id, abK = ab.has(kK), nomeK = db.dic.cli[k.id];
+            partes.push(linhaC(botao(kK, abK, nomeK) + esc(nomeK), k, 'nivel-1'));
+            if (!abK) return;
+            Array.from(k.filhos.values()).sort(porCusto).forEach(l => {
+                partes.push(linhaC('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-2 linha-loja',
+                    ' tabindex="0" data-setor="' + s2.id + '" data-cli="' + k.id + '" data-loja="' + l.id + '"'));
             });
         });
     });
     document.getElementById('tab-custo').innerHTML = f.contas.length
-        ? '<table class="tabela-bi"><thead><tr><th>Conta / Setor / Cliente / Unidade</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
+        ? '<table class="tabela-bi"><thead><tr><th>Setor / Cliente / Unidade</th><th class="num">Custo (R$)</th><th class="num">Custo × Faturamento (%)</th>' +
           '<th class="num">Participação no custo total (%)</th><th class="num">Custo por unidade (R$)</th></tr></thead><tbody>' +
           partes.join('') + linhaC('Total', { custo: f.arv.total, porUni: f.arv.porUni }, 'total') + '</tbody></table>'
         : '<div class="aviso-vazio">Nenhum custo para os filtros escolhidos.</div>';
@@ -2701,7 +2830,7 @@ function mostrarObs(tr, x, y) {
     const db = estado.db, f = estado.finAtual, ctx = estado.finCtx;
     if (!f || !ctx) return;
     const d = tr.dataset;
-    const r = obsDaLoja(db, estado.cascata, f.mesesSel, ctx.localEf, Number(d.conta), Number(d.setor), Number(d.cli), Number(d.loja), 15);
+    const r = obsDaLoja(db, estado.cascata, f.mesesSel, ctx.localEf, d.conta === undefined ? null : Number(d.conta), Number(d.setor), Number(d.cli), Number(d.loja), 15);
     const caixa = document.getElementById('dica-obs');
     const titulo = db.dic.loja[Number(d.loja)] + ' (' + db.dic.cli[Number(d.cli)] + ')';
     caixa.innerHTML = '<h4>Observações — ' + esc(titulo) + '</h4>' +
@@ -3499,9 +3628,9 @@ function desenharTabelaOps() {
             '<td class="num' + classeValor(o.margem) + '">' + pct(o.margemPct) + '</td><td class="num">' + o.qtdPessoas + '</td><td class="num">' + (o.custoPessoa === null ? '—' : num(o.custoPessoa)) + '</td></tr>');
         // r192: ao abrir, todos os custos da operação — uma linha por lançamento (Conta, Setor, Descrição, Valor)
         if (aberto) {
-            partes.push('<tr class="nivel-1 cab-lanc"><td><strong>Conta</strong></td><td><strong>Setor</strong></td><td colspan="2"><strong>Descrição</strong></td><td></td><td class="num"><strong>Valor (R$)</strong></td><td colspan="4"></td></tr>');
+            partes.push('<tr class="nivel-1 cab-lanc"><td><strong>Conta</strong></td><td colspan="3"><strong>Setor</strong></td><td></td><td class="num"><strong>Valor (R$)</strong></td><td colspan="4"></td></tr>');
             Array.from(o.lancs.values()).sort((a, b) => db.dic.conta[a.conta].localeCompare(db.dic.conta[b.conta]) || b.v - a.v).forEach(l => {
-                partes.push('<tr class="nivel-1"><td>' + esc(db.dic.conta[l.conta]) + '</td><td>' + esc(db.dic.setor[l.setor]) + '</td><td colspan="2">' + esc(db.dic.det[l.det]) + '</td><td></td><td class="num' + classeValor(-l.v) + '">' + num(l.v) + '</td><td colspan="4"></td></tr>');
+                partes.push('<tr class="nivel-1"><td>' + esc(db.dic.conta[l.conta]) + '</td><td colspan="3">' + esc(db.dic.setor[l.setor]) + '</td><td></td><td class="num' + classeValor(-l.v) + '">' + num(l.v) + '</td><td colspan="4"></td></tr>');
             });
         }
     });
@@ -4198,6 +4327,8 @@ async function gerarPDFTelas() {
     }
 }
 
+ligarRendimento();   // r193
+rendCarregarLocal();
 document.addEventListener('keydown', e => {   // r186: Esc fecha o painel do PDF
     const p = document.getElementById('painel-pdf-telas');
     if (e.key === 'Escape' && p && !p.classList.contains('hidden')) fecharPainelPDFTelas();

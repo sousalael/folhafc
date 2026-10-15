@@ -612,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-14-r192';
+const VERSAO_SCRIPT = '2026-10-14-r193';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -7784,6 +7784,16 @@ function biFinValidarConfig_(cfg) {
 
 // r141: filtros persistentes (globais e de cada aba) ficam na mesma aba, no nome
 // reservado "__FILTROS__". So listas de textos curtos sao aceitas.
+// r193: pessoas dos gráficos de rendimento do B.I. (supervisores e apoios); null = lista padrão
+function biFinValidarPessoas_(c) {
+  if (!c || typeof c !== 'object') return null;
+  function lista(a) {
+    if (a === null || a === undefined) return null;
+    if (!Array.isArray(a)) return null;
+    return a.filter(function(x) { return typeof x === 'string' && x.length <= 150; }).slice(0, 300);
+  }
+  return { sup: lista(c.sup), apo: lista(c.apo) };
+}
 function biFinValidarFiltros_(f) {
   if (!f || typeof f !== 'object') return null;
   function lista(a) {
@@ -7811,20 +7821,21 @@ function biFinConfigListar(cpf) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
   var alvo = normalizarCPF(cpf);
   var dados = biFinAbaConfigs_().getDataRange().getValues();
-  var atual = null, filtros = null, lista = [];
+  var atual = null, filtros = null, pessoas = null, lista = [];
   for (var i = 1; i < dados.length; i++) {
     if (normalizarCPF(dados[i][0]) !== alvo) continue;
     var nome = String(dados[i][1] || '');
     var bruto = null;
     try { bruto = JSON.parse(dados[i][2]); } catch (e) { bruto = null; }
     if (nome === '__FILTROS__') { filtros = biFinValidarFiltros_(bruto); continue; }
+    if (nome === '__PESSOAS__') { pessoas = biFinValidarPessoas_(bruto); continue; }   // r193
     var cfg = biFinValidarConfig_(bruto);
     if (!cfg) continue;
     if (nome === '__ATUAL__') atual = cfg;
     else lista.push({ nome: nome, config: cfg });
   }
   lista.sort(function(a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-  return { success: true, atual: atual, filtros: filtros, lista: lista };
+  return { success: true, atual: atual, filtros: filtros, pessoas: pessoas, lista: lista };
 }
 
 function biFinConfigSalvar(cpf, nome, config) {
@@ -7832,7 +7843,7 @@ function biFinConfigSalvar(cpf, nome, config) {
   nome = String(nome || '').replace(/\s+/g, ' ').trim();
   if (!nome) return { error: 'Dê um nome para a configuração.' };
   if (nome.length > 60) return { error: 'Use um nome com até 60 caracteres.' };
-  var cfg = nome === '__FILTROS__' ? biFinValidarFiltros_(config) : biFinValidarConfig_(config);
+  var cfg = nome === '__FILTROS__' ? biFinValidarFiltros_(config) : nome === '__PESSOAS__' ? biFinValidarPessoas_(config) : biFinValidarConfig_(config);   // r193
   if (!cfg) return { error: nome === '__FILTROS__' ? 'Filtros inválidos ou grandes demais para salvar.' : 'Configuração inválida.' };
   var alvo = normalizarCPF(cpf);
   var lock = LockService.getScriptLock();
