@@ -612,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-14-r193';
+const VERSAO_SCRIPT = '2026-10-16-r194';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4524,7 +4524,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
   function corN(n){n=parseFloat(n)||0;if(n>=9)return'#2E7D32';if(n>=7.5)return'#5DC500';if(n>=6)return'#D4A017';if(n>=4)return'#E8872B';return'#E05252';}
   function txF(n){n=parseFloat(n)||0;if(n>=9)return'Excelente';if(n>=7.5)return'Bom';if(n>=6)return'Regular';if(n>=4)return'Insatisfatório';return'Crítico';}
   function bgF(n){n=parseFloat(n)||0;if(n>=9)return'#E8F5E9';if(n>=7.5)return'#EAF8E0';if(n>=6)return'#FFF8E1';if(n>=4)return'#FFF3E0';return'#FDEAEA';}
-  var LEGENDA_VOLUME='<div style="font-size:10px;color:#6B7B8D;margin:-10px 0 14px;line-height:1.5">Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).</div>';
+  var LEGENDA_VOLUME='';   // r194: sem a explicação da nota de volume nos relatórios
   function celCor(n){return'text-align:center;font-weight:700;color:'+corN(n)+';background:'+bgF(n);}
 
   var porEstrutura={};var INFRA_IDS={ef_iluminacao:1,ef_equipamentos:1};
@@ -6558,8 +6558,7 @@ function perfMontarCorpoCliente(cli, filtro, anterior, textos) {
     cli.lista.forEach(function (u) {
       h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(u.unidade) + '</td>' + perfCelNota(u.organizacao) + perfCelNota(u.volume) + perfCelNota(u.orgVol) + '</tr>';
     });
-    h += '<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Média do cliente</td>' + perfCelNota(cli.organizacao) + perfCelNota(cli.volume) + perfCelNota(cli.orgVol) + '</tr></table>'
-      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).</div></div>';
+    h += '<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Média do cliente</td>' + perfCelNota(cli.organizacao) + perfCelNota(cli.volume) + perfCelNota(cli.orgVol) + '</tr></table></div>';   // r194: sem a explicação da nota de volume
   }
 
   // análise por unidade

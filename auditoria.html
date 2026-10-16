@@ -455,7 +455,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r193';
+const VERSAO = 'r194';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -2401,14 +2401,11 @@ function npsRedesenharCards() {
   if (box) box.innerHTML = htmlCardsNps();
 }
 
-// r118: contagem de clientes/unidades/análises concluídas — usa o filtro APLICADO na aba Performance
-// (na primeira abertura, o filtro padrão dela).
+// r194: contagem dos 2 cards do topo — SEMPRE o mês atual (MTD), sem os filtros da aba Performance.
 async function pfCarregarContagem() {
-  const p = pfEstado();
-  const f = p.aplicado || p.filtro;
-  const iv = pfIntervalo(f);
+  const iv = pfIntervalo({ periodo: 'mes' });
   const req = state.pfContagemReq = (state.pfContagemReq || 0) + 1;
-  const r = await apiCall('contarAnalisadasPerformance', { clientes: f.clientes, unidades: f.unidades || [], estab: f.estab, tipo: f.tipo, de: iv.de, ate: iv.ate });
+  const r = await apiCall('contarAnalisadasPerformance', { clientes: [], unidades: [], estab: '', tipo: '', de: iv.de, ate: iv.ate });
   if (req !== state.pfContagemReq) return;
   if (r && r.ok && r.totais) { state.pfContagem = r.totais; state.pfContagemErro = false; }
   else { state.pfContagem = null; state.pfContagemErro = true; }
@@ -2424,7 +2421,7 @@ const NPS_COLUNAS = [['prom', 'NPS 9–10'], ['neutro', 'NPS 7–8'], ['detr', '
 function npsCorCsat(n) { return n === null || n === undefined ? '#9AA7B4' : (n >= 9 ? '#2E7D32' : (n >= 7 ? '#D4A017' : '#E05252')); }
 
 // r130: os 2 cards fixos do topo — unidades analisadas em destaque e, na segunda linha, a quantidade de clientes.
-// Cada card é de um tipo de estabelecimento (Supermercado / Farmácia). A contagem segue os filtros da aba Performance.
+// Cada card é de um tipo de estabelecimento (Supermercado / Farmácia). r194: contagem sempre do mês atual (MTD).
 function htmlCardsNps() {
   const an = state.pfContagem || null;
   const pt = an && an.porTipo ? an.porTipo : null;
@@ -2439,7 +2436,7 @@ function htmlCardsNps() {
         <span class="nps-sub">${sub}</span>
       </button>`;
   };
-  return card('🛒 Supermercado · analisadas', pt ? pt.SUPERMERCADO : null) + card('💊 Farmácia · analisadas', pt ? pt.FARMACIA : null);
+  return card('🛒 Supermercado · analisadas no mês (MTD)', pt ? pt.SUPERMERCADO : null) + card('💊 Farmácia · analisadas no mês (MTD)', pt ? pt.FARMACIA : null);
 }
 
 // r130: os cards de NPS, CSAT e Respostas — agora no topo da aba CSAT/NPS (acompanham os filtros dessa aba).
@@ -3725,7 +3722,7 @@ async function pfBuscar() {
   }
   p.dados = r;
   p.aplicado = JSON.parse(JSON.stringify(f));
-  pfCarregarContagem();   // r130: os 2 cards do topo (Supermercado/Farmácia) acompanham os filtros aplicados na Performance
+  // r194: os 2 cards do topo mostram sempre o mês atual (MTD); não dependem dos filtros da Performance
   p.foco = (f.clientes.length === 1 && r.clientes.some(c => c.cliente === f.clientes[0])) ? f.clientes[0] : '';
   p.textos = null; p.textosChave = ''; p.origemTexto = '';
   pfMarcarPendente();
@@ -3962,7 +3959,6 @@ function pfHtmlDetalhe(c) {
     <div class="pf-bloco"><h4>Organização x Volume</h4>
       <div class="pf-rolagem"><table class="pf-tab"><thead><tr><th>Unidade</th><th>Organização</th><th>Volume<br>(10 = ideal)</th><th>Média dos dois</th></tr></thead><tbody>${linhasOV}
       <tr class="pf-total"><td>Média do cliente</td>${pfCelula(c.organizacao)}${pfCelula(c.volume)}${pfCelula(c.orgVol)}</tr></tbody></table></div>
-      <div class="pf-nota-tab">Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal). Volume acima do ideal é sempre ponto de atenção, mesmo com boa organização.</div>
     </div>`;
 
   return `
@@ -5727,7 +5723,6 @@ function montarPptxPerformanceGrupo(g) {
             });
             if (ini + POR_OV >= cli.lista.length) linhas.push([{ text:'Média do cliente', options:{ bold:true, color: DARK, fill:{ color:'F0F2F4' }, fontSize:10, fontFace:'Arial', align:'left', valign:'middle' } }, cel(cli.organizacao), cel(cli.volume), cel(cli.orgVol)]);
             sO.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.6, 1.7, 2.0, 1.7], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-            notaRodape(sO, 'Leitura do volume: quanto maior o volume de mercadoria, menor a nota (1 = volume excessivo · 10 = volume ideal).');
           }
         }
 
