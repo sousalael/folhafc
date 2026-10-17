@@ -455,7 +455,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r194';
+const VERSAO = 'r198';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -3764,7 +3764,7 @@ function pfHtmlMetricas(o) {
   if (o.areaVendas !== null) h += pfHtmlMetrica('Área de Vendas', o.areaVendas);
   if (o.equipe !== null) h += pfHtmlMetrica('Equipe de apoio', o.equipe);
   if (o.organizacao !== null) h += pfHtmlMetrica('Organização', o.organizacao);
-  if (o.volume !== null) h += pfHtmlMetrica('Volume (10 = ideal)', o.volume);
+  if (o.volume !== null) h += pfHtmlMetrica('Volume', o.volume);
   return h;
 }
 
@@ -3794,7 +3794,7 @@ function pfHtmlMacro(d) {
     <div class="pf-resumo-linha"><b>${t.clientes}</b> cliente(s) · <b>${t.unidades}</b> unidade(s) · <b>${t.analises}</b> análise(s) concluída(s).<br>${pfHtmlPeriodoLinha()}</div>
     ${pfHtmlExportarGrupo()}
     <div class="pf-grid">${cards}</div>
-    <div class="pf-nota-tab">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Toque num cliente para ver as unidades, a análise e exportar.</div>
+    <div class="pf-nota-tab">Toque num cliente para ver as unidades, a análise e exportar.</div>
     <div style="margin-top:14px">${pfHtmlInterno()}</div>`;
 }
 
@@ -3950,14 +3950,13 @@ function pfHtmlDetalhe(c) {
     <div class="pf-bloco"><h4>Comparativo entre unidades</h4>
       <div class="pf-rolagem"><table class="pf-tab"><thead><tr><th>Unidade</th><th>Geral</th><th>Equipe</th><th>Retaguarda</th><th>Área de Vendas</th><th>Variação<br>vs anterior</th></tr></thead><tbody>${linhas}
       <tr class="pf-total"><td>Média do cliente</td>${pfCelula(c.geral)}${pfCelula(c.equipe)}${pfCelula(c.retaguarda)}${pfCelula(c.areaVendas)}<td style="color:${pfDeltaCor(c.variacao.geral)}">${pfDeltaCurto(c.variacao.geral)}</td></tr></tbody></table></div>
-      <div class="pf-nota-tab">Setor ou critério não avaliado aparece como "—" (nunca como zero).</div>
     </div>`;
 
   const temOV = c.lista.some(u => u.organizacao !== null || u.volume !== null);
   const linhasOV = c.lista.map(u => `<tr><td>${esc(u.unidade)}</td>${pfCelula(u.organizacao)}${pfCelula(u.volume)}${pfCelula(u.orgVol)}</tr>`).join('');
   const tabOV = !temOV ? '' : `
     <div class="pf-bloco"><h4>Organização x Volume</h4>
-      <div class="pf-rolagem"><table class="pf-tab"><thead><tr><th>Unidade</th><th>Organização</th><th>Volume<br>(10 = ideal)</th><th>Média dos dois</th></tr></thead><tbody>${linhasOV}
+      <div class="pf-rolagem"><table class="pf-tab"><thead><tr><th>Unidade</th><th>Organização</th><th>Volume</th><th>Média dos dois</th></tr></thead><tbody>${linhasOV}
       <tr class="pf-total"><td>Média do cliente</td>${pfCelula(c.organizacao)}${pfCelula(c.volume)}${pfCelula(c.orgVol)}</tr></tbody></table></div>
     </div>`;
 
@@ -4157,7 +4156,7 @@ function pfColsInterno(lista) {
   if (tem('equipe')) cols.push(['Equipe', 'equipe']);
   cols.push(['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']);
   if (tem('organizacao')) cols.push(['Organização', 'organizacao']);
-  if (tem('volume')) cols.push(['Volume<br>(10 = ideal)', 'volume']);
+  if (tem('volume')) cols.push(['Volume', 'volume']);
   return cols;
 }
 function pfTabRanking(lista, rankRef, cols, nome, comCliente, total) {
@@ -4186,8 +4185,7 @@ function pfHtmlInterno() {
     h += `<div class="pf-int-sub">Cliente: ${esc(c.cliente)}</div>${pfTabRanking(c.lista, c.lista, cols, 'Unidade', false, { rotulo: 'Média do cliente', obj: c })}`;
   });
   if (varios) h += `<div class="pf-int-sub">Ranking entre clientes</div>${pfTabRanking(di.rankClientes, di.rankClientes, pfColsInterno(di.clientes), 'Cliente', false, null)}`;
-  h += `<div class="pf-nota-tab">Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.</div>
-      <div id="pfTextoInterno" style="margin-top:12px">${pfHtmlTextoInterno()}</div>
+  h += `<div id="pfTextoInterno" style="margin-top:12px">${pfHtmlTextoInterno()}</div>
     </div>`;
   return h;
 }
@@ -4489,6 +4487,7 @@ function montarPptxPerformanceInterno(g) {
         s.addText([{ text: a, options: { color: DARK } }, { text: b, options: { color: GREEN } }], { x: 0.5, y: 0.7, w: 9, h: 0.5, fontSize: pptTituloFs(a + b, 9, 22, 16), fontFace: 'Calibri', bold: true, isTextBox: true, margin: 0 });
       }
       function notaRodape(s, txt) {
+        if (!txt) return;   // r196
         s.addText(txt, { x: 0.5, y: 4.98, w: 9, h: 0.3, fontSize: 8, fontFace: 'Arial', color: LABEL, isTextBox: true, margin: 0, valign: 'top' });
       }
       function slideTextoFull(rot, a, b, texto) {
@@ -4582,7 +4581,7 @@ function montarPptxPerformanceInterno(g) {
 
       const varios = g.clientes.length > 1;
       const colsUn = cols(g.unidades);
-      const notaUn = 'Nota da unidade = média das análises do período · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).';
+      const notaUn = '';   // r196: sem rodapé explicativo da nota
 
       /* 1 — Capa */
       const sc = pres.addSlide();
@@ -4618,21 +4617,21 @@ function montarPptxPerformanceInterno(g) {
 
       /* 3 — Ranking geral das unidades (só com 2+ clientes; com 1 cliente é o mesmo ranking do cliente) */
       if (varios) {
-        barrasRanking('RANKING GERAL DAS UNIDADES', 'Nota por ', 'Unidade', g.rankUnidades, function(o) { return o.unidade + ' · ' + o.cliente; }, 'Nota da unidade = média das análises do período (0 a 10).');
+        barrasRanking('RANKING GERAL DAS UNIDADES', 'Nota por ', 'Unidade', g.rankUnidades, function(o) { return o.unidade + ' · ' + o.cliente; }, '');
         tabelaRanking('RANKING GERAL DAS UNIDADES', 'Ranking geral ', 'das Unidades', g.rankUnidades, g.rankUnidades, colsUn, 'unidade', true, null, notaUn, t.ranking_unidades);
       }
 
       /* 4 — Cada cliente: texto + ranking das suas unidades */
       g.clientes.forEach(function(c) {
         const txt = [varios ? '' : t.ranking_unidades, t.por_cliente ? t.por_cliente[c.cliente] : ''].filter(Boolean).join('\n\n');
-        if (!varios) barrasRanking('CLIENTE', pptTruncar(c.cliente, 40) + ' — ', 'Nota por unidade', c.lista, function(o) { return o.unidade; }, 'Nota da unidade = média das análises do período (0 a 10).');
+        if (!varios) barrasRanking('CLIENTE', pptTruncar(c.cliente, 40) + ' — ', 'Nota por unidade', c.lista, function(o) { return o.unidade; }, '');
         tabelaRanking('CLIENTE', pptTruncar(c.cliente, 40) + ' — ', 'Ranking das unidades', c.lista, c.lista, colsUn, 'unidade', false, { rotulo: 'Média do cliente', obj: c }, notaUn, txt);
       });
 
       /* 5 — Ranking entre clientes */
       if (varios) {
-        barrasRanking('RANKING ENTRE CLIENTES', 'Nota por ', 'Cliente', g.rankClientes, function(o) { return o.cliente; }, 'Nota do cliente = média das notas das unidades (0 a 10).');
-        tabelaRanking('RANKING ENTRE CLIENTES', 'Ranking entre ', 'Clientes', g.rankClientes, g.rankClientes, cols(g.clientes), 'cliente', false, null, 'Nota do cliente = média das unidades · "—" = não avaliado.', t.entre_clientes);
+        barrasRanking('RANKING ENTRE CLIENTES', 'Nota por ', 'Cliente', g.rankClientes, function(o) { return o.cliente; }, '');
+        tabelaRanking('RANKING ENTRE CLIENTES', 'Ranking entre ', 'Clientes', g.rankClientes, g.rankClientes, cols(g.clientes), 'cliente', false, null, '', t.entre_clientes);
       }
 
       /* 6 — Conclusão */
@@ -5587,6 +5586,7 @@ function montarPptxPerformanceGrupo(g) {
         s.addText([{ text:a, options:{ color: DARK } }, { text:b, options:{ color: GREEN } }], { x:0.5, y:0.7, w:9, h:0.5, fontSize:pptTituloFs(a + b, 9, 22, 16), fontFace:'Calibri', bold:true, isTextBox:true, margin:0 });
       }
       function notaRodape(s, txt) {
+        if (!txt) return;   // r196
         s.addText(txt, { x:0.5, y:4.98, w:9, h:0.3, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
       }
 
@@ -5697,7 +5697,6 @@ function montarPptxPerformanceGrupo(g) {
             ]);
           }
           sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW:[3.0, 1.0, 1.0, 1.3, 1.5, 1.2], rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-          notaRodape(sT, 'Nota da unidade = média das análises do período · nota do cliente = média das unidades · "—" = não avaliado.');
         }
 
         /* 6 — Leitura comparativa (texto) */
@@ -5714,7 +5713,7 @@ function montarPptxPerformanceGrupo(g) {
             fullBg(sO);
             rotuloFull(sO, 'ORGANIZAÇÃO X VOLUME');
             tituloFull(sO, 'Organização ', 'x Volume' + (ini > 0 ? ' (cont.)' : ''));
-            const cab = ['Unidade', 'Organização', 'Volume (10 = ideal)', 'Média dos dois'].map(function(t, i) {
+            const cab = ['Unidade', 'Organização', 'Volume', 'Média dos dois'].map(function(t, i) {
               return { text:t, options:{ bold:true, color:'FFFFFF', fill:{ color: NAVY }, fontSize:10, fontFace:'Arial', align: i === 0 ? 'left' : 'center', valign:'middle' } };
             });
             const cel = function(v) { return { text: fmt(v), options:{ bold:true, color: corHex(v), fill:{ color: bgHex(v) }, fontSize:11, fontFace:'Arial', align:'center', valign:'middle' } }; };
@@ -5734,7 +5733,7 @@ function montarPptxPerformanceGrupo(g) {
           if (u.areaVendas !== null && u.areaVendas !== undefined) mets.push(['Área de Vendas', u.areaVendas]);
           if (u.equipe !== null && u.equipe !== undefined) mets.push(['Equipe de apoio', u.equipe]);
           if (u.organizacao !== null && u.organizacao !== undefined) mets.push(['Organização', u.organizacao]);
-          if (u.volume !== null && u.volume !== undefined) mets.push(['Volume (10 = ideal)', u.volume]);
+          if (u.volume !== null && u.volume !== undefined) mets.push(['Volume', u.volume]);
           mets.push(['Variação vs anterior', null]);
           const yTxt = 2.3 + Math.ceil(mets.length / 2) * 0.42 + 0.1;
           const hDisp = PPT_Y_MAX - yTxt;
@@ -5876,7 +5875,7 @@ function montarPptxPerformanceGrupo(g) {
           });
           const yEixo = yIni + lote.length * passo + 0.02;
           [0, 5, 10].forEach(function(v) { sG.addText(String(v), { x:xTrilho + wTrilho * v / 10 - 0.2, y:yEixo, w:0.4, h:0.2, fontSize:8, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, align:'center' }); });
-          notaRodape(sG, 'Nota do cliente = média das notas das unidades (0 a 10).');
+          notaRodape(sG, '');
         }
 
         // tabela comparativa (7 clientes por slide)
@@ -5899,7 +5898,6 @@ function montarPptxPerformanceGrupo(g) {
               .concat([{ text: deltaTxt(c.variacao.geral), options:{ bold:true, color: deltaCor(c.variacao.geral), fontSize:9.5, fontFace:'Arial', align:'center', valign:'middle' } }]);
           });
           sT.addTable([cab].concat(linhas), { x:0.5, y:1.35, w:9, colW: colW, rowH:0.38, border:{ type:'solid', color:'E2E8F0', pt:0.75 } });
-          notaRodape(sT, 'Nota do cliente = média das unidades · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).');
         }
 
         // conclusão do grupo: as três caixas num único slide quando cabem

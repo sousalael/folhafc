@@ -612,7 +612,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-16-r194';
+const VERSAO_SCRIPT = '2026-10-17-r198';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4551,7 +4551,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
   function tabelaOrgVol(items){
     var porSub={};items.forEach(function(it){var sub=it.label.split(' — ')[0]||it.label;if(!porSub[sub])porSub[sub]={org:null,vol:null};if(it.id.indexOf('_sku')!==-1)porSub[sub].org=it.nota;else if(it.invertida)porSub[sub].vol=it.nota;else if(!porSub[sub].org)porSub[sub].org=it.nota;});
     var subs=Object.keys(porSub);if(!subs.length)return'';var sO=0,nO=0,sV=0,nV=0;
-    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#001528;color:#FFF"><td style="padding:7px 10px;font-weight:600">Setor</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
+    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#001528;color:#FFF"><td style="padding:7px 10px;font-weight:600">Setor</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     subs.forEach(function(sub){var o=porSub[sub].org,v=porSub[sub].vol;var med=0,nn=0;if(o!==null){med+=o;nn++;sO+=o;nO++;}if(v!==null){med+=v;nn++;sV+=v;nV++;}med=nn?med/nn:0;
       h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+sub+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(o!==null?celCor(o):'text-align:center;color:#CCC')+'">'+(o!==null?o:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(v!==null?celCor(v):'text-align:center;color:#CCC')+'">'+(v!==null?v:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(med)+'">'+med.toFixed(1)+'</td></tr>';});
     var mO=nO?sO/nO:0;var mV=nV?sV/nV:0;var mT=(nO&&nV)?(mO+mV)/2:mO||mV;
@@ -4562,7 +4562,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
     naoEq.forEach(function(it){var cam=CAM_MAP[it.id]||it.label.split(' — ')[1]||it.label;if(!porCam[cam])porCam[cam]={org:null,vol:null};
       if(it.id.indexOf('_org')!==-1)porCam[cam].org=it.nota;else if(it.invertida||it.id.indexOf('_vol')!==-1)porCam[cam].vol=it.nota;});
     var cams=Object.keys(porCam);if(!cams.length)return'';var sO=0,nO=0,sV=0,nV=0;
-    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 12px"><tr style="background:#001528;color:#FFF"><td style="padding:7px 10px;font-weight:600">Câmara</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
+    var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 12px"><tr style="background:#001528;color:#FFF"><td style="padding:7px 10px;font-weight:600">Câmara</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Organização</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:90px">Volume</td><td style="padding:7px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
     cams.forEach(function(cam){var c=porCam[cam];var vals=[];if(c.org!==null){vals.push(c.org);sO+=c.org;nO++;}if(c.vol!==null){vals.push(c.vol);sV+=c.vol;nV++;}var med=vals.length?vals.reduce(function(a,b){return a+b;},0)/vals.length:0;
       h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+cam+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(c.org!==null?celCor(c.org):'text-align:center;color:#CCC')+'">'+(c.org!==null?c.org:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(c.vol!==null?celCor(c.vol):'text-align:center;color:#CCC')+'">'+(c.vol!==null?c.vol:'—')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(med)+'">'+med.toFixed(1)+'</td></tr>';});
     var mO=nO?sO/nO:0;var mV=nV?sV/nV:0;var mT=(nO&&nV)?(mO+mV)/2:mO||mV;
@@ -4587,7 +4587,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
     h+='<tr style="font-weight:700;background:#F0F2F4"><td style="padding:6px 10px">Resultado</td><td style="padding:6px 8px;'+celCor(mQ)+'">'+mQ.toFixed(1)+'</td><td style="padding:6px 8px;'+(nP?celCor(mP):'text-align:center;color:#CCC')+'">'+(nP?mP.toFixed(1):'—')+'</td><td style="padding:6px 8px;'+celCor(mT)+'">'+mT.toFixed(1)+'</td></tr></table>';return h;}
   function tabelaSimples(items){if(!items.length)return'';
     var h='<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:8px 0 16px"><tr style="background:#001528;color:#FFF"><td style="padding:6px 10px;font-weight:600">Critério</td><td style="padding:6px 8px;text-align:center;font-weight:600;width:70px">Nota</td></tr>';
-    items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+(it.invertida?' <span style="font-size:10px;color:#6B7B8D">(10 = volume ideal)</span>':'')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>'+(items.some(function(i){return i.invertida;})?LEGENDA_VOLUME:'');}
+    items.forEach(function(it){h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+it.label+(it.invertida?'':'')+'</td><td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+celCor(it.nota)+'">'+it.nota+'</td></tr>';});return h+'</table>'+(items.some(function(i){return i.invertida;})?LEGENDA_VOLUME:'');}
   // r159: tabela de Alimentação — informativa, nunca entra na nota geral (por isso não usa celCor/escala invertida)
   function tabelaAlimentacao(lista){
     var ALIM_TIPOS={'Lanche':1,'Almoço':1,'Jantar':1};
@@ -4597,7 +4597,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
       h+='<tr><td style="padding:5px 10px;border-bottom:1px solid #F0F2F4">'+tipoTxt+'</td>'
         +'<td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(q!==null?celCor(q):'text-align:center;color:#CCC')+'">'+(q!==null?q:'—')+'</td>'
         +'<td style="padding:5px 8px;border-bottom:1px solid #F0F2F4;'+(qt!==null?celCor(qt):'text-align:center;color:#CCC')+'">'+(qt!==null?qt:'—')+'</td></tr>';});
-    return h+'</table><div style="font-size:10px;color:#6B7B8D;margin:-2px 0 14px;line-height:1.5">Alimentação é uma cortesia do cliente à equipe — não entra na nota geral da análise.</div>';}
+    return h+'</table><div style="margin:-2px 0 14px"></div>';}   // r198: sem a nota sobre a alimentação
 
   // r101: bloco de fotos de UMA seção específica, inserido logo após a
   // tabela daquela seção (mesmo agrupamento por secaoId usado na
@@ -4632,7 +4632,7 @@ function montarHTMLRelatorio(ident, respostas, scores, relatorio, fotosIds, alim
   h+='<table><tr><td style="padding:24px 32px;background:#001528"><img src="data:image/png;base64,'+logoPNG+'" style="height:48px" alt="FC"></td><td style="padding:24px 32px;text-align:right;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:#001528">Análise de Preparação<br>para Inventário</td></tr></table>';
   h+='<table><tr><td style="padding:14px 32px;background:#001528;color:#FFF;width:33%"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Cliente</div><div style="font-size:14px;font-weight:700">'+(ident.cliente||'')+'</div></td><td style="padding:14px 20px;background:#001528;color:#FFF;width:33%"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Unidade</div><div style="font-size:14px;font-weight:700">'+(ident.unidade||'')+'</div></td><td style="padding:14px 20px;background:#001528;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Tipo</div><div><span style="padding:2px 10px;border-radius:12px;font-size:10px;font-weight:700;background:'+tipoCor+';color:'+tipoTxt+'">'+tipoLabel+'</span></div></td></tr>';
   h+='<tr><td style="padding:14px 32px;background:#001528;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Auditor</div><div style="font-size:14px;font-weight:700">'+(ident.auditor||'')+'</div></td><td style="padding:14px 20px;background:#001528;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Data</div><div style="font-size:14px;font-weight:700">'+dataF+'</div></td><td style="padding:14px 20px;background:#001528;color:#FFF"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5)">Responsável</div><div style="font-size:14px;font-weight:700">'+(ident.responsavel_cliente||'')+'</div></td></tr></table>';
-  h+='<div style="padding:32px;text-align:center;border-bottom:1px solid #E2E8F0"><div style="font-size:52px;font-weight:700;color:'+corN(sg)+'">'+(scoreGeralRecalc||'—')+'</div><div style="display:inline-block;padding:4px 16px;border-radius:12px;font-size:12px;font-weight:700;color:'+corN(sg)+';background:'+bgF(sg)+'">'+txF(sg)+'</div><table style="width:300px;margin:20px auto"><tr><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px"><div style="font-size:24px;font-weight:700;color:#001528">'+(scoreGeralRecalc||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Ambiente</div></td><td style="width:12px"></td><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px;border:2px solid #E8872B"><div style="font-size:24px;font-weight:700;color:#E8872B">'+(scores.equipe||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Equipe</div></td></tr></table><div style="margin-top:12px;font-size:10px;color:#6B7B8D"><span style="padding:2px 6px;border-radius:6px;background:#E8F5E9;color:#2E7D32;margin:0 2px">9-10 Excelente</span><span style="padding:2px 6px;border-radius:6px;background:#EAF8E0;color:#3a8000;margin:0 2px">7.5-8.9 Bom</span><span style="padding:2px 6px;border-radius:6px;background:#FFF8E1;color:#856404;margin:0 2px">6-7.4 Regular</span><span style="padding:2px 6px;border-radius:6px;background:#FFF3E0;color:#E8872B;margin:0 2px">4-5.9 Insatisf.</span><span style="padding:2px 6px;border-radius:6px;background:#FDEAEA;color:#E05252;margin:0 2px">1-3.9 Crítico</span></div></div>';
+  h+='<div style="padding:32px;text-align:center;border-bottom:1px solid #E2E8F0"><div style="font-size:52px;font-weight:700;color:'+corN(sg)+'">'+(scoreGeralRecalc||'—')+'</div><div style="display:inline-block;padding:4px 16px;border-radius:12px;font-size:12px;font-weight:700;color:'+corN(sg)+';background:'+bgF(sg)+'">'+txF(sg)+'</div><table style="width:300px;margin:20px auto"><tr><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px"><div style="font-size:24px;font-weight:700;color:#001528">'+(scoreGeralRecalc||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Ambiente</div></td><td style="width:12px"></td><td style="text-align:center;padding:12px;background:#F4F6F8;border-radius:8px;border:2px solid #E8872B"><div style="font-size:24px;font-weight:700;color:#E8872B">'+(scores.equipe||'—')+'</div><div style="font-size:10px;color:#6B7B8D">Equipe</div></td></tr></table></div>';
   // Resumo
   h+='<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0"><div style="font-size:13px;font-weight:700;color:#001528;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;border-left:4px solid #5DC500;padding-left:8px">Resumo Executivo</div><p style="font-size:13px;line-height:1.8">'+String(relatorio.resumo_executivo||'').replace(/\n\n/g,'</p><p style="font-size:13px;line-height:1.8;margin-top:8px">')+'</p></div>';
   // Estruturas
@@ -6526,7 +6526,7 @@ function perfMontarCorpoCliente(cli, filtro, anterior, textos) {
         + '<table><tr><td style="font-size:13px;font-weight:700;color:#001528;vertical-align:top">' + perfEsc(u.unidade) + '<div style="font-size:9px;font-weight:400;color:#6B7B8D">' + u.analises + ' análise(s)' + (u.ultimaAnalise ? ' · última em ' + perfDataBR(u.ultimaAnalise) : '') + '</div></td>'
         + '<td style="text-align:right;vertical-align:top"><span style="font-size:24px;font-weight:700;color:' + perfCorNota(u.geral) + '">' + perfFmt(u.geral) + '</span><div style="font-size:9px;font-weight:700;color:' + perfCorNota(u.geral) + ';text-transform:uppercase">' + perfEsc(u.faixa || '') + '</div></td></tr></table>'
         + '<table style="margin-top:6px"><tr>' + mini('Retaguarda', u.retaguarda) + mini('Área de Vendas', u.areaVendas) + '</tr><tr>'
-        + mini('Organização', u.organizacao) + mini('Volume (10 = ideal)', u.volume) + '</tr>'
+        + mini('Organização', u.organizacao) + mini('Volume', u.volume) + '</tr>'
         + (u.equipe !== null ? '<tr>' + mini('Equipe de apoio', u.equipe) + '<td style="padding:3px 4px;font-size:10px;color:#6B7B8D;border-top:1px solid #E7ECF1">Variação</td><td style="padding:3px 4px;font-size:11px;text-align:right;border-top:1px solid #E7ECF1">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>'
           : '<tr><td style="padding:3px 4px;font-size:10px;color:#6B7B8D;border-top:1px solid #E7ECF1">Variação</td><td colspan="3" style="padding:3px 4px;font-size:11px;text-align:right;border-top:1px solid #E7ECF1">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>')
         + '</table></div></td>';
@@ -6546,15 +6546,14 @@ function perfMontarCorpoCliente(cli, filtro, anterior, textos) {
       + '<td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + perfDeltaHtml(u.variacao.geral) + '</td></tr>';
   });
   h += '<tr style="font-weight:700;background:#F0F2F4"><td style="padding:7px 10px">Média do cliente</td>' + perfCelNota(cli.geral) + perfCelNota(cli.equipe) + perfCelNota(cli.retaguarda) + perfCelNota(cli.areaVendas)
-    + '<td style="padding:7px 6px;text-align:center">' + perfDeltaHtml(cli.variacao.geral) + '</td></tr></table>'
-    + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota da unidade = média das análises do período; nota do cliente = média das unidades. Setor ou critério não avaliado aparece como "—".</div></div>';
+    + '<td style="padding:7px 6px;text-align:center">' + perfDeltaHtml(cli.variacao.geral) + '</td></tr></table></div>';   // r196: sem rodapé explicativo
 
   // organização x volume
   var temOV = cli.lista.some(function (u) { return u.organizacao !== null || u.volume !== null; });
   if (temOV) {
     h += '<div style="padding:20px 32px;border-bottom:1px solid #E2E8F0">' + sec('Organização x Volume') + par(textos.volume_organizacao)
       + '<table style="width:100%;font-size:12px;border:1px solid #E2E8F0;margin:10px 0 6px"><tr style="background:#001528;color:#FFF"><td style="padding:7px 10px;font-weight:600">Unidade</td>'
-      + '<td style="padding:7px 6px;text-align:center;font-weight:600">Organização</td><td style="padding:7px 6px;text-align:center;font-weight:600">Volume<br><span style="font-size:9px;font-weight:400;opacity:.8">10 = ideal</span></td><td style="padding:7px 6px;text-align:center;font-weight:600">Média dos dois</td></tr>';
+      + '<td style="padding:7px 6px;text-align:center;font-weight:600">Organização</td><td style="padding:7px 6px;text-align:center;font-weight:600">Volume</td><td style="padding:7px 6px;text-align:center;font-weight:600">Média dos dois</td></tr>';
     cli.lista.forEach(function (u) {
       h += '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F2F4;font-weight:600">' + perfEsc(u.unidade) + '</td>' + perfCelNota(u.organizacao) + perfCelNota(u.volume) + perfCelNota(u.orgVol) + '</tr>';
     });
@@ -6860,7 +6859,7 @@ function perfMontarComparativoClientes(lista, filtro, anterior, tg) {
   lista.forEach(function (c) {
     h += '<tr style="page-break-inside:avoid"><td style="width:30%;padding:5px 8px 5px 0;font-weight:600;color:#001528">' + perfEsc(c.cliente) + '</td><td style="width:58%;padding:5px 0">' + perfBarraHtml(c.geral, perfCorNota(c.geral)) + '</td><td style="width:12%;padding:5px 0 5px 8px;font-weight:700;color:' + perfCorNota(c.geral) + '">' + perfFmt(c.geral) + '</td></tr>';
   });
-  h += '</table><div style="font-size:10px;color:#6B7B8D;margin-top:6px">Nota do cliente = média das notas das unidades (0 a 10).</div></div>';
+  h += '</table></div>';
   // tabela comparativa
   var temOV = lista.some(function (c) { return c.organizacao !== null || c.volume !== null; });
   var colunas = [['Geral', 'geral'], ['Equipe', 'equipe'], ['Retaguarda', 'retaguarda'], ['Área de Vendas', 'areaVendas']];
@@ -6873,7 +6872,7 @@ function perfMontarComparativoClientes(lista, filtro, anterior, tg) {
       + colunas.map(function (col) { return perfCelNota(c[col[1]]); }).join('')
       + '<td style="padding:6px;border-bottom:1px solid #F0F2F4;text-align:center">' + perfDeltaHtml(c.variacao.geral) + '</td></tr>';
   });
-  h += '</table><div style="font-size:10px;color:#6B7B8D;line-height:1.5">Setor ou critério não avaliado aparece como "—". Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).</div></div>';
+  h += '</table></div>';
   // conclusão do grupo
   h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Conclusão do Grupo');
   if (tg.pontos_positivos) h += '<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">' + perfEsc(tg.pontos_positivos) + '</p></div>';
@@ -7212,7 +7211,7 @@ function perfMontarHTMLInterno(p, t) {
   if (p.clientes.length > 1) {
     h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Ranking geral das unidades') + perfParHtml(t.ranking_unidades)
       + perfTabelaRankingHtml(p.rankUnidades, p.rankUnidades, colsUn, ['Unidade', 'unidade'], ['Cliente', 'cliente'], null)
-      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota da unidade = média das análises do período · "—" = não avaliado · Volume: quanto maior o volume de mercadoria, menor a nota (10 = ideal).</div></div>';
+      + '</div>';
   }
   p.clientes.forEach(function (c) {
     h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0;page-break-inside:auto">' + perfSecHtml('Cliente: ' + perfEsc(c.cliente))
@@ -7228,7 +7227,7 @@ function perfMontarHTMLInterno(p, t) {
       h += '<tr style="page-break-inside:avoid"><td style="width:6%;padding:5px 0;font-weight:700;color:#001528">' + perfPosicao(p.rankClientes, c) + '</td><td style="width:28%;padding:5px 8px 5px 0;font-weight:600;color:#001528">' + perfEsc(c.cliente) + '</td><td style="width:54%;padding:5px 0">' + perfBarraHtml(c.geral, perfCorNota(c.geral)) + '</td><td style="width:12%;padding:5px 0 5px 8px;font-weight:700;color:' + perfCorNota(c.geral) + '">' + perfFmt(c.geral) + '</td></tr>';
     });
     h += '</table>' + perfTabelaRankingHtml(p.rankClientes, p.rankClientes, colsCli, ['Cliente', 'cliente'], null, null)
-      + '<div style="font-size:10px;color:#6B7B8D;line-height:1.5">Nota do cliente = média das notas das unidades.</div></div>';
+      + '</div>';
   }
   h += '<div style="padding:18px 32px;border-bottom:1px solid #E2E8F0">' + perfSecHtml('Conclusão');
   if (t.pontos_positivos) h += '<div style="background:#E8F5E9;border-left:4px solid #2E7D32;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:6px">✓ PONTOS POSITIVOS</div><p style="font-size:13px;line-height:1.7">' + perfEsc(t.pontos_positivos) + '</p></div>';
