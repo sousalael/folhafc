@@ -101,6 +101,7 @@ function doPost(e) {
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
     else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
+    else if (action === 'avalInternaCorrigir') { result = avalInternaCorrigir(data, data.cpf); }   // r202: confere os nomes dos destaques
     else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
     else if (action === 'cobrancaAtivar') { result = cobrancaAtivar(data, data.cpf); }   // r163
     else if (action === 'cobrancaDesativar') { result = cobrancaDesativar(data, data.cpf); }   // r163
@@ -613,7 +614,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-17-r201';
+const VERSAO_SCRIPT = '2026-10-17-r202';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -646,7 +647,7 @@ function doGet(e) {
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
-    'avalInternaListar'
+    'avalInternaListar', 'avalInternaCorrigir'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -2943,6 +2944,35 @@ function avalInternaListar(dados, cpf) {
     return { ok: true, lista: lista };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
+// r202: grava os colaboradores escolhidos pelo Diretor num destaque (nome reduzido + CPF), por cima do texto livre
+function avalInternaCorrigir(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
+    var tipo = d.tipo === 'destNeg' ? 'destNeg' : 'destPos', idx = parseInt(d.indice, 10) || 0;
+    var pessoas = (Array.isArray(d.pessoas) ? d.pessoas : []).map(function (p) { return { cpf: normalizarCPF(p && p.cpf), nome: String((p && p.nome) || '').trim().slice(0, 80) }; })
+      .filter(function (p) { return p.cpf && p.nome; });
+    if (!pessoas.length) return { ok: false, erro: 'Escolha ao menos um colaborador.' };
+    var aba = getOuCriarAbaAuditoria(), ult = aba.getLastRow();
+    var ids = aba.getRange(2, 1, Math.max(ult - 1, 1), 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) !== String(d.id)) continue;
+      var cel = aba.getRange(i + 2, 23), av = null;
+      try { av = JSON.parse(cel.getValue() || 'null'); } catch (e) { av = null; }
+      if (!av) return { ok: false, erro: 'Esta análise não tem avaliação interna.' };
+      var de = av[tipo] || {};
+      if (!Array.isArray(de.itens)) { de.itens = [{ nomes: de.nomes || '', notas: de.notas || {}, comentario: de.comentario || '' }]; delete de.nomes; delete de.notas; delete de.comentario; }
+      if (!de.itens[idx]) return { ok: false, erro: 'Destaque não encontrado.' };
+      de.itens[idx].nomes = pessoas.map(function (p) { return p.nome; }).join(', ');
+      de.itens[idx].pessoas = pessoas;
+      de.itens[idx].verificado = true;
+      av[tipo] = de;
+      cel.setValue(JSON.stringify(av));
+      return { ok: true, aval: av };
+    }
+    return { ok: false, erro: 'Análise não encontrada.' };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
 // r201: data (ISO ou dd/mm/aaaa) + cliente + loja → chave única
 function avalChavePres(data, cliente, loja) {
   var t = String(data || '').trim(), m, iso = '';
@@ -2958,17 +2988,26 @@ function avalContarPresencas(lista) {
   if (!Object.keys(alvo).length) return out;
   var sh = getSheet('Presencas'), ult = sh.getLastRow();
   if (ult < 2) return out;
-  var dados = sh.getRange(2, 1, ult - 1, 5).getDisplayValues();
+  var dados = sh.getRange(2, 1, ult - 1, 8).getDisplayValues();
   var vistos = {};
+  // r202: nome reduzido de cada colaborador (aba Colaboradores)
+  var reduz = {};
+  try {
+    var cd = getColabDados(), ix = getColabIndices();
+    for (var c = 1; c < cd.length; c++) { var cc = normalizarCPF(cd[c][ix.cpf]); if (cc) reduz[cc] = { reduzido: String(cd[c][ix.reduzido] || '').trim(), nome: String(cd[c][ix.nome] || '').trim() }; }
+  } catch (eC) { reduz = {}; }
   dados.forEach(function (r) {
     var k = avalChavePres(r[0], r[1], r[2]);
     if (!alvo[k]) return;
     var cpf = normalizarCPF(r[3]); if (!cpf || vistos[k + '|' + cpf]) return;
     vistos[k + '|' + cpf] = 1;
-    var o = out[k] || (out[k] = { supervisores: 0, outros: 0, total: 0 });
+    var o = out[k] || (out[k] = { supervisores: 0, outros: 0, total: 0, pessoas: [] });
     var f = String(r[4] || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (f.indexOf('SUPERVIS') === 0) o.supervisores++; else o.outros++;
+    var ehSup = f.indexOf('SUPERVIS') === 0;
+    if (ehSup) o.supervisores++; else o.outros++;
     o.total++;
+    var info = reduz[cpf] || {}, nomeComp = String(r[7] || info.nome || '').trim();
+    o.pessoas.push({ cpf: cpf, nome: nomeComp, reduzido: info.reduzido || nomeComp.split(' ')[0] || '', supervisor: ehSup });   // r202
   });
   return out;
 }

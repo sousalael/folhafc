@@ -4695,7 +4695,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-17-r201';
+    const VERSAO_ESPERADA = '2026-10-17-r202';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
@@ -4906,7 +4906,7 @@
         rec: { manter:'Manter', aumentar:'Aumentar', reduzir:'Reduzir' }
     };
     const AV_QUES = [['conhecimento','Conhec.'],['proatividade','Proativ.'],['eficiencia','Eficiên.'],['comportamento','Comport.'],['equipe','Equipe']];
-    const avEst = { lista: [], tipo: '', cliente: '', aberto: {} };
+    const avEst = { lista: [], tipo: '', cliente: '', aberto: {}, conf: '' };
     function avTipoDe(x) { return x.tipoEstabelecimento === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO'; }
     function avDataBR(v) { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : (v || '—'); }
     function avNoPeriodo(iso, per) {
@@ -4921,6 +4921,73 @@
     // r201: destaques em lista (r200 tinha um só por tipo)
     function avItens(d) { if (!d || d.sem) return []; return Array.isArray(d.itens) ? d.itens : [{ nomes: d.nomes, notas: d.notas, comentario: d.comentario }]; }
     function avPres(x) { return x.presenca && x.presenca.total ? x.presenca : null; }
+    // r202: conferência dos nomes digitados com quem esteve na lista de presença do projeto
+    function avNorm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+    function avLev(a, b) {
+        if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length;
+        let ant = Array.from({ length: b.length + 1 }, (_, j) => j);
+        for (let i = 1; i <= a.length; i++) { const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(ant[j] + 1, cur[j - 1] + 1, ant[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); ant = cur; }
+        return ant[b.length];
+    }
+    const AV_LIGA = { da: 1, de: 1, do: 1, das: 1, dos: 1, e: 1 };
+    function avScore(tok, p) {
+        const t = avNorm(tok), full = avNorm(p.nome), red = avNorm(p.reduzido);
+        if (!t) return 0;
+        if (t === red || t === full) return 100;
+        if (full.indexOf(t) === 0 || (red && red.indexOf(t) === 0)) return 90;
+        const pt = t.split(' ').filter(w => !AV_LIGA[w]), pf = full.split(' ');
+        if (pt.length && pt.every(w => pf.some(x => x.indexOf(w) === 0))) return 80;
+        if (pt.some(w => w.length > 2 && pf.indexOf(w) >= 0)) return 60;
+        if (red && avLev(t, red) <= 2) return 50;
+        if (pt.some(w => w.length > 3 && pf.some(x => avLev(w, x) <= 1))) return 40;
+        return 0;
+    }
+    // separa o texto em nomes; se um trecho com várias palavras não bate com ninguém, testa cada palavra
+    function avTokens(txt, pessoas) {
+        const base = String(txt || '').split(/,|;|\/|\n|\s+e\s+/i).map(s => s.trim()).filter(Boolean), out = [];
+        base.forEach(b => {
+            const melhor = Math.max(0, ...pessoas.map(p => avScore(b, p)));
+            const pal = b.split(/\s+/).filter(w => w.length > 2 && !AV_LIGA[avNorm(w)]);
+            if (melhor < 80 && pal.length > 1) pal.forEach(w => out.push(w)); else out.push(b);
+        });
+        return out.length ? out : [''];
+    }
+    function avCandidatos(tok, pessoas) {
+        return pessoas.map(p => ({ p, s: avScore(tok, p) })).sort((a, b) => b.s - a.s || String(a.p.reduzido).localeCompare(String(b.p.reduzido), 'pt-BR'));
+    }
+    function avConfHtml(x, tipo, i, it) {
+        const pes = (x.presenca && x.presenca.pessoas) || [];
+        if (!pes.length) return '<div class="small text-muted">Sem lista de presença para este projeto — não dá para conferir os nomes.</div>';
+        const toks = avTokens(it.nomes, pes);
+        const opc = (sel, cand) => '<option value="">— não é ninguém da presença —</option>' + cand.map(c => '<option value="' + c.p.cpf + '"' + (c.p.cpf === sel ? ' selected' : '') + '>' +
+            escaparHtml(c.p.reduzido + ' — ' + c.p.nome + (c.p.supervisor ? ' (supervisor)' : '')) + (c.s >= 60 ? ' ★' : '') + '</option>').join('');
+        const linhas = toks.map((t, k) => {
+            const cand = avCandidatos(t, pes), top = cand[0], seg = cand[1];
+            const pre = top && top.s >= 60 && (!seg || seg.s < top.s) ? top.p.cpf : '';
+            return '<div class="d-flex flex-wrap gap-2 align-items-center mb-1"><span class="small" style="min-width:150px">digitado: <b>' + escaparHtml(t || '(vazio)') + '</b></span>' +
+                '<select class="form-select form-select-sm" style="max-width:380px" data-av-escolha="' + k + '">' + opc(pre, cand) + '</select></div>';
+        }).join('');
+        const todos = avCandidatos('', pes);
+        return '<div class="border rounded p-2 mt-1 bg-white" data-av-conf-box>' +
+            '<div class="small text-muted mb-1">Pessoas da lista de presença deste projeto (★ = mais provável). Confira e salve: o texto será trocado pelo nome reduzido.</div>' + linhas +
+            '<div class="d-flex flex-wrap gap-2 align-items-center mb-2"><span class="small" style="min-width:150px">incluir outra pessoa:</span><select class="form-select form-select-sm" style="max-width:380px" data-av-escolha="extra">' + opc('', todos).replace('— não é ninguém da presença —', '— nenhuma —') + '</select></div>' +
+            '<button type="button" class="btn btn-sm btn-primary me-2" data-av-salvar="' + escaparHtml(x.id) + '|' + tipo + '|' + i + '">Salvar correção</button>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary" data-av-conf="">Cancelar</button></div>';
+    }
+    async function avSalvarConf(chave, box) {
+        const [id, tipo, i] = chave.split('|');
+        const x = avEst.lista.find(y => String(y.id) === id); if (!x) return;
+        const pes = (x.presenca && x.presenca.pessoas) || [], escolhidos = [];
+        box.querySelectorAll('[data-av-escolha]').forEach(s => { if (s.value && escolhidos.indexOf(s.value) < 0) escolhidos.push(s.value); });
+        if (!escolhidos.length) { alert('Escolha ao menos uma pessoa da presença.'); return; }
+        const pessoas = escolhidos.map(c => { const p = pes.find(q => q.cpf === c) || {}; return { cpf: c, nome: p.reduzido || p.nome || '' }; });
+        const btn = box.querySelector('[data-av-salvar]'); if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+        try {
+            const res = await chamarApi({ action: 'avalInternaCorrigir', cpf: getCpfLogado(), id: id, tipo: tipo, indice: Number(i), pessoas: pessoas });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível salvar.');
+            x.aval = res.aval; avEst.conf = ''; avDesenhar();
+        } catch (e) { alert('⚠️ ' + e.message); if (btn) { btn.disabled = false; btn.textContent = 'Salvar correção'; } }
+    }
     function avNomes(txt) { return String(txt || '').split(/,|;|\s+e\s+|\n/i).map(s => s.trim()).filter(Boolean); }
     async function avCarregar() {
         const alvo = document.getElementById('av-conteudo');
@@ -4974,16 +5041,19 @@
                     '<td class="text-center">' + pess + '</td><td class="text-center">' + ideal + '</td><td>' + (AV_ROT.qtd[a.qtd] || '—') + '</td><td>' + rec + '</td></tr>';
                 if (ab) {
                     const lst = (arr, dic) => (arr || []).map(v => dic[v] || v).join(' · ') || '—';
-                    const dest = (d, t) => {
+                    const dest = (d, t, tipo) => {
                         const its = avItens(d);
                         if (!its.length) return '<div><b>' + t + ':</b> não houve.</div>';
-                        return its.map(it => { const m = avMedia(it.notas);
-                            return '<div class="mt-1"><b>' + t + ':</b> ' + escaparHtml(it.nomes || '') + (m !== null ? ' — média ' + m.toFixed(1).replace('.', ',') : '') +
-                                '<div class="text-muted">' + AV_QUES.map(([q, r]) => r + ' ' + ((it.notas || {})[q] || '—')).join(' · ') + '</div>' + (it.comentario ? '<div class="fst-italic">“' + escaparHtml(it.comentario) + '”</div>' : '') + '</div>'; }).join('');
+                        return its.map((it, i) => { const m = avMedia(it.notas), ck = x.id + '|' + tipo + '|' + i;
+                            const conf = it.verificado ? ' <span class="badge text-bg-success">✔ conferido</span>'
+                                : ' <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-av-conf="' + escaparHtml(ck) + '">🔎 Conferir nomes</button>';
+                            return '<div class="mt-1"><b>' + t + ':</b> ' + escaparHtml(it.nomes || '') + conf + (m !== null ? ' — média ' + m.toFixed(1).replace('.', ',') : '') +
+                                '<div class="text-muted">' + AV_QUES.map(([q, r]) => r + ' ' + ((it.notas || {})[q] || '—')).join(' · ') + '</div>' + (it.comentario ? '<div class="fst-italic">“' + escaparHtml(it.comentario) + '”</div>' : '') +
+                                (avEst.conf === ck ? avConfHtml(x, tipo, i, it) : '') + '</div>'; }).join('');
                     };
                     linha += '<tr><td></td><td colspan="8" class="bg-light"><div><b>Por quê:</b> ' + lst(a.motivos, AV_ROT.motivos) + (a.motivoOutro ? ' · ' + escaparHtml(a.motivoOutro) : '') + '</div>' +
                         '<div><b>Impacto:</b> ' + lst(a.impacto, AV_ROT.impacto) + (a.atrasoTempo ? ' (' + escaparHtml(a.atrasoTempo) + ')' : '') + '</div>' +
-                        '<div><b>Composição:</b> ' + lst(a.composicao, AV_ROT.composicao) + '</div>' + dest(a.destPos, '⭐ Destaque positivo') + dest(a.destNeg, '⚠️ Destaque negativo') + '</td></tr>';
+                        '<div><b>Composição:</b> ' + lst(a.composicao, AV_ROT.composicao) + '</div>' + dest(a.destPos, '⭐ Destaque positivo', 'destPos') + dest(a.destNeg, '⚠️ Destaque negativo', 'destNeg') + '</td></tr>';
                 }
                 return linha;
             }).join('') + '</tbody></table></div>';
@@ -4991,7 +5061,8 @@
         const pes = {};
         L.forEach(x => [['destPos', 'pos'], ['destNeg', 'neg']].forEach(([k, t]) => {
             avItens((x.aval || {})[k]).forEach(it => { const m = avMedia(it.notas);
-            avNomes(it.nomes).forEach(n => { const c = n.toUpperCase(); const p = pes[c] || (pes[c] = { nome: n, pos: 0, neg: 0, sPos: 0, nPos: 0, sNeg: 0, nNeg: 0 });
+            const quem = Array.isArray(it.pessoas) && it.pessoas.length ? it.pessoas.map(p => ({ c: 'CPF' + p.cpf, n: p.nome })) : avNomes(it.nomes).map(n => ({ c: n.toUpperCase(), n: n }));   // r202: conferidos contam pelo CPF
+            quem.forEach(({ c, n }) => { const p = pes[c] || (pes[c] = { nome: n, pos: 0, neg: 0, sPos: 0, nPos: 0, sNeg: 0, nNeg: 0 });
                 p[t]++; if (m !== null) { if (t === 'pos') { p.sPos += m; p.nPos++; } else { p.sNeg += m; p.nNeg++; } } });
             });
         }));
@@ -5004,7 +5075,9 @@
     }
     document.addEventListener('click', e => {
         const t = e.target.closest('[data-av-tipo]'); if (t) { avEst.tipo = t.dataset.avTipo; avDesenhar(); return; }
-        const b = e.target.closest('[data-av-abrir]'); if (b) { avEst.aberto[b.dataset.avAbrir] = !avEst.aberto[b.dataset.avAbrir]; avDesenhar(); }
+        const b = e.target.closest('[data-av-abrir]'); if (b) { avEst.aberto[b.dataset.avAbrir] = !avEst.aberto[b.dataset.avAbrir]; avDesenhar(); return; }
+        const cf = e.target.closest('[data-av-conf]'); if (cf) { avEst.conf = cf.dataset.avConf; avDesenhar(); return; }   // r202
+        const sv = e.target.closest('[data-av-salvar]'); if (sv) avSalvarConf(sv.dataset.avSalvar, sv.closest('[data-av-conf-box]'));
     });
     document.addEventListener('change', e => {
         if (e.target.id === 'av-cliente') { avEst.cliente = e.target.value; avDesenhar(); }
