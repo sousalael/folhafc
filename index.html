@@ -868,6 +868,13 @@
         <!-- ############ r155: ABA PESSOAS (somente Diretor) ############ -->
         <div class="tab-pane fade" id="tab-pessoas">
 
+        <!-- r200: sub-abas da aba Pessoas -->
+        <ul class="nav nav-pills nav-fill mb-3 small" role="tablist">
+            <li class="nav-item"><button type="button" class="nav-link active fw-bold" id="pes-subbtn-diag" onclick="pesSubAba('diag')">🧭 Diagnóstico de Prontidão</button></li>
+            <li class="nav-item"><button type="button" class="nav-link fw-bold" id="pes-subbtn-aval" onclick="pesSubAba('aval')">🔒 Avaliação interna da equipe</button></li>
+        </ul>
+        <div id="pes-sub-diag">
+
         <h6 class="fw-bold text-primary mb-1">🧭 Diagnóstico de Prontidão para Mudança</h6>
         <div class="small text-muted mb-3">Mapeia a prontidão da equipe, o perfil de liderança e quem influencia o grupo (metodologia HCMBOK). Cada supervisor recebe por e-mail um link pessoal; os resultados ficam visíveis só para a Diretoria.</div>
 
@@ -948,6 +955,27 @@
         </div>
 
         <div id="pes-vazio" class="hidden text-center text-muted py-4 border rounded bg-light">Nenhum diagnóstico criado ainda. Toque em ➕ Novo diagnóstico para começar.</div>
+
+        </div><!-- fim pes-sub-diag -->
+
+        <!-- r200: AVALIAÇÃO INTERNA DA EQUIPE (preenchida na Análise de Preparação, DURANTE A OPERAÇÃO) -->
+        <div id="pes-sub-aval" class="hidden">
+            <h6 class="fw-bold text-primary mb-1">🔒 Avaliação interna da equipe</h6>
+            <div class="small text-muted mb-3">Preenchida pelo supervisor ao concluir cada Análise de Preparação DURANTE A OPERAÇÃO. Uso interno: não vai para o cliente.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de estabelecimento">
+                    <button type="button" class="btn btn-outline-primary active" data-av-tipo="">Todos</button>
+                    <button type="button" class="btn btn-outline-primary" data-av-tipo="SUPERMERCADO">🛒 Supermercado</button>
+                    <button type="button" class="btn btn-outline-primary" data-av-tipo="FARMACIA">💊 Farmácia</button>
+                </div>
+                <select class="form-select form-select-sm" id="av-cliente" style="max-width:240px" aria-label="Cliente"></select>
+                <select class="form-select form-select-sm" id="av-periodo" style="max-width:180px" aria-label="Período">
+                    <option value="mes">Mês atual</option><option value="90">Últimos 90 dias</option><option value="ano">Este ano</option><option value="tudo">Todo o período</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="avCarregar()">↻ Atualizar</button>
+            </div>
+            <div id="av-conteudo"><div class="text-center text-muted small py-3">Carregando...</div></div>
+        </div>
 
         </div>
         <!-- ############ FIM ABA PESSOAS ############ -->
@@ -4667,7 +4695,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-17-r199';
+    const VERSAO_ESPERADA = '2026-10-17-r200';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
@@ -4858,6 +4886,124 @@
 <!-- ############ r155: ABA PESSOAS — Diagnóstico de Prontidão (somente Diretor) ############ -->
 <!-- Bloco isolado: só funções com prefixo "pes". Não altera nenhuma função existente. -->
 <script>
+    // r200: sub-abas da aba Pessoas
+    function pesSubAba(qual) {
+        ['diag', 'aval'].forEach(q => {
+            document.getElementById('pes-sub-' + q).classList.toggle('hidden', q !== qual);
+            document.getElementById('pes-subbtn-' + q).classList.toggle('active', q === qual);
+        });
+        if (qual === 'aval') avCarregar();
+    }
+    // r200: AVALIAÇÃO INTERNA DA EQUIPE — leitura das avaliações gravadas na Análise de Preparação
+    const AV_ROT = {
+        motivos: { volume_acima:'Volume acima do previsto', loja_maior:'Loja maior que o informado', areas_extras:'Áreas extras não previstas', faltas:'Faltas/atrasos da equipe',
+                   desorganizacao:'Desorganização da loja', inexperiencia:'Equipe pouco experiente', inicio_atrasado:'Início atrasado', tempo_curto:'Tempo de contagem curto',
+                   dimensionamento:'Dimensionamento compatível', loja_preparada:'Loja organizada e preparada', equipe_experiente:'Equipe experiente', planejamento:'Bom planejamento',
+                   volume_abaixo:'Volume abaixo do previsto', loja_menor:'Loja menor/mais organizada', areas_nao_contadas:'Áreas previstas não contadas', equipe_produtiva:'Equipe muito produtiva' },
+        impacto: { no_horario:'Terminou no horário', atrasou:'Atrasou o término', hora_extra:'Hora extra', qualidade:'Prejudicou a qualidade', nao_afetou:'Não afetou' },
+        composicao: { adequada:'Adequada', faltou_supervisor:'Faltou supervisor', faltou_apoio:'Faltou apoio p/ áreas críticas', faltou_experiente:'Faltou gente experiente' },
+        qtd: { faltou:'😟 Faltou', adequada:'✅ Adequada', sobrou:'➕ Sobrou' },
+        rec: { manter:'Manter', aumentar:'Aumentar', reduzir:'Reduzir' }
+    };
+    const AV_QUES = [['conhecimento','Conhec.'],['proatividade','Proativ.'],['eficiencia','Eficiên.'],['comportamento','Comport.'],['equipe','Equipe']];
+    const avEst = { lista: [], tipo: '', cliente: '', aberto: {} };
+    function avTipoDe(x) { return x.tipoEstabelecimento === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO'; }
+    function avDataBR(v) { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : (v || '—'); }
+    function avNoPeriodo(iso, per) {
+        if (per === 'tudo' || !iso) return per === 'tudo';
+        const d = new Date(iso + 'T12:00:00'), hoje = new Date();
+        if (per === 'mes') return d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth();
+        if (per === 'ano') return d.getFullYear() === hoje.getFullYear();
+        if (per === '90') return (hoje - d) / 86400000 <= 90;
+        return true;
+    }
+    function avMedia(notas) { const v = AV_QUES.map(([q]) => Number(notas && notas[q])).filter(n => n >= 1); return v.length ? v.reduce((s, n) => s + n, 0) / v.length : null; }
+    function avNomes(txt) { return String(txt || '').split(/,|;|\s+e\s+|\n/i).map(s => s.trim()).filter(Boolean); }
+    async function avCarregar() {
+        const alvo = document.getElementById('av-conteudo');
+        alvo.innerHTML = '<div class="text-center text-muted small py-3">Carregando...</div>';
+        try {
+            const res = await chamarApi({ action: 'avalInternaListar', cpf: getCpfLogado() });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível carregar as avaliações.');
+            avEst.lista = res.lista || [];
+            avDesenhar();
+        } catch (e) { alvo.innerHTML = '<div class="text-center text-danger small py-3">' + escaparHtml(e.message) + '</div>'; }
+    }
+    function avDesenhar() {
+        const per = document.getElementById('av-periodo').value;
+        const doPer = avEst.lista.filter(x => avNoPeriodo(x.dataAuditoria, per));
+        const doTipo = doPer.filter(x => !avEst.tipo || avTipoDe(x) === avEst.tipo);
+        const clientes = Array.from(new Set(doTipo.map(x => x.cliente))).sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+        if (avEst.cliente && clientes.indexOf(avEst.cliente) < 0) avEst.cliente = '';
+        document.getElementById('av-cliente').innerHTML = '<option value="">Todos os clientes' + (avEst.tipo ? (avEst.tipo === 'FARMACIA' ? ' (farmácia)' : ' (supermercado)') : '') + '</option>' +
+            clientes.map(c => '<option value="' + escaparHtml(c) + '"' + (c === avEst.cliente ? ' selected' : '') + '>' + escaparHtml(c) + '</option>').join('');
+        document.querySelectorAll('[data-av-tipo]').forEach(b => b.classList.toggle('active', b.dataset.avTipo === avEst.tipo));
+        const L = doTipo.filter(x => !avEst.cliente || x.cliente === avEst.cliente);
+        const alvo = document.getElementById('av-conteudo');
+        if (!L.length) { alvo.innerHTML = '<div class="text-center text-muted small py-3 border rounded bg-light">Nenhuma avaliação interna para este filtro.</div>'; return; }
+        // indicadores
+        const cont = { faltou: 0, adequada: 0, sobrou: 0 };
+        let somaDif = 0, nDif = 0;
+        L.forEach(x => { const a = x.aval || {}; if (cont[a.qtd] !== undefined) cont[a.qtd]++; if (a.ideal > 0 && a.trabalharam > 0) { somaDif += a.ideal - a.trabalharam; nDif++; } });
+        const pct = n => Math.round(n / L.length * 100) + '%';
+        const kpi = (v, r, cor) => '<div class="col-6 col-md"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-2"><div class="fs-5 fw-bold" style="color:' + cor + '">' + v + '</div><div class="small text-muted fw-bold">' + r + '</div></div></div></div>';
+        let html = '<div class="row g-2 mb-3">' + kpi(L.length, 'Avaliações', 'var(--fc-primaria)') + kpi(pct(cont.faltou), 'Faltou gente', '#E05252') +
+            kpi(pct(cont.adequada), 'Adequada', '#3a8000') + kpi(pct(cont.sobrou), 'Sobrou gente', '#E8872B') +
+            kpi(nDif ? (somaDif / nDif > 0 ? '+' : '') + (somaDif / nDif).toFixed(1).replace('.', ',') : '—', 'Diferença média p/ o ideal', 'var(--fc-primaria)') + '</div>';
+        // motivos mais citados
+        const mot = {};
+        L.forEach(x => ((x.aval || {}).motivos || []).forEach(m => mot[m] = (mot[m] || 0) + 1));
+        const topMot = Object.entries(mot).sort((a, b) => b[1] - a[1]).slice(0, 6);
+        if (topMot.length) html += '<div class="small fw-bold text-primary mb-1">Motivos mais citados</div><div class="mb-3">' +
+            topMot.map(([m, n]) => '<span class="badge rounded-pill text-bg-light border me-1 mb-1">' + escaparHtml(AV_ROT.motivos[m] || m) + ' · ' + n + '</span>').join('') + '</div>';
+        // tabela das avaliações
+        html += '<div class="small fw-bold text-primary mb-1">Avaliações</div><div class="table-responsive rounded shadow-sm mb-3"><table class="table table-sm table-bordered align-middle mb-0" style="font-size:12px"><thead class="table-light"><tr>' +
+            '<th></th><th>Data</th><th>Cliente</th><th>Unidade</th><th>Supervisor</th><th class="text-center">Pessoas</th><th>Quantidade</th><th>Recomendação</th></tr></thead><tbody>' +
+            L.map((x, i) => {
+                const a = x.aval || {}, ab = !!avEst.aberto[x.id];
+                const pess = (a.trabalharam || '—') + (a.ideal ? ' → ' + a.ideal + ' ideal' : '');
+                const rec = (AV_ROT.rec[a.recomendacao] || '—') + (a.recomendacaoQtd ? ' p/ ' + a.recomendacaoQtd : '');
+                let linha = '<tr><td class="text-center"><button type="button" class="btn btn-link btn-sm p-0" data-av-abrir="' + escaparHtml(x.id) + '" aria-expanded="' + ab + '">' + (ab ? '▾' : '▸') + '</button></td>' +
+                    '<td>' + avDataBR(x.dataAuditoria) + '</td><td>' + escaparHtml(x.cliente) + '</td><td>' + escaparHtml(x.unidade) + '</td><td>' + escaparHtml(x.auditor || '') + '</td>' +
+                    '<td class="text-center">' + pess + '</td><td>' + (AV_ROT.qtd[a.qtd] || '—') + '</td><td>' + rec + '</td></tr>';
+                if (ab) {
+                    const lst = (arr, dic) => (arr || []).map(v => dic[v] || v).join(' · ') || '—';
+                    const dest = (d, t) => {
+                        if (!d || d.sem) return '<div><b>' + t + ':</b> não houve.</div>';
+                        const m = avMedia(d.notas);
+                        return '<div><b>' + t + ':</b> ' + escaparHtml(d.nomes || '') + (m !== null ? ' — média ' + m.toFixed(1).replace('.', ',') : '') +
+                            '<div class="text-muted">' + AV_QUES.map(([q, r]) => r + ' ' + ((d.notas || {})[q] || '—')).join(' · ') + '</div>' + (d.comentario ? '<div class="fst-italic">“' + escaparHtml(d.comentario) + '”</div>' : '') + '</div>';
+                    };
+                    linha += '<tr><td></td><td colspan="7" class="bg-light"><div><b>Por quê:</b> ' + lst(a.motivos, AV_ROT.motivos) + (a.motivoOutro ? ' · ' + escaparHtml(a.motivoOutro) : '') + '</div>' +
+                        '<div><b>Impacto:</b> ' + lst(a.impacto, AV_ROT.impacto) + (a.atrasoTempo ? ' (' + escaparHtml(a.atrasoTempo) + ')' : '') + '</div>' +
+                        '<div><b>Composição:</b> ' + lst(a.composicao, AV_ROT.composicao) + '</div>' + dest(a.destPos, '⭐ Destaque positivo') + dest(a.destNeg, '⚠️ Destaque negativo') + '</td></tr>';
+                }
+                return linha;
+            }).join('') + '</tbody></table></div>';
+        // pessoas destacadas
+        const pes = {};
+        L.forEach(x => [['destPos', 'pos'], ['destNeg', 'neg']].forEach(([k, t]) => {
+            const d = (x.aval || {})[k]; if (!d || d.sem) return;
+            const m = avMedia(d.notas);
+            avNomes(d.nomes).forEach(n => { const c = n.toUpperCase(); const p = pes[c] || (pes[c] = { nome: n, pos: 0, neg: 0, sPos: 0, nPos: 0, sNeg: 0, nNeg: 0 });
+                p[t]++; if (m !== null) { if (t === 'pos') { p.sPos += m; p.nPos++; } else { p.sNeg += m; p.nNeg++; } } });
+        }));
+        const P = Object.values(pes).sort((a, b) => (b.pos - b.neg) - (a.pos - a.neg) || b.pos - a.pos);
+        if (P.length) html += '<div class="small fw-bold text-primary mb-1">Pessoas destacadas</div><div class="table-responsive rounded shadow-sm"><table class="table table-sm table-bordered align-middle mb-0" style="font-size:12px"><thead class="table-light"><tr>' +
+            '<th>Nome</th><th class="text-center">⭐ Positivos</th><th class="text-center">Média (positivos)</th><th class="text-center">⚠️ Negativos</th><th class="text-center">Média (negativos)</th></tr></thead><tbody>' +
+            P.map(p => '<tr><td>' + escaparHtml(p.nome) + '</td><td class="text-center text-success fw-bold">' + (p.pos || '—') + '</td><td class="text-center">' + (p.nPos ? (p.sPos / p.nPos).toFixed(1).replace('.', ',') : '—') +
+                '</td><td class="text-center text-danger fw-bold">' + (p.neg || '—') + '</td><td class="text-center">' + (p.nNeg ? (p.sNeg / p.nNeg).toFixed(1).replace('.', ',') : '—') + '</td></tr>').join('') + '</tbody></table></div>';
+        alvo.innerHTML = html;
+    }
+    document.addEventListener('click', e => {
+        const t = e.target.closest('[data-av-tipo]'); if (t) { avEst.tipo = t.dataset.avTipo; avDesenhar(); return; }
+        const b = e.target.closest('[data-av-abrir]'); if (b) { avEst.aberto[b.dataset.avAbrir] = !avEst.aberto[b.dataset.avAbrir]; avDesenhar(); }
+    });
+    document.addEventListener('change', e => {
+        if (e.target.id === 'av-cliente') { avEst.cliente = e.target.value; avDesenhar(); }
+        else if (e.target.id === 'av-periodo') avDesenhar();
+    });
+
     let pesDiagAtual = null;      // { diagnostico, participantes }
     let pesCandidatos = [];
 

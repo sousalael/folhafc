@@ -355,6 +355,22 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 .pf-tab td:first-child{text-align:left;font-weight:600;color:var(--navy)}
 .pf-tab tr.pf-total td{background:var(--bg);font-weight:800}
 .pf-nota-tab{font-size:10px;color:var(--text-light);margin-top:8px;line-height:1.5}
+/* r200: avaliação interna da equipe */
+.av-card{border-left:4px solid var(--navy)}
+.av-aviso{font-size:11px;background:#EEF2F7;color:var(--navy);border-radius:8px;padding:8px 10px;margin-bottom:6px}
+.av-rot{font-size:12px;font-weight:700;color:var(--navy);margin:14px 0 6px}
+.av-in{width:100%;border:1px solid #DDE3EA;border-radius:8px;padding:8px 10px;font-size:13px;margin-top:6px;font-family:inherit}
+.av-num{max-width:140px}
+.av-chips{display:flex;flex-wrap:wrap;gap:6px}
+.av-chip{border:1px solid #CFD8E3;background:#fff;color:var(--text);border-radius:16px;padding:6px 12px;font-size:12px;cursor:pointer}
+.av-chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.av-dif{font-size:12px;font-weight:700;color:var(--orange);margin-top:6px}
+.av-dest{border-left:4px solid;background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:16px}
+.av-dest-tit{font-size:13px;font-weight:800;color:var(--navy)}
+.av-sem{display:flex;align-items:center;gap:6px;font-size:12px;margin-top:6px}
+.av-escala{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.av-n{border:1px solid #CFD8E3;background:#fff;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer}
+.av-n.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
 .pf-texto p{font-size:13px;line-height:1.7;margin:0 0 8px;color:var(--text)}
 .pf-texto .pf-un{margin-bottom:10px}
 .pf-texto .pf-un b{color:var(--navy)}
@@ -455,7 +471,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r199';
+const VERSAO = 'r200';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -926,6 +942,7 @@ async function salvarRascunho(silencioso) {
     respostas: state.respostas,
     observacoes: state.observacoes,
     alimentacao: state.alimentacao || [],   // r159
+    avaliacaoInterna: state.avalInterna || null,   // r200
     // r74: BUG CORRIGIDO — este payload não incluía fotosIds, então
     // cada "próxima seção" (que chama salvarRascunho) sobrescrevia no
     // banco o campo FotosIds com {} — apagando as fotos já salvas no
@@ -1086,6 +1103,7 @@ function iniciarAvaliacaoTipo(tipo) {
   state.fotos = {};
   state.fotosIds = {};
   state.alimentacao = [];   // r159
+  state.avalInterna = null;   // r200
   state.identificacao = { tipo_estabelecimento: tipo };
   state.secaoAtual = 0;
   state.status = 'RASCUNHO';
@@ -1124,6 +1142,7 @@ async function carregarRascunho(idx) {
     state.observacoes = r.auditoria.observacoes || {};
     state.fotos = {};
     state.alimentacao = r.auditoria.alimentacao || [];   // r159
+    state.avalInterna = r.auditoria.avaliacaoInterna || null;   // r200
     state.identificacao = r.auditoria.identificacao || {};
     state.secaoAtual = r.auditoria.secaoAtual || 0;
   } else {
@@ -1135,6 +1154,7 @@ async function carregarRascunho(idx) {
       state.observacoes = d.observacoes || {};
       state.fotos = d.fotos || {};
       state.alimentacao = d.alimentacao || [];   // r159
+      state.avalInterna = d.avaliacaoInterna || null;   // r200
       state.identificacao = d.identificacao || {};
       state.secaoAtual = d.secaoAtual || 0;
     } else {
@@ -1142,6 +1162,7 @@ async function carregarRascunho(idx) {
       state.observacoes = {};
       state.fotos = {};
       state.alimentacao = [];   // r159
+  state.avalInterna = null;   // r200
       state.identificacao = rascunho.identificacao || {};
       state.secaoAtual = 0;
     }
@@ -1762,6 +1783,9 @@ function renderFinalizacao(secao) {
       </div>
     </div>`;
 
+  // r200: avaliação interna da equipe (só DURANTE A OPERAÇÃO)
+  if (avEhDurante()) html += htmlAvalInterna();
+
   // Pendências
   if (pendentes.length) {
     html += `
@@ -1792,6 +1816,116 @@ function renderFinalizacao(secao) {
     </div>`;
 
   return html;
+}
+
+/* ═══════════════════════════════════════════════════════
+   r200: AVALIAÇÃO INTERNA DA EQUIPE (só Formula Code — nunca vai para o cliente)
+   Só em análises DURANTE A OPERAÇÃO; obrigatória para concluir.
+   Não aparece em relatório, e-mail, PDF ou apresentação e não entra na nota.
+   ═══════════════════════════════════════════════════════ */
+const AV_MOTIVOS = {
+  faltou: [['volume_acima','Volume de mercadoria acima do previsto'],['loja_maior','Loja maior que o informado'],['areas_extras','Áreas extras não previstas (câmaras, aéreos, ilhas)'],
+           ['faltas','Faltas ou atrasos da equipe'],['desorganizacao','Desorganização da loja'],['inexperiencia','Equipe com pouca experiência'],
+           ['inicio_atrasado','Horário de início atrasado'],['tempo_curto','Tempo de contagem curto']],
+  adequada: [['dimensionamento','Dimensionamento compatível com o volume'],['loja_preparada','Loja organizada e preparada'],['equipe_experiente','Equipe experiente'],['planejamento','Bom planejamento das áreas']],
+  sobrou: [['volume_abaixo','Volume de mercadoria abaixo do previsto'],['loja_menor','Loja menor ou mais organizada que o esperado'],['areas_nao_contadas','Áreas previstas que não foram contadas'],['equipe_produtiva','Equipe muito produtiva']]
+};
+const AV_IMPACTO = [['no_horario','Terminou no horário'],['atrasou','Atrasou o término'],['hora_extra','Precisou de hora extra'],['qualidade','Prejudicou a qualidade da contagem'],['nao_afetou','Não afetou']];
+const AV_COMPOSICAO = [['adequada','Composição adequada'],['faltou_supervisor','Faltou supervisor'],['faltou_apoio','Faltou apoio para áreas críticas'],['faltou_experiente','Faltou gente experiente em farmácia ou perecíveis']];
+const AV_QUESITOS = [['conhecimento','Conhecimento'],['proatividade','Proatividade'],['eficiencia','Eficiência'],['comportamento','Comportamento / postura'],['equipe','Trabalho em equipe']];
+function avNovo() {
+  const dest = () => ({ sem: false, nomes: '', notas: {}, comentario: '' });
+  return { trabalharam: null, qtd: '', ideal: null, motivos: [], motivoOutro: '', impacto: [], atrasoTempo: '', composicao: [],
+           recomendacao: '', recomendacaoQtd: null, destPos: dest(), destNeg: dest() };
+}
+function avDados() {
+  const a = state.avalInterna && typeof state.avalInterna === 'object' ? state.avalInterna : (state.avalInterna = avNovo());
+  const base = avNovo();
+  Object.keys(base).forEach(k => { if (a[k] === undefined) a[k] = base[k]; });
+  ['destPos','destNeg'].forEach(k => { a[k] = Object.assign({ sem: false, nomes: '', notas: {}, comentario: '' }, a[k] || {}); a[k].notas = a[k].notas || {}; });
+  return a;
+}
+function avEhDurante() { return String((state.identificacao || {}).tipo_avaliacao || '').toUpperCase().indexOf('DURANTE') !== -1; }
+function avRedesenhar() { const el = document.getElementById('cardAvalInterna'); if (el) el.outerHTML = htmlAvalInterna(); }
+function avSet(campo, valor) {
+  const a = avDados();
+  if (campo === 'qtd' && a.qtd !== valor) { a.motivos = []; if (valor === 'adequada') a.ideal = null; }
+  a[campo] = valor; avRedesenhar();
+}
+function avNum(campo, valor) { const n = parseInt(valor, 10); avDados()[campo] = isNaN(n) || n < 0 ? null : n; }
+function avTxt(campo, valor) { avDados()[campo] = String(valor || ''); }
+function avAlternar(campo, id) {
+  const a = avDados(), l = a[campo];
+  const i = l.indexOf(id); if (i >= 0) l.splice(i, 1); else l.push(id);
+  if (campo === 'impacto' && id === 'nao_afetou' && l.indexOf('nao_afetou') >= 0) a.impacto = ['nao_afetou'];
+  else if (campo === 'impacto' && id !== 'nao_afetou') a.impacto = a.impacto.filter(x => x !== 'nao_afetou');
+  if (campo === 'composicao' && id === 'adequada' && l.indexOf('adequada') >= 0) a.composicao = ['adequada'];
+  else if (campo === 'composicao' && id !== 'adequada') a.composicao = a.composicao.filter(x => x !== 'adequada');
+  avRedesenhar();
+}
+function avDest(tipo, campo, valor) { const d = avDados()[tipo]; d[campo] = valor; if (campo === 'sem') avRedesenhar(); }
+function avNota(tipo, q, n) { avDados()[tipo].notas[q] = n; avRedesenhar(); }
+function avPendencias() {
+  const a = avDados(), p = [];
+  if (!(a.trabalharam > 0)) p.push('Quantas pessoas trabalharam');
+  if (!a.qtd) p.push('Se a quantidade foi suficiente');
+  if ((a.qtd === 'faltou' || a.qtd === 'sobrou') && !(a.ideal > 0)) p.push('Quantas pessoas seriam o ideal');
+  if (a.qtd && !a.motivos.length && !a.motivoOutro.trim()) p.push('Por quê (marque um motivo ou explique)');
+  if (!a.impacto.length) p.push('Impacto no atendimento');
+  if (!a.composicao.length) p.push('Composição da equipe');
+  if (!a.recomendacao) p.push('Recomendação para o próximo inventário');
+  if ((a.recomendacao === 'aumentar' || a.recomendacao === 'reduzir') && !(a.recomendacaoQtd > 0)) p.push('Quantidade recomendada');
+  [['destPos','Destaque positivo'],['destNeg','Destaque negativo']].forEach(([k, t]) => {
+    const d = a[k]; if (d.sem) return;
+    if (!d.nomes.trim()) p.push(t + ': nome(s)');
+    if (AV_QUESITOS.some(([q]) => !(d.notas[q] >= 1))) p.push(t + ': notas dos 5 quesitos');
+  });
+  return p;
+}
+function htmlAvalInterna() {
+  const a = avDados();
+  const chip = (on, onclick, txt) => `<button type="button" class="av-chip${on ? ' on' : ''}" aria-pressed="${on}" onclick="${onclick}">${txt}</button>`;
+  const rot = t => `<div class="av-rot">${t}</div>`;
+  const qtdOpc = [['faltou','😟 Faltou gente'],['adequada','✅ Foi adequada'],['sobrou','➕ Sobrou gente']];
+  const dif = (a.ideal > 0 && a.trabalharam > 0) ? a.ideal - a.trabalharam : null;
+  const destaque = (k, titulo, cor) => {
+    const d = a[k];
+    return `<div class="av-dest" style="border-left-color:${cor}">
+      <div class="av-dest-tit">${titulo}</div>
+      <label class="av-sem"><input type="checkbox" ${d.sem ? 'checked' : ''} onchange="avDest('${k}','sem',this.checked)"> Não houve ${k === 'destPos' ? 'destaque positivo' : 'destaque negativo'}</label>
+      ${d.sem ? '' : `
+        ${rot('Nome(s) da(s) pessoa(s)')}
+        <input type="text" class="av-in" value="${esc(d.nomes)}" placeholder="ex.: João Silva, Maria Souza" oninput="avDest('${k}','nomes',this.value)">
+        ${AV_QUESITOS.map(([q, t]) => `${rot(t + (d.notas[q] ? ' · <b>' + d.notas[q] + '</b>' : ''))}
+          <div class="av-escala">${[1,2,3,4,5,6,7,8,9,10].map(n => `<button type="button" class="av-n${d.notas[q] === n ? ' on' : ''}" aria-label="${t} nota ${n}" onclick="avNota('${k}','${q}',${n})">${n}</button>`).join('')}</div>`).join('')}
+        ${rot('Comentário (opcional)')}
+        <textarea class="av-in" rows="2" oninput="avDest('${k}','comentario',this.value)">${esc(d.comentario)}</textarea>`}
+    </div>`;
+  };
+  return `<div class="secao-card av-card" id="cardAvalInterna">
+    <div class="secao-titulo"><i class="bi bi-lock-fill"></i> Avaliação interna da equipe</div>
+    <div class="av-aviso">🔒 Uso interno da Formula Code — não vai para o cliente e não entra na nota. Obrigatória para concluir.</div>
+    ${rot('Quantas pessoas trabalharam nesta unidade nesta data?')}
+    <input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.trabalharam || ''}" oninput="avNum('trabalharam',this.value)" onchange="avRedesenhar()">
+    ${rot('A quantidade de integrantes foi suficiente?')}
+    <div class="av-chips">${qtdOpc.map(([v, t]) => chip(a.qtd === v, `avSet('qtd','${v}')`, t)).join('')}</div>
+    ${(a.qtd === 'faltou' || a.qtd === 'sobrou') ? `${rot('Quantas pessoas teriam sido o ideal?')}
+      <input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.ideal || ''}" oninput="avNum('ideal',this.value)" onchange="avRedesenhar()">
+      ${dif !== null && dif !== 0 ? `<div class="av-dif">${dif > 0 ? 'Faltaram ' + dif : 'Sobraram ' + (-dif)} pessoa${Math.abs(dif) === 1 ? '' : 's'}</div>` : ''}` : ''}
+    ${a.qtd ? `${rot('Por quê? (marque um ou mais)')}
+      <div class="av-chips">${AV_MOTIVOS[a.qtd].map(([v, t]) => chip(a.motivos.indexOf(v) >= 0, `avAlternar('motivos','${v}')`, t)).join('')}</div>
+      <input type="text" class="av-in" value="${esc(a.motivoOutro)}" placeholder="Outro / explique" oninput="avTxt('motivoOutro',this.value)">` : ''}
+    ${rot('Impacto no atendimento')}
+    <div class="av-chips">${AV_IMPACTO.map(([v, t]) => chip(a.impacto.indexOf(v) >= 0, `avAlternar('impacto','${v}')`, t)).join('')}</div>
+    ${a.impacto.indexOf('atrasou') >= 0 ? `<input type="text" class="av-in" value="${esc(a.atrasoTempo)}" placeholder="Quanto tempo de atraso? (ex.: 40 min, 2 h)" oninput="avTxt('atrasoTempo',this.value)">` : ''}
+    ${rot('Composição da equipe')}
+    <div class="av-chips">${AV_COMPOSICAO.map(([v, t]) => chip(a.composicao.indexOf(v) >= 0, `avAlternar('composicao','${v}')`, t)).join('')}</div>
+    ${rot('Para o próximo inventário desta unidade, recomenda:')}
+    <div class="av-chips">${[['manter','Manter a quantidade'],['aumentar','Aumentar'],['reduzir','Reduzir']].map(([v, t]) => chip(a.recomendacao === v, `avSet('recomendacao','${v}')`, t)).join('')}</div>
+    ${(a.recomendacao === 'aumentar' || a.recomendacao === 'reduzir') ? `<input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.recomendacaoQtd || ''}" placeholder="para quantas pessoas?" oninput="avNum('recomendacaoQtd',this.value)">` : ''}
+    ${destaque('destPos', '⭐ Destaque positivo', '#5DC500')}
+    ${destaque('destNeg', '⚠️ Destaque negativo', '#E05252')}
+  </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1839,6 +1973,14 @@ async function finalizarAvaliacao() {
     return;
   }
 
+  if (avEhDurante()) {   // r200: avaliação interna obrigatória
+    const pend = avPendencias();
+    if (pend.length) {
+      const el = document.getElementById('cardAvalInterna'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      alert('Preencha a Avaliação interna da equipe para concluir:\n\n• ' + pend.join('\n• '));
+      return;
+    }
+  }
   if (!confirm('Confirma a finalização desta avaliação?\n\nO relatório será gerado automaticamente.')) return;
 
   state.status = 'CONCLUIDO';
@@ -1879,6 +2021,7 @@ async function finalizarAvaliacao() {
     respostas: state.respostas,
     observacoes: state.observacoes,
     alimentacao: state.alimentacao || [],   // r159
+    avaliacaoInterna: avEhDurante() ? avDados() : null,   // r200
     fotosIds: fotosIds,
     status: 'CONCLUIDO',
     versao: VERSAO
@@ -4673,6 +4816,7 @@ async function editarAuditoria(auditoriaId) {
   state.fotos = {};
   state.fotosIds = a.fotosIds || {};
   state.alimentacao = a.alimentacao || [];   // r159
+  state.avalInterna = a.avaliacaoInterna || null;   // r200
   state.status = a.status || 'CONCLUIDO';
   state.secaoAtual = 0;
   state.editando = true;

@@ -100,6 +100,7 @@ function doPost(e) {
     else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
+    else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
     else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
     else if (action === 'cobrancaAtivar') { result = cobrancaAtivar(data, data.cpf); }   // r163
     else if (action === 'cobrancaDesativar') { result = cobrancaDesativar(data, data.cpf); }   // r163
@@ -612,7 +613,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-17-r199';
+const VERSAO_SCRIPT = '2026-10-17-r200';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -644,7 +645,8 @@ function doGet(e) {
     'biFinanceiroDados', 'biFinConfigListar', 'biFinConfigSalvar', 'biFinConfigExcluir',
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
-    'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja'
+    'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
+    'avalInternaListar'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -2854,9 +2856,10 @@ function salvarAuditoria(dados, cpf) {
     if (tipoEst !== 'FARMACIA' && tipoEst !== 'SUPERMERCADO') {
       tipoEst = tipoEstabelecimentoPorRespostas(d.respostas) || (linhaExistente > 0 ? String(todas[linhaExistente-1][19] || '').toUpperCase() : '') || 'SUPERMERCADO';
     }
-    if (aba.getMaxColumns() < 22) aba.insertColumnsAfter(aba.getMaxColumns(), 22 - aba.getMaxColumns());   // r157: +EmailGerente · r159: +Alimentacao
+    if (aba.getMaxColumns() < 23) aba.insertColumnsAfter(aba.getMaxColumns(), 23 - aba.getMaxColumns());   // r157: +EmailGerente · r159: +Alimentacao · r200: +AvaliacaoInterna
     if (!todas[0] || !todas[0][20]) aba.getRange(1, 21).setValue('EmailGerente');
     if (!todas[0] || !todas[0][21]) aba.getRange(1, 22).setValue('Alimentacao');
+    if (!todas[0] || !todas[0][22]) aba.getRange(1, 23).setValue('AvaliacaoInterna');   // r200
     var rowData = [
       d.id,
       linhaExistente > 0 ? todas[linhaExistente-1][1] : agora,
@@ -2868,7 +2871,9 @@ function salvarAuditoria(dados, cpf) {
       JSON.stringify(d.fotosIds || {}), ident.email_cliente || '',
       '', parseFloat(scores.geral)||0, parseFloat(scores.equipe)||0, d.versao || 'r50', tipoEst,
       perfSepararEmails(ident.email_gerente).join(', '),   // r157: E-mail do Gerente da Unidade (opcional)
-      JSON.stringify(d.alimentacao || [])   // r159: Alimentação (só Supermercado) — refeições cadastradas (tipo/qualidade/quantidade), informativo, fora da nota geral
+      JSON.stringify(d.alimentacao || []),   // r159
+      // r200: avaliação interna da equipe — só DURANTE A OPERAÇÃO; interna (nunca vai ao cliente, fora da nota)
+      (d.avaliacaoInterna && String(ident.tipo_avaliacao || '').toUpperCase().indexOf('DURANTE') !== -1) ? JSON.stringify(d.avaliacaoInterna) : ''   // r159: Alimentação (só Supermercado) — refeições cadastradas (tipo/qualidade/quantidade), informativo, fora da nota geral
     ];
     if (linhaExistente > 0) aba.getRange(linhaExistente, 1, 1, rowData.length).setValues([rowData]);
     else aba.appendRow(rowData);
@@ -2895,17 +2900,42 @@ function carregarAuditoria(dados, cpf) {
         try { observacoes = JSON.parse(row[12] || '{}'); } catch(e) {}
         try { fotosIds = JSON.parse(row[13] || '{}'); } catch(e) {}
         try { alimentacao = JSON.parse(row[21] || '[]'); } catch(e) {}   // r159
+        var avaliacaoInterna = null;
+        try { avaliacaoInterna = row[22] ? JSON.parse(row[22]) : null; } catch(e) {}   // r200
         return { ok: true, auditoria: {
           id: row[0], identificacao: { tipo_avaliacao: row[4], cliente: row[5], unidade: row[6],
             data_auditoria: extrairDataISO(row[7]), responsavel_cliente: row[8],
             email_gerente: String(row[20] || ''),   // r157
             tipo_estabelecimento: tipoEstabelecimentoDaLinha(row, respostas) },
           respostas: respostas, observacoes: observacoes, fotosIds: fotosIds, alimentacao: alimentacao,
+          avaliacaoInterna: avaliacaoInterna,   // r200
           secaoAtual: row[10], status: row[9]
         }};
       }
     }
     return { ok: false, erro: 'Auditoria não encontrada' };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
+// r200: lista as avaliações internas da equipe das análises concluídas (só Diretor)
+function avalInternaListar(dados, cpf) {
+  try {
+    if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+    var aba = getOuCriarAbaAuditoria();
+    var ult = aba.getLastRow();
+    if (ult < 2 || aba.getLastColumn() < 23) return { ok: true, lista: [] };
+    var linhas = aba.getRange(2, 1, ult - 1, 23).getValues();
+    var lista = [];
+    linhas.forEach(function (row) {
+      if (String(row[9]) !== 'CONCLUIDO' || !row[22]) return;
+      var av = null;
+      try { av = JSON.parse(row[22]); } catch (e) { av = null; }
+      if (!av) return;
+      lista.push({ id: row[0], auditor: row[2], cliente: row[5], unidade: row[6], dataAuditoria: extrairDataISO(row[7]),
+                   tipoEstabelecimento: String(row[19] || '').toUpperCase() === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO', aval: av });
+    });
+    lista.sort(function (a, b) { return String(b.dataAuditoria).localeCompare(String(a.dataAuditoria)); });
+    return { ok: true, lista: lista };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
