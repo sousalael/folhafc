@@ -613,7 +613,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-17-r200';
+const VERSAO_SCRIPT = '2026-10-17-r201';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -2935,8 +2935,42 @@ function avalInternaListar(dados, cpf) {
                    tipoEstabelecimento: String(row[19] || '').toUpperCase() === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO', aval: av });
     });
     lista.sort(function (a, b) { return String(b.dataAuditoria).localeCompare(String(a.dataAuditoria)); });
+    // r201: quantas pessoas trabalharam = lista de presença do projeto (mesma data, cliente e loja)
+    try {
+      var presencas = avalContarPresencas(lista);
+      lista.forEach(function (x) { x.presenca = presencas[avalChavePres(x.dataAuditoria, x.cliente, x.unidade)] || null; });
+    } catch (ePres) { Logger.log('Avaliação interna — presenças: ' + ePres.message); }
     return { ok: true, lista: lista };
   } catch (e) { return { ok: false, erro: e.message }; }
+}
+// r201: data (ISO ou dd/mm/aaaa) + cliente + loja → chave única
+function avalChavePres(data, cliente, loja) {
+  var t = String(data || '').trim(), m, iso = '';
+  if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) iso = m[1] + '-' + m[2] + '-' + m[3];
+  else if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) iso = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  return iso + '|' + fcChave(cliente) + '|' + fcChave(loja);
+}
+// conta, por projeto, quantos supervisores (função SUPERVISÃO) e quantas outras pessoas registraram presença
+function avalContarPresencas(lista) {
+  var alvo = {};
+  lista.forEach(function (x) { alvo[avalChavePres(x.dataAuditoria, x.cliente, x.unidade)] = 1; });
+  var out = {};
+  if (!Object.keys(alvo).length) return out;
+  var sh = getSheet('Presencas'), ult = sh.getLastRow();
+  if (ult < 2) return out;
+  var dados = sh.getRange(2, 1, ult - 1, 5).getDisplayValues();
+  var vistos = {};
+  dados.forEach(function (r) {
+    var k = avalChavePres(r[0], r[1], r[2]);
+    if (!alvo[k]) return;
+    var cpf = normalizarCPF(r[3]); if (!cpf || vistos[k + '|' + cpf]) return;
+    vistos[k + '|' + cpf] = 1;
+    var o = out[k] || (out[k] = { supervisores: 0, outros: 0, total: 0 });
+    var f = String(r[4] || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (f.indexOf('SUPERVIS') === 0) o.supervisores++; else o.outros++;
+    o.total++;
+  });
+  return out;
 }
 
 function finalizarAuditoria(dados, cpf) {

@@ -371,6 +371,12 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 .av-escala{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
 .av-n{border:1px solid #CFD8E3;background:#fff;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer}
 .av-n.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+/* r201: vários destaques */
+.av-item{border-top:1px dashed #CFD8E3;margin-top:10px;padding-top:4px}
+.av-item:first-of-type{border-top:0}
+.av-item-tit{display:flex;align-items:center;font-size:12px;font-weight:700;color:var(--navy);margin-top:6px}
+.av-tirar{margin-left:auto;border:0;background:none;color:#E05252;font-size:12px;cursor:pointer}
+.av-mais{margin-top:10px;border:1px dashed var(--navy);background:#fff;color:var(--navy);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
 .pf-texto p{font-size:13px;line-height:1.7;margin:0 0 8px;color:var(--text)}
 .pf-texto .pf-un{margin-bottom:10px}
 .pf-texto .pf-un b{color:var(--navy)}
@@ -471,7 +477,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r200';
+const VERSAO = 'r201';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1833,16 +1839,26 @@ const AV_MOTIVOS = {
 const AV_IMPACTO = [['no_horario','Terminou no horário'],['atrasou','Atrasou o término'],['hora_extra','Precisou de hora extra'],['qualidade','Prejudicou a qualidade da contagem'],['nao_afetou','Não afetou']];
 const AV_COMPOSICAO = [['adequada','Composição adequada'],['faltou_supervisor','Faltou supervisor'],['faltou_apoio','Faltou apoio para áreas críticas'],['faltou_experiente','Faltou gente experiente em farmácia ou perecíveis']];
 const AV_QUESITOS = [['conhecimento','Conhecimento'],['proatividade','Proatividade'],['eficiencia','Eficiência'],['comportamento','Comportamento / postura'],['equipe','Trabalho em equipe']];
+// r201: cada destaque (positivo/negativo) é uma lista — dá para incluir mais de um
+function avItemNovo() { return { nomes: '', notas: {}, comentario: '' }; }
 function avNovo() {
-  const dest = () => ({ sem: false, nomes: '', notas: {}, comentario: '' });
-  return { trabalharam: null, qtd: '', ideal: null, motivos: [], motivoOutro: '', impacto: [], atrasoTempo: '', composicao: [],
+  const dest = () => ({ sem: false, itens: [avItemNovo()] });
+  return { qtd: '', ideal: null, motivos: [], motivoOutro: '', impacto: [], atrasoTempo: '', composicao: [],
            recomendacao: '', recomendacaoQtd: null, destPos: dest(), destNeg: dest() };
 }
 function avDados() {
   const a = state.avalInterna && typeof state.avalInterna === 'object' ? state.avalInterna : (state.avalInterna = avNovo());
   const base = avNovo();
   Object.keys(base).forEach(k => { if (a[k] === undefined) a[k] = base[k]; });
-  ['destPos','destNeg'].forEach(k => { a[k] = Object.assign({ sem: false, nomes: '', notas: {}, comentario: '' }, a[k] || {}); a[k].notas = a[k].notas || {}; });
+  ['destPos','destNeg'].forEach(k => {
+    const d = a[k] || {};
+    if (!Array.isArray(d.itens)) d.itens = [{ nomes: d.nomes || '', notas: d.notas || {}, comentario: d.comentario || '' }];   // avaliações da r200 (um destaque só)
+    delete d.nomes; delete d.notas; delete d.comentario;
+    d.sem = !!d.sem; if (!d.itens.length) d.itens.push(avItemNovo());
+    d.itens.forEach(it => { it.notas = it.notas || {}; it.nomes = it.nomes || ''; it.comentario = it.comentario || ''; });
+    a[k] = d;
+  });
+  delete a.trabalharam;   // r201: a quantidade de pessoas vem da lista de presença
   return a;
 }
 function avEhDurante() { return String((state.identificacao || {}).tipo_avaliacao || '').toUpperCase().indexOf('DURANTE') !== -1; }
@@ -1863,11 +1879,13 @@ function avAlternar(campo, id) {
   else if (campo === 'composicao' && id !== 'adequada') a.composicao = a.composicao.filter(x => x !== 'adequada');
   avRedesenhar();
 }
-function avDest(tipo, campo, valor) { const d = avDados()[tipo]; d[campo] = valor; if (campo === 'sem') avRedesenhar(); }
-function avNota(tipo, q, n) { avDados()[tipo].notas[q] = n; avRedesenhar(); }
+function avDest(tipo, campo, valor) { avDados()[tipo][campo] = valor; avRedesenhar(); }   // só "sem destaque"
+function avItem(tipo, i, campo, valor) { avDados()[tipo].itens[i][campo] = valor; }
+function avNota(tipo, i, q, n) { avDados()[tipo].itens[i].notas[q] = n; avRedesenhar(); }
+function avMaisItem(tipo) { avDados()[tipo].itens.push(avItemNovo()); avRedesenhar(); }
+function avTirarItem(tipo, i) { const l = avDados()[tipo].itens; l.splice(i, 1); if (!l.length) l.push(avItemNovo()); avRedesenhar(); }
 function avPendencias() {
   const a = avDados(), p = [];
-  if (!(a.trabalharam > 0)) p.push('Quantas pessoas trabalharam');
   if (!a.qtd) p.push('Se a quantidade foi suficiente');
   if ((a.qtd === 'faltou' || a.qtd === 'sobrou') && !(a.ideal > 0)) p.push('Quantas pessoas seriam o ideal');
   if (a.qtd && !a.motivos.length && !a.motivoOutro.trim()) p.push('Por quê (marque um motivo ou explique)');
@@ -1877,8 +1895,11 @@ function avPendencias() {
   if ((a.recomendacao === 'aumentar' || a.recomendacao === 'reduzir') && !(a.recomendacaoQtd > 0)) p.push('Quantidade recomendada');
   [['destPos','Destaque positivo'],['destNeg','Destaque negativo']].forEach(([k, t]) => {
     const d = a[k]; if (d.sem) return;
-    if (!d.nomes.trim()) p.push(t + ': nome(s)');
-    if (AV_QUESITOS.some(([q]) => !(d.notas[q] >= 1))) p.push(t + ': notas dos 5 quesitos');
+    d.itens.forEach((it, i) => {
+      const tt = t + (d.itens.length > 1 ? ' ' + (i + 1) : '');
+      if (!it.nomes.trim()) p.push(tt + ': nome(s)');
+      if (AV_QUESITOS.some(([q]) => !(it.notas[q] >= 1))) p.push(tt + ': notas dos 5 quesitos');
+    });
   });
   return p;
 }
@@ -1887,31 +1908,31 @@ function htmlAvalInterna() {
   const chip = (on, onclick, txt) => `<button type="button" class="av-chip${on ? ' on' : ''}" aria-pressed="${on}" onclick="${onclick}">${txt}</button>`;
   const rot = t => `<div class="av-rot">${t}</div>`;
   const qtdOpc = [['faltou','😟 Faltou gente'],['adequada','✅ Foi adequada'],['sobrou','➕ Sobrou gente']];
-  const dif = (a.ideal > 0 && a.trabalharam > 0) ? a.ideal - a.trabalharam : null;
   const destaque = (k, titulo, cor) => {
-    const d = a[k];
+    const d = a[k], tipoTxt = k === 'destPos' ? 'destaque positivo' : 'destaque negativo';
+    const item = (it, i) => `<div class="av-item">
+        ${d.itens.length > 1 ? `<div class="av-item-tit">${titulo} ${i + 1}<button type="button" class="av-tirar" aria-label="Tirar este ${tipoTxt}" onclick="avTirarItem('${k}',${i})">× tirar</button></div>` : ''}
+        ${rot('Nome(s) da(s) pessoa(s)')}
+        <input type="text" class="av-in" value="${esc(it.nomes)}" placeholder="ex.: João Silva, Maria Souza" oninput="avItem('${k}',${i},'nomes',this.value)">
+        ${AV_QUESITOS.map(([q, t]) => `${rot(t + (it.notas[q] ? ' · <b>' + it.notas[q] + '</b>' : ''))}
+          <div class="av-escala">${[1,2,3,4,5,6,7,8,9,10].map(n => `<button type="button" class="av-n${it.notas[q] === n ? ' on' : ''}" aria-label="${t} nota ${n}" onclick="avNota('${k}',${i},'${q}',${n})">${n}</button>`).join('')}</div>`).join('')}
+        ${rot('Comentário (opcional)')}
+        <textarea class="av-in" rows="2" oninput="avItem('${k}',${i},'comentario',this.value)">${esc(it.comentario)}</textarea>
+      </div>`;
     return `<div class="av-dest" style="border-left-color:${cor}">
       <div class="av-dest-tit">${titulo}</div>
-      <label class="av-sem"><input type="checkbox" ${d.sem ? 'checked' : ''} onchange="avDest('${k}','sem',this.checked)"> Não houve ${k === 'destPos' ? 'destaque positivo' : 'destaque negativo'}</label>
-      ${d.sem ? '' : `
-        ${rot('Nome(s) da(s) pessoa(s)')}
-        <input type="text" class="av-in" value="${esc(d.nomes)}" placeholder="ex.: João Silva, Maria Souza" oninput="avDest('${k}','nomes',this.value)">
-        ${AV_QUESITOS.map(([q, t]) => `${rot(t + (d.notas[q] ? ' · <b>' + d.notas[q] + '</b>' : ''))}
-          <div class="av-escala">${[1,2,3,4,5,6,7,8,9,10].map(n => `<button type="button" class="av-n${d.notas[q] === n ? ' on' : ''}" aria-label="${t} nota ${n}" onclick="avNota('${k}','${q}',${n})">${n}</button>`).join('')}</div>`).join('')}
-        ${rot('Comentário (opcional)')}
-        <textarea class="av-in" rows="2" oninput="avDest('${k}','comentario',this.value)">${esc(d.comentario)}</textarea>`}
+      <label class="av-sem"><input type="checkbox" ${d.sem ? 'checked' : ''} onchange="avDest('${k}','sem',this.checked)"> Não houve ${tipoTxt}</label>
+      ${d.sem ? '' : d.itens.map(item).join('') + `<button type="button" class="av-mais" onclick="avMaisItem('${k}')">+ Incluir outro ${tipoTxt}</button>`}
     </div>`;
   };
   return `<div class="secao-card av-card" id="cardAvalInterna">
     <div class="secao-titulo"><i class="bi bi-lock-fill"></i> Avaliação interna da equipe</div>
     <div class="av-aviso">🔒 Uso interno da Formula Code — não vai para o cliente e não entra na nota. Obrigatória para concluir.</div>
-    ${rot('Quantas pessoas trabalharam nesta unidade nesta data?')}
-    <input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.trabalharam || ''}" oninput="avNum('trabalharam',this.value)" onchange="avRedesenhar()">
     ${rot('A quantidade de integrantes foi suficiente?')}
     <div class="av-chips">${qtdOpc.map(([v, t]) => chip(a.qtd === v, `avSet('qtd','${v}')`, t)).join('')}</div>
     ${(a.qtd === 'faltou' || a.qtd === 'sobrou') ? `${rot('Quantas pessoas teriam sido o ideal?')}
-      <input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.ideal || ''}" oninput="avNum('ideal',this.value)" onchange="avRedesenhar()">
-      ${dif !== null && dif !== 0 ? `<div class="av-dif">${dif > 0 ? 'Faltaram ' + dif : 'Sobraram ' + (-dif)} pessoa${Math.abs(dif) === 1 ? '' : 's'}</div>` : ''}` : ''}
+      <input type="number" min="1" step="1" inputmode="numeric" class="av-in av-num" value="${a.ideal || ''}" oninput="avNum('ideal',this.value)">
+      <div style="font-size:11px;color:var(--text-light);margin-top:4px">A quantidade que trabalhou é contada pela lista de presença do projeto.</div>` : ''}
     ${a.qtd ? `${rot('Por quê? (marque um ou mais)')}
       <div class="av-chips">${AV_MOTIVOS[a.qtd].map(([v, t]) => chip(a.motivos.indexOf(v) >= 0, `avAlternar('motivos','${v}')`, t)).join('')}</div>
       <input type="text" class="av-in" value="${esc(a.motivoOutro)}" placeholder="Outro / explique" oninput="avTxt('motivoOutro',this.value)">` : ''}

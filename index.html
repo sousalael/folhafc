@@ -961,7 +961,7 @@
         <!-- r200: AVALIAÇÃO INTERNA DA EQUIPE (preenchida na Análise de Preparação, DURANTE A OPERAÇÃO) -->
         <div id="pes-sub-aval" class="hidden">
             <h6 class="fw-bold text-primary mb-1">🔒 Avaliação interna da equipe</h6>
-            <div class="small text-muted mb-3">Preenchida pelo supervisor ao concluir cada Análise de Preparação DURANTE A OPERAÇÃO. Uso interno: não vai para o cliente.</div>
+            <div class="small text-muted mb-3">Preenchida pelo supervisor ao concluir cada Análise de Preparação DURANTE A OPERAÇÃO. Uso interno: não vai para o cliente. A quantidade que trabalhou vem da lista de presença do projeto (mesma data, cliente e loja).</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
                 <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de estabelecimento">
                     <button type="button" class="btn btn-outline-primary active" data-av-tipo="">Todos</button>
@@ -4695,7 +4695,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-17-r200';
+    const VERSAO_ESPERADA = '2026-10-17-r201';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
@@ -4918,6 +4918,9 @@
         return true;
     }
     function avMedia(notas) { const v = AV_QUES.map(([q]) => Number(notas && notas[q])).filter(n => n >= 1); return v.length ? v.reduce((s, n) => s + n, 0) / v.length : null; }
+    // r201: destaques em lista (r200 tinha um só por tipo)
+    function avItens(d) { if (!d || d.sem) return []; return Array.isArray(d.itens) ? d.itens : [{ nomes: d.nomes, notas: d.notas, comentario: d.comentario }]; }
+    function avPres(x) { return x.presenca && x.presenca.total ? x.presenca : null; }
     function avNomes(txt) { return String(txt || '').split(/,|;|\s+e\s+|\n/i).map(s => s.trim()).filter(Boolean); }
     async function avCarregar() {
         const alvo = document.getElementById('av-conteudo');
@@ -4944,12 +4947,12 @@
         // indicadores
         const cont = { faltou: 0, adequada: 0, sobrou: 0 };
         let somaDif = 0, nDif = 0;
-        L.forEach(x => { const a = x.aval || {}; if (cont[a.qtd] !== undefined) cont[a.qtd]++; if (a.ideal > 0 && a.trabalharam > 0) { somaDif += a.ideal - a.trabalharam; nDif++; } });
+        L.forEach(x => { const a = x.aval || {}, pr = avPres(x); if (cont[a.qtd] !== undefined) cont[a.qtd]++; if (a.ideal > 0 && pr) { somaDif += a.ideal - pr.total; nDif++; } });
         const pct = n => Math.round(n / L.length * 100) + '%';
         const kpi = (v, r, cor) => '<div class="col-6 col-md"><div class="card border-0 shadow-sm text-center h-100"><div class="card-body py-2"><div class="fs-5 fw-bold" style="color:' + cor + '">' + v + '</div><div class="small text-muted fw-bold">' + r + '</div></div></div></div>';
         let html = '<div class="row g-2 mb-3">' + kpi(L.length, 'Avaliações', 'var(--fc-primaria)') + kpi(pct(cont.faltou), 'Faltou gente', '#E05252') +
             kpi(pct(cont.adequada), 'Adequada', '#3a8000') + kpi(pct(cont.sobrou), 'Sobrou gente', '#E8872B') +
-            kpi(nDif ? (somaDif / nDif > 0 ? '+' : '') + (somaDif / nDif).toFixed(1).replace('.', ',') : '—', 'Diferença média p/ o ideal', 'var(--fc-primaria)') + '</div>';
+            kpi(nDif ? (somaDif / nDif > 0 ? '+' : '') + (somaDif / nDif).toFixed(1).replace('.', ',') : '—', 'Ideal − presença (média)', 'var(--fc-primaria)') + '</div>';
         // motivos mais citados
         const mot = {};
         L.forEach(x => ((x.aval || {}).motivos || []).forEach(m => mot[m] = (mot[m] || 0) + 1));
@@ -4958,23 +4961,27 @@
             topMot.map(([m, n]) => '<span class="badge rounded-pill text-bg-light border me-1 mb-1">' + escaparHtml(AV_ROT.motivos[m] || m) + ' · ' + n + '</span>').join('') + '</div>';
         // tabela das avaliações
         html += '<div class="small fw-bold text-primary mb-1">Avaliações</div><div class="table-responsive rounded shadow-sm mb-3"><table class="table table-sm table-bordered align-middle mb-0" style="font-size:12px"><thead class="table-light"><tr>' +
-            '<th></th><th>Data</th><th>Cliente</th><th>Unidade</th><th>Supervisor</th><th class="text-center">Pessoas</th><th>Quantidade</th><th>Recomendação</th></tr></thead><tbody>' +
+            '<th></th><th>Data</th><th>Cliente</th><th>Unidade</th><th>Supervisor</th><th class="text-center">Presença (sup. + outras)</th><th class="text-center">Ideal</th><th>Quantidade</th><th>Recomendação</th></tr></thead><tbody>' +
             L.map((x, i) => {
                 const a = x.aval || {}, ab = !!avEst.aberto[x.id];
-                const pess = (a.trabalharam || '—') + (a.ideal ? ' → ' + a.ideal + ' ideal' : '');
+                const pr = avPres(x);
+                const pess = pr ? pr.supervisores + ' + ' + pr.outros + ' = <b>' + pr.total + '</b>' : '<span class="text-muted">sem presença</span>';
+                const dif = (pr && a.ideal > 0) ? a.ideal - pr.total : null;
+                const ideal = a.ideal ? a.ideal + (dif ? ' <span class="' + (dif > 0 ? 'text-danger' : 'text-warning') + '">(' + (dif > 0 ? '+' : '') + dif + ')</span>' : '') : '—';
                 const rec = (AV_ROT.rec[a.recomendacao] || '—') + (a.recomendacaoQtd ? ' p/ ' + a.recomendacaoQtd : '');
                 let linha = '<tr><td class="text-center"><button type="button" class="btn btn-link btn-sm p-0" data-av-abrir="' + escaparHtml(x.id) + '" aria-expanded="' + ab + '">' + (ab ? '▾' : '▸') + '</button></td>' +
                     '<td>' + avDataBR(x.dataAuditoria) + '</td><td>' + escaparHtml(x.cliente) + '</td><td>' + escaparHtml(x.unidade) + '</td><td>' + escaparHtml(x.auditor || '') + '</td>' +
-                    '<td class="text-center">' + pess + '</td><td>' + (AV_ROT.qtd[a.qtd] || '—') + '</td><td>' + rec + '</td></tr>';
+                    '<td class="text-center">' + pess + '</td><td class="text-center">' + ideal + '</td><td>' + (AV_ROT.qtd[a.qtd] || '—') + '</td><td>' + rec + '</td></tr>';
                 if (ab) {
                     const lst = (arr, dic) => (arr || []).map(v => dic[v] || v).join(' · ') || '—';
                     const dest = (d, t) => {
-                        if (!d || d.sem) return '<div><b>' + t + ':</b> não houve.</div>';
-                        const m = avMedia(d.notas);
-                        return '<div><b>' + t + ':</b> ' + escaparHtml(d.nomes || '') + (m !== null ? ' — média ' + m.toFixed(1).replace('.', ',') : '') +
-                            '<div class="text-muted">' + AV_QUES.map(([q, r]) => r + ' ' + ((d.notas || {})[q] || '—')).join(' · ') + '</div>' + (d.comentario ? '<div class="fst-italic">“' + escaparHtml(d.comentario) + '”</div>' : '') + '</div>';
+                        const its = avItens(d);
+                        if (!its.length) return '<div><b>' + t + ':</b> não houve.</div>';
+                        return its.map(it => { const m = avMedia(it.notas);
+                            return '<div class="mt-1"><b>' + t + ':</b> ' + escaparHtml(it.nomes || '') + (m !== null ? ' — média ' + m.toFixed(1).replace('.', ',') : '') +
+                                '<div class="text-muted">' + AV_QUES.map(([q, r]) => r + ' ' + ((it.notas || {})[q] || '—')).join(' · ') + '</div>' + (it.comentario ? '<div class="fst-italic">“' + escaparHtml(it.comentario) + '”</div>' : '') + '</div>'; }).join('');
                     };
-                    linha += '<tr><td></td><td colspan="7" class="bg-light"><div><b>Por quê:</b> ' + lst(a.motivos, AV_ROT.motivos) + (a.motivoOutro ? ' · ' + escaparHtml(a.motivoOutro) : '') + '</div>' +
+                    linha += '<tr><td></td><td colspan="8" class="bg-light"><div><b>Por quê:</b> ' + lst(a.motivos, AV_ROT.motivos) + (a.motivoOutro ? ' · ' + escaparHtml(a.motivoOutro) : '') + '</div>' +
                         '<div><b>Impacto:</b> ' + lst(a.impacto, AV_ROT.impacto) + (a.atrasoTempo ? ' (' + escaparHtml(a.atrasoTempo) + ')' : '') + '</div>' +
                         '<div><b>Composição:</b> ' + lst(a.composicao, AV_ROT.composicao) + '</div>' + dest(a.destPos, '⭐ Destaque positivo') + dest(a.destNeg, '⚠️ Destaque negativo') + '</td></tr>';
                 }
@@ -4983,10 +4990,10 @@
         // pessoas destacadas
         const pes = {};
         L.forEach(x => [['destPos', 'pos'], ['destNeg', 'neg']].forEach(([k, t]) => {
-            const d = (x.aval || {})[k]; if (!d || d.sem) return;
-            const m = avMedia(d.notas);
-            avNomes(d.nomes).forEach(n => { const c = n.toUpperCase(); const p = pes[c] || (pes[c] = { nome: n, pos: 0, neg: 0, sPos: 0, nPos: 0, sNeg: 0, nNeg: 0 });
+            avItens((x.aval || {})[k]).forEach(it => { const m = avMedia(it.notas);
+            avNomes(it.nomes).forEach(n => { const c = n.toUpperCase(); const p = pes[c] || (pes[c] = { nome: n, pos: 0, neg: 0, sPos: 0, nPos: 0, sNeg: 0, nNeg: 0 });
                 p[t]++; if (m !== null) { if (t === 'pos') { p.sPos += m; p.nPos++; } else { p.sNeg += m; p.nNeg++; } } });
+            });
         }));
         const P = Object.values(pes).sort((a, b) => (b.pos - b.neg) - (a.pos - a.neg) || b.pos - a.pos);
         if (P.length) html += '<div class="small fw-bold text-primary mb-1">Pessoas destacadas</div><div class="table-responsive rounded shadow-sm"><table class="table table-sm table-bordered align-middle mb-0" style="font-size:12px"><thead class="table-light"><tr>' +
