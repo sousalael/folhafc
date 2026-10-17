@@ -987,6 +987,24 @@
                     <div id="cob-listas"></div>
                 </div>
             </div>
+            <!-- r199: análises concluídas e ainda não enviadas ao cliente -->
+            <div class="fc-pend-card fc-pend-azul mt-3">
+                <div class="fc-pend-head">
+                    <div class="fc-pend-titulo"><span class="fc-pend-icone" style="background:#E8EAF6">📨</span> Análises concluídas e não enviadas</div>
+                    <div class="fc-pend-contagem" id="ane-cont">0</div>
+                </div>
+                <div style="font-size:11px;color:#6B7B8D;margin-bottom:8px">Análises de Preparação para Inventário concluídas cujo relatório ainda não foi enviado ao cliente.</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de estabelecimento" id="ane-tipos">
+                        <button type="button" class="btn btn-outline-primary active" data-ane-tipo="">Todos</button>
+                        <button type="button" class="btn btn-outline-primary" data-ane-tipo="SUPERMERCADO">🛒 Supermercado</button>
+                        <button type="button" class="btn btn-outline-primary" data-ane-tipo="FARMACIA">💊 Farmácia</button>
+                    </div>
+                    <select class="form-select form-select-sm" id="ane-cliente" style="max-width:260px" aria-label="Cliente"></select>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="carregarNaoEnviadas()">↻ Atualizar</button>
+                </div>
+                <div id="ane-lista"><div class="text-center text-muted small py-2">Carregando...</div></div>
+            </div>
         </div>
         <!-- ############ FIM ABA COBRANÇA ############ -->
         </div>
@@ -2409,7 +2427,7 @@
     // r167: a cobrança agora mora na aba 🔔 Cobrança e carrega ao abrir a aba
     document.addEventListener('DOMContentLoaded', () => {
         const btnCob = document.getElementById('btn-aba-cobranca');
-        if (btnCob) btnCob.addEventListener('shown.bs.tab', () => carregarCobrancaHome());
+        if (btnCob) btnCob.addEventListener('shown.bs.tab', () => { carregarCobrancaHome(); carregarNaoEnviadas(); });   // r199
     });
     let cobLista = [];   // r165: lojas mostradas no card (para os botões por loja)
     // r165: por loja — Ignorar = pausa (fica na lista e pode reativar); Excluir = sai da lista e da cobrança de vez
@@ -2428,6 +2446,67 @@
             carregarCobrancaHome();
         }
     }
+    // r199: ANÁLISES CONCLUÍDAS E NÃO ENVIADAS — filtros encadeados: o tipo limita os clientes da lista
+    const aneEstado = { lista: [], tipo: '', cliente: '' };
+    function aneTipoDe(a) { return String(a.tipoEstabelecimento || '').toUpperCase() === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO'; }
+    function aneDataBR(v) {
+        if (!v) return '—';
+        const d = new Date(v); if (isNaN(d)) return String(v);
+        return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    }
+    function aneDias(v) { const d = new Date(v); if (isNaN(d)) return null; return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)); }
+    async function carregarNaoEnviadas() {
+        const alvo = document.getElementById('ane-lista');
+        if (!alvo) return;
+        alvo.innerHTML = '<div class="text-center text-muted small py-2">Carregando...</div>';
+        try {
+            const res = await chamarApi({ action: 'listarHistoricoAuditorias', cpf: getCpfLogado() });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível carregar as análises.');
+            aneEstado.lista = (res.auditorias || []).filter(a => a.status === 'CONCLUIDO' && !String(a.dataEnvio || '').trim());
+            desenharNaoEnviadas();
+        } catch (e) {
+            alvo.innerHTML = '<div class="text-center text-danger small py-2">' + escaparHtml(e.message) + '</div>';
+        }
+    }
+    function desenharNaoEnviadas() {
+        const doTipo = aneEstado.lista.filter(a => !aneEstado.tipo || aneTipoDe(a) === aneEstado.tipo);
+        const clientes = Array.from(new Set(doTipo.map(a => a.cliente))).sort((x, y) => String(x).localeCompare(String(y), 'pt-BR'));
+        if (aneEstado.cliente && clientes.indexOf(aneEstado.cliente) < 0) aneEstado.cliente = '';   // cliente de outro tipo sai do filtro
+        const sel = document.getElementById('ane-cliente');
+        sel.innerHTML = '<option value="">Todos os clientes' + (aneEstado.tipo ? (aneEstado.tipo === 'FARMACIA' ? ' (farmácia)' : ' (supermercado)') : '') + '</option>' +
+            clientes.map(c => '<option value="' + escaparHtml(c) + '"' + (c === aneEstado.cliente ? ' selected' : '') + '>' + escaparHtml(c) + '</option>').join('');
+        document.querySelectorAll('[data-ane-tipo]').forEach(b => b.classList.toggle('active', b.dataset.aneTipo === aneEstado.tipo));
+        const L = doTipo.filter(a => !aneEstado.cliente || a.cliente === aneEstado.cliente)
+            .sort((x, y) => new Date(x.dataAuditoria) - new Date(y.dataAuditoria));
+        document.getElementById('ane-cont').textContent = L.length;
+        const alvo = document.getElementById('ane-lista');
+        if (!L.length) { alvo.innerHTML = '<div class="text-center text-muted small py-2">Nenhuma análise concluída aguardando envio' + (aneEstado.tipo || aneEstado.cliente ? ' para este filtro' : '') + '. 👍</div>'; return; }
+        alvo.innerHTML = '<div class="table-responsive"><table class="table table-sm align-middle mb-0" style="font-size:12px"><thead><tr>' +
+            '<th>Cliente</th><th>Unidade</th><th>Tipo</th><th>Análise</th><th>Data</th><th>Supervisor</th><th class="text-end">Dias sem envio</th><th></th></tr></thead><tbody>' +
+            L.map(a => {
+                const dias = aneDias(a.dataAuditoria);
+                return '<tr><td>' + escaparHtml(a.cliente) + '</td><td>' + escaparHtml(a.unidade) + '</td><td>' + (aneTipoDe(a) === 'FARMACIA' ? '💊 Farmácia' : '🛒 Supermercado') + '</td>' +
+                    '<td>' + escaparHtml(a.tipoAvaliacao || '') + '</td><td>' + aneDataBR(a.dataAuditoria) + '</td><td>' + escaparHtml(a.auditor || '') + '</td>' +
+                    '<td class="text-end' + (dias !== null && dias > 3 ? ' text-danger fw-bold' : '') + '">' + (dias === null ? '—' : dias) + '</td>' +
+                    '<td class="text-end"><button type="button" class="btn btn-sm btn-primary text-nowrap" onclick="abrirEnvioAnalise(\'' + escaparHtml(a.id) + '\')">Abrir e enviar</button></td></tr>';
+            }).join('') + '</tbody></table></div>';
+    }
+    // abre a Análise de Preparação já na tela de envio desta análise
+    function abrirEnvioAnalise(id) {
+        const base = window.location.href.split('?')[0].replace(/[^\/]*$/, '') + 'auditoria.html';
+        const tok = window.tokenSessao || '';
+        if (!tok) { alert('Faça login novamente para abrir a Análise de Preparação para Inventário.'); return; }
+        window.open(base + '?token=' + encodeURIComponent(tok) + '&cpf=' + encodeURIComponent(getCpfLogado()) + '&enviar=' + encodeURIComponent(id), '_blank');
+    }
+    document.addEventListener('click', e => {
+        const b = e.target.closest('[data-ane-tipo]'); if (!b) return;
+        aneEstado.tipo = b.dataset.aneTipo; desenharNaoEnviadas();
+    });
+    document.addEventListener('change', e => {
+        if (e.target.id !== 'ane-cliente') return;
+        aneEstado.cliente = e.target.value; desenharNaoEnviadas();
+    });
+
     async function carregarCobrancaHome() {
         const card = document.getElementById('card-cobranca-analise');
         const elCarr = document.getElementById('cob-carregando'), elErro = document.getElementById('cob-erro');
@@ -4588,7 +4667,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-17-r198';
+    const VERSAO_ESPERADA = '2026-10-17-r199';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
