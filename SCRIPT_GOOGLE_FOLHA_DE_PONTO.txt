@@ -40,8 +40,8 @@ function doPost(e) {
     else if (action === 'verificarSupervisor') { result = verificarSupervisor(data.cpf, data.projeto); }
     else if (action === 'getListaPresencas') { result = getListaPresencas(data.projeto); }
     else if (action === 'registrarPonto') { result = registrarPonto(data.projeto, data.cpf, data.extras); }
-    else if (action === 'salvarApenas') { result = salvarApenas(data.lista); }
-    else if (action === 'encerrarProjeto') { result = encerrarProjeto(data.projeto || data.project); } // CORRIGIDO (autorizado)
+    else if (action === 'salvarApenas') { result = salvarApenas(data.lista, data.cpf); }   // r203: + trava de divisão
+    else if (action === 'encerrarProjeto') { result = encerrarProjeto(data.projeto || data.project, data.cpf); } // CORRIGIDO (autorizado) · r203: + divisão
     else if (action === 'getRelatorioMultiplo') { result = getRelatorioMultiplo(data.projetos); }
     else if (action === 'pesquisarColaboradores') { result = pesquisarColaboradores(data.filtros); }
     else if (action === 'getContadoresPonto') { result = getContadoresPonto(data.cpf, data.filtros); }
@@ -299,6 +299,56 @@ function getDataTrabalhoVigente() {
   return Utilities.formatDate(referencia, TZ, 'dd/MM/yyyy');
 }
 
+// ============================================================================ //
+// r203: RESTRIÇÃO DE ACESSO POR DIVISÃO
+// Colaboradores e Projetos têm a coluna "Divisão" (achada pelo nome do cabeçalho).
+// Diretor e supervisor com Divisão "Todas" enxergam todos os projetos. Supervisor
+// da divisão X só enxerga projetos da divisão X — de HOJE em diante (o histórico
+// segue livre). Supervisor sem divisão não enxerga projeto nenhum (de hoje em diante);
+// projeto sem divisão só aparece para o Diretor e para quem tem "Todas".
+// Aceita várias divisões na mesma célula: "A, B".
+// ============================================================================ //
+function divSemAcento_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+function divNorm_(t) { return divSemAcento_(t).replace(/^DIVISAO\b\s*/, '').trim(); }
+function divLista_(t) { return String(t || '').split(/[,;\/]/).map(divNorm_).filter(Boolean); }
+function divColuna_(cabecalho) { for (var i = 0; i < cabecalho.length; i++) if (divSemAcento_(cabecalho[i]).indexOf('DIVIS') === 0) return i; return -1; }
+function acessoDivisao(cpf) {
+  var perfil = getPerfilPorCPF(cpf);
+  if (perfil === 'DIRETOR') return { livre: true, perfil: perfil };
+  var cd = getColabDados(), ix = getColabIndices(), col = divColuna_(cd[0] || []);
+  var cpfL = normalizarCPF(cpf), lista = [];
+  for (var i = 1; i < cd.length; i++) if (normalizarCPF(cd[i][ix.cpf]) === cpfL) { if (col >= 0) lista = divLista_(cd[i][col]); break; }
+  if (lista.some(function (d) { return d === 'TODAS' || d === 'TODOS'; })) return { livre: true, perfil: perfil };
+  return { livre: false, perfil: perfil, divisoes: lista, semDivisao: !lista.length };
+}
+// projeto (data dd/mm/aaaa + divisão do projeto) pode ser visto por este acesso?
+function projetoPermitido(acesso, dataBR, divProjeto) {
+  if (!acesso || acesso.livre) return true;
+  if (ddmmyyyyToInt(dataBR) < ddmmyyyyToInt(getDataTrabalhoVigente())) return true;   // histórico: livre
+  if (acesso.semDivisao) return false;
+  var ds = divLista_(divProjeto);
+  return ds.some(function (d) { return acesso.divisoes.indexOf(d) >= 0; });
+}
+// divisão de um projeto (data, cliente, loja) lida da aba Projetos
+function divisaoDoProjeto(dataBR, cliente, unidade, dadosProj) {
+  var dados = dadosProj || getSheet('Projetos').getDataRange().getDisplayValues();
+  var col = divColuna_(dados[0] || []); if (col < 0) return '';
+  var kc = fcChave(cliente), ku = fcChave(unidade);
+  for (var i = 1; i < dados.length; i++) {
+    var r = dados[i];
+    if (String(r[0]).trim() === String(dataBR).trim() && fcChave(r[1]) === kc && fcChave(r[2]) === ku) return String(r[col] || '');
+  }
+  return '';
+}
+// trava usada nas ações do supervisor sobre um projeto (encerrar, salvar presença, lançar despesa)
+function exigirProjetoPermitido(cpf, projeto) {
+  if (!projeto || !projeto.data) return null;
+  var ac = acessoDivisao(cpf);
+  if (ac.livre) return null;
+  if (projetoPermitido(ac, projeto.data, divisaoDoProjeto(projeto.data, projeto.cliente, projeto.unidade))) return null;
+  return ac.semDivisao ? 'Sua divisão não está cadastrada. Fale com a Diretoria.' : 'Este projeto é de outra divisão. Fale com a Diretoria.';
+}
+
 function getProjetos() {
   const sheet = getSheet('Projetos');
   const dados = sheet.getDataRange().getDisplayValues();
@@ -318,7 +368,14 @@ function getProjetos() {
 function montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) {
   const cpfFormatado = formatarCPF(cpfLimpo);
 
-  if (projeto && projeto.data && !isProjetoEncerrado(projeto)) {
+  // r203: divisão do supervisor — só os projetos da divisão dele (de hoje em diante)
+  let acesso = null, projetoNegado = false;
+  if (perfil === 'SUPERVISOR') {
+    acesso = acessoDivisao(cpfLimpo);
+    if (!acesso.livre && projeto && projeto.data && !projetoPermitido(acesso, projeto.data, divisaoDoProjeto(projeto.data, projeto.cliente, projeto.unidade))) projetoNegado = true;
+  }
+
+  if (projeto && projeto.data && !isProjetoEncerrado(projeto) && !projetoNegado) {
      const sheetPresencas = getSheet('Presencas');
      const { linhas } = lerPresencasDoProjeto(sheetPresencas, projeto.data);
      let jaRegistrado = false;
@@ -333,6 +390,20 @@ function montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) {
   }
 
   let resposta = { encontrado: true, nome: nome, perfil: perfil };
+  if (acesso && !acesso.livre) {   // r203
+    const dp = getSheet('Projetos').getDataRange().getDisplayValues(), col = divColuna_(dp[0] || []);
+    const hoje = getDataTrabalhoVigente();
+    resposta.restritoDivisao = true;
+    resposta.semDivisao = !!acesso.semDivisao;
+    resposta.divisoes = acesso.divisoes || [];
+    resposta.projetosPermitidos = [];
+    for (let i = 1; i < dp.length; i++) {
+      const r = dp[i];
+      if (r[0] === hoje && r[3] !== 'Encerrado' && projetoPermitido(acesso, r[0], col >= 0 ? r[col] : ''))
+        resposta.projetosPermitidos.push(r[0] + '|' + r[1] + '|' + r[2]);
+    }
+    if (projetoNegado) resposta.projetoNegado = true;
+  }
 
   if (perfil === 'DIRETOR') {
      const sheetProj = getSheet('Projetos');
@@ -460,8 +531,13 @@ function getListaPresencas(projeto) {
   return { lista: lista };
 }
 
-function salvarApenas(lista) {
+function salvarApenas(lista, cpf) {
   const sheetPresencas = getSheet('Presencas');
+  if (cpf && lista && lista.length) {   // r203: o projeto da lista precisa ser da divisão do supervisor
+    const lin = sheetPresencas.getRange(lista[0].rowId, 1, 1, 3).getDisplayValues()[0];
+    const erroDiv = exigirProjetoPermitido(cpf, { data: lin[0], cliente: lin[1], unidade: lin[2] });
+    if (erroDiv) return { error: erroDiv };
+  }
   lista.forEach(item => {
     sheetPresencas.getRange(item.rowId, 5).setValue(item.funcao); 
     sheetPresencas.getRange(item.rowId, 6).setValue(item.obs);    
@@ -469,7 +545,8 @@ function salvarApenas(lista) {
   return { success: true };
 }
 
-function encerrarProjeto(projeto) {
+function encerrarProjeto(projeto, cpf) {
+  if (cpf) { const erroDiv = exigirProjetoPermitido(cpf, projeto); if (erroDiv) return { error: erroDiv }; }   // r203
   const sheetProjetos = getSheet('Projetos');
   const dadosProj = sheetProjetos.getDataRange().getDisplayValues();
   for (let i = 1; i < dadosProj.length; i++) {
@@ -614,7 +691,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-17-r202';
+const VERSAO_SCRIPT = '2026-10-18-r203';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -756,6 +833,11 @@ function getProjetosEncerrados(cpf, filtros) {
     });
   }
 
+  if (perfil === 'SUPERVISOR') {   // r203: divisão
+    const ac = acessoDivisao(cpf);
+    if (!ac.livre) { const tudo = getSheet('Projetos').getRange(1, 1, 1, getSheet('Projetos').getLastColumn()).getDisplayValues()[0], col = divColuna_(tudo);
+      filtrados = filtrados.filter(r => projetoPermitido(ac, r[0], col >= 0 ? r[col] : '')); }
+  }
   filtrados.sort((a, b) => ddmmyyyyToInt(b[0]) - ddmmyyyyToInt(a[0]));
   return { projetos: filtrados.map(r => ({ data: r[0], cliente: r[1], unidade: r[2], status: r[3] })) };
 }
@@ -1493,6 +1575,7 @@ function lancarDespesa(d) {
   const perfil = getPerfilPorCPF(d.cpf);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Apenas Supervisor ou Diretoria podem lancar despesas.' };
   if (d.semProjeto && perfil !== 'DIRETOR') return { error: 'Apenas a Diretoria pode lancar despesas sem projeto.' };
+  if (!d.semProjeto) { const erroDiv = exigirProjetoPermitido(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade }); if (erroDiv) return { error: erroDiv }; }   // r203
 
   if (!d.semProjeto && isSessaoEncerrada(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade })) {
     return { error: 'Seus lancamentos aqui estao encerrados. Reabra a sessao para lancar novamente.' };
@@ -3722,8 +3805,10 @@ function listarProjetosAuditoria(dados, cpf) {
     if (perfil !== 'DIRETOR' && perfil !== 'SUPERVISOR') return { ok: false, erro: 'Acesso restrito' };
     var linhas = getSheet('Projetos').getDataRange().getDisplayValues();
     var vistos = {}, lista = [];
+    var acDiv = perfil === 'SUPERVISOR' ? acessoDivisao(cpf) : null, colDiv = divColuna_(linhas[0] || []);   // r203
     for (var i = 1; i < linhas.length; i++) {
       var r = linhas[i];
+      if (acDiv && !acDiv.livre && !projetoPermitido(acDiv, r[0], colDiv >= 0 ? r[colDiv] : '')) continue;   // r203: divisão
       var cli = String(r[1] || '').replace(/\s+/g, ' ').trim();
       var uni = String(r[2] || '').replace(/\s+/g, ' ').trim();
       var m = String(r[0] || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);

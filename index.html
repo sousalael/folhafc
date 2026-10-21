@@ -1850,6 +1850,15 @@
             }
 
             if(res && res.encontrado) {
+                // r203: restrição por divisão — o supervisor só vê os projetos (de hoje em diante) da divisão dele
+                window.__projPermitidos = res.restritoDivisao ? new Set(res.projetosPermitidos || []) : null;
+                if (res.projetoNegado) {
+                    projetoAtivo = { data: null, cliente: null, unidade: null, status: null };
+                    alert(res.semDivisao ? 'Sua divisão não está cadastrada. Fale com a Diretoria.' : 'Este projeto é de outra divisão. Escolha um projeto da sua divisão.');
+                } else if (res.semDivisao) {
+                    alert('Sua divisão não está cadastrada. Fale com a Diretoria para liberar os projetos.');
+                }
+                const _dst = document.getElementById('sel-proj-ativos-sup'); if (_dst) _dst.innerHTML = '';   // força refazer a lista com o filtro
                 document.getElementById('view-login').classList.add('hidden');
                 document.getElementById('view-dashboard').classList.remove('hidden');
                 document.getElementById('fc-header-barra').style.display = 'block';
@@ -3429,7 +3438,7 @@
         // a lista e reconstruida para refletir o estado atual.
         const qtdDestino = Math.max(0, destino.options.length - 1);
         const destinoTemProjetosReais = qtdDestino > 0 && destino.options[1] && destino.options[1].value !== '';
-        if (qtdOrigem > 0 && destinoTemProjetosReais && qtdDestino === qtdOrigem) return;
+        if (!window.__projPermitidos && qtdOrigem > 0 && destinoTemProjetosReais && qtdDestino === qtdOrigem) return;   // r203: com divisão, sempre refaz
 
         if (qtdOrigem === 0) {
             // Ainda nao chegaram os projetos (ou realmente nao ha nenhum hoje).
@@ -3445,9 +3454,15 @@
         // para exibir do projeto mais recente para o mais antigo.
         const opcoes = [];
         for (let i = 1; i < origem.options.length; i++) {
+            // r203: só os projetos da divisão do supervisor
+            if (window.__projPermitidos) {
+                let pj = null; try { pj = JSON.parse(origem.options[i].value); } catch (e) { pj = null; }
+                if (!pj || !window.__projPermitidos.has(pj.data + '|' + pj.cliente + '|' + pj.unidade)) continue;
+            }
             opcoes.push({ value: origem.options[i].value, text: origem.options[i].text });
         }
         opcoes.reverse();
+        if (!opcoes.length) { destino.innerHTML = '<option value="">' + (window.__projPermitidos ? '-- Nenhum projeto da sua divisão hoje --' : '-- Nenhum projeto ativo hoje --') + '</option>'; return; }
 
         destino.innerHTML = '';
         const placeholder = document.createElement('option');
@@ -4695,7 +4710,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-17-r202';
+    const VERSAO_ESPERADA = '2026-10-18-r203';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
