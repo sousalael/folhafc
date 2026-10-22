@@ -3230,15 +3230,16 @@
     function exportarDespesasExcel() {
         if (!despesasGlobais.length) return alert('Não há despesas para exportar.');
         let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Tipo Despesa", "Valor", "Forma Pagamento", "Observação", "Supervisor", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Divisão", "Tipo Despesa", "Valor", "Forma Pagamento", "Observação", "Supervisor", "URL Comprovante", "Apurado"].join(";")];   // r207
         despesasGlobais.forEach(d => {
             total += Number(d.valor || 0);
-            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.tipo),
+            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.divisao || ''), escCsv(d.tipo),
                       escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.obs),
-                      escCsv(d.supervisor), escCsv(d.url)].join(";"));
+                      escCsv(d.supervisor), escCsv(d.url), escCsv(d.apurado || '')].join(";"));
         });
-        csv.push(["", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", ""].join(";"));
+        csv.push(["", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", ""].join(";"));
         baixarCsv(csv, 'Despesas_' + projetoAtivo.cliente + '_' + projetoAtivo.data.replace(/\//g, '-') + '.csv');
+        setTimeout(() => perguntarApurado(despesasGlobais), 400);   // r207
     }
 
     // ============================================================
@@ -4072,15 +4073,33 @@
 
     function linhasCsvLancamentos(lista) {
         let total = 0;
-        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Grupo", "Tipo Despesa", "Valor", "Forma Pagamento", "Recurso Próprio", "Observação", "Supervisor", "URL Comprovante"].join(";")];
+        let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Divisão", "Grupo", "Tipo Despesa", "Valor", "Forma Pagamento", "Recurso Próprio", "Observação", "Supervisor", "URL Comprovante", "Apurado"].join(";")];   // r207: + Divisão e Apurado
         lista.forEach(d => {
             total += Number(d.valor || 0);
-            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.grupo), escCsv(d.tipo),
+            csv.push([escCsv(d.timestamp), escCsv(d.data), escCsv(d.cliente), escCsv(d.unidade), escCsv(d.divisao || ''), escCsv(d.grupo), escCsv(d.tipo),
                       escCsv(Number(d.valor || 0).toFixed(2).replace('.', ',')), escCsv(d.formaPagamento), escCsv(d.recursoProprio ? 'SIM' : 'NÃO'),
-                      escCsv(d.obs), escCsv(d.supervisor), escCsv(d.url)].join(";"));
+                      escCsv(d.obs), escCsv(d.supervisor), escCsv(d.url), escCsv(d.apurado || '')].join(";"));
         });
-        csv.push(["", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", ""].join(";"));
+        csv.push(["", "", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", "", ""].join(";"));
         return csv;
+    }
+    // r207: depois de exportar, o Diretor escolhe se grava a data de hoje na coluna "Apurado" das despesas exportadas
+    async function perguntarApurado(lista) {
+        if (getPerfilLogado() !== 'DIRETOR' || !lista || !lista.length) return;
+        const d = new Date(), hoje = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+        const ja = lista.filter(x => String(x.apurado || '').trim()), sem = lista.length - ja.length;
+        if (!confirm('Gravar a data de hoje (' + hoje + ') na coluna "Apurado" das ' + lista.length + ' despesa(s) exportada(s)?')) return;
+        let sobrescrever = false;
+        if (ja.length) {
+            sobrescrever = confirm(ja.length + ' dessas despesas já têm data em "Apurado".\n\nOK = sobrescrever todas com a data de hoje\nCancelar = gravar só nas ' + sem + ' sem data');
+            if (!sobrescrever && !sem) return alert('Nenhuma data gravada: todas já estavam apuradas.');
+        }
+        try {
+            const res = await chamarApi({ action: 'despesasMarcarApurado', cpf: getCpfLogado(), rowIds: lista.map(x => x.rowId), sobrescrever: sobrescrever });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível gravar.');
+            lista.forEach(x => { if (sobrescrever || !String(x.apurado || '').trim()) x.apurado = res.data; });
+            alert('✅ Data ' + res.data + ' gravada em "Apurado" de ' + res.gravadas + ' despesa(s)' + (res.mantidas ? ' (' + res.mantidas + ' mantida(s) com a data anterior)' : '') + '.');
+        } catch (e) { alert('⚠️ ' + e.message); }
     }
 
     // 🖼️ Abre o Relatorio Visual com Fotos em nova aba. Passa o token de sessao
@@ -4215,6 +4234,7 @@
         const sel = relDespSelecionadas();
         if (!sel.length) return alert('Selecione ao menos um cliente para exportar.');
         baixarCsv(linhasCsvLancamentos(sel), 'Relatorio_Despesas_' + document.getElementById('rel-desp-ini').value + '_a_' + document.getElementById('rel-desp-fim').value + '.csv');
+        setTimeout(() => perguntarApurado(sel), 400);   // r207
     }
 
     function prepararBiDespesas() {
@@ -4476,7 +4496,7 @@
         btnExp.classList.remove('hidden');
     }
 
-    function exportarDespXProv() {
+    async function exportarDespXProv() {
         if (!acertoDados.length) return alert('Não há dados para exportar.');
         let csv = [["CPF", "Nome", "Gastou com recurso próprio", "Recebeu de provisionamento", "Saldo", "Situação"].join(";")];
         acertoDados.forEach(p => {
@@ -4484,7 +4504,15 @@
             csv.push([escCsv(p.cpf), escCsv(p.nome), escCsv(p.gastou.toFixed(2).replace('.', ',')),
                       escCsv(p.recebeu.toFixed(2).replace('.', ',')), escCsv(p.saldo.toFixed(2).replace('.', ',')), escCsv(sit)].join(";"));
         });
+        // r207: lançamentos de despesa do período, com Divisão e Apurado, logo abaixo do resumo
+        let lancs = [];
+        try {
+            const rd = await chamarApi({ action: 'getDespesasRelatorio', cpf: getCpfLogado(), filtros: { dataIni: document.getElementById('fin-ini').value, dataFim: document.getElementById('fin-fim').value } });
+            lancs = (rd && rd.lista) || [];
+        } catch (e) { lancs = []; }
+        if (lancs.length) { csv.push(''); csv.push(escCsv('LANÇAMENTOS DE DESPESA DO PERÍODO')); csv = csv.concat(linhasCsvLancamentos(lancs)); }
         baixarCsv(csv, 'Acerto_de_Contas_' + document.getElementById('fin-ini').value + '_a_' + document.getElementById('fin-fim').value + '.csv');
+        if (lancs.length) setTimeout(() => perguntarApurado(lancs), 400);
     }
 
     // ---------- Relatório de Provisionamento ----------
@@ -4736,7 +4764,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-22-r206';
+    const VERSAO_ESPERADA = '2026-10-22-r207';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

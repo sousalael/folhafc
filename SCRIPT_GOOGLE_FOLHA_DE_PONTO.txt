@@ -104,6 +104,7 @@ function doPost(e) {
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
     else if (action === 'divDespesasAtualizar') { result = divDespesasAtualizar(data.cpf); }   // r206
     else if (action === 'divDespesasStatus') { result = divDespesasStatus(data.cpf); }         // r206
+    else if (action === 'despesasMarcarApurado') { result = despesasMarcarApurado(data.cpf, data.rowIds, !!data.sobrescrever); }   // r207
     else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
     else if (action === 'avalInternaCorrigir') { result = avalInternaCorrigir(data, data.cpf); }   // r202: confere os nomes dos destaques
     else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
@@ -432,6 +433,34 @@ function migrarDivisaoDespesasSePreciso_() {
   if (props.getProperty('DIV_DESP_MIGRACAO') === DIV_DESP_MIGRACAO) return;
   var r = atualizarDivisaoDespesas();
   if (r && r.ok) props.setProperty('DIV_DESP_MIGRACAO', DIV_DESP_MIGRACAO);
+}
+// r207: colunas "Apurado" e "Divisão" da aba Despesas (achadas pelo nome do cabeçalho)
+function despColunasExtras_(cab) {
+  var ap = -1;
+  for (var i = 0; i < cab.length; i++) if (divSemAcento_(cab[i]).indexOf('APURAD') === 0) { ap = i; break; }
+  var dv = divColuna_(cab);
+  return { apurado: ap, divisao: dv >= 0 ? dv : DIV_DESP_COL_PADRAO - 1 };
+}
+// grava a data de hoje na coluna Apurado das despesas exportadas (só Diretor)
+function despesasMarcarApurado(cpf, rowIds, sobrescrever) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Somente a Diretoria grava a data de apuração.' };
+  var sh = getSheet('Despesas'), ult = sh.getLastRow();
+  var cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
+  var col = despColunasExtras_(cab).apurado;
+  if (col < 0) return { ok: false, erro: 'Coluna "Apurado" não encontrada na aba Despesas.' };
+  var ids = (Array.isArray(rowIds) ? rowIds : []).map(Number).filter(function (n) { return n >= 2 && n <= ult; });
+  if (!ids.length) return { ok: true, gravadas: 0, mantidas: 0 };
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var faixa = sh.getRange(2, col + 1, ult - 1, 1), vals = faixa.getDisplayValues();
+    var hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy'), grav = 0, mant = 0;
+    ids.forEach(function (rid) {
+      var cel = vals[rid - 2];
+      if (String(cel[0] || '').trim() && !sobrescrever) { mant++; return; }
+      sh.getRange(rid, col + 1).setNumberFormat('@').setValue(hoje); grav++;
+    });
+    return { ok: true, gravadas: grav, mantidas: mant, data: hoje };
+  } finally { lock.releaseLock(); }
 }
 function divDespesasAtualizar(cpf) {   // botão do Diretor
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
@@ -785,7 +814,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-22-r206';
+const VERSAO_SCRIPT = '2026-10-22-r207';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -818,7 +847,7 @@ function doGet(e) {
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
-    'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus'
+    'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus', 'despesasMarcarApurado'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -1746,6 +1775,7 @@ function getDespesas(projeto, cpf) {
   if (!sheet) return { lista: [], sessaoEncerrada: false };
   const dados = sheet.getDataRange().getDisplayValues();
   const ctx = getContextoUsuario(cpf);
+  const cxP = despColunasExtras_(dados[0] || []);   // r207
 
   let lista = [];
   for (let i = 1; i < dados.length; i++) {
@@ -1756,7 +1786,8 @@ function getDespesas(projeto, cpf) {
     lista.push({
       rowId: i + 1, timestamp: r[0], data: r[1], cliente: r[2], unidade: r[3],
       tipo: r[4], valor: despesaValorParaNumero(r[5]), obs: r[6],
-      supervisor: r[7], url: r[8], cpfSupervisor: r[9] || '', formaPagamento: r[10] || ''
+      supervisor: r[7], url: r[8], cpfSupervisor: r[9] || '', formaPagamento: r[10] || '',
+      divisao: r[cxP.divisao] || '', apurado: cxP.apurado >= 0 ? (r[cxP.apurado] || '') : ''   // r207
     });
   }
   lista.sort((a, b) => b.rowId - a.rowId);
@@ -1899,6 +1930,7 @@ function getDespesasRelatorio(cpf, filtros) {
   const sheet = getSheet('Despesas');
   if (!sheet) return { lista: [], perfil: ctx.perfil };
   const dados = sheet.getDataRange().getDisplayValues();
+  const cx = despColunasExtras_(dados[0] || []);   // r207
 
   const tIni = htmlDateToInt(filtros ? filtros.dataIni : '', false);
   const tFim = htmlDateToInt(filtros ? filtros.dataFim : '', true);
@@ -1926,7 +1958,8 @@ function getDespesasRelatorio(cpf, filtros) {
       tipo: tipo, grupo: mapaGrupo[tipo.toUpperCase()] || 'SEM GRUPO',
       valor: despesaValorParaNumero(r[5]), obs: r[6],
       supervisor: r[7] || 'NAO INFORMADO', url: r[8], cpfSupervisor: r[9] || '',
-      formaPagamento: forma, recursoProprio: !!mapaProprio[forma.toUpperCase()]
+      formaPagamento: forma, recursoProprio: !!mapaProprio[forma.toUpperCase()],
+      divisao: r[cx.divisao] || '', apurado: cx.apurado >= 0 ? (r[cx.apurado] || '') : ''   // r207
     });
   }
   return { lista: ordenarPorDataDesc(lista), perfil: ctx.perfil };

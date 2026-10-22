@@ -112,7 +112,7 @@
             </div>
             <div class="d-flex gap-2 mt-3">
                 <button class="btn btn-fc btn-sm" onclick="aplicarFiltros()">🔍 Aplicar filtros</button>
-                <button class="btn btn-fc-verde btn-sm" onclick="window.print()">🖨️ Imprimir / PDF</button>
+                <button class="btn btn-fc-verde btn-sm" onclick="imprimirRelatorio()">🖨️ Imprimir / PDF</button>
             </div>
         </div>
 
@@ -143,6 +143,27 @@
         return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // r207: imprime/gera o PDF e, para o Diretor, oferece gravar a data de hoje em "Apurado" das despesas do relatório
+    let perfilRel = '';
+    async function imprimirRelatorio() {
+        window.print();
+        if (perfilRel !== 'DIRETOR' || !despesasVisiveis.length) return;
+        const lista = despesasVisiveis;
+        const d = new Date(), hoje = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+        const ja = lista.filter(x => String(x.apurado || '').trim()), sem = lista.length - ja.length;
+        if (!confirm('Gravar a data de hoje (' + hoje + ') na coluna "Apurado" das ' + lista.length + ' despesa(s) do relatório?')) return;
+        let sobrescrever = false;
+        if (ja.length) {
+            sobrescrever = confirm(ja.length + ' dessas despesas já têm data em "Apurado".\n\nOK = sobrescrever todas com a data de hoje\nCancelar = gravar só nas ' + sem + ' sem data');
+            if (!sobrescrever && !sem) return alert('Nenhuma data gravada: todas já estavam apuradas.');
+        }
+        try {
+            const res = await chamar({ action: 'despesasMarcarApurado', cpf: cpfLogado, rowIds: lista.map(x => x.rowId), sobrescrever: sobrescrever });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível gravar.');
+            lista.forEach(x => { if (sobrescrever || !String(x.apurado || '').trim()) x.apurado = res.data; });
+            alert('✅ Data ' + res.data + ' gravada em "Apurado" de ' + res.gravadas + ' despesa(s)' + (res.mantidas ? ' (' + res.mantidas + ' mantida(s) com a data anterior)' : '') + '.');
+        } catch (e) { alert('⚠️ ' + e.message); }
+    }
     async function chamar(payload) {
         payload.token = tokenSessao;
         const resp = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
@@ -206,6 +227,7 @@
         try {
             const res = await chamar({ action: 'getDespesasRelatorio', cpf: cpfLogado, filtros: { dataIni: ini, dataFim: fim } });
             despesasTodas = res.lista || [];
+            perfilRel = res.perfil || perfilRel;   // r207
             popularSeletores(despesasTodas); // r114: acrescenta opcoes novas sem perder a selecao
         } catch (err) {
             document.getElementById('area-lista').innerHTML = '<div class="estado-msg">⚠️ ' + escaparHtml(err.message) + '</div>';
@@ -253,6 +275,7 @@
                     '<div class="desp-linha"><b>Cliente:</b> ' + escaparHtml(d.cliente) + ' — ' + escaparHtml(d.unidade) + '</div>' +
                     '<div class="desp-linha"><b>Supervisor:</b> ' + escaparHtml(d.supervisor) + '</div>' +
                     '<div class="desp-linha"><b>Forma:</b> ' + escaparHtml(d.formaPagamento || '—') + '</div>' +
+                    '<div class="desp-linha"><b>Divisão:</b> ' + escaparHtml(d.divisao || '—') + ' · <b>Apurado:</b> ' + escaparHtml(d.apurado || '—') + '</div>' +   // r207
                     (d.obs ? '<div class="desp-linha"><b>Obs:</b> ' + escaparHtml(d.obs) + '</div>' : '') +
                     '<span class="badge-grupo' + (d.recursoProprio ? ' badge-proprio' : '') + '">' + escaparHtml(d.grupo) + '</span>' +
                 '</div>' +
