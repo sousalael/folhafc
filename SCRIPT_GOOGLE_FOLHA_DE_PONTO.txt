@@ -322,9 +322,18 @@ function acessoDivisao(cpf) {
   return { livre: false, perfil: perfil, divisoes: lista, semDivisao: !lista.length };
 }
 // projeto (data dd/mm/aaaa + divisão do projeto) pode ser visto por este acesso?
+// r204: supervisor (sem "Todas") vê todo o passado; do futuro, só hoje + os 2 próximos dias (3 dias contando hoje),
+// e só da divisão dele. Diretor e "Todas" seguem sem limite.
+function divLimiteFuturoInt_() {
+  var p = String(getDataTrabalhoVigente()).split('/');
+  var d = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]) + 2);
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
 function projetoPermitido(acesso, dataBR, divProjeto) {
   if (!acesso || acesso.livre) return true;
-  if (ddmmyyyyToInt(dataBR) < ddmmyyyyToInt(getDataTrabalhoVigente())) return true;   // histórico: livre
+  var dia = ddmmyyyyToInt(dataBR);
+  if (dia < ddmmyyyyToInt(getDataTrabalhoVigente())) return true;   // histórico: livre
+  if (dia > divLimiteFuturoInt_()) return false;                     // r204: além de hoje + 2 dias, não aparece
   if (acesso.semDivisao) return false;
   var ds = divLista_(divProjeto);
   return ds.some(function (d) { return acesso.divisoes.indexOf(d) >= 0; });
@@ -691,7 +700,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-18-r203';
+const VERSAO_SCRIPT = '2026-10-21-r204';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
