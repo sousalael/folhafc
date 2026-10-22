@@ -36,6 +36,8 @@ function doPost(e) {
       }
     }
 
+    try { migrarDivisaoDespesasSePreciso_(); } catch (eMig) { Logger.log('r206 migração divisão despesas: ' + eMig.message); }   // r206: uma vez só
+
     if (action === 'getProjetos') { result = getProjetos(); }
     else if (action === 'verificarSupervisor') { result = verificarSupervisor(data.cpf, data.projeto); }
     else if (action === 'getListaPresencas') { result = getListaPresencas(data.projeto); }
@@ -100,6 +102,8 @@ function doPost(e) {
     else if (action === 'enviarPesquisaNps') { result = enviarPesquisaNps(data, data.cpf); }   // r130: envio SEPARADO da pesquisa CSAT/NPS
     else if (action === 'listarProjetosAuditoria') { result = listarProjetosAuditoria(data, data.cpf); }   // r130: Cliente/Unidade/Data vêm da aba Projetos
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
+    else if (action === 'divDespesasAtualizar') { result = divDespesasAtualizar(data.cpf); }   // r206
+    else if (action === 'divDespesasStatus') { result = divDespesasStatus(data.cpf); }         // r206
     else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
     else if (action === 'avalInternaCorrigir') { result = avalInternaCorrigir(data, data.cpf); }   // r202: confere os nomes dos destaques
     else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
@@ -358,6 +362,85 @@ function exigirProjetoPermitido(cpf, projeto) {
   if (ac.livre) return null;
   if (projetoPermitido(ac, projeto.data, divisaoDoProjeto(projeto.data, projeto.cliente, projeto.unidade))) return null;
   return ac.semDivisao ? 'Sua divisão não está cadastrada. Fale com a Diretoria.' : 'Este projeto é de outra divisão. Fale com a Diretoria.';
+}
+
+// ============================================================================ //
+// r206: DIVISÃO NAS DESPESAS (aba Despesas, coluna "Divisão" — coluna M)
+// - cada despesa lançada já grava a Divisão do projeto (mesma data + cliente + loja);
+//   despesa sem projeto (centro de custo) grava "ADMINISTRATIVO";
+// - atualização geral: varre a aba Projetos e regrava a Divisão de TODAS as despesas
+//   (a aba Projetos manda). Roda sozinha uma vez, no primeiro uso após publicar esta
+//   versão, e pelo botão do Diretor na aba Pendências.
+// ============================================================================ //
+var DIV_DESP_COL_PADRAO = 13;   // coluna M
+var DIV_DESP_MIGRACAO = 'r206';
+function divColunaDespesas_(sheet) {
+  var ult = Math.max(sheet.getLastColumn(), DIV_DESP_COL_PADRAO);
+  var cab = sheet.getRange(1, 1, 1, ult).getDisplayValues()[0];
+  var i = divColuna_(cab);
+  return i >= 0 ? i + 1 : DIV_DESP_COL_PADRAO;
+}
+function divMapaProjetos_() {
+  var dp = getSheet('Projetos').getDataRange().getDisplayValues(), col = divColuna_(dp[0] || []), mapa = {};
+  if (col < 0) return mapa;
+  for (var i = 1; i < dp.length; i++) mapa[String(dp[i][0]).trim() + '|' + fcChave(dp[i][1]) + '|' + fcChave(dp[i][2])] = String(dp[i][col] || '').trim();
+  return mapa;
+}
+function divCentrosCusto_() {
+  var c = {};
+  try { var dados = lerAbaConfigCacheada('Config_Centros'); (dados || []).slice(1).forEach(function (r) { var k = fcChave(r[0]); if (k) c[k] = 1; }); } catch (e) {}
+  return c;
+}
+// Divisão de uma despesa: a do projeto (data + cliente + loja); centro de custo = ADMINISTRATIVO; senão null (não mexe)
+function divisaoDaDespesa_(mapa, centros, data, cliente, unidade, semProjeto) {
+  if (semProjeto) return 'ADMINISTRATIVO';
+  var k = String(data).trim() + '|' + fcChave(cliente) + '|' + fcChave(unidade);
+  if (Object.prototype.hasOwnProperty.call(mapa, k)) return mapa[k];
+  if (centros[fcChave(cliente)] || centros[fcChave(unidade)]) return 'ADMINISTRATIVO';
+  return null;
+}
+function atualizarDivisaoDespesas() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: false, erro: 'Outra atualização está em andamento. Tente de novo em instantes.' };
+  try {
+    var sh = getSheet('Despesas'), ult = sh.getLastRow();
+    var col = divColunaDespesas_(sh);
+    if (!sh.getRange(1, col).getDisplayValue()) sh.getRange(1, col).setValue('Divisão');
+    if (ult < 2) return { ok: true, total: 0, alteradas: 0, semProjetoEncontrado: 0 };
+    var dados = sh.getRange(2, 1, ult - 1, 4).getDisplayValues();
+    var atuais = sh.getRange(2, col, ult - 1, 1).getDisplayValues();
+    var mapa = divMapaProjetos_(), centros = divCentrosCusto_();
+    var saida = [], alteradas = 0, semAchar = 0;
+    for (var i = 0; i < dados.length; i++) {
+      var atual = String(atuais[i][0] || '');
+      if (!dados[i][1] && !dados[i][2]) { saida.push([atual]); continue; }   // linha vazia
+      var v = divisaoDaDespesa_(mapa, centros, dados[i][1], dados[i][2], dados[i][3], false);
+      if (v === null) { semAchar++; saida.push([atual]); continue; }
+      if (v !== atual) alteradas++;
+      saida.push([v]);
+    }
+    sh.getRange(2, col, saida.length, 1).setValues(saida);
+    var res = { ok: true, total: saida.length, alteradas: alteradas, semProjetoEncontrado: semAchar, quando: new Date().toLocaleString('pt-BR') };
+    PropertiesService.getScriptProperties().setProperty('DIV_DESP_ULTIMA', JSON.stringify(res));
+    return res;
+  } catch (e) { return { ok: false, erro: e.message }; }
+  finally { lock.releaseLock(); }
+}
+// roda uma única vez após publicar esta versão (no primeiro uso do sistema)
+function migrarDivisaoDespesasSePreciso_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DIV_DESP_MIGRACAO') === DIV_DESP_MIGRACAO) return;
+  var r = atualizarDivisaoDespesas();
+  if (r && r.ok) props.setProperty('DIV_DESP_MIGRACAO', DIV_DESP_MIGRACAO);
+}
+function divDespesasAtualizar(cpf) {   // botão do Diretor
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+  return atualizarDivisaoDespesas();
+}
+function divDespesasStatus(cpf) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
+  var u = PropertiesService.getScriptProperties().getProperty('DIV_DESP_ULTIMA');
+  return { ok: true, ultima: u ? JSON.parse(u) : null };
 }
 
 function getProjetos() {
@@ -702,7 +785,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-22-r205';
+const VERSAO_SCRIPT = '2026-10-22-r206';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -735,7 +818,7 @@ function doGet(e) {
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
-    'avalInternaListar', 'avalInternaCorrigir'
+    'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -1617,7 +1700,8 @@ function lancarDespesa(d) {
   }
 
   const tsLancamento = new Date().toLocaleString('pt-BR');
-  getSheet('Despesas').appendRow([
+  const shDesp = getSheet('Despesas');
+  const linhaNova = [
     tsLancamento,
     d.data,
     d.cliente,
@@ -1629,7 +1713,15 @@ function lancarDespesa(d) {
     url,
     formatarCPF(normalizarCPF(d.cpf)),
     d.formaPagamento
-  ]);
+  ];
+  // r206: Divisão do projeto (ou ADMINISTRATIVO, sem projeto) já no lançamento
+  try {
+    const colDiv = divColunaDespesas_(shDesp);
+    const div = divisaoDaDespesa_(divMapaProjetos_(), d.semProjeto ? {} : divCentrosCusto_(), d.data, d.cliente, d.unidade, !!d.semProjeto);
+    while (linhaNova.length < colDiv) linhaNova.push('');
+    linhaNova[colDiv - 1] = div === null ? '' : div;
+  } catch (eDiv) { Logger.log('r206 divisão no lançamento: ' + eDiv.message); }
+  shDesp.appendRow(linhaNova);
 
   // BLOCO 1 — se o supervisor confirmou que e DIFERENTE de uma identica,
   // registra para a Diretoria revisar (marca de duplicidade).
@@ -1725,6 +1817,10 @@ function editarDespesa(cpf, d) {
   sheet.getRange(rowId, 6).setValue(valor);                                          // F
   sheet.getRange(rowId, 7).setValue(d.obs || '');                                    // G
   sheet.getRange(rowId, 11).setValue(d.formaPagamento);                              // K
+  try {   // r206: a divisão acompanha o projeto/centro de custo da despesa
+    const div = divisaoDaDespesa_(divMapaProjetos_(), divCentrosCusto_(), d.data, d.cliente, d.unidade, !!d.semProjeto);
+    if (div !== null) sheet.getRange(rowId, divColunaDespesas_(sheet)).setValue(div);
+  } catch (eDiv) { Logger.log('r206 divisão na edição: ' + eDiv.message); }
   return { success: true };
 }
 

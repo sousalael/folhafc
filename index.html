@@ -1033,6 +1033,15 @@
                 </div>
                 <div id="ane-lista"><div class="text-center text-muted small py-2">Carregando...</div></div>
             </div>
+            <!-- r206: Divisão nas despesas -->
+            <div class="fc-pend-card mt-3">
+                <div class="fc-pend-head"><div class="fc-pend-titulo"><span class="fc-pend-icone" style="background:#EEF2F7">🏷️</span> Divisão das despesas</div></div>
+                <div style="font-size:11px;color:#6B7B8D;margin-bottom:8px">A coluna Divisão da aba Despesas segue a aba Projetos (mesma data, cliente e loja); sem projeto = ADMINISTRATIVO. Cada lançamento novo já grava a divisão. Use o botão se mudar a divisão de algum projeto.</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button type="button" class="btn btn-sm btn-primary" id="btn-div-desp" onclick="atualizarDivisaoDespesas()">Atualizar divisões das despesas</button>
+                    <span class="small text-muted" id="div-desp-status"></span>
+                </div>
+            </div>
         </div>
         <!-- ############ FIM ABA COBRANÇA ############ -->
         </div>
@@ -2464,7 +2473,7 @@
     // r167: a cobrança agora mora na aba 🔔 Cobrança e carrega ao abrir a aba
     document.addEventListener('DOMContentLoaded', () => {
         const btnCob = document.getElementById('btn-aba-cobranca');
-        if (btnCob) btnCob.addEventListener('shown.bs.tab', () => { carregarCobrancaHome(); carregarNaoEnviadas(); });   // r199
+        if (btnCob) btnCob.addEventListener('shown.bs.tab', () => { carregarCobrancaHome(); carregarNaoEnviadas(); divDespStatus(); });   // r199 · r206
     });
     let cobLista = [];   // r165: lojas mostradas no card (para os botões por loja)
     // r165: por loja — Ignorar = pausa (fica na lista e pode reativar); Excluir = sai da lista e da cobrança de vez
@@ -2483,6 +2492,23 @@
             carregarCobrancaHome();
         }
     }
+    // r206: DIVISÃO DAS DESPESAS
+    function divDespTexto(u) { return u ? 'Última atualização: ' + u.quando + ' · ' + u.total + ' despesa(s), ' + u.alteradas + ' alterada(s)' + (u.semProjetoEncontrado ? ' · ' + u.semProjetoEncontrado + ' sem projeto correspondente (mantidas)' : '') : 'Ainda não atualizado.'; }
+    async function divDespStatus() {
+        const el = document.getElementById('div-desp-status'); if (!el) return;
+        try { const r = await chamarApi({ action: 'divDespesasStatus', cpf: getCpfLogado() }); el.textContent = r && r.ok ? divDespTexto(r.ultima) : ''; } catch (e) { el.textContent = ''; }
+    }
+    async function atualizarDivisaoDespesas() {
+        const b = document.getElementById('btn-div-desp'), el = document.getElementById('div-desp-status');
+        b.disabled = true; b.textContent = 'Atualizando...';
+        try {
+            const r = await chamarApi({ action: 'divDespesasAtualizar', cpf: getCpfLogado() });
+            if (!r || !r.ok) throw new Error((r && (r.erro || r.error)) || 'Não foi possível atualizar.');
+            el.textContent = divDespTexto(r);
+        } catch (e) { el.textContent = '⚠️ ' + e.message; }
+        b.disabled = false; b.textContent = 'Atualizar divisões das despesas';
+    }
+
     // r199: ANÁLISES CONCLUÍDAS E NÃO ENVIADAS — filtros encadeados: o tipo limita os clientes da lista
     const aneEstado = { lista: [], tipo: '', cliente: '' };
     function aneTipoDe(a) { return String(a.tipoEstabelecimento || '').toUpperCase() === 'FARMACIA' ? 'FARMACIA' : 'SUPERMERCADO'; }
@@ -4710,7 +4736,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-22-r205';
+    const VERSAO_ESPERADA = '2026-10-22-r206';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
