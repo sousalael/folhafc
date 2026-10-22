@@ -329,13 +329,15 @@ function divLimiteFuturoInt_() {
   var d = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]) + 2);
   return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 }
+// r205: o passado também segue a divisão — supervisor vê os projetos passados da divisão dele e os passados
+// SEM divisão (coluna em branco no histórico); supervisor sem divisão não vê nenhum projeto, nem passado.
 function projetoPermitido(acesso, dataBR, divProjeto) {
   if (!acesso || acesso.livre) return true;
-  var dia = ddmmyyyyToInt(dataBR);
-  if (dia < ddmmyyyyToInt(getDataTrabalhoVigente())) return true;   // histórico: livre
-  if (dia > divLimiteFuturoInt_()) return false;                     // r204: além de hoje + 2 dias, não aparece
   if (acesso.semDivisao) return false;
+  var dia = ddmmyyyyToInt(dataBR);
+  if (dia > divLimiteFuturoInt_()) return false;                     // r204: além de hoje + 2 dias, não aparece
   var ds = divLista_(divProjeto);
+  if (dia < ddmmyyyyToInt(getDataTrabalhoVigente()) && !ds.length) return true;   // passado sem divisão: aparece
   return ds.some(function (d) { return acesso.divisoes.indexOf(d) >= 0; });
 }
 // divisão de um projeto (data, cliente, loja) lida da aba Projetos
@@ -700,7 +702,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-21-r204';
+const VERSAO_SCRIPT = '2026-10-22-r205';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
