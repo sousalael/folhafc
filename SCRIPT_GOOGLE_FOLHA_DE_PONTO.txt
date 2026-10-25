@@ -104,7 +104,7 @@ function doPost(e) {
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
     else if (action === 'divDespesasAtualizar') { result = divDespesasAtualizar(data.cpf); }   // r206
     else if (action === 'divDespesasStatus') { result = divDespesasStatus(data.cpf); }         // r206
-    else if (action === 'despesasMarcarApurado') { result = despesasMarcarApurado(data.cpf, data.rowIds, !!data.sobrescrever); }   // r207
+    else if (action === 'despesasMarcarApurado') { result = despesasMarcarApurado(data.cpf, data.itens || data.rowIds, !!data.sobrescrever); }   // r207 · r208
     else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
     else if (action === 'avalInternaCorrigir') { result = avalInternaCorrigir(data, data.cpf); }   // r202: confere os nomes dos destaques
     else if (action === 'cobrancaStatus') { result = cobrancaStatus(data, data.cpf); }   // r163: cobrança automática da Análise de Preparação
@@ -442,24 +442,46 @@ function despColunasExtras_(cab) {
   return { apurado: ap, divisao: dv >= 0 ? dv : DIV_DESP_COL_PADRAO - 1 };
 }
 // grava a data de hoje na coluna Apurado das despesas exportadas (só Diretor)
-function despesasMarcarApurado(cpf, rowIds, sobrescrever) {
+// r208: cada despesa é conferida pela "impressão digital" (lançamento + data + cliente + tipo + valor),
+// não só pelo número da linha — se linhas mudaram de lugar desde que o relatório foi carregado
+// (exclusões, lançamentos novos), a data vai para a despesa certa. Vale para qualquer despesa,
+// inclusive as lançadas pela Diretoria.
+function despChave_(timestamp, data, cliente, tipo, valor) {
+  return [String(timestamp || '').trim(), String(data || '').trim(), fcChave(cliente), fcChave(tipo), Number(valor || 0).toFixed(2)].join('|');
+}
+function despesasMarcarApurado(cpf, itens, sobrescrever) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Somente a Diretoria grava a data de apuração.' };
   var sh = getSheet('Despesas'), ult = sh.getLastRow();
   var cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
   var col = despColunasExtras_(cab).apurado;
   if (col < 0) return { ok: false, erro: 'Coluna "Apurado" não encontrada na aba Despesas.' };
-  var ids = (Array.isArray(rowIds) ? rowIds : []).map(Number).filter(function (n) { return n >= 2 && n <= ult; });
-  if (!ids.length) return { ok: true, gravadas: 0, mantidas: 0 };
+  var lista = (Array.isArray(itens) ? itens : []).map(function (x) { return typeof x === 'object' && x ? x : { rowId: x }; });
+  if (!lista.length || ult < 2) return { ok: true, gravadas: 0, mantidas: 0, naoEncontradas: 0 };
   var lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    var faixa = sh.getRange(2, col + 1, ult - 1, 1), vals = faixa.getDisplayValues();
-    var hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy'), grav = 0, mant = 0;
-    ids.forEach(function (rid) {
-      var cel = vals[rid - 2];
-      if (String(cel[0] || '').trim() && !sobrescrever) { mant++; return; }
-      sh.getRange(rid, col + 1).setNumberFormat('@').setValue(hoje); grav++;
+    var dados = sh.getRange(2, 1, ult - 1, Math.max(col + 1, 6)).getDisplayValues();
+    var porChave = {};
+    for (var i = 0; i < dados.length; i++) {
+      var k = despChave_(dados[i][0], dados[i][1], dados[i][2], dados[i][4], despesaValorParaNumero(dados[i][5]));
+      if (!porChave[k]) porChave[k] = i + 2;
+    }
+    var hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy'), grav = 0, mant = 0, nao = 0, feitas = {};
+    lista.forEach(function (it) {
+      var linha = null, rid = Number(it.rowId);
+      var temChave = it.timestamp !== undefined;
+      var chave = temChave ? despChave_(it.timestamp, it.data, it.cliente, it.tipo, it.valor) : null;
+      if (rid >= 2 && rid <= ult) {
+        var r = dados[rid - 2];
+        if (!temChave || despChave_(r[0], r[1], r[2], r[4], despesaValorParaNumero(r[5])) === chave) linha = rid;
+      }
+      if (!linha && chave && porChave[chave]) linha = porChave[chave];
+      if (!linha) { nao++; return; }
+      if (feitas[linha]) return;
+      feitas[linha] = 1;
+      if (String(dados[linha - 2][col] || '').trim() && !sobrescrever) { mant++; return; }
+      sh.getRange(linha, col + 1).setNumberFormat('@').setValue(hoje); grav++;
     });
-    return { ok: true, gravadas: grav, mantidas: mant, data: hoje };
+    return { ok: true, gravadas: grav, mantidas: mant, naoEncontradas: nao, data: hoje };
   } finally { lock.releaseLock(); }
 }
 function divDespesasAtualizar(cpf) {   // botão do Diretor
@@ -814,7 +836,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-22-r207';
+const VERSAO_SCRIPT = '2026-10-23-r208';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
