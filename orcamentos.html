@@ -8,7 +8,9 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r189: IA com 3 posições (Desligada / Econômica = Haiku / Precisa = Sonnet), sempre começa Desligada;
+<!-- r209: título no topo; Regional e Cliente na descrição; regional só se dita; recolher/renomear unidades, dias, equipes e transportes;
+     subir/descer unidades, dias, equipes e transportes; várias tabelas de preços (o orçamento fica ligado à tabela escolhida).
+     r189: IA com 3 posições (Desligada / Econômica = Haiku / Precisa = Sonnet), sempre começa Desligada;
      desligada usa a leitura simples sem IA (frases padronizadas), o resto se preenche à mão.
      r184: a interpretação usa o Sonnet com raciocínio como padrão (o Opus saiu; reservas Sonnet 4.5 → Haiku).
      r183: van cobrada por trecho OU por km (escolha no orçamento); R$/km por cidade de origem na tabela e por equipe; a equipe mostra os km de ida e volta.
@@ -175,9 +177,18 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   </div>
   <div class="bloq-aviso" id="avisoBloq" hidden>Orçamento concluído: os valores estão travados com a tabela de preços usada na conclusão. Para alterar, clique em <strong>Reabrir</strong> ou <strong>Duplicar</strong>.</div>
 
+  <!-- r209: TÍTULO no início -->
+  <section class="step" id="secTitulo">
+    <label class="f" style="font-size:15px;font-weight:700">Título do orçamento<input type="text" id="titulo" placeholder="ex.: Queiroz Regional PB" style="font-size:16px"></label>
+  </section>
+
   <!-- 1. ENTRADA -->
   <section class="step" id="secEntrada">
     <h2><span class="num">1</span>Descrever o orçamento</h2>
+    <div class="grid" style="margin-bottom:8px">
+      <label class="f">Regional<input type="text" id="descRegional" placeholder="opcional — vale para todas as unidades lidas"></label>
+      <label class="f">Cliente<input type="text" id="descCliente" placeholder="opcional — vale para todo o orçamento"></label>
+    </div>
     <textarea id="texto" rows="6" placeholder="Ex.: Queiroz Atacadão, Nova Parnamirim. No primeiro dia, depósito e aéreos: 5 inventariantes nos aéreos, 10 no depósito, 2 na câmara resfriada... No segundo dia, área de vendas e aéreos. Dez de Fortaleza, diária de 180, van a 900 por trecho, almoço e jantar a 35 nos dois dias, uma noite de hotel a 110..."></textarea>
     <div class="toolbar" style="margin-top:8px">
       <button class="ghost small" id="btnDitar" aria-pressed="false">🎤 Ditar</button>
@@ -225,7 +236,16 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <!-- 2. PREÇOS -->
   <section class="step" id="secPrecos">
     <h2><span class="num">2</span>Tabela de preços</h2>
-    <p class="hint" style="margin-top:0">Sua tabela de preços (cada Diretor tem a sua), salva automaticamente. Os valores de alimentação e hospedagem vêm sugeridos; ajuste para a sua realidade. Unidades marcadas como farmácia usam só as funções e as refeições de farmácia.</p>
+    <div class="toolbar" style="margin-bottom:8px">
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px;margin:0">Tabela usada neste orçamento
+        <select id="tabSel" style="min-width:220px"></select></label>
+      <button class="ghost small" id="tabNova">➕ Nova tabela</button>
+      <button class="ghost small" id="tabDup">Duplicar</button>
+      <button class="ghost small" id="tabRen">✏️ Renomear</button>
+      <button class="ghost small" id="tabPadrao">★ Tornar padrão</button>
+      <button class="danger small" id="tabExc">Excluir</button>
+    </div>
+    <p class="hint" style="margin-top:0">Escolha a tabela de preços deste orçamento (você pode ter várias; ★ = padrão dos novos orçamentos). Tudo é salvo automaticamente, e mudanças na tabela valem para os rascunhos que a usam. Os valores de alimentação e hospedagem vêm sugeridos; ajuste para a sua realidade. Unidades marcadas como farmácia usam só as funções e as refeições de farmácia.</p>
     <div id="precosOrcBox"></div>
     <details class="box" open><summary>Diárias</summary><div class="in tbl">
       <table><thead><tr><th>Função</th><th>Fortaleza (R$)</th><th>Natal (R$)</th><th>Juazeiro do Norte (R$)</th></tr></thead><tbody id="tbDiarias"></tbody></table>
@@ -262,7 +282,7 @@ tr.atual-linha td{font-weight:600;background:var(--soft)}
   <!-- 3. ORÇAMENTO -->
   <section class="step" id="secOrc">
     <h2><span class="num">3</span>Orçamento</h2>
-    <div class="grid"><label class="f">Título do orçamento<input type="text" id="titulo" placeholder="ex.: Queiroz Regional PB"></label>
+    <div class="grid">
       <label class="f">Nome do cliente<input type="text" id="cliente"></label>
       <label class="f">Van cobrada por<select id="vanModo"><option value="trecho">Trecho (valor fixo por viagem)</option><option value="km">Quilômetro (R$/km por cidade de origem)</option></select></label></div>
     <details class="box" open><summary>Descritivo do orçamento</summary><div class="in">
@@ -516,7 +536,7 @@ function normDia(d){
       if(o.funcao==="apoio" && l.autoApoio && FUN[l.autoApoio]){ o.autoApoio = l.autoApoio; o.detalheOrig = String(l.detalheOrig||""); o.tirado = Object.assign(zeroOrig(), l.tirado||{}); }   // r181
       return o; })()
   }));
-  return {inicio:/^\d{1,2}:\d{2}$/.test(d.inicio||"") ? d.inicio.padStart(5,"0") : "14:00", coletores:int(d.coletores), linhas};
+  return {inicio:/^\d{1,2}:\d{2}$/.test(d.inicio||"") ? d.inicio.padStart(5,"0") : "14:00", coletores:int(d.coletores), linhas, rotulo:String(d.rotulo||"")};   // r209: nome do dia
 }
 function normUnidade(u, reg){
   u = u || {};
@@ -551,6 +571,7 @@ function normRegional(r){
 function normOrc(o){
   o = o || {};
   return {titulo:String(o.titulo||""), cliente:String(o.cliente||""),   // r182: título
+    descRegional:String(o.descRegional||""), descCliente:String(o.descCliente||""), tabelaId:String(o.tabelaId||""),   // r209
     descricao:String(o.descricao||""), planilhaNome:String(o.planilhaNome||""), planilhaTexto:String(o.planilhaTexto||""),   // r179: o que foi solicitado
     vanModo:o.vanModo==="km" ? "km" : "trecho",   // r183: van por trecho (padrão) ou por km
     comissaoPct:num(o.comissaoPct), comissaoNome:String(o.comissaoNome||""), composicao:normCompo(o.composicao), precosOrc:normPrecosOrc(o.precosOrc), regionais:(Array.isArray(o.regionais) && o.regionais.length ? o.regionais : [{}]).map(normRegional)};
@@ -561,6 +582,43 @@ function gravar(ch, v){ if(ch===CH_PRECOS) agendarPrecos(); else agendarOrc(); }
 
 let precos = precosIniciais();
 let precosDiretor = precos;          // tabela de preços do Diretor (a que se edita)
+/* r209: VÁRIAS TABELAS DE PREÇOS — guardadas juntas no registro de preços do Diretor:
+   {lista:[{id, nome, precos}], padrao:id}. O orçamento guarda o id da tabela (orc.tabelaId):
+   rascunho acompanha as mudanças da tabela; concluído trava os valores (cópia guardada na conclusão). */
+let tabelas = null;
+function idTabelaNova(){ return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function normTabelas(p){
+  if(p && Array.isArray(p.lista) && p.lista.length){
+    const lista = p.lista.map(t=>({id:String(t.id||idTabelaNova()), nome:String(t.nome||"Tabela"), precos:normPrecos(t.precos||{})}));
+    const padrao = lista.some(t=>t.id===p.padrao) ? p.padrao : lista[0].id;
+    return {lista, padrao};
+  }
+  const t = {id:idTabelaNova(), nome:"Tabela padrão", precos:normPrecos(p||{})};   // tabela antiga (uma só) vira a padrão
+  return {lista:[t], padrao:t.id};
+}
+function tabelaPorId(id){ if(!tabelas) tabelas = normTabelas(precosDiretor); return tabelas.lista.find(t=>t.id===id) || tabelas.lista.find(t=>t.id===tabelas.padrao) || tabelas.lista[0]; }
+function selecionarTabelaDoOrc(){
+  const t = tabelaPorId(orc.tabelaId);
+  const eraPrecos = precos===precosDiretor;
+  precosDiretor = t.precos;
+  if(eraPrecos || orcStatus!=="Concluído") precos = precosDiretor;
+  desenharTabelas();
+}
+function desenharTabelas(){
+  const sel = document.getElementById("tabSel"); if(!sel || !tabelas) return;
+  const atual = tabelaPorId(orc.tabelaId);
+  sel.innerHTML = tabelas.lista.map(t=>`<option value="${esc(t.id)}" ${t.id===atual.id?"selected":""}>${esc(t.nome)}${t.id===tabelas.padrao?" ★ padrão":""}</option>`).join("");
+  document.getElementById("tabExc").disabled = tabelas.lista.length<2;
+  document.getElementById("tabPadrao").disabled = atual.id===tabelas.padrao;
+}
+async function salvarTabelas(){
+  try{ await chamar({action:"orcPrecosSalvar", precos:tabelas}); precosNoServidor = true; }
+  catch(e){ toast("Não foi possível salvar as tabelas de preços: " + e.message); }
+}
+function trocarTabela(id){
+  orc.tabelaId = id; selecionarTabelaDoOrc();
+  desenharPrecos(); desenharOrcamento(); atualizar(); salvar();
+}
 let orc = normOrc(ler(CH_ORC));
 
 /* r170: preços efetivos = tabela (ou a tabela travada do orçamento concluído) + valores próprios do orçamento */
@@ -1028,12 +1086,21 @@ function desenharOrcamento(){
       </div></details>`;
   }).join("");
 }
+// r209: estado de "recolhido" de cada bloco (fica na tela; não vai para o orçamento salvo)
+const recolhido = new WeakSet();
+function btnRec(obj, A, extra){ const r = recolhido.has(obj); return `<button class="ghost small" data-acao="recolher" ${A} ${extra||""} aria-expanded="${!r}" title="${r?"Abrir":"Recolher"}">${r?"▸ Abrir":"▾ Recolher"}</button>`; }
+function btnMv(acao, A, extra, i, n){ return `<span class="mv"><button class="ghost small" data-acao="sobe${acao}" ${A} ${extra||""} ${i===0?"disabled":""} title="Subir" aria-label="Subir">▲</button><button class="ghost small" data-acao="desce${acao}" ${A} ${extra||""} ${i===n-1?"disabled":""} title="Descer" aria-label="Descer">▼</button></span>`; }
 function desenharUnidade(reg, ri, u, ui){
   const P = `regionais.${ri}.unidades.${ui}`, A = `data-r="${ri}" data-u="${ui}"`, n = u.dias.length;
+  if(recolhido.has(u)) return `<div class="unit"><div class="unit-top"><h3>${esc(u.nome || ("Unidade " + (ui+1)))} <span class="tag">${n} dia${n>1?"s":""} · ${u.equipes.length} equipe${u.equipes.length===1?"":"s"}</span></h3>
+    <div class="toolbar">${btnMv("Uni", A, "", ui, reg.unidades.length)}<button class="ghost small" data-acao="renUni" ${A}>✏️ Renomear</button>${btnRec(u, A, 'data-rec="u"')}</div></div></div>`;
   return `<div class="unit">
     <div class="unit-top">
       <h3>${esc(u.nome || ("Unidade " + (ui+1)))}</h3>
       <div class="toolbar">
+        ${btnMv("Uni", A, "", ui, reg.unidades.length)}
+        <button class="ghost small" data-acao="renUni" ${A}>✏️ Renomear</button>
+        ${btnRec(u, A, 'data-rec="u"')}
         <button class="ghost small" data-acao="dupUni" ${A}>Duplicar</button>
         <button class="danger small" data-acao="remUni" ${A}>Remover</button>
       </div>
@@ -1062,9 +1129,12 @@ function desenharUnidade(reg, ri, u, ui){
         <p class="hint" style="align-self:end;margin:0">Informe a quantidade de coletores locados em cada dia. Sem valor aqui, vale o da tabela de preços.</p></div>` : ""}
       ${u.dias.map((d,di)=>{
         const D = `${P}.dias.${di}`;
+        const cab = `<strong>${di+1}º dia${d.rotulo ? " — " + esc(d.rotulo) : ""} <span class="tag" data-totcab>· ${totalInvDia(d)} inventariante${totalInvDia(d)===1?"":"s"}</span></strong>`;
+        const ferr = `${btnMv("Dia", A, `data-d="${di}"`, di, n)}<button class="ghost small" data-acao="renDia" ${A} data-d="${di}">✏️ Renomear</button>${btnRec(d, A, `data-rec="d" data-d="${di}"`)}`;
+        if(recolhido.has(d)) return `<div class="day"><div class="block-h">${cab}<div class="toolbar">${ferr}</div></div></div>`;
         return `<div class="day">
-          <div class="block-h"><strong>${di+1}º dia <span class="tag" data-totcab>· ${totalInvDia(d)} inventariante${totalInvDia(d)===1?"":"s"}</span></strong>
-            <div class="toolbar"><label class="f" style="flex-direction:row;align-items:center;gap:6px">Início
+          <div class="block-h">${cab}
+            <div class="toolbar">${ferr}<label class="f" style="flex-direction:row;align-items:center;gap:6px">Início
               <input type="time" data-path="${D}.inicio" data-t="txt" value="${esc(d.inicio)}" style="width:auto"></label>
               <button class="danger small" data-acao="remDia" ${A} data-d="${di}" ${n<2?"disabled":""}>Remover dia</button></div></div>
           <div class="tbl"><table><thead><tr><th>Função</th><th>Detalhe</th>${ORIGENS.map(o=>`<th>${o.nome}</th>`).join("")}<th></th></tr></thead><tbody>
@@ -1094,8 +1164,8 @@ function desenharUnidade(reg, ri, u, ui){
     </div>
 
     <div class="block">
-      <div class="block-h"><h4>Transportes avulsos</h4><button class="ghost small" data-acao="addTr" ${A}>Adicionar transporte</button></div>
-      ${u.transportes.length ? `<div class="tbl"><table><thead><tr><th>Tipo</th><th>Origem</th><th>Dia</th><th>Valor ida e volta (R$)</th><th></th></tr></thead><tbody>
+      <div class="block-h"><h4>Transportes avulsos ${u.transportes.length ? `<span class="tag">(${u.transportes.length})</span>` : ""}</h4><div class="toolbar">${btnRec(u.transportes, A, 'data-rec="t"')}<button class="ghost small" data-acao="addTr" ${A}>Adicionar transporte</button></div></div>
+      ${recolhido.has(u.transportes) ? "" : u.transportes.length ? `<div class="tbl"><table><thead><tr><th>Tipo</th><th>Origem</th><th>Dia</th><th>Valor ida e volta (R$)</th><th></th></tr></thead><tbody>
       ${u.transportes.map((tr,ti)=>{
         const T = `${P}.transportes.${ti}`;
         const opts = Array.from({length:n+1}, (_,k)=>`<option value="${k+1}" ${String(tr.dia)===String(k+1)?"selected":""}>${nomeDia(k+1,n)}</option>`).join("");
@@ -1103,7 +1173,7 @@ function desenharUnidade(reg, ri, u, ui){
           <td>${inp(T+".origem", tr.origem, "text", 'placeholder="ex.: Fortaleza" style="min-width:130px"')}</td>
           <td><select data-path="${T}.dia"><option value="" ${tr.dia===""?"selected":""}>Geral</option>${opts}</select></td>
           <td>${inp(T+".valor", tr.valor, "number", 'min="0" step="0.01"')}</td>
-          <td><button class="danger small" data-acao="remTr" ${A} data-ti="${ti}" aria-label="Remover transporte">×</button></td></tr>`;
+          <td style="white-space:nowrap">${btnMv("Tr", A, `data-ti="${ti}"`, ti, u.transportes.length)}<button class="ghost small" data-acao="renTr" ${A} data-ti="${ti}" title="Renomear">✏️</button><button class="danger small" data-acao="remTr" ${A} data-ti="${ti}" aria-label="Remover transporte">×</button></td></tr>`;
       }).join("")}
       </tbody></table></div>` : '<p class="hint">Nenhum. Use para Uber, ônibus, passagens etc., sempre com o valor total de ida e volta.</p>'}
     </div>
@@ -1118,12 +1188,14 @@ function opcoesFuncao(u, sel){
 function desenharEquipe(u, P, A, e, ei){
   const E = `${P}.equipes.${ei}`, n = u.dias.length, nv = veiculosDe(e);
   const dias = []; for(let k=e.saida; k<=e.retorno; k++) dias.push(k);
+  const ferr = `${btnMv("Eq", A, `data-e="${ei}"`, ei, u.equipes.length)}<button class="ghost small" data-acao="renEq" ${A} data-e="${ei}">✏️ Renomear</button>${btnRec(e, A, `data-rec="e" data-e="${ei}"`)}`;
+  if(recolhido.has(e)) return `<div class="team"><div class="block-h"><strong>${esc(e.nome)} <span class="tag">${e.pessoas} pessoa${e.pessoas===1?"":"s"} · ${esc(ORIG[e.origem]||"")}</span></strong><div class="toolbar">${ferr}</div></div></div>`;
   return `<div class="team">
     <div class="block-h"><strong>${esc(e.nome)}</strong>
-      <div class="toolbar"><button class="ghost small" data-acao="sugCons" ${A} data-e="${ei}">Sugerir alimentação</button>
+      <div class="toolbar">${ferr}<button class="ghost small" data-acao="sugCons" ${A} data-e="${ei}">Sugerir alimentação</button>
       <button class="danger small" data-acao="remEq" ${A} data-e="${ei}">Remover</button></div></div>
     <div class="grid">
-      <label class="f">Nome${inp(E+".nome", e.nome)}</label>
+      <label class="f">Nome da equipe${inp(E+".nome", e.nome)}</label>
       <label class="f">Pessoas${inp(E+".pessoas", e.pessoas, "number", 'min="0" step="1"')}</label>
       <label class="f">Origem<select data-path="${E}.origem">${ORIGENS.map(o=>`<option value="${o.id}" ${o.id===e.origem?"selected":""}>${o.nome}</option>`).join("")}</select></label>
       <label class="f">Transporte<select data-path="${E}.transporte" data-re="1">${TRANSPORTES.map(t=>`<option value="${t.id}" ${t.id===e.transporte?"selected":""}>${t.nome}</option>`).join("")}</select></label>
@@ -1259,6 +1331,27 @@ elOrc.addEventListener("click", async e=>{
       break;
     }
     case "sugCons": sugerirConsumo(u, u.equipes[ei]); toast("Alimentação e hospedagem sugeridas"); break;
+    // r209: recolher, renomear e mudar a ordem
+    case "recolher": {
+      const t = e.target.dataset.rec, obj = t==="u" ? u : t==="d" ? u.dias[di] : t==="e" ? u.equipes[ei] : u.transportes;
+      if(recolhido.has(obj)) recolhido.delete(obj); else recolhido.add(obj);
+      desenharOrcamento(); return;
+    }
+    case "renUni": { const v = prompt("Nome da unidade:", u.nome || ""); if(v===null) return; u.nome = v.trim(); break; }
+    case "renDia": { const d = u.dias[di], v = prompt("Nome do " + (di+1) + "º dia (opcional, ex.: Retaguarda):", d.rotulo || ""); if(v===null) return; d.rotulo = v.trim(); break; }
+    case "renEq": { const q = u.equipes[ei], v = prompt("Nome da equipe:", q.nome || ""); if(v===null) return; q.nome = v.trim() || q.nome; break; }
+    case "renTr": { const tr = u.transportes[Number(e.target.dataset.ti)], v = prompt("Nome do transporte (ex.: Uber, ônibus):", tr.tipo || ""); if(v===null) return; tr.tipo = v.trim(); break; }
+    case "sobeUni": case "desceUni": { const L = reg.unidades, j = a==="sobeUni" ? ui-1 : ui+1; if(j<0 || j>=L.length) return; [L[ui], L[j]] = [L[j], L[ui]]; break; }
+    case "sobeEq": case "desceEq": { const L = u.equipes, j = a==="sobeEq" ? ei-1 : ei+1; if(j<0 || j>=L.length) return; [L[ei], L[j]] = [L[j], L[ei]]; break; }
+    case "sobeTr": case "desceTr": { const L = u.transportes, i = Number(e.target.dataset.ti), j = a==="sobeTr" ? i-1 : i+1; if(j<0 || j>=L.length) return; [L[i], L[j]] = [L[j], L[i]]; break; }
+    case "sobeDia": case "desceDia": {
+      const L = u.dias, j = a==="sobeDia" ? di-1 : di+1; if(j<0 || j>=L.length) return;
+      [L[di], L[j]] = [L[j], L[di]];
+      // os transportes avulsos marcados nesses dias acompanham a troca; as equipes são refeitas pelos dias
+      const A1 = String(di+1), B1 = String(j+1);
+      u.transportes.forEach(t=>{ if(String(t.dia)===A1) t.dia = Number(B1); else if(String(t.dia)===B1) t.dia = Number(A1); });
+      equipesDosDias(u, reg); break;
+    }
     case "addTr": u.transportes.push({tipo:"", origem:"", dia:"", valor:0}); break;
     case "remTr": u.transportes.splice(Number(e.target.dataset.ti),1); break;
     default: return;
@@ -1280,6 +1373,8 @@ function limparEntrada(){
   aberto.clear(); aberto.add("r0");
   // r179: devolve ao campo a descrição (e a planilha) salvas com o orçamento
   document.getElementById("texto").value = orc.descricao || "";
+  document.getElementById("descRegional").value = orc.descRegional || "";   // r209
+  document.getElementById("descCliente").value = orc.descCliente || "";
   textoPlanilha = orc.planilhaTexto || "";
   document.getElementById("arqNome").textContent = orc.planilhaNome ? `Planilha do orçamento: ${orc.planilhaNome}` : "";
 }
@@ -1290,6 +1385,7 @@ function guardarDescricao(){
   orc.descricao = v; salvar();
 }
 document.getElementById("texto").addEventListener("input", guardarDescricao);
+["descRegional","descCliente"].forEach(id=>document.getElementById(id).addEventListener("input", e=>{ orc[id] = e.target.value; salvar(); }));   // r209
 function salvar(){ gravar(CH_ORC, orc); atualizar(); }
 
 /* r174: distâncias automáticas — o servidor calcula a rota de carro de Fortaleza, Natal e
@@ -1671,7 +1767,7 @@ FORMATO
  "cliente": "nome do cliente (ex.: Grupo Queiroz)",
  "precos": {} ou SOMENTE os preços ditos no texto: {"diarias": [{"funcao": "<id da função>", "origem": "FOR" | "NAT" | "JUA" | "TODAS", "valor": R$ por pessoa por dia}], "cafe", "lanche", "almoco", "jantar": R$ por pessoa (em farmácia use "lanche_farm", "almoco_farm", "jantar_farm"), "hosp": R$ por pessoa por noite, "combustivel": R$ por litro, "kmL": km por litro, "vanTrecho": R$ por van por trecho, "locacao": R$ por coletor por dia},
  "regionais": [{
-   "nome": "nome da regional em maiúsculas",
+   "nome": "nome da regional em maiúsculas SOMENTE se o texto disser explicitamente a regional (ex.: \"Regional PB\"); se não disser, use \"\" — não invente regional pela cidade, estado ou cliente",
    "origem": "FOR", "NAT" ou "JUA" (base de equipe mais próxima dessa regional),
    "unidades": [{
      "nome": "nome da unidade",
@@ -1836,7 +1932,7 @@ function lerSemIA(texto){
   res.regionais.forEach(r=>r.unidades.forEach((u,ui)=>{ if(!u.nome) u.nome = "Unidade " + (ui+1); u.dias = u.dias.filter(d=>d.linhas.length); }));
   res.regionais.forEach(r=>{ r.unidades = r.unidades.filter(u=>u.dias.length || u.cidade); });
   res.regionais = res.regionais.filter(r=>r.unidades.length);
-  res.regionais.forEach((r,i)=>{ if(!r.nome) r.nome = "Regional " + (i+1); });
+  // r209: regional só quando o texto diz explicitamente — sem nome automático
   return {json:res, lidos};
 }
 
@@ -1862,8 +1958,10 @@ function mesclar(novo){
   if(document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)))){
     const cp = orc.comissaoPct, cn = orc.comissaoNome, cmp = orc.composicao, po = orc.precosOrc;
     const ds = orc.descricao, pn = orc.planilhaNome, pt = orc.planilhaTexto;   // r179
+    const ti = orc.titulo, dr = orc.descRegional, dc = orc.descCliente, tb = orc.tabelaId, vm = orc.vanModo;   // r209: não perder ao substituir
     orc = novo; orc.comissaoPct = cp; orc.comissaoNome = cn; orc.composicao = cmp; orc.precosOrc = po || {diarias:{}};
-    orc.descricao = ds; orc.planilhaNome = pn; orc.planilhaTexto = pt; return;
+    orc.descricao = ds; orc.planilhaNome = pn; orc.planilhaTexto = pt;
+    orc.titulo = ti; orc.descRegional = dr; orc.descCliente = dc; orc.tabelaId = tb; orc.vanModo = vm; return;
   }
   if(novo.cliente && !orc.cliente) orc.cliente = novo.cliente;
   novo.regionais.forEach(nr=>{
@@ -1893,6 +1991,14 @@ btnLer.addEventListener("click", async ()=>{
   try{
     const r = semIA ? semIA.json : await sample.json(montarPrompt(tudo), {signal:ctl.signal, modelTier:"complex"});
     const novo = normOrc(r);
+    // r209: Regional e Cliente informados no passo 1 valem para toda a interpretação
+    const dReg = (orc.descRegional || "").trim(), dCli = (orc.descCliente || "").trim();
+    if(dCli) novo.cliente = dCli;
+    if(dReg){
+      const todas = []; novo.regionais.forEach(rg=>todas.push(...rg.unidades));
+      const base = novo.regionais[0] || regionalVazia();
+      base.nome = dReg; base.unidades = todas.length ? todas : base.unidades; novo.regionais = [base];
+    }
     if(!novo.cliente) novo.cliente = orc.cliente;
     let nU = 0;
     const substitui = document.getElementById("modoLer").value==="sub" || !orc.regionais.some(r=>r.unidades.some(u=>u.nome || u.dias.some(d=>totalDia(d)>1)));
@@ -2180,7 +2286,7 @@ function atualizarBarra(){
   document.getElementById("btnSalvarAgora").hidden = bloqueado();
 }
 function aplicarBloqueio(){
-  ["secEntrada","secPrecos","secOrc","secVenda"].forEach(id=>{ const el = document.getElementById(id); if(bloqueado()) el.setAttribute("inert",""); else el.removeAttribute("inert"); });
+  ["secTitulo","secEntrada","secPrecos","secOrc","secVenda"].forEach(id=>{ const el = document.getElementById(id); if(bloqueado()) el.setAttribute("inert",""); else el.removeAttribute("inert"); });
   document.getElementById("avisoBloq").hidden = !bloqueado();
   atualizarBarra();
 }
@@ -2234,7 +2340,7 @@ function agendarPrecos(){
   if(bloqueado() || !sessaoOk || precos!==precosDiretor) return;
   clearTimeout(tmrPrecos);
   tmrPrecos = setTimeout(async ()=>{
-    try{ await chamar({action:"orcPrecosSalvar", precos:precosDiretor}); precosNoServidor = true; }
+    try{ await chamar({action:"orcPrecosSalvar", precos:tabelas || normTabelas(precosDiretor)}); precosNoServidor = true; }   // r209: todas as tabelas
     catch(e){ toast("Não foi possível salvar a tabela de preços: " + e.message); }
   }, 2000);
   if(orcId) agendarOrc();
@@ -2261,6 +2367,7 @@ document.getElementById("filtroStatus").addEventListener("change", desenharLista
 
 function mostrarOrcamento(novoOrc, id, status, precosDoOrc){
   orc = novoOrc; orcId = id; orcStatus = status || "Rascunho";
+  if(tabelas){ if(!orc.tabelaId) orc.tabelaId = tabelaPorId("").id; precosDiretor = tabelaPorId(orc.tabelaId).precos; desenharTabelas(); }   // r209: tabela ligada ao orçamento
   precos = (orcStatus==="Concluído" && precosDoOrc) ? normPrecos(precosDoOrc) : precosDiretor;
   limparEntrada();
   orc.regionais.forEach((r,ri)=>aberto.add("r"+ri));
@@ -2346,10 +2453,12 @@ document.getElementById("arqImport").addEventListener("change", async e=>{
   if(!await esperarSalvar()){ if(!await confirmar("O orçamento aberto não pôde ser salvo agora. Importar mesmo assim?", "Importar")) return; }
   if(pac.precos){
     const usar = !precosNoServidor || await confirmar("Usar a tabela de preços do arquivo no lugar da sua tabela atual?\\n\\n(Cancelar mantém a sua tabela e importa só o orçamento.)", "Usar a do arquivo");
-    if(usar){
-      precosDiretor = normPrecos(pac.precos);
-      try{ await chamar({action:"orcPrecosSalvar", precos:precosDiretor}); precosNoServidor = true; }
-      catch(err){ toast("Não foi possível salvar a tabela de preços: " + err.message); }
+    if(usar){   // r209: a tabela do arquivo entra como uma tabela nova, ligada a este orçamento
+      const hoje = new Date(), dd = String(hoje.getDate()).padStart(2,"0") + "/" + String(hoje.getMonth()+1).padStart(2,"0");
+      const t = {id:idTabelaNova(), nome:"Importada " + dd + (pac.orc && pac.orc.titulo ? " – " + pac.orc.titulo : ""), precos:normPrecos(pac.precos)};
+      if(!tabelas) tabelas = normTabelas(precosDiretor);
+      tabelas.lista.push(t); pac.orc.tabelaId = t.id;
+      await salvarTabelas();
     }
   }
   mostrarOrcamento(normOrc(pac.orc), null, "Rascunho", null);
@@ -2382,6 +2491,35 @@ async function verificarBackup(){
   } else backupLocal(false);
 }
 
+/* ---------- r209: botões das tabelas de preços ---------- */
+document.getElementById("tabSel").addEventListener("change", e=>trocarTabela(e.target.value));
+document.getElementById("tabNova").addEventListener("click", async ()=>{
+  const nome = prompt("Nome da nova tabela de preços:", "Nova tabela"); if(nome===null || !nome.trim()) return;
+  const t = {id:idTabelaNova(), nome:nome.trim(), precos:normPrecos({})};
+  tabelas.lista.push(t); await salvarTabelas(); trocarTabela(t.id); toast("Tabela criada. Preencha os valores abaixo.");
+});
+document.getElementById("tabDup").addEventListener("click", async ()=>{
+  const at = tabelaPorId(orc.tabelaId), nome = prompt("Nome da cópia:", "Cópia de " + at.nome); if(nome===null || !nome.trim()) return;
+  const t = {id:idTabelaNova(), nome:nome.trim(), precos:JSON.parse(JSON.stringify(at.precos))};
+  tabelas.lista.push(t); await salvarTabelas(); trocarTabela(t.id); toast("Tabela duplicada");
+});
+document.getElementById("tabRen").addEventListener("click", async ()=>{
+  const at = tabelaPorId(orc.tabelaId), nome = prompt("Novo nome da tabela:", at.nome); if(nome===null || !nome.trim()) return;
+  at.nome = nome.trim(); desenharTabelas(); await salvarTabelas(); toast("Tabela renomeada");
+});
+document.getElementById("tabPadrao").addEventListener("click", async ()=>{
+  const at = tabelaPorId(orc.tabelaId); tabelas.padrao = at.id; desenharTabelas(); await salvarTabelas();
+  toast("\"" + at.nome + "\" agora é a tabela padrão dos novos orçamentos");
+});
+document.getElementById("tabExc").addEventListener("click", async ()=>{
+  if(tabelas.lista.length<2) return;
+  const at = tabelaPorId(orc.tabelaId);
+  if(!await confirmar(`Excluir a tabela "${at.nome}"? Os orçamentos em rascunho que usam esta tabela passam a usar a tabela padrão. Orçamentos concluídos não mudam.`, "Excluir")) return;
+  tabelas.lista = tabelas.lista.filter(t=>t.id!==at.id);
+  if(tabelas.padrao===at.id) tabelas.padrao = tabelas.lista[0].id;
+  await salvarTabelas(); trocarTabela(tabelas.padrao); toast("Tabela excluída");
+});
+
 /* ---------- início ---------- */
 desenharPrecos();
 desenharOrcamento();
@@ -2390,8 +2528,12 @@ atualizar();
   if(!tokenSessao){ mostrarEstado("Abra a calculadora pelo botão 🧮 Calculadora de Orçamentos, na tela principal do Sistema de Gestão (área da Diretoria).", true); return; }
   try{
     const [p, l] = await Promise.all([chamar({action:"orcPrecosObter"}), chamar({action:"orcListar"})]);
-    if(p.precos){ precosDiretor = normPrecos(p.precos); precosNoServidor = true; }
+    tabelas = normTabelas(p.precos || precosDiretor);   // r209: várias tabelas
+    if(p.precos) precosNoServidor = true;
+    if(!orc.tabelaId) orc.tabelaId = tabelaPorId("").id;
+    precosDiretor = tabelaPorId(orc.tabelaId).precos;
     precos = precosDiretor;
+    desenharTabelas();
     lista = l.lista || [];
     mostrarEstado("");
     document.getElementById("app").hidden = false;
