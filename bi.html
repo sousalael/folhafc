@@ -132,6 +132,10 @@
         .tabela-bi tr.nivel-4 td { background: #fafcfd; font-size: .78rem; }
         .tabela-bi tr.cab-lanc td { background: #eef3f8; font-size: .78rem; }
         /* r193: coluna Obs e gráficos de rendimento */
+        .tabela-bi tr.nivel-3 td:first-child { padding-left: 74px; }   /* r211: Setor */
+        .tabela-bi tr.nivel-3 td { background: #f4f7fa; font-size: .82rem; }
+        .tabela-bi tr.nivel-4 td:first-child { padding-left: 96px; color: #47535f; }   /* r211: Tipo */
+        .tabela-bi tr.nivel-4 td { font-size: .8rem; }
         .tabela-bi td.obs-col { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #47535f; font-size: .78rem; }
         .rend-sel { max-height: 280px; overflow: auto; border: 1px solid #dfe5ec; border-radius: 6px; padding: 6px 8px; margin-top: 6px; }
         .rend-sel label { display: flex; gap: 6px; align-items: center; font-size: .8rem; padding: 2px 0; }
@@ -745,7 +749,8 @@ function arvoreResultado(db, linhas) {
         const im = db.imp[i];
         if (!f && !cu && !im) continue;
         const a = no(raiz, db.neg[i]), b = no(a.filhos, db.cli[i]), d = no(b.filhos, db.loja[i]);
-        [a, b, d, tot].forEach(x => { x.fat += f; x.custo += cu; x.imp += im; });
+        const s = no(d.filhos, db.setor[i]), t = no(s.filhos, db.det[i]);   // r211: Loja > Setor > Tipo
+        [a, b, d, s, t, tot].forEach(x => { x.fat += f; x.custo += cu; x.imp += im; });
     }
     return { raiz: raiz, total: tot };
 }
@@ -2124,7 +2129,7 @@ function desenharResultadoOperacional() {
         if (!b) return;
         const k = b.dataset.chave;
         if (estado.abertosRO.has(k)) {
-            Array.from(estado.abertosRO).forEach(x => { if (x === k || x.indexOf(k + 'c') === 0) estado.abertosRO.delete(x); });
+            Array.from(estado.abertosRO).forEach(x => { if (x === k || x.indexOf(k + 'c') === 0 || x.indexOf(k + 'l') === 0 || x.indexOf(k + 's') === 0) estado.abertosRO.delete(x); });   // r211: fecha também Setor/Tipo
         } else estado.abertosRO.add(k);
         desenharDrillRO();
         const nb = document.querySelector('#tab-drill-ro .btn-drill[data-chave="' + k + '"]');
@@ -2201,35 +2206,71 @@ function atualizarDependentesRO() {
 function cabecalhoRO(primeira) {
     return '<thead><tr><th>' + primeira + '</th><th class="num">Faturamento (R$)</th><th class="num">Custo (R$)</th><th class="num">Lucro (R$)</th><th class="num">Margem (%)</th><th class="num">Participação (%)</th></tr></thead>';
 }
-function linhaRO(nome, x, classe, semBarra) {
+function linhaRO(nome, x, classe, semBarra, obsTxt) {
     const totFat = estado.roAtual.arv.total.fat;
     const lucro = x.fat - x.custo - x.imp;
     const part = totFat ? x.fat / totFat : null;
-    return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' +
+    const colObs = obsTxt === undefined ? '' : '<td class="obs-col"' + (obsTxt ? ' title="' + esc(obsTxt) + '"' : '') + '>' + (obsTxt ? esc(obsTxt) : '') + '</td>';   // r211
+    return '<tr class="' + (classe || '') + '"><td>' + nome + '</td>' + colObs +
         '<td class="num">' + num(x.fat) + '</td><td class="num">' + num(x.custo) + '</td>' +
         '<td class="num' + classeValor(lucro) + '">' + num(lucro) + '</td>' +
         '<td class="num' + classeValor(lucro) + '">' + (x.fat ? pct(lucro / x.fat) : '—') + '</td>' +
         '<td class="num">' + pct(part) + (part && !semBarra ? '<span class="barra-part" style="width:' + Math.max(2, Math.round(part * 60)) + 'px"></span>' : '') + '</td></tr>';
 }
+// r211: observações por negócio + cliente + loja + setor + tipo, com os mesmos filtros do Resultado Operacional
+function obsPorLojaSetorTipo(db) {
+    const O = db.obs, ef = estado.cascata.efetivo, mesesSel = mesesSelecionados(), out = new Map();
+    for (let i = 0; i < O.n; i++) {
+        const c = O.conta[i];
+        if (!db.ehCustoOper[c] && !db.ehFat[c]) continue;
+        const m = O.mes[i];
+        if (mesesSel && !mesesSel.has(m)) continue;
+        if (ef.ano && !ef.ano.has(db.anoDoMes[m])) continue;
+        if (ef.mes && !ef.mes.has(m)) continue;
+        if (ef.neg && !ef.neg.has(O.neg[i])) continue;
+        if (ef.cli && !ef.cli.has(O.cli[i])) continue;
+        if (ef.uni && !ef.uni.has(db.mapaUni[O.cli[i] + '|' + O.loja[i]])) continue;
+        if (ef.tipo && !ef.tipo.has(O.tipo[i])) continue;
+        const k = O.neg[i] + '|' + O.cli[i] + '|' + O.loja[i] + '|' + O.setor[i] + '|' + O.det[i];
+        let s = out.get(k); if (!s) { s = new Map(); out.set(k, s); }
+        s.set(O.txt[i], (s.get(O.txt[i]) || 0) + (O.custo[i] || 0));
+    }
+    return out;
+}
 function desenharDrillRO() {
     const db = estado.db, r = estado.roAtual, ab = estado.abertosRO;
+    const obs = obsPorLojaSetorTipo(db);   // r211
     const partes = [];
     const botao = (chave, aberto, nome) => '<button class="btn-drill" data-chave="' + chave + '" aria-expanded="' + aberto + '" aria-label="' + (aberto ? 'Recolher ' : 'Abrir ') + esc(nome) + '">' + (aberto ? '▾' : '▸') + '</button>';
     r.negs.forEach(n => {
         const kN = 'n' + n.id, abN = ab.has(kN), nomeN = db.dic.neg[n.id];
-        partes.push(linhaRO(botao(kN, abN, nomeN) + esc(nomeN), n, 'nivel-0'));
+        partes.push(linhaRO(botao(kN, abN, nomeN) + esc(nomeN), n, 'nivel-0', false, ''));
         if (!abN) return;
         Array.from(n.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(c => {
             const kC = kN + 'c' + c.id, abC = ab.has(kC), nomeC = db.dic.cli[c.id];
-            partes.push(linhaRO(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-1'));
+            partes.push(linhaRO(botao(kC, abC, nomeC) + esc(nomeC), c, 'nivel-1', false, ''));
             if (!abC) return;
             Array.from(c.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(l => {
-                partes.push(linhaRO('<span class="espaco-drill"></span>' + esc(db.dic.loja[l.id]), l, 'nivel-2'));
+                // r211: a loja abre em Setor > Tipo (Equipe/Descrição), com as observações ao lado
+                const kL = kC + 'l' + l.id, abL = ab.has(kL), nomeL = db.dic.loja[l.id];
+                partes.push(linhaRO(botao(kL, abL, nomeL) + esc(nomeL), l, 'nivel-2', false, ''));
+                if (!abL) return;
+                Array.from(l.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(s => {
+                    const kS = kL + 's' + s.id, abS = ab.has(kS), nomeS = db.dic.setor[s.id] || '(sem setor)';
+                    partes.push(linhaRO(botao(kS, abS, nomeS) + esc(nomeS), s, 'nivel-3', false, ''));
+                    if (!abS) return;
+                    Array.from(s.filhos.values()).sort((a, b) => b.fat - a.fat || b.custo - a.custo).forEach(t => {
+                        const ob = obs.get(n.id + '|' + c.id + '|' + l.id + '|' + s.id + '|' + t.id);
+                        const txt = ob ? Array.from(ob.entries()).sort((x, y) => y[1] - x[1]).map(([k]) => db.obsDic[k]).filter(Boolean).join(' · ') : '';
+                        partes.push(linhaRO('<span class="espaco-drill"></span>' + esc(db.dic.det[t.id] || '(sem tipo)'), t, 'nivel-4', false, txt));
+                    });
+                });
             });
         });
     });
+    const cab = '<thead><tr><th>Negócio / Cliente / Loja / Setor / Tipo</th><th>Obs</th><th class="num">Faturamento (R$)</th><th class="num">Custo (R$)</th><th class="num">Lucro (R$)</th><th class="num">Margem (%)</th><th class="num">Participação (%)</th></tr></thead>';
     document.getElementById('tab-drill-ro').innerHTML = r.negs.length
-        ? '<table class="tabela-bi">' + cabecalhoRO('Negócio / Cliente / Loja') + '<tbody>' + partes.join('') + linhaRO('Total', r.arv.total, 'total') + '</tbody></table>'
+        ? '<table class="tabela-bi">' + cab + '<tbody>' + partes.join('') + linhaRO('Total', r.arv.total, 'total', false, '') + '</tbody></table>'
         : '<div class="aviso-vazio">Nenhum lançamento para os filtros escolhidos.</div>';
 }
 

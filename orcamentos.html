@@ -8,7 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <meta name="robots" content="noindex, nofollow">
 <title>Calculadora de Orçamentos — Formula Code</title>
-<!-- r209: título no topo; Regional e Cliente na descrição; regional só se dita; recolher/renomear unidades, dias, equipes e transportes;
+<!-- r210: transporte das equipes sempre cobra ida + volta (antes, equipe que voltava no mesmo dia pagava só a ida).
+     r209: título no topo; Regional e Cliente na descrição; regional só se dita; recolher/renomear unidades, dias, equipes e transportes;
      subir/descer unidades, dias, equipes e transportes; várias tabelas de preços (o orçamento fica ligado à tabela escolhida).
      r189: IA com 3 posições (Desligada / Econômica = Haiku / Precisa = Sonnet), sempre começa Desligada;
      desligada usa a leitura simples sem IA (frases padronizadas), o resto se preenche à mão.
@@ -887,8 +888,9 @@ function calcularUnidade(reg, u, ui){
         }
       }
     };
+    // r210: transporte sempre ida + volta — mesmo quando a equipe volta no mesmo dia em que saiu
     trecho(e.saida, "ida");
-    if(e.retorno>e.saida) trecho(e.retorno, "volta");
+    trecho(e.retorno, "volta");
     if(e.transporte==="outro" && e.outroValor){
       add({"Dia":nomeDia(e.saida,n), "Etapa":"Logística", "Categoria":"Transporte", "Item":`${e.outroTipo || "Transporte"} – ida e volta`, "Equipe":e.nome, "Origem":e.outroOrigem || orig,
            "Quantidade":1, "Valor unitário":e.outroValor, "Total":e.outroValor, "Observação":"Valor total ida e volta"});
