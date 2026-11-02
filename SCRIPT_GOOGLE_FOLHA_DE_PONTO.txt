@@ -499,12 +499,12 @@ function divDespesasStatus(cpf) {
 }
 
 // ============================================================================ //
-// r212: EDITAR A EQUIPE DE UM PROJETO ENCERRADO (até 48 h depois do encerramento)
+// r212: EDITAR A EQUIPE DE UM PROJETO ENCERRADO (r213: até 2 dias depois da DATA do encerramento)
 // - só função e observação (nada de incluir ou remover pessoas);
 // - supervisor que esteve no projeto como SUPERVISÃO (e da divisão permitida) ou Diretor;
 // - a cada abertura pede login (CPF) + senha + código enviado por e-mail.
 // ============================================================================ //
-var ENC_EDICAO_HORAS = 48;
+var ENC_EDICAO_DIAS = 2;   // r213: dias de calendário depois da data do encerramento
 var ENC_FUNCOES = ['OPERAÇÃO', 'FRIOS', 'AÉREOS', 'PONTO-EXTRA', 'SUPERVISÃO'];
 function colEncerradoEm_(sheet) {
   var ult = Math.max(sheet.getLastColumn(), 4);
@@ -529,11 +529,12 @@ function encEdicaoStatus(cpf, projeto) {
     for (var i = 1; i < dados.length; i++) if (dados[i][0] === projeto.data && dados[i][1] === projeto.cliente && dados[i][2] === projeto.unidade) { linha = dados[i]; break; }
     if (!linha) return { pode: false, motivo: 'Projeto não encontrado.' };
     if (linha[3] !== 'Encerrado') return { pode: false, motivo: 'O projeto não está encerrado.' };
-    var quando = encDataHora_(linha[colE]) || encDataHora_(linha[0]);   // sem registro da hora: fim do dia do projeto
-    var limite = quando ? new Date(quando.getTime() + ENC_EDICAO_HORAS * 3600000) : null;
-    var limiteTxt = limite ? Utilities.formatDate(limite, 'America/Fortaleza', 'dd/MM/yyyy HH:mm') : '';
+    // r213: regra pela DATA — encerrado no dia D, pode editar até o fim do dia D + 2 (sem registro: data do projeto)
+    var quando = encDataHora_(linha[colE]) || encDataHora_(linha[0]);
+    var limite = quando ? new Date(quando.getFullYear(), quando.getMonth(), quando.getDate() + ENC_EDICAO_DIAS, 23, 59, 59) : null;
+    var limiteTxt = limite ? Utilities.formatDate(limite, 'America/Fortaleza', 'dd/MM/yyyy') : '';
     if (perfil === 'SUPERVISOR') {
-      if (!limite || new Date() > limite) return { pode: false, motivo: 'O prazo de 48 horas depois do encerramento já passou.', limite: limiteTxt };
+      if (!limite || new Date() > limite) return { pode: false, motivo: 'O prazo de 2 dias depois do encerramento já passou.', limite: limiteTxt };
       var erroDiv = exigirProjetoPermitido(cpfL, projeto); if (erroDiv) return { pode: false, motivo: erroDiv };
       var pres = getSheet('Presencas'), ult = pres.getLastRow(), esteve = false;
       if (ult >= 2) {
@@ -969,7 +970,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-25-r212';
+const VERSAO_SCRIPT = '2026-10-25-r213';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,

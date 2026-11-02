@@ -518,7 +518,7 @@
             <span id="contador-participantes" class="badge bg-primary ms-2 rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
         </h6>
         
-        <!-- r212: editar a equipe de projeto encerrado (até 48 h; só função e observação) -->
+        <!-- r212: editar a equipe de projeto encerrado (r213: até 2 dias após a data do encerramento; só função e observação) -->
         <div id="enc-edicao-box" class="hidden alert alert-warning py-2 small mb-2"></div>
         <div class="table-responsive shadow-sm rounded">
             <table class="table table-sm table-bordered align-middle mb-0" id="tabela-presencas">
@@ -1831,7 +1831,7 @@
         
         encResetar();   // r212
         if(projetoAtivo.status === 'Encerrado') {
-            encVerificar();   // r212: dá para editar a equipe? (até 48 h depois do encerramento)
+            encVerificar();   // r212: dá para editar a equipe? (r213: até 2 dias após a data do encerramento)
             document.getElementById('badge-status').innerText = "Encerrado";
             document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
             alerta.classList.replace('alert-success', 'alert-secondary');
@@ -2092,7 +2092,7 @@
     }
 
     // ============================================================
-    // r212: EDITAR A EQUIPE DE PROJETO ENCERRADO (até 48 h; só função e observação)
+    // r212: EDITAR A EQUIPE DE PROJETO ENCERRADO (r213: até 2 dias após a data do encerramento; só função e observação)
     // ============================================================
     let encEstado = { token: null, chave: null };
     function encChave(p) { return p ? (p.data + '|' + p.cliente + '|' + p.unidade) : ''; }
@@ -2109,7 +2109,7 @@
             const res = await chamarApi({ action: 'encEdicaoStatus', cpf: getCpfLogado(), projeto: proj });
             if (encChave(projetoAtivo) !== encChave(proj)) return;   // trocou de projeto no meio
             if (res && res.pode) {
-                box.innerHTML = '✏️ Este projeto encerrado ainda pode ter <b>funções e observações</b> ajustadas' + (res.limite ? ' até <b>' + res.limite + '</b>' : '') +
+                box.innerHTML = '✏️ Este projeto encerrado ainda pode ter <b>funções e observações</b> ajustadas' + (res.limite ? ' até o fim do dia <b>' + res.limite + '</b>' : '') +
                     '. <button type="button" class="btn btn-sm btn-warning fw-bold ms-1" onclick="encAbrir()">Editar equipe</button>';
                 box.classList.remove('hidden');
             } else box.classList.add('hidden');
@@ -4894,7 +4894,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-25-r212';
+    const VERSAO_ESPERADA = '2026-10-25-r213';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
