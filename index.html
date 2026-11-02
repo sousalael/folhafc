@@ -518,6 +518,8 @@
             <span id="contador-participantes" class="badge bg-primary ms-2 rounded-pill shadow-sm" style="font-size: 0.95rem;">0</span>
         </h6>
         
+        <!-- r212: editar a equipe de projeto encerrado (até 48 h; só função e observação) -->
+        <div id="enc-edicao-box" class="hidden alert alert-warning py-2 small mb-2"></div>
         <div class="table-responsive shadow-sm rounded">
             <table class="table table-sm table-bordered align-middle mb-0" id="tabela-presencas">
                 <thead class="table-light">
@@ -532,6 +534,7 @@
         </div>
         
         <div class="d-flex flex-column gap-2 mt-4">
+            <button class="btn btn-warning fw-bold w-100 py-2 hidden" id="btn-enc-salvar" onclick="encSalvar()">💾 Salvar alterações da equipe (projeto encerrado)</button>
             <button class="btn btn-primary fw-bold w-100 py-2" id="btn-salvar-apenas" onclick="salvarAlteracoes()">💾 Salvar Alterações</button>
             <button class="btn btn-danger w-100 py-2" id="btn-encerrar" onclick="encerrarProjeto()">🔒 Encerrar Projeto</button>
             <button class="btn btn-secondary fc-btn-verde w-100 py-2" onclick="exportarExcel()">📊 Gerar Relatório Excel (Deste Projeto)</button>
@@ -1179,13 +1182,44 @@
                         <th class="text-primary">Projeto / Unidade</th>
                         <th class="text-primary">Colaborador</th>
                         <th class="text-primary">Função</th>
+                        <th class="text-primary">Observação do supervisor</th>
                     </tr>
                 </thead>
                 <tbody id="tbody-busca-resultados">
-                    <tr><td colspan="4" class="text-muted py-3">Preencha os filtros acima e clique em Executar Busca.</td></tr>
+                    <tr><td colspan="5" class="text-muted py-3">Preencha os filtros acima e clique em Executar Busca.</td></tr>
                 </tbody>
             </table>
         </div>
+        <div id="busca-adiantamentos" class="hidden"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ############ r212: MODAL — confirmar identidade para editar projeto encerrado ############ -->
+<div class="modal fade" id="modalEncEdicao" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white" style="background-color: var(--fc-primaria);">
+        <h5 class="modal-title fw-bold">🔐 Editar equipe do projeto encerrado</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-muted mb-2">Para alterar funções e observações de um projeto encerrado, confirme sua identidade. Não é possível incluir nem remover pessoas.</div>
+        <div id="enc-passo1">
+          <label class="form-label small fw-bold mb-1" for="enc-login">Login (CPF)</label>
+          <input type="text" id="enc-login" class="form-control form-control-sm mb-2 cpf-mask" placeholder="000.000.000-00" autocomplete="username">
+          <label class="form-label small fw-bold mb-1" for="enc-senha">Senha</label>
+          <input type="password" id="enc-senha" class="form-control form-control-sm mb-3" autocomplete="current-password">
+          <button class="btn btn-primary btn-sm w-100 fw-bold" id="enc-btn-enviar" onclick="encSolicitarCodigo()">Enviar código por e-mail</button>
+        </div>
+        <div id="enc-passo2" class="hidden">
+          <div class="small mb-2" id="enc-msg-email"></div>
+          <label class="form-label small fw-bold mb-1" for="enc-codigo">Código recebido</label>
+          <input type="text" id="enc-codigo" class="form-control form-control-sm mb-3" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+          <button class="btn btn-success btn-sm w-100 fw-bold" id="enc-btn-validar" onclick="encValidarCodigo()">Liberar edição</button>
+        </div>
+        <div class="small text-danger mt-2" id="enc-erro" role="alert"></div>
       </div>
     </div>
   </div>
@@ -1795,7 +1829,9 @@
         document.getElementById('span-projeto').innerText = `${projetoAtivo.data} - ${projetoAtivo.cliente} - ${projetoAtivo.unidade}`;
         const alerta = document.getElementById('alerta-header');
         
+        encResetar();   // r212
         if(projetoAtivo.status === 'Encerrado') {
+            encVerificar();   // r212: dá para editar a equipe? (até 48 h depois do encerramento)
             document.getElementById('badge-status').innerText = "Encerrado";
             document.getElementById('badge-status').classList.replace('bg-success', 'bg-danger');
             alerta.classList.replace('alert-success', 'alert-secondary');
@@ -2055,6 +2091,84 @@
         }
     }
 
+    // ============================================================
+    // r212: EDITAR A EQUIPE DE PROJETO ENCERRADO (até 48 h; só função e observação)
+    // ============================================================
+    let encEstado = { token: null, chave: null };
+    function encChave(p) { return p ? (p.data + '|' + p.cliente + '|' + p.unidade) : ''; }
+    function encEdicaoAtiva() { return !!(encEstado.token && projetoAtivo && encEstado.chave === encChave(projetoAtivo)); }
+    function encResetar() {
+        encEstado = { token: null, chave: null };
+        const box = document.getElementById('enc-edicao-box'); if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+        const b = document.getElementById('btn-enc-salvar'); if (b) b.classList.add('hidden');
+    }
+    async function encVerificar() {
+        const proj = projetoAtivo, box = document.getElementById('enc-edicao-box');
+        if (!proj || proj.status !== 'Encerrado' || !box) return;
+        try {
+            const res = await chamarApi({ action: 'encEdicaoStatus', cpf: getCpfLogado(), projeto: proj });
+            if (encChave(projetoAtivo) !== encChave(proj)) return;   // trocou de projeto no meio
+            if (res && res.pode) {
+                box.innerHTML = '✏️ Este projeto encerrado ainda pode ter <b>funções e observações</b> ajustadas' + (res.limite ? ' até <b>' + res.limite + '</b>' : '') +
+                    '. <button type="button" class="btn btn-sm btn-warning fw-bold ms-1" onclick="encAbrir()">Editar equipe</button>';
+                box.classList.remove('hidden');
+            } else box.classList.add('hidden');
+        } catch (e) { box.classList.add('hidden'); }
+    }
+    function encAbrir() {
+        ['enc-login', 'enc-senha', 'enc-codigo'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('enc-login').value = (typeof formatarCPFTela === 'function') ? formatarCPFTela(getCpfLogado()) : getCpfLogado();
+        document.getElementById('enc-passo1').classList.remove('hidden');
+        document.getElementById('enc-passo2').classList.add('hidden');
+        document.getElementById('enc-erro').innerText = '';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEncEdicao')).show();
+    }
+    async function encSolicitarCodigo() {
+        const b = document.getElementById('enc-btn-enviar'), erro = document.getElementById('enc-erro');
+        erro.innerText = ''; b.disabled = true; b.innerText = 'Enviando...';
+        try {
+            const res = await chamarApi({ action: 'encEdicaoSolicitar', cpf: getCpfLogado(), login: document.getElementById('enc-login').value,
+                                          senha: document.getElementById('enc-senha').value, projeto: projetoAtivo });
+            if (!res || res.error || !res.success) throw new Error((res && res.error) || 'Não foi possível enviar o código.');
+            document.getElementById('enc-msg-email').innerHTML = 'Enviamos um código para <b>' + escaparHtml(res.emailMascarado || 'seu e-mail') + '</b> (vale 10 minutos).';
+            document.getElementById('enc-passo1').classList.add('hidden');
+            document.getElementById('enc-passo2').classList.remove('hidden');
+            document.getElementById('enc-codigo').focus();
+        } catch (e) { erro.innerText = '⚠️ ' + e.message; }
+        b.disabled = false; b.innerText = 'Enviar código por e-mail';
+    }
+    async function encValidarCodigo() {
+        const b = document.getElementById('enc-btn-validar'), erro = document.getElementById('enc-erro');
+        erro.innerText = ''; b.disabled = true; b.innerText = 'Conferindo...';
+        try {
+            const res = await chamarApi({ action: 'encEdicaoValidar', cpf: getCpfLogado(), codigo: document.getElementById('enc-codigo').value, projeto: projetoAtivo });
+            if (!res || res.error || !res.success) throw new Error((res && res.error) || 'Código não conferiu.');
+            encEstado = { token: res.editToken, chave: encChave(projetoAtivo) };
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEncEdicao')).hide();
+            document.getElementById('btn-enc-salvar').classList.remove('hidden');
+            const box = document.getElementById('enc-edicao-box');
+            box.innerHTML = '✏️ <b>Edição liberada</b> (30 minutos): ajuste funções e observações e toque em “Salvar alterações da equipe”. Não é possível incluir nem remover pessoas.';
+            isTyping = false; carregarLista(false);
+        } catch (e) { erro.innerText = '⚠️ ' + e.message; }
+        b.disabled = false; b.innerText = 'Liberar edição';
+    }
+    async function encSalvar() {
+        if (!encEdicaoAtiva()) return alert('A edição não está liberada para este projeto.');
+        const b = document.getElementById('btn-enc-salvar'); b.disabled = true; b.innerText = 'Salvando...'; isTyping = false;
+        try {
+            const lista = [];
+            document.querySelectorAll('tbody#lista-presentes-sup tr').forEach(tr => {
+                const rowId = tr.getAttribute('data-rowid');
+                if (rowId) lista.push({ rowId: parseInt(rowId), funcao: document.getElementById('f-' + rowId).value, obs: document.getElementById('o-' + rowId).value });
+            });
+            const res = await chamarApi({ action: 'encEdicaoSalvar', cpf: getCpfLogado(), editToken: encEstado.token, projeto: projetoAtivo, lista: lista });
+            if (!res || res.error || !res.success) throw new Error((res && res.error) || 'Não foi possível salvar.');
+            alert('✅ Alterações salvas (' + res.alteradas + ' pessoa(s) alterada(s)).');
+            carregarLista(false);
+        } catch (e) { alert('⚠️ ' + e.message); }
+        b.disabled = false; b.innerText = '💾 Salvar alterações da equipe (projeto encerrado)';
+    }
+
     async function executarBuscaColab() {
         const dataIni = document.getElementById('busca-data-ini').value;
         const dataFim = document.getElementById('busca-data-fim').value;
@@ -2068,22 +2182,38 @@
         btn.innerText = "Buscando..."; btn.disabled = true;
 
         try {
-            const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'pesquisarColaboradores', filtros: { dataIni, dataFim, cpf, nome }}) });
-            const res = await response.json();
+            const res = await chamarApi({ action:'pesquisarColaboradores', cpf: getCpfLogado(), filtros: { dataIni, dataFim, cpf, nome } });   // r212
 
             const tbody = document.getElementById('tbody-busca-resultados');
             if(!res.resultados || res.resultados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-muted py-3">Nenhum registro encontrado com estes filtros.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted py-3">Nenhum projeto encontrado com estes filtros.</td></tr>';
             } else {
                 tbody.innerHTML = res.resultados.map(r => `
                     <tr>
-                        <td class="text-nowrap">${r.data}</td>
-                        <td><span class="fw-bold d-block text-truncate" style="max-width:120px;">${r.cliente}</span><small class="text-muted">${r.unidade}</small></td>
-                        <td><span class="fw-bold d-block text-truncate" style="max-width:150px; color: var(--fc-primaria);">${r.nome}</span></td>
-                        <td>${r.funcao}</td>
+                        <td class="text-nowrap">${escaparHtml(r.data)}</td>
+                        <td><span class="fw-bold d-block text-truncate" style="max-width:120px;">${escaparHtml(r.cliente)}</span><small class="text-muted">${escaparHtml(r.unidade)}</small></td>
+                        <td><span class="fw-bold d-block text-truncate" style="max-width:150px; color: var(--fc-primaria);">${escaparHtml(r.nome)}</span></td>
+                        <td>${escaparHtml(r.funcao)}</td>
+                        <td class="text-start">${r.obs ? escaparHtml(r.obs) : '<span class="text-muted">—</span>'}</td>
                     </tr>
                 `).join('');
             }
+            // r212: adiantamentos (só a Diretoria recebe)
+            const boxA = document.getElementById('busca-adiantamentos');
+            if (Array.isArray(res.adiantamentos)) {
+                const tot = res.adiantamentos.reduce((s, a) => s + Number(a.valor || 0), 0);
+                const hoje = new Date(), hojeTxt = String(hoje.getDate()).padStart(2,'0') + '/' + String(hoje.getMonth()+1).padStart(2,'0') + '/' + hoje.getFullYear();
+                const iniTxt = dataIni.split('-').reverse().join('/');
+                boxA.innerHTML = '<h6 class="fw-bold text-primary mt-3 mb-1">💸 Adiantamentos de ' + iniTxt + ' até hoje (' + hojeTxt + ')</h6>' +
+                    (res.adiantamentos.length ? '<div class="table-responsive rounded shadow-sm"><table class="table table-sm table-bordered align-middle mb-0" style="font-size:.85rem"><thead class="table-light"><tr>' +
+                      '<th>Data</th><th>Colaborador</th><th class="text-end">Valor (R$)</th><th>Forma</th><th>Obs</th><th>Lançado por</th></tr></thead><tbody>' +
+                      res.adiantamentos.map(a => '<tr><td class="text-nowrap">' + escaparHtml(a.data) + '</td><td>' + escaparHtml(a.nome) + '</td><td class="text-end">' +
+                        Number(a.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '</td><td>' + escaparHtml(a.formaPagamento || '') + '</td><td>' + escaparHtml(a.obs || '') +
+                        (a.url ? ' <a href="' + escaparHtml(a.url) + '" target="_blank" rel="noopener">comprovante</a>' : '') + '</td><td>' + escaparHtml(a.lancadoPor || '') + '</td></tr>').join('') +
+                      '<tr class="table-light fw-bold"><td colspan="2">Total</td><td class="text-end">' + tot.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '</td><td colspan="3"></td></tr></tbody></table></div>'
+                    : '<div class="small text-muted">Nenhum adiantamento neste período.</div>');
+                boxA.classList.remove('hidden');
+            } else { boxA.classList.add('hidden'); boxA.innerHTML = ''; }
         } catch(err) {
             alert("Erro ao executar busca: " + err.message);
         } finally {
@@ -2207,7 +2337,7 @@
                                 <span class="text-muted me-2 small">#${index + 1}</span> ${p.nome}
                             </td>
                             <td>
-                                <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'disabled' : ''}>
+                                <select id="f-${p.rowId}" class="form-select form-select-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' && !encEdicaoAtiva() ? 'disabled' : ''}>
                                     <option value="OPERAÇÃO" ${p.funcao === 'OPERAÇÃO' ? 'selected' : ''}>OPERAÇÃO</option>
                                     <option value="FRIOS" ${p.funcao === 'FRIOS' ? 'selected' : ''}>FRIOS</option>
                                     <option value="AÉREOS" ${p.funcao === 'AÉREOS' ? 'selected' : ''}>AÉREOS</option>
@@ -2216,7 +2346,7 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' ? 'readonly' : ''}>
+                                <input type="text" id="o-${p.rowId}" value="${p.obs}" class="form-control form-control-sm" onfocus="isTyping = true" onblur="isTyping = false" ${projetoAtivo.status === 'Encerrado' && !encEdicaoAtiva() ? 'readonly' : ''}>
                             </td>
                         </tr>
                     `).join('');
@@ -4764,7 +4894,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-24-r211';
+    const VERSAO_ESPERADA = '2026-10-25-r212';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

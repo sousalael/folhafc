@@ -45,7 +45,11 @@ function doPost(e) {
     else if (action === 'salvarApenas') { result = salvarApenas(data.lista, data.cpf); }   // r203: + trava de divisão
     else if (action === 'encerrarProjeto') { result = encerrarProjeto(data.projeto || data.project, data.cpf); } // CORRIGIDO (autorizado) · r203: + divisão
     else if (action === 'getRelatorioMultiplo') { result = getRelatorioMultiplo(data.projetos); }
-    else if (action === 'pesquisarColaboradores') { result = pesquisarColaboradores(data.filtros); }
+    else if (action === 'pesquisarColaboradores') { result = pesquisarColaboradores(data.filtros, data.cpf); }   // r212: + obs e adiantamentos
+    else if (action === 'encEdicaoStatus') { result = encEdicaoStatus(data.cpf, data.projeto); }                    // r212: editar equipe de projeto encerrado
+    else if (action === 'encEdicaoSolicitar') { result = encEdicaoSolicitar(data.cpf, data.login, data.senha, data.projeto); }
+    else if (action === 'encEdicaoValidar') { result = encEdicaoValidar(data.cpf, data.codigo, data.projeto); }
+    else if (action === 'encEdicaoSalvar') { result = encEdicaoSalvar(data.cpf, data.editToken, data.projeto, data.lista); }
     else if (action === 'getContadoresPonto') { result = getContadoresPonto(data.cpf, data.filtros); }
 
     // ############ ACOES NOVAS: DESPESAS E FINANCEIRO ############
@@ -494,6 +498,112 @@ function divDespesasStatus(cpf) {
   return { ok: true, ultima: u ? JSON.parse(u) : null };
 }
 
+// ============================================================================ //
+// r212: EDITAR A EQUIPE DE UM PROJETO ENCERRADO (até 48 h depois do encerramento)
+// - só função e observação (nada de incluir ou remover pessoas);
+// - supervisor que esteve no projeto como SUPERVISÃO (e da divisão permitida) ou Diretor;
+// - a cada abertura pede login (CPF) + senha + código enviado por e-mail.
+// ============================================================================ //
+var ENC_EDICAO_HORAS = 48;
+var ENC_FUNCOES = ['OPERAÇÃO', 'FRIOS', 'AÉREOS', 'PONTO-EXTRA', 'SUPERVISÃO'];
+function colEncerradoEm_(sheet) {
+  var ult = Math.max(sheet.getLastColumn(), 4);
+  var cab = sheet.getRange(1, 1, 1, ult).getDisplayValues()[0];
+  for (var i = 0; i < cab.length; i++) if (divSemAcento_(cab[i]).indexOf('ENCERRADO EM') === 0) return i + 1;
+  sheet.getRange(1, ult + 1).setValue('Encerrado em');
+  return ult + 1;
+}
+function encChave_(p) { return String(p.data) + '|' + String(p.cliente) + '|' + String(p.unidade); }
+function encDataHora_(txt) {   // 'dd/MM/yyyy HH:mm' → Date
+  var m = String(txt || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), m[4] ? Number(m[4]) : 23, m[5] ? Number(m[5]) : 59);
+}
+function encEdicaoStatus(cpf, projeto) {
+  try {
+    var cpfL = normalizarCPF(cpf), perfil = getPerfilPorCPF(cpfL);
+    if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { pode: false, motivo: 'Acesso restrito.' };
+    if (!projeto || !projeto.data) return { pode: false, motivo: 'Projeto não informado.' };
+    var sh = getSheet('Projetos'), dados = sh.getDataRange().getDisplayValues();
+    var colE = colEncerradoEm_(sh) - 1, linha = null;
+    for (var i = 1; i < dados.length; i++) if (dados[i][0] === projeto.data && dados[i][1] === projeto.cliente && dados[i][2] === projeto.unidade) { linha = dados[i]; break; }
+    if (!linha) return { pode: false, motivo: 'Projeto não encontrado.' };
+    if (linha[3] !== 'Encerrado') return { pode: false, motivo: 'O projeto não está encerrado.' };
+    var quando = encDataHora_(linha[colE]) || encDataHora_(linha[0]);   // sem registro da hora: fim do dia do projeto
+    var limite = quando ? new Date(quando.getTime() + ENC_EDICAO_HORAS * 3600000) : null;
+    var limiteTxt = limite ? Utilities.formatDate(limite, 'America/Fortaleza', 'dd/MM/yyyy HH:mm') : '';
+    if (perfil === 'SUPERVISOR') {
+      if (!limite || new Date() > limite) return { pode: false, motivo: 'O prazo de 48 horas depois do encerramento já passou.', limite: limiteTxt };
+      var erroDiv = exigirProjetoPermitido(cpfL, projeto); if (erroDiv) return { pode: false, motivo: erroDiv };
+      var pres = getSheet('Presencas'), ult = pres.getLastRow(), esteve = false;
+      if (ult >= 2) {
+        var pd = pres.getRange(2, 1, ult - 1, 5).getDisplayValues();
+        for (var k = 0; k < pd.length; k++) {
+          if (pd[k][0] !== projeto.data || pd[k][1] !== projeto.cliente || pd[k][2] !== projeto.unidade) continue;
+          if (normalizarCPF(pd[k][3]) === cpfL && divSemAcento_(pd[k][4]).indexOf('SUPERVIS') === 0) { esteve = true; break; }
+        }
+      }
+      if (!esteve) return { pode: false, motivo: 'Só o supervisor que esteve neste projeto pode editar a equipe depois do encerramento.' };
+    }
+    return { pode: true, limite: perfil === 'DIRETOR' ? '' : limiteTxt, perfil: perfil };
+  } catch (e) { return { pode: false, motivo: e.message }; }
+}
+function encEdicaoSolicitar(cpf, login, senha, projeto) {
+  var cpfL = normalizarCPF(cpf);
+  if (normalizarCPF(login) !== cpfL) return { error: 'O CPF informado não é o do usuário conectado.' };
+  var st = encEdicaoStatus(cpfL, projeto); if (!st.pode) return { error: st.motivo };
+  var idxSenha = getIndiceSenha(); if (idxSenha === -1) return { error: 'Coluna "SenhaHash" nao encontrada.' };
+  var cd = getColabDados(), ix = getColabIndices();
+  var user = cd.find(function (r) { return normalizarCPF(r[ix.cpf]) === cpfL; });
+  if (!user) return { error: 'CPF não encontrado.' };
+  var h = String(user[idxSenha] || '').trim();
+  if (!h) return { error: 'Senha não cadastrada. Faça o primeiro acesso.' };
+  if (hashSenha(senha) !== h) return { error: 'Senha incorreta.' };
+  var email = getEmailPorCPF(cpfL);
+  if (!email || email.indexOf('@') === -1) return { error: 'Não há e-mail válido cadastrado para este CPF. Procure a Diretoria.' };
+  var codigo = String(Math.floor(100000 + Math.random() * 900000));
+  CacheService.getScriptCache().put('encotp_' + cpfL + '_' + Utilities.base64EncodeWebSafe(encChave_(projeto)).slice(0, 120), JSON.stringify({ codigo: codigo, tentativas: 0 }), OTP_VALIDADE_SEG);
+  try {
+    MailApp.sendEmail({ to: email, subject: 'Código para editar projeto encerrado - Folha de Ponto', inlineImages: { fclogo: fcLogoEmailBlob() },
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:480px">' + fcCabecalhoEmailHtml() +
+        '<p style="margin-top:20px">Olá, <strong>' + getNomePorCPF(cpfL) + '</strong>.</p>' +
+        '<p>Código para editar a equipe do projeto encerrado <strong>' + projeto.data + ' - ' + projeto.cliente + ' - ' + projeto.unidade + '</strong>:</p>' +
+        '<p style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#001528">' + codigo + '</p>' +
+        '<p style="color:#666">Válido por 10 minutos. Se você não pediu, ignore e avise a Diretoria.</p></div>' });
+  } catch (e) { return { error: 'Não foi possível enviar o e-mail: ' + e.toString() }; }
+  return { success: true, emailMascarado: mascararEmail(email) };
+}
+function encEdicaoValidar(cpf, codigo, projeto) {
+  var cpfL = normalizarCPF(cpf), cache = CacheService.getScriptCache();
+  var chave = 'encotp_' + cpfL + '_' + Utilities.base64EncodeWebSafe(encChave_(projeto)).slice(0, 120);
+  var bruto = cache.get(chave); if (!bruto) return { error: 'Código expirado ou inexistente. Peça um novo.' };
+  var d = JSON.parse(bruto);
+  if (d.tentativas >= OTP_MAX_TENTATIVAS) { cache.remove(chave); return { error: 'Número máximo de tentativas excedido. Peça um novo código.' }; }
+  if (String(codigo).trim() !== d.codigo) { d.tentativas++; cache.put(chave, JSON.stringify(d), OTP_VALIDADE_SEG); return { error: 'Código incorreto.' }; }
+  cache.remove(chave);
+  var tok = Utilities.getUuid();
+  cache.put('enced_' + tok, JSON.stringify({ cpf: cpfL, proj: encChave_(projeto) }), 1800);   // 30 min de edição
+  return { success: true, editToken: tok };
+}
+function encEdicaoSalvar(cpf, editToken, projeto, lista) {
+  var cpfL = normalizarCPF(cpf), bruto = CacheService.getScriptCache().get('enced_' + editToken);
+  if (!bruto) return { error: 'A autorização de edição expirou. Abra a edição de novo (login, senha e código).' };
+  var t = JSON.parse(bruto);
+  if (t.cpf !== cpfL || t.proj !== encChave_(projeto)) return { error: 'Autorização inválida para este projeto.' };
+  var st = encEdicaoStatus(cpfL, projeto); if (!st.pode) return { error: st.motivo };
+  var sh = getSheet('Presencas'), ult = sh.getLastRow(), n = 0;
+  (lista || []).forEach(function (it) {
+    var rid = Number(it.rowId); if (!(rid >= 2 && rid <= ult)) return;
+    var lin = sh.getRange(rid, 1, 1, 6).getDisplayValues()[0];
+    if (lin[0] !== projeto.data || lin[1] !== projeto.cliente || lin[2] !== projeto.unidade) return;   // só linhas deste projeto
+    var f = String(it.funcao || '').trim(), o = String(it.obs == null ? '' : it.obs);
+    if (ENC_FUNCOES.indexOf(f) === -1) f = lin[4];
+    if (f !== lin[4] || o !== lin[5]) { sh.getRange(rid, 5, 1, 2).setValues([[f, o]]); n++; }
+  });
+  Logger.log('r212 edição de projeto encerrado ' + encChave_(projeto) + ' por ' + cpfL + ': ' + n + ' linha(s)');
+  return { success: true, alteradas: n };
+}
+
 function getProjetos() {
   const sheet = getSheet('Projetos');
   const dados = sheet.getDataRange().getDisplayValues();
@@ -697,6 +807,7 @@ function encerrarProjeto(projeto, cpf) {
   for (let i = 1; i < dadosProj.length; i++) {
     if (dadosProj[i][0] === projeto.data && dadosProj[i][1] === projeto.cliente && dadosProj[i][2] === projeto.unidade) {
       sheetProjetos.getRange(i + 1, 4).setValue("Encerrado");
+      try { sheetProjetos.getRange(i + 1, colEncerradoEm_(sheetProjetos)).setNumberFormat('@').setValue(Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm')); } catch (eE) {}   // r212
       return { success: true };
     }
   }
@@ -761,7 +872,7 @@ function htmlDateToInt(str, isFim) {
   return isFim ? 99999999 : 0;
 }
 
-function pesquisarColaboradores(filtros) {
+function pesquisarColaboradores(filtros, cpfQuem) {
   const sheetPresencas = getSheet('Presencas');
   const dados = sheetPresencas.getDataRange().getDisplayValues();
   const sheetProjetos = getSheet('Projetos');
@@ -800,10 +911,32 @@ function pesquisarColaboradores(filtros) {
 
     lista.push({
       data: pData, cliente: pCliente, unidade: pUnidade,
-      cpf: formatarCPF(dados[i][3]), nome: dados[i][7], funcao: dados[i][4]
+      cpf: formatarCPF(dados[i][3]), nome: dados[i][7], funcao: dados[i][4],
+      obs: String(dados[i][5] || '').trim()   // r212: observação do supervisor sobre o colaborador
     });
   }
-  return { resultados: lista };
+  // r212: adiantamentos dos colaboradores encontrados, da data inicial até hoje (só o Diretor vê)
+  let adiantamentos = null;
+  if (cpfQuem && getPerfilPorCPF(normalizarCPF(cpfQuem)) === 'DIRETOR') {
+    adiantamentos = [];
+    const cpfs = {};
+    lista.forEach(x => { cpfs[normalizarCPF(x.cpf)] = 1; });
+    if (cpfFiltro) cpfs[cpfFiltro] = 1;
+    const shA = getSheet('Adiantamentos');
+    if (shA && Object.keys(cpfs).length) {
+      const hojeInt = parseInt(Utilities.formatDate(new Date(), 'America/Fortaleza', 'yyyyMMdd'), 10);
+      const dA = shA.getDataRange().getDisplayValues();
+      for (let i = 1; i < dA.length; i++) {
+        const ra = dA[i];
+        if (!ra[1] || !cpfs[normalizarCPF(ra[2])]) continue;
+        const dInt = ddmmyyyyToInt(ra[1]) || htmlDateToInt(ra[1], false);
+        if (dInt < tIni || dInt > hojeInt) continue;
+        adiantamentos.push({ data: ra[1], cpf: ra[2], nome: ra[3], valor: despesaValorParaNumero(ra[4]), formaPagamento: ra[5], obs: ra[6], url: ra[7], lancadoPor: ra[8] });
+      }
+      adiantamentos = ordenarPorDataDesc(adiantamentos);
+    }
+  }
+  return { resultados: lista, adiantamentos: adiantamentos };
 }
 
 // ============================================================================= //
@@ -836,7 +969,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-24-r211';
+const VERSAO_SCRIPT = '2026-10-25-r212';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -869,7 +1002,8 @@ function doGet(e) {
     'diagListar', 'diagCandidatos', 'diagCriar', 'diagDetalhe', 'diagAlterarStatus', 'diagEnviarAcessos',
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
-    'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus', 'despesasMarcarApurado'
+    'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus', 'despesasMarcarApurado',
+    'encEdicaoStatus', 'encEdicaoSolicitar', 'encEdicaoValidar', 'encEdicaoSalvar'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
