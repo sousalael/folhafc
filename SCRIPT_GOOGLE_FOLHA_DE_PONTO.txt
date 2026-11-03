@@ -873,6 +873,9 @@ function getRelatorioMultiplo(projetosSelecionados) {
   let projSet = new Set(projetosSelecionados.map(p => `${p.data}|${p.cliente}|${p.unidade}`));
   let lista = [];
   const colAp = presColApurado_(dados[0] || []);   // r214
+  // r215: Divisão de cada projeto (aba Projetos, coluna "Divisão")
+  const dp = getSheet('Projetos').getDataRange().getDisplayValues(), colDivP = divColuna_(dp[0] || []), divProj = {};
+  if (colDivP >= 0) for (let k = 1; k < dp.length; k++) divProj[dp[k][0] + '|' + dp[k][1] + '|' + dp[k][2]] = String(dp[k][colDivP] || '').trim();
 
   for(let i=1; i<dados.length; i++) {
     let key = `${dados[i][0]}|${dados[i][1]}|${dados[i][2]}`;
@@ -889,7 +892,8 @@ function getRelatorioMultiplo(projetosSelecionados) {
         nome: infoColab.nome || dados[i][7] || 'Não localizado',
         pix: infoColab.pix,
         nomeReduzido: infoColab.nomeReduzido,
-        apurado: colAp >= 0 ? (dados[i][colAp] || '') : ''   // r214
+        apurado: colAp >= 0 ? (dados[i][colAp] || '') : '',   // r214
+        divisao: divProj[key] || ''   // r215
       });
     }
   }
@@ -1007,7 +1011,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-26-r214';
+const VERSAO_SCRIPT = '2026-10-26-r215';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,

@@ -2075,9 +2075,9 @@
             
             const escapeCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"'; };
 
-            let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação", "Apurado"].join(";")];   // r214: + Apurado
+            let csv = [["Data", "Divisão", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação", "Apurado"].join(";")];   // r214: + Apurado · r215: + Divisão
             res.lista.forEach(p => {
-                csv.push([escapeCsv(p.data), escapeCsv(p.cliente), escapeCsv(p.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(p.funcao), escapeCsv(p.obs), escapeCsv(p.apurado || '')].join(";"));
+                csv.push([escapeCsv(p.data), escapeCsv(p.divisao || ''), escapeCsv(p.cliente), escapeCsv(p.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(p.funcao), escapeCsv(p.obs), escapeCsv(p.apurado || '')].join(";"));
             });
 
             let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
@@ -4899,7 +4899,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-26-r214';
+    const VERSAO_ESPERADA = '2026-10-26-r215';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,
