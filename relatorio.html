@@ -143,27 +143,9 @@
         return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // r207: imprime/gera o PDF e, para o Diretor, oferece gravar a data de hoje em "Apurado" das despesas do relatório
+    // r214: Imprimir / PDF não grava mais a apuração (só o Relatório de Despesas grava); mantém Divisão e Apurado na tela
     let perfilRel = '';
-    async function imprimirRelatorio() {
-        window.print();
-        if (perfilRel !== 'DIRETOR' || !despesasVisiveis.length) return;
-        const lista = despesasVisiveis;
-        const d = new Date(), hoje = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
-        const ja = lista.filter(x => String(x.apurado || '').trim()), sem = lista.length - ja.length;
-        if (!confirm('Gravar a data de hoje (' + hoje + ') na coluna "Apurado" das ' + lista.length + ' despesa(s) do relatório?')) return;
-        let sobrescrever = false;
-        if (ja.length) {
-            sobrescrever = confirm(ja.length + ' dessas despesas já têm data em "Apurado".\n\nOK = sobrescrever todas com a data de hoje\nCancelar = gravar só nas ' + sem + ' sem data');
-            if (!sobrescrever && !sem) return alert('Nenhuma data gravada: todas já estavam apuradas.');
-        }
-        try {
-            const res = await chamar({ action: 'despesasMarcarApurado', cpf: cpfLogado, itens: lista.map(x => ({ rowId: x.rowId, timestamp: x.timestamp, data: x.data, cliente: x.cliente, tipo: x.tipo, valor: x.valor })), sobrescrever: sobrescrever });
-            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível gravar.');
-            lista.forEach(x => { if (sobrescrever || !String(x.apurado || '').trim()) x.apurado = res.data; });
-            alert('✅ Data ' + res.data + ' gravada em "Apurado" de ' + res.gravadas + ' despesa(s)' + (res.mantidas ? ' (' + res.mantidas + ' mantida(s) com a data anterior)' : '') + '.' + (res.naoEncontradas ? '\n\n⚠️ ' + res.naoEncontradas + ' despesa(s) não foram encontradas na planilha (podem ter sido excluídas ou alteradas). Atualize o relatório e exporte de novo.' : ''));
-        } catch (e) { alert('⚠️ ' + e.message); }
-    }
+    function imprimirRelatorio() { window.print(); }
     async function chamar(payload) {
         payload.token = tokenSessao;
         const resp = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });

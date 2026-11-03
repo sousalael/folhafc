@@ -2061,6 +2061,13 @@
 
         try {
             const selecionados = Array.from(chks).map(el => JSON.parse(el.value));
+            // r214: Diretor — grava a apuração (só nas linhas sem data) e atualiza os nomes pela aba Colaboradores ANTES de gerar
+            let apur = null;
+            if (getPerfilLogado() === 'DIRETOR') {
+                try { apur = await chamarApi({ action: 'presencasApurar', cpf: getCpfLogado(), projetos: selecionados }); }
+                catch (e) { apur = { ok: false, erro: e.message }; }
+                if (apur && !apur.ok) alert('⚠️ A data de apuração não foi gravada: ' + (apur.erro || apur.error || 'erro desconhecido'));
+            }
             const response = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'getRelatorioMultiplo', projetos: selecionados}) });
             const res = await response.json();
 
@@ -2068,9 +2075,9 @@
             
             const escapeCsv = (str) => { if (str === null || str === undefined) return '""'; return '"' + String(str).replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " - ") + '"'; };
 
-            let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação"].join(";")];
+            let csv = [["Data", "Cliente", "Unidade", "CPF", "Nome Completo", "Chave Pix", "Nome Reduzido", "Função", "Observação", "Apurado"].join(";")];   // r214: + Apurado
             res.lista.forEach(p => {
-                csv.push([escapeCsv(p.data), escapeCsv(p.cliente), escapeCsv(p.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(p.funcao), escapeCsv(p.obs)].join(";"));
+                csv.push([escapeCsv(p.data), escapeCsv(p.cliente), escapeCsv(p.unidade), escapeCsv(p.cpf), escapeCsv(p.nome), escapeCsv(p.pix), escapeCsv(p.nomeReduzido), escapeCsv(p.funcao), escapeCsv(p.obs), escapeCsv(p.apurado || '')].join(";"));
             });
 
             let csvFile = new Blob(["\ufeff" + csv.join("\n")], {type: "text/csv;charset=utf-8;"});
@@ -2084,6 +2091,7 @@
             downloadLink.download = nomeArquivo + '.csv';
             downloadLink.href = window.URL.createObjectURL(csvFile);
             downloadLink.click();
+            if (apur && apur.ok) document.getElementById('multi-contador').innerHTML = '✅ Relatório gerado. Apuração ' + apur.data + ' gravada em ' + apur.gravadas + ' presença(s) sem data' + (apur.nomes ? '; ' + apur.nomes + ' nome(s) atualizado(s) pela aba Colaboradores' : '') + '.';
         } catch(err) {
             alert("Erro ao extrair relatório unificado: " + err.message);
         } finally {
@@ -3357,9 +3365,10 @@
         }
     }
 
-    function exportarDespesasExcel() {
+    async function exportarDespesasExcel() {
         if (!despesasGlobais.length) return alert('Não há despesas para exportar.');
         let total = 0;
+        await gravarApuradoDespesas(despesasGlobais);   // r214
         let csv = [["Timestamp", "Data Projeto", "Cliente", "Unidade", "Divisão", "Tipo Despesa", "Valor", "Forma Pagamento", "Observação", "Supervisor", "URL Comprovante", "Apurado"].join(";")];   // r207
         despesasGlobais.forEach(d => {
             total += Number(d.valor || 0);
@@ -3369,7 +3378,6 @@
         });
         csv.push(["", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", ""].join(";"));
         baixarCsv(csv, 'Despesas_' + projetoAtivo.cliente + '_' + projetoAtivo.data.replace(/\//g, '-') + '.csv');
-        setTimeout(() => perguntarApurado(despesasGlobais), 400);   // r207
     }
 
     // ============================================================
@@ -4213,23 +4221,20 @@
         csv.push(["", "", "", "", "", "", escCsv("TOTAL"), escCsv(total.toFixed(2).replace('.', ',')), "", "", "", "", "", ""].join(";"));
         return csv;
     }
-    // r207: depois de exportar, o Diretor escolhe se grava a data de hoje na coluna "Apurado" das despesas exportadas
-    async function perguntarApurado(lista) {
-        if (getPerfilLogado() !== 'DIRETOR' || !lista || !lista.length) return;
-        const d = new Date(), hoje = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
-        const ja = lista.filter(x => String(x.apurado || '').trim()), sem = lista.length - ja.length;
-        if (!confirm('Gravar a data de hoje (' + hoje + ') na coluna "Apurado" das ' + lista.length + ' despesa(s) exportada(s)?')) return;
-        let sobrescrever = false;
-        if (ja.length) {
-            sobrescrever = confirm(ja.length + ' dessas despesas já têm data em "Apurado".\n\nOK = sobrescrever todas com a data de hoje\nCancelar = gravar só nas ' + sem + ' sem data');
-            if (!sobrescrever && !sem) return alert('Nenhuma data gravada: todas já estavam apuradas.');
-        }
+    // r214: ao gerar o Relatório de Despesas (geral ou do projeto), o Diretor grava DIRETO a data de hoje
+    // na coluna "Apurado" das despesas do relatório que ainda estão sem data (sem perguntar; não sobrescreve).
+    async function gravarApuradoDespesas(lista) {
+        if (getPerfilLogado() !== 'DIRETOR' || !lista || !lista.length) return null;
+        const sem = lista.filter(x => !String(x.apurado || '').trim());
+        if (!sem.length) return { gravadas: 0 };
         try {
-            const res = await chamarApi({ action: 'despesasMarcarApurado', cpf: getCpfLogado(), itens: lista.map(x => ({ rowId: x.rowId, timestamp: x.timestamp, data: x.data, cliente: x.cliente, tipo: x.tipo, valor: x.valor })), sobrescrever: sobrescrever });
-            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível gravar.');
-            lista.forEach(x => { if (sobrescrever || !String(x.apurado || '').trim()) x.apurado = res.data; });
-            alert('✅ Data ' + res.data + ' gravada em "Apurado" de ' + res.gravadas + ' despesa(s)' + (res.mantidas ? ' (' + res.mantidas + ' mantida(s) com a data anterior)' : '') + '.' + (res.naoEncontradas ? '\n\n⚠️ ' + res.naoEncontradas + ' despesa(s) não foram encontradas na planilha (podem ter sido excluídas ou alteradas). Atualize o relatório e exporte de novo.' : ''));
-        } catch (e) { alert('⚠️ ' + e.message); }
+            const res = await chamarApi({ action: 'despesasMarcarApurado', cpf: getCpfLogado(), sobrescrever: false,
+                itens: sem.map(x => ({ rowId: x.rowId, timestamp: x.timestamp, data: x.data, cliente: x.cliente, tipo: x.tipo, valor: x.valor })) });
+            if (!res || !res.ok) throw new Error((res && (res.erro || res.error)) || 'Não foi possível gravar a apuração.');
+            sem.forEach(x => { x.apurado = res.data; });
+            if (res.naoEncontradas) alert('⚠️ ' + res.naoEncontradas + ' despesa(s) do relatório não foram encontradas na planilha para gravar a apuração (podem ter sido excluídas ou alteradas).');
+            return res;
+        } catch (e) { alert('⚠️ A data de apuração não foi gravada: ' + e.message); return null; }
     }
 
     // 🖼️ Abre o Relatorio Visual com Fotos em nova aba. Passa o token de sessao
@@ -4360,11 +4365,11 @@
         document.getElementById('rel-desp-total').innerText = formatarReal(total);
     }
 
-    function exportarRelDespesas() {
+    async function exportarRelDespesas() {
         const sel = relDespSelecionadas();
         if (!sel.length) return alert('Selecione ao menos um cliente para exportar.');
+        await gravarApuradoDespesas(sel);   // r214: grava antes, para o arquivo já sair com a data
         baixarCsv(linhasCsvLancamentos(sel), 'Relatorio_Despesas_' + document.getElementById('rel-desp-ini').value + '_a_' + document.getElementById('rel-desp-fim').value + '.csv');
-        setTimeout(() => perguntarApurado(sel), 400);   // r207
     }
 
     function prepararBiDespesas() {
@@ -4642,7 +4647,7 @@
         } catch (e) { lancs = []; }
         if (lancs.length) { csv.push(''); csv.push(escCsv('LANÇAMENTOS DE DESPESA DO PERÍODO')); csv = csv.concat(linhasCsvLancamentos(lancs)); }
         baixarCsv(csv, 'Acerto_de_Contas_' + document.getElementById('fin-ini').value + '_a_' + document.getElementById('fin-fim').value + '.csv');
-        if (lancs.length) setTimeout(() => perguntarApurado(lancs), 400);
+        // r214: esta exportação não grava a apuração (mantém as colunas Divisão e Apurado)
     }
 
     // ---------- Relatório de Provisionamento ----------
@@ -4894,7 +4899,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-10-25-r213';
+    const VERSAO_ESPERADA = '2026-10-26-r214';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

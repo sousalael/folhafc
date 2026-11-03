@@ -108,6 +108,7 @@ function doPost(e) {
     else if (action === 'getPendenciasHome') { result = getPendenciasHome(data.cpf); }   // r133: cards da Home (não encerrados / sem análise) do dia anterior, corte 6h
     else if (action === 'divDespesasAtualizar') { result = divDespesasAtualizar(data.cpf); }   // r206
     else if (action === 'divDespesasStatus') { result = divDespesasStatus(data.cpf); }         // r206
+    else if (action === 'presencasApurar') { result = presencasApurar(data.cpf, data.projetos); }   // r214
     else if (action === 'despesasMarcarApurado') { result = despesasMarcarApurado(data.cpf, data.itens || data.rowIds, !!data.sobrescrever); }   // r207 · r208
     else if (action === 'avalInternaListar') { result = avalInternaListar(data, data.cpf); }   // r200: avaliação interna da equipe (só Diretor)
     else if (action === 'avalInternaCorrigir') { result = avalInternaCorrigir(data, data.cpf); }   // r202: confere os nomes dos destaques
@@ -488,6 +489,40 @@ function despesasMarcarApurado(cpf, itens, sobrescrever) {
     return { ok: true, gravadas: grav, mantidas: mant, naoEncontradas: nao, data: hoje };
   } finally { lock.releaseLock(); }
 }
+// r214: APURAÇÃO DAS PRESENÇAS (Relatório Múltiplo Unificado, só Diretor)
+// grava a data de hoje na coluna "Apurado" da aba Presencas das linhas dos projetos selecionados que ainda
+// estão sem data, e atualiza o Nome Completo (coluna H) de TODAS essas linhas pela aba Colaboradores.
+function presColApurado_(cab) { for (var i = 0; i < cab.length; i++) if (divSemAcento_(cab[i]).indexOf('APURAD') === 0) return i; return -1; }
+function presencasApurar(cpf, projetos) {
+  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Somente a Diretoria grava a data de apuração.' };
+  if (!Array.isArray(projetos) || !projetos.length) return { ok: true, gravadas: 0, nomes: 0 };
+  var sh = getSheet('Presencas'), ult = sh.getLastRow(), ultCol = sh.getLastColumn();
+  var cab = sh.getRange(1, 1, 1, ultCol).getDisplayValues()[0], colAp = presColApurado_(cab);
+  if (colAp < 0) return { ok: false, erro: 'Coluna "Apurado" não encontrada na aba Presencas.' };
+  if (ult < 2) return { ok: true, gravadas: 0, nomes: 0 };
+  var sel = {}; projetos.forEach(function (p) { sel[p.data + '|' + p.cliente + '|' + p.unidade] = 1; });
+  var cd = getColabDados(), ix = getColabIndices(), nomes = {};
+  for (var c = 1; c < cd.length; c++) { var k = normalizarCPF(cd[c][ix.cpf]); if (k) nomes[k] = String(cd[c][ix.nome] || '').trim(); }
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var larg = Math.max(colAp + 1, 8), dados = sh.getRange(2, 1, ult - 1, larg).getDisplayValues();
+    var hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy');
+    var min = -1, max = -1, grav = 0, trocaNome = 0;
+    var colH = dados.map(function (r) { return [r[7]]; }), colA = dados.map(function (r) { return [r[colAp]]; });
+    for (var i = 0; i < dados.length; i++) {
+      var r = dados[i]; if (!sel[r[0] + '|' + r[1] + '|' + r[2]]) continue;
+      if (min < 0) min = i; max = i;
+      var nm = nomes[normalizarCPF(r[3])];
+      if (nm && nm !== String(r[7] || '').trim()) { colH[i] = [nm]; trocaNome++; }
+      if (!String(r[colAp] || '').trim()) { colA[i] = [hoje]; grav++; }
+    }
+    if (min >= 0) {
+      if (trocaNome) sh.getRange(min + 2, 8, max - min + 1, 1).setValues(colH.slice(min, max + 1));
+      if (grav) sh.getRange(min + 2, colAp + 1, max - min + 1, 1).setNumberFormat('@').setValues(colA.slice(min, max + 1));
+    }
+    return { ok: true, gravadas: grav, nomes: trocaNome, data: hoje };
+  } finally { lock.releaseLock(); }
+}
 function divDespesasAtualizar(cpf) {   // botão do Diretor
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { ok: false, erro: 'Acesso restrito ao Diretor' };
   return atualizarDivisaoDespesas();
@@ -837,6 +872,7 @@ function getRelatorioMultiplo(projetosSelecionados) {
 
   let projSet = new Set(projetosSelecionados.map(p => `${p.data}|${p.cliente}|${p.unidade}`));
   let lista = [];
+  const colAp = presColApurado_(dados[0] || []);   // r214
 
   for(let i=1; i<dados.length; i++) {
     let key = `${dados[i][0]}|${dados[i][1]}|${dados[i][2]}`;
@@ -852,7 +888,8 @@ function getRelatorioMultiplo(projetosSelecionados) {
         obs: dados[i][5],
         nome: infoColab.nome || dados[i][7] || 'Não localizado',
         pix: infoColab.pix,
-        nomeReduzido: infoColab.nomeReduzido
+        nomeReduzido: infoColab.nomeReduzido,
+        apurado: colAp >= 0 ? (dados[i][colAp] || '') : ''   // r214
       });
     }
   }
@@ -970,7 +1007,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-25-r213';
+const VERSAO_SCRIPT = '2026-10-26-r214';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -1004,7 +1041,7 @@ function doGet(e) {
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
     'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus', 'despesasMarcarApurado',
-    'encEdicaoStatus', 'encEdicaoSolicitar', 'encEdicaoValidar', 'encEdicaoSalvar'
+    'encEdicaoStatus', 'encEdicaoSolicitar', 'encEdicaoValidar', 'encEdicaoSalvar', 'presencasApurar'
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
