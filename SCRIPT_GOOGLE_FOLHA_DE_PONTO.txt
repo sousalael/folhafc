@@ -1011,7 +1011,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-10-26-r215';
+const VERSAO_SCRIPT = '2026-11-04-r216';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -8285,7 +8285,7 @@ function biFinConstruir_(fonte, mesAtual) {
 // ---------- Configuracoes de cards do B.I. (cada Diretor ve so as suas) ----------
 // Aba BI_Configs: CPF | Nome | Config (JSON) | Atualizado em
 // O nome reservado "__ATUAL__" guarda a ultima arrumacao usada (ordem e cards visiveis).
-const BI_FIN_CARDS_VALIDOS = ['fat', 'custo', 'imp', 'margem', 'unid', 'yoy'];
+const BI_FIN_CARDS_VALIDOS = ['fat', 'custo', 'imp', 'margem', 'lucro', 'fatFolha', 'lucroFolha', 'unid', 'yoy'];   // r216: + cards da r191 (antes eram descartados ao salvar)
 
 function biFinAbaConfigs_() {
   var ss = getPlanilha();
@@ -8299,10 +8299,14 @@ function biFinAbaConfigs_() {
 }
 
 function biFinValidarConfig_(cfg) {
+  // r216: aceita qualquer identificador de card válido (nome curto), para nenhum card novo ser descartado ao salvar;
+  // os da lista BI_FIN_CARDS_VALIDOS que faltarem entram no fim da ordem (ocultos se a arrumação não os tinha).
   if (!cfg || typeof cfg !== 'object') return null;
-  var ordem = Array.isArray(cfg.ordem) ? cfg.ordem.filter(function(x) { return BI_FIN_CARDS_VALIDOS.indexOf(x) >= 0; }) : [];
+  var ok = function(x) { return typeof x === 'string' && /^[A-Za-z][A-Za-z0-9]{0,24}$/.test(x); };
+  var ordem = Array.isArray(cfg.ordem) ? cfg.ordem.filter(ok).slice(0, 40) : [];
+  var tinhaOrdem = ordem.length > 0;
   BI_FIN_CARDS_VALIDOS.forEach(function(x) { if (ordem.indexOf(x) < 0) ordem.push(x); });
-  var visiveis = Array.isArray(cfg.visiveis) ? cfg.visiveis.filter(function(x) { return BI_FIN_CARDS_VALIDOS.indexOf(x) >= 0; }) : BI_FIN_CARDS_VALIDOS.slice();
+  var visiveis = Array.isArray(cfg.visiveis) ? cfg.visiveis.filter(ok).slice(0, 40) : (tinhaOrdem ? ordem.slice() : BI_FIN_CARDS_VALIDOS.slice());
   return { ordem: ordem, visiveis: visiveis };
 }
 

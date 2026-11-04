@@ -158,6 +158,11 @@
         .trilha { font-size: .8rem; color: var(--fc-texto-suave); margin-bottom: 6px; min-height: 1.2em; }
         .btn-fc-contorno { border: 1px solid var(--fc-primaria); color: var(--fc-primaria); background: #fff; font-weight: 600; }
         .btn-fc-contorno:hover { background: var(--fc-primaria); color: #fff; }
+        /* r216: cabeçalhos clicáveis para ordenar */
+        table.tabela-bi:not(.tabela-dre) thead th { cursor: pointer; user-select: none; }
+        table.tabela-bi:not(.tabela-dre) thead th:hover { text-decoration: underline; }
+        table.tabela-bi thead th[aria-sort="ascending"]::after { content: " ▲"; font-size: .7em; }
+        table.tabela-bi thead th[aria-sort="descending"]::after { content: " ▼"; font-size: .7em; }
         .btn-fc { background: var(--fc-primaria); border-color: var(--fc-primaria); color: #fff; font-weight: 600; }
         .btn-fc:hover { background: var(--fc-primaria-clara); color: #fff; }
         .btn-verde { background: var(--fc-acao); border-color: var(--fc-acao); color: #fff; font-weight: 600; }
@@ -3595,12 +3600,13 @@ function desenharAbaOperacoes() {
     const op = calcularOperacoes(db, L);
     estado.opsAtual = op;
     if (estado.opsFaixa === undefined) estado.opsFaixa = null;
-    estado.opsLimite = 150;
+    if (!estado.opsLimite) estado.opsLimite = 150;   // r216: mantém o "mostrar mais" ao redesenhar
     const alvo = document.getElementById('conteudo-aba');
     alvo.innerHTML = esqueletoNova('Operações por faixa de margem direta', 'Margem direta por tipo de operação',
         'Operação = cliente + loja + dia com faturamento. Margem direta = faturamento − custos lançados na mesma loja e dia. Clique numa faixa para filtrar a tabela.',
         'Faturamento e custo direto por tipo de operação (os 8 maiores); linha: margem direta.') +
-        '<section class="bi-painel"><div class="painel-cabeca"><h3>Operações</h3><span class="small text-muted" id="ops-info"></span></div>' +
+        '<section class="bi-painel"><div class="painel-cabeca"><h3>Operações</h3><span class="small text-muted" id="ops-info"></span>' +
+        '<span class="ms-auto d-flex gap-1"><button type="button" class="btn btn-sm btn-fc-contorno" id="ops-expandir">Expandir</button><button type="button" class="btn btn-sm btn-fc-contorno" id="ops-recolher">Recolher</button></span></div>' +   // r216
         '<div class="explica">Ordenadas da pior para a melhor margem. Clique em ▸ para ver as pessoas e o custo de cada uma.</div>' +
         '<div class="tabela-rolagem tabela-alta" id="tab-ops"></div></section>';
     document.getElementById('cards-aba').innerHTML =
@@ -3646,7 +3652,9 @@ function desenharAbaOperacoes() {
                    plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? 'Margem direta: ' + (c.raw === null ? '—' : c.raw.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%') : c.dataset.label + ': ' + brl(c.raw) } } },
                    scales: { y: eixoMoeda(), y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v.toLocaleString('pt-BR') + '%' } }, x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 30 } } } }
     });
-    estado.opsAbertas = new Set();
+    if (!estado.opsAbertas) estado.opsAbertas = new Set();   // r216: mantém o que estava aberto (inclusive ao gerar o PDF das telas)
+    document.getElementById('ops-expandir').addEventListener('click', () => { (estado.opsChavesVisiveis || []).forEach(k => estado.opsAbertas.add(k)); desenharTabelaOps(); });
+    document.getElementById('ops-recolher').addEventListener('click', () => { estado.opsAbertas.clear(); desenharTabelaOps(); });
     const tab = document.getElementById('tab-ops');
     tab.addEventListener('click', e => {
         const b = e.target.closest('.btn-drill');
@@ -3661,6 +3669,7 @@ function desenharTabelaOps() {
     if (estado.opsFaixa !== null) lista = lista.filter(o => faixaMargem(o.margemPct) === estado.opsFaixa);
     document.getElementById('ops-info').textContent = fmtNum.format(lista.length) + ' operações' + (estado.opsFaixa !== null ? ' na faixa ' + FAIXAS_MARGEM[estado.opsFaixa][2] : '');
     const partes = [];
+    estado.opsChavesVisiveis = lista.slice(0, estado.opsLimite).filter(o => o.lancs.size).map(o => o.uni + '|' + o.mes + '|' + o.dia);   // r216
     lista.slice(0, estado.opsLimite).forEach(o => {
         const k = o.uni + '|' + o.mes + '|' + o.dia, aberto = estado.opsAbertas.has(k);
         partes.push('<tr class="nivel-0"><td>' + (o.lancs.size ? '<button class="btn-drill" data-chave="' + k + '" aria-expanded="' + aberto + '" aria-label="Custos da operação">' + (aberto ? '▾' : '▸') + '</button>' : '<span class="espaco-drill"></span>') +
@@ -4399,6 +4408,88 @@ function iniciarDados() {
     setInterval(() => { if (!document.hidden && tokenBI) atualizarDados(false, true); }, 30 * 60 * 1000);
 }
 iniciar();
+// ============================================================
+// r216: ORDENAR AS TABELAS CLICANDO NO CABEÇALHO (todas, menos a DRE)
+// Respeita os níveis (negócio > cliente > loja…): cada grupo é ordenado dentro do seu pai;
+// a linha de Total fica sempre no fim. A ordem escolhida volta sozinha quando a tabela é redesenhada.
+// ============================================================
+const ordemTabelas = {};
+function chaveTabelaOrd(t) {
+    const c = t.closest('[id]');
+    return (estado.aba || '') + '|' + (c ? c.id : '') + '|' + Array.from(t.querySelectorAll('thead th')).map(th => th.textContent.replace(/[▲▼]/g, '').trim()).join('¦');
+}
+function valorCelulaOrd(td) {
+    if (!td) return null;
+    const t = td.textContent.replace(/[▸▾]/g, '').trim();
+    if (!t || t === '—' || t === '-') return null;
+    const n = t.replace(/R\$\s?/g, '').replace(/\s/g, '');
+    if (/^\(?[-+]?[\d.]*\d(,\d+)?\)?%?$/.test(n)) {
+        let v = parseFloat(n.replace(/[()%]/g, '').replace(/\./g, '').replace(',', '.'));
+        if (/^\(.*\)$/.test(n)) v = -v;
+        if (!isNaN(v)) return v;
+    }
+    const d = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);   // datas dd/mm/aaaa
+    if (d) return Number(d[3] + d[2] + d[1]);
+    return t.toLocaleLowerCase('pt-BR');
+}
+function nivelOrd(tr) { const m = tr.className.match(/nivel-(\d)/); return m ? Number(m[1]) : 0; }
+function ordenarTabela(t, col, dir) {
+    const tb = t.tBodies[0]; if (!tb) return;
+    const linhas = Array.from(tb.rows);
+    const fixos = linhas.filter(r => r.classList.contains('total') || r.classList.contains('linha-total'));
+    const raiz = { filhos: [] }, pilha = [{ n: -1, no: raiz }];
+    linhas.filter(r => fixos.indexOf(r) < 0).forEach(tr => {
+        const n = tr.classList.contains('cab-lanc') ? 99 : nivelOrd(tr);
+        const nv = n === 99 ? (pilha.length > 1 ? pilha[pilha.length - 1].n + 1 : 0) : n;
+        while (pilha.length > 1 && pilha[pilha.length - 1].n >= nv) pilha.pop();
+        const no = { tr: tr, filhos: [] };
+        pilha[pilha.length - 1].no.filhos.push(no);
+        pilha.push({ n: nv, no: no });
+    });
+    const cmp = (a, b) => {
+        const va = valorCelulaOrd(a.tr.cells[col]), vb = valorCelulaOrd(b.tr.cells[col]);
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        const x = (typeof va === 'number' && typeof vb === 'number') ? va - vb : String(va).localeCompare(String(vb), 'pt-BR', { numeric: true });
+        return dir === 'asc' ? x : -x;
+    };
+    const ordenavel = l => l.length > 1 && l.every(no => no.tr.cells.length > col && !Array.from(no.tr.cells).some(c => c.colSpan > 1));
+    (function ord(no) {
+        const cab = no.filhos.filter(f => f.tr.classList.contains('cab-lanc'));
+        let resto = no.filhos.filter(f => !f.tr.classList.contains('cab-lanc'));
+        if (ordenavel(resto)) resto = resto.map((f, i) => ({ f: f, i: i })).sort((p, q) => cmp(p.f, q.f) || p.i - q.i).map(x => x.f);
+        no.filhos = cab.concat(resto);
+        no.filhos.forEach(ord);
+    })(raiz);
+    const frag = document.createDocumentFragment();
+    (function por(no) { no.filhos.forEach(f => { frag.appendChild(f.tr); por(f); }); })(raiz);
+    fixos.forEach(r => frag.appendChild(r));
+    tb.appendChild(frag);
+    t.querySelectorAll('thead th').forEach((th, i) => th.setAttribute('aria-sort', i === col ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'));
+}
+document.addEventListener('click', e => {
+    const th = e.target.closest('table.tabela-bi:not(.tabela-dre) thead th');
+    if (!th || e.target.closest('button, a, input, select')) return;
+    const t = th.closest('table'), col = Array.from(th.parentElement.children).indexOf(th);
+    const k = chaveTabelaOrd(t), atual = ordemTabelas[k];
+    let dir;
+    if (atual && atual.col === col) dir = atual.dir === 'asc' ? 'desc' : 'asc';
+    else {
+        const v = Array.from(t.tBodies[0] ? t.tBodies[0].rows : []).map(r => valorCelulaOrd(r.cells[col])).find(x => x !== null);
+        dir = typeof v === 'number' ? 'desc' : 'asc';   // números: maior primeiro; textos: A→Z
+    }
+    ordemTabelas[k] = { col: col, dir: dir };
+    ordenarTabela(t, col, dir);
+});
+// a ordem escolhida volta quando a tabela é redesenhada (filtros, abrir/fechar níveis, troca de aba)
+new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        const tabs = n.matches && n.matches('table.tabela-bi') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('table.tabela-bi') : []);
+        tabs.forEach(t => { if (t.classList.contains('tabela-dre')) return; const o = ordemTabelas[chaveTabelaOrd(t)]; if (o) ordenarTabela(t, o.col, o.dir); });
+    }));
+}).observe(document.body, { childList: true, subtree: true });
 </script>
 </body>
 </html>
