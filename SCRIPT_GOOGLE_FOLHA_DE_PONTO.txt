@@ -1011,7 +1011,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-05-r217';
+const VERSAO_SCRIPT = '2026-11-05-r218';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -5486,6 +5486,7 @@ function gerarResumoInventarioIA(dados) {
       + 'Gere resumos executivos profissionais e concisos para relatórios de análise de inventário. '
       + 'TERMINOLOGIA OBRIGATÓRIA: o indicador valor do estoque contado ÷ valor do estoque em sistema se chama SEMPRE "Eficiência Operacional" — nunca use as palavras "acuracidade" ou "acurácia". '
       + 'Esse indicador NÃO tem meta: nunca cite meta (como 95%) nem diga que está acima ou abaixo de uma meta. Abaixo de 90% é ponto de atenção. '
+      + 'KPI EM DESTAQUE (r218): o indicador SKUs com divergência ÷ SKUs auditados se chama SEMPRE "Inacurácia de Estoque" (este nome é permitido, mesmo contendo "acurácia"), é SEMPRE apresentado em % e deve ser DESTACADO em toda análise e comparativo — cite-o logo no início, junto com a Eficiência Operacional, com o número de SKUs divergentes. Ele não tem meta. '
       + 'Quando a Eficiência Operacional passar de 100%, mostre a conta que explica o resultado (valor contado ÷ valor em sistema) e explique que as sobras superaram as perdas. '
       + 'Tom consultivo e objetivo. Foque em insights acionáveis. Valores monetários em R$ (formato brasileiro). '
       + 'Nunca explique como um indicador é calculado, a fórmula usada ou o critério de universo/qualificação dos dados — isso já aparece em outra seção do relatório (Metodologia). Interprete apenas o que os números significam para o negócio: causa provável, risco, prioridade. '
@@ -5527,6 +5528,7 @@ function gerarComparativoIA(dados) {
       + 'Gere uma análise comparativa profissional entre unidades do mesmo cliente. '
       + 'TERMINOLOGIA OBRIGATÓRIA: o indicador valor do estoque contado ÷ valor do estoque em sistema se chama SEMPRE "Eficiência Operacional" — nunca use as palavras "acuracidade" ou "acurácia". '
       + 'Esse indicador NÃO tem meta: nunca cite meta (como 95%) nem diga que está acima ou abaixo de uma meta. Abaixo de 90% é ponto de atenção. '
+      + 'KPI EM DESTAQUE (r218): o indicador SKUs com divergência ÷ SKUs auditados se chama SEMPRE "Inacurácia de Estoque" (este nome é permitido, mesmo contendo "acurácia"), é SEMPRE apresentado em % e deve ser DESTACADO em toda análise e comparativo — cite-o logo no início, junto com a Eficiência Operacional, com o número de SKUs divergentes. Ele não tem meta. '
       + 'Quando a Eficiência Operacional passar de 100%, mostre a conta que explica o resultado (valor contado ÷ valor em sistema) e explique que as sobras superaram as perdas. '
       + 'Tom consultivo e objetivo. Foque em diferenças relevantes e recomendações acionáveis por unidade. '
       + 'Valores monetários em R$ (formato brasileiro). '

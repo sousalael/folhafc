@@ -572,8 +572,8 @@ var Engine = (function(){
        fmt 'brl_pct' = valor em R$ + % (pctKey). rankBy 'pct' = melhor/pior pelo percentual
        (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
+      {key:'inacuracidade',  label:'Inacurácia de Estoque (%)',                melhor:'min',       fmt:'pct', destaque:true},   /* r217 · r218: em destaque, sempre em 1º */
       {key:'acuracidade',    label:'Eficiência Operacional (%)',               melhor:'target100', fmt:'pct'},
-      {key:'inacuracidade',  label:'Inacurácia de Estoque (%)',                melhor:'min',       fmt:'pct'},   /* r217 */
       {key:'saldoLiquido',   label:'Valor Quebra (saldo entre perdas e sobras)', melhor:'min_abs', fmt:'brl'},
       {key:'totalSobras',    label:'Valor Sobras',                             melhor:'min_abs',   fmt:'brl'},
       {key:'totalFaltas',    label:'Valor Perdas',                             melhor:'min_abs',   fmt:'brl'},
@@ -608,7 +608,7 @@ var Engine = (function(){
       }
 
       comp.rankings.push({
-        key: def.key, label: def.label, fmt: def.fmt,
+        key: def.key, label: def.label, fmt: def.fmt, destaque: !!def.destaque,   // r218
         valores: vals,
         melhor: def.melhor !== 'info' ? sorted[0].unidade : null,
         pior:   def.melhor !== 'info' ? sorted[sorted.length-1].unidade : null
@@ -747,6 +747,14 @@ var Engine = (function(){
           : '')
     );
 
+    // r217 · r218 (logo após a Eficiência, em destaque): Inacurácia de estoque — em quantos produtos o sistema não bate com o físico
+    if (c.totalSKUs) {
+      paragrafos.push(
+        'A inacurácia de estoque — que mede em quantos produtos o sistema não bate com o físico, independentemente do valor — ficou em ' + pct(c.inacuracidade)
+        + ': ' + num(c.skusDivergentes) + ' dos ' + num(c.totalSKUs) + ' SKUs auditados apresentaram divergência entre o estoque registrado e a contagem física.'
+      );
+    }
+
     // 2) Perda de estoque % — indicador único que resume o tamanho financeiro da divergência
     if (typeof c.perdaEstoquePct === 'number' && c.totalSKUs) {
       var perdaAbs = Math.abs(c.perdaEstoquePct);
@@ -762,14 +770,6 @@ var Engine = (function(){
     if (c.totalSKUs) {
       paragrafos.push(
         'Do total de ' + num(c.totalSKUs) + ' SKUs analisados, ' + num(c.okCount) + ' (' + pct(c.okCount / c.totalSKUs * 100) + ') não apresentaram nenhuma divergência entre o sistema e a contagem física — uma base de comparação relevante para acompanhar a evolução dos processos de entrada, transformação e saída de mercadoria ao longo das próximas contagens.'
-      );
-    }
-
-    // r217: Inacurácia de estoque — em quantos produtos o sistema não bate com o físico
-    if (c.totalSKUs) {
-      paragrafos.push(
-        'A inacurácia de estoque — que mede em quantos produtos o sistema não bate com o físico, independentemente do valor — ficou em ' + pct(c.inacuracidade)
-        + ': ' + num(c.skusDivergentes) + ' dos ' + num(c.totalSKUs) + ' SKUs auditados apresentaram divergência entre o estoque registrado e a contagem física.'
       );
     }
 

@@ -662,6 +662,13 @@ function renderResumo(){
 
   if(avail.critica){
     var c=r.critica;
+    /* r218: Inacurácia de Estoque — KPI em destaque, sempre em % (sem meta) */
+    html+='<div class="resumo-card kpi-destaque">';
+    html+='<div class="resumo-card-label">★ INACURÁCIA DE ESTOQUE</div>';
+    html+='<div class="resumo-card-valor">'+PCT(c.inacuracidade)+'</div>';
+    html+='<div class="resumo-card-titulo">SKUs com divergência ÷ SKUs auditados</div>';
+    html+='<div class="resumo-card-detalhe">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência</div>';
+    html+='</div>';
     /* r158: Eficiência Operacional — sem meta; alerta só abaixo de 90%; acima de 100% mostra a conta */
     var cls=c.acuracidade<90?'critico':'ok';
     html+='<div class="resumo-card '+cls+'">';
@@ -669,7 +676,6 @@ function renderResumo(){
     html+='<div class="resumo-card-valor">'+PCT(c.acuracidade)+'</div>';
     html+='<div class="resumo-card-titulo">Valor contado ÷ valor em sistema</div>';
     if(c.acuracidade>100)html+='<div class="resumo-card-detalhe">'+Engine.contaEficiencia(c)+'</div>';
-    html+='<div class="resumo-card-detalhe">'+NUM(c.totalSKUs)+' SKUs analisados &nbsp;·&nbsp; '+NUM(c.faltaCount)+' faltas &nbsp;·&nbsp; '+NUM(c.sobraCount)+' sobras</div>';
     html+='</div>';
   }
 
@@ -701,7 +707,6 @@ function renderResumo(){
     html+='<div class="resumo-card-label">INVESTIMENTO ABC</div>';
     html+='<div class="resumo-card-valor">R$ '+Engine.formatNum(a.totalInvest)+'</div>';
     html+='<div class="resumo-card-titulo">Investimento em estoque</div>';
-    html+='<div class="resumo-card-detalhe">Faturamento: R$ '+Engine.formatNum(a.totalFat)+' &nbsp;·&nbsp; Giro: '+Engine.round2(a.totalFat/a.totalInvest)+'x</div>';
     html+='</div>';
   }
 
@@ -802,7 +807,7 @@ function renderCritica(page){
   html+='<div class="metrics">';
   html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div>'+(c.acuracidade>100?'<div class="metric-detail">'+Engine.contaEficiencia(c)+'</div>':'')+'</div>';
   /* r217: Inacurácia de Estoque — sem meta (cor neutra) */
-  html+='<div class="metric" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">Inacurácia de estoque</div><div class="metric-value">'+PCT(c.inacuracidade)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
+  html+='<div class="metric kpi-destaque" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">★ Inacurácia de estoque</div><div class="metric-value">'+PCT(c.inacuracidade)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div><div class="metric-detail">Antes da contagem (sistema)</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div><div class="metric-detail">Apurado na contagem física</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
@@ -988,7 +993,7 @@ function renderComparativo(){
   c.unidades.forEach(function(u){html+='<th style="text-align:right">'+u.unidade+'</th>';});
   html+='</tr></thead><tbody>';
   c.rankings.forEach(function(r){
-    html+='<tr><td style="font-weight:600">'+r.label+'</td>';
+    html+='<tr'+(r.destaque?' class="comp-destaque"':'')+'><td style="font-weight:600">'+(r.destaque?'★ ':'')+r.label+'</td>';   // r218
     r.valores.forEach(function(v){
       var cls='';
       if(r.melhor&&v.unidade===r.melhor)cls='comp-best';

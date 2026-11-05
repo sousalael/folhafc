@@ -196,6 +196,11 @@ table.data-table tr:hover td{background:#eef6ff}
 .resumo-card.alerta{border-left-color:var(--fc-amb)}
 .resumo-card.critico{border-left-color:var(--fc-red)}
 .resumo-card.ok{border-left-color:var(--fc-gd)}
+/* r218: KPI em destaque (Inacurácia de Estoque) */
+.resumo-card.kpi-destaque{border-left-color:var(--fc-green);background:#F1F9EA;box-shadow:0 0 0 2px var(--fc-green) inset,0 2px 8px rgba(0,0,0,.06)}
+.metric.kpi-destaque{background:#F1F9EA;box-shadow:0 0 0 2px var(--fc-green) inset;border-radius:10px}
+.comp-table tr.comp-destaque td{background:#F1F9EA}
+.comp-table tr.comp-destaque td:first-child{color:var(--fc-navy);border-left:4px solid var(--fc-green)}
 .resumo-card-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--fc-green);font-weight:700;margin-bottom:8px}
 .resumo-card-valor{font-size:32px;font-weight:700;color:var(--fc-navy);line-height:1.1}
 .resumo-card-titulo{font-size:14px;font-weight:600;color:var(--fc-navy);margin-top:4px}

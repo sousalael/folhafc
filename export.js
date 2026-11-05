@@ -548,7 +548,7 @@ function generateComparativoPDF(comp, units, info, iaTextos, logo){
   var tH=['Métrica'];comp.unidades.forEach(function(u){tH.push(u.unidade);});
   var tB=[];
   comp.rankings.forEach(function(r){
-    var row=[r.label];
+    var row=[r.destaque?r.label.toUpperCase():r.label];   /* r218: KPI em destaque */
     r.valores.forEach(function(v){
       row.push(fmtRank(r,v)+(r.melhor&&v.unidade===r.melhor?' ★':'')+(r.pior&&v.unidade===r.pior?' ▼':''));
     });
@@ -592,7 +592,7 @@ function generateComparativoExcel(comp, units, info){
   R=addST(ws,R,'RANKING POR MÉTRICA');
   var hdr=['Métrica'];comp.unidades.forEach(function(u){hdr.push(u.unidade);});
   var rows=comp.rankings.map(function(r){
-    var row=[r.label];
+    var row=[r.destaque?r.label.toUpperCase():r.label];   /* r218 */
     r.valores.forEach(function(v){
       row.push(fmtRank(r,v));
     });
@@ -650,11 +650,11 @@ function generateResumoPDF(results,recs,info,unidade,logo){
 
   var red=[211,47,47],amb=[245,124,0];
   var dims=[];
-  if(results.critica)dims.push({label:'Eficiência Operacional',valor:PCT(results.critica.acuracidade),detalhe:(results.critica.acuracidade>100?Engine.contaEficiencia(results.critica).replace(/^[^(]*\(|\)$/g,''):results.critica.totalSKUs+' SKUs · '+results.critica.faltaCount+' faltas · '+results.critica.sobraCount+' sobras'),cor:results.critica.acuracidade<90?red:green});
-  if(results.critica)dims.push({label:'Inacurácia de Estoque',valor:PCT(results.critica.inacuracidade),detalhe:NUM(results.critica.skusDivergentes)+' de '+NUM(results.critica.totalSKUs)+' SKUs com divergência',cor:navy});   /* r217 */
+  if(results.critica)dims.push({label:'★ Inacurácia de Estoque',valor:PCT(results.critica.inacuracidade),detalhe:NUM(results.critica.skusDivergentes)+' de '+NUM(results.critica.totalSKUs)+' SKUs com divergência',cor:green});   /* r218: em destaque, em 1º */
+  if(results.critica)dims.push({label:'Eficiência Operacional',valor:PCT(results.critica.acuracidade),detalhe:(results.critica.acuracidade>100?Engine.contaEficiencia(results.critica).replace(/^[^(]*\(|\)$/g,''):''),cor:results.critica.acuracidade<90?red:green});
   if(results.ruptura)dims.push({label:'Ruptura',valor:results.ruptura.taxaRuptura+'%',detalhe:results.ruptura.totalRupturas+' SKUs em falta · Curva A: '+results.ruptura.rupturaA,cor:results.ruptura.taxaRuptura>10?red:(results.ruptura.taxaRuptura>5?amb:green)});
   if(results.dias)dims.push({label:'Cobertura',valor:Engine.round2(results.dias.coberturaGeral)+' dias',detalhe:'Sem giro: '+results.dias.semGiro+' · Excesso: '+results.dias.excessos,cor:(results.dias.coberturaGeral<15||results.dias.coberturaGeral>60)?red:green});
-  if(results.abc)dims.push({label:'Investimento',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),detalhe:'Faturamento: R$ '+Engine.formatNum(results.abc.totalFat),cor:navy});
+  if(results.abc)dims.push({label:'Investimento',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),detalhe:'',cor:navy});   /* r218: sem faturamento/giro */
   if(results.perda)dims.push({label:'Perda Mensal',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),detalhe:results.perda.totalSKUs+' SKUs identificados',cor:results.perda.perdaMensal>50000?red:(results.perda.perdaMensal>10000?amb:green)});
 
   /* Cards em grade de 2 colunas */
@@ -929,11 +929,11 @@ function montarDeckResumo(results,recs,info,unidade,logo){
   s2.text([{text:'Diagnóstico do ',color:PAL.navy},{text:'Inventário',color:PAL.green}],0.8,0.85,5.6,0.55,{fs:28,bold:true});
   s2.text((info.dataInventario||'')+'\n'+(info.diasVenda||90)+' dias de venda',7.1,1.5,2.4,0.5,{fs:10,color:PAL.label,ls:1.3});
   var dims=[];
-  if(results.critica)dims.push({label:'EFICIÊNCIA OPERACIONAL',valor:PCT(results.critica.acuracidade),sub:(results.critica.acuracidade>100?Engine.contaEficiencia(results.critica).replace(/^[^(]*\(|\)$/g,''):NUM(results.critica.totalSKUs)+' SKUs analisados'),longo:results.critica.acuracidade>100,accent:results.critica.acuracidade<90});
-  if(results.critica)dims.push({label:'INACURÁCIA DE ESTOQUE',valor:PCT(results.critica.inacuracidade),sub:NUM(results.critica.skusDivergentes)+' de '+NUM(results.critica.totalSKUs)+' SKUs com divergência',accent:false});   /* r217 */
+  if(results.critica)dims.push({label:'★ INACURÁCIA DE ESTOQUE',valor:PCT(results.critica.inacuracidade),sub:NUM(results.critica.skusDivergentes)+' de '+NUM(results.critica.totalSKUs)+' SKUs com divergência',accent:true});   /* r218: em destaque, em 1º */
+  if(results.critica)dims.push({label:'EFICIÊNCIA OPERACIONAL',valor:PCT(results.critica.acuracidade),sub:(results.critica.acuracidade>100?Engine.contaEficiencia(results.critica).replace(/^[^(]*\(|\)$/g,''):''),longo:results.critica.acuracidade>100,accent:results.critica.acuracidade<90});
   if(results.ruptura)dims.push({label:'RUPTURA',valor:PCT(results.ruptura.taxaRuptura),sub:NUM(results.ruptura.totalRupturas)+' SKUs em falta',accent:true});
   if(results.dias)dims.push({label:'COBERTURA',valor:Engine.round2(results.dias.coberturaGeral)+' dias',sub:'Sem giro: '+NUM(results.dias.semGiro)+' SKUs',accent:results.dias.coberturaGeral>45});
-  if(results.abc)dims.push({label:'INVESTIMENTO',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),sub:'Giro: '+(results.abc.totalInvest?Engine.round2(results.abc.totalFat/results.abc.totalInvest):0)+'x',accent:false});
+  if(results.abc)dims.push({label:'INVESTIMENTO',valor:'R$ '+Engine.formatNum(results.abc.totalInvest),sub:'',accent:false});   /* r218: sem giro */
   if(results.perda)dims.push({label:'PERDA MENSAL',valor:'R$ '+Engine.formatNum(results.perda.perdaMensal),sub:NUM(results.perda.totalSKUs)+' SKUs',accent:true});
   var passoK=Math.min(0.68,3.75/Math.max(dims.length,1));   /* r217: cabe 6 indicadores no slide */
   dims.forEach(function(d,i){
@@ -1008,7 +1008,7 @@ function montarDeckComparativo(comp,info,logo){
     var wM=2.7,wU=(SL.R-SL.M-wM)/us.length;
     var cab=['Métrica'].concat(us.map(function(u){return _cortar(u.unidade,24);}));
     var corpo=comp.rankings.map(function(r){
-      var linha=[{t:r.label,bold:true,cor:PAL.navy}];
+      var linha=[{t:(r.destaque?'★ ':'')+r.label,bold:true,cor:r.destaque?PAL.green:PAL.navy}];   /* r218 */
       us.forEach(function(u){
         var v=null;r.valores.forEach(function(x){if(x.unidade===u.unidade)v=x;});
         if(!v){linha.push('—');return;}
