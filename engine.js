@@ -118,13 +118,18 @@ var Engine = (function(){
       var sv=g.items.filter(function(i){return i.status==='Sobra'}).reduce(function(s,i){return s+i.difValor},0);
       var vE=g.items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
       var vC=g.items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
-      return {nome:g.nome, total:g.items.length, ok:ok, faltaVal:round2(fv), sobraVal:round2(sv), valorEstoque:round2(vE), valorEstoqueContado:round2(vC), acuracidade:acuraciaPorValor(vE,vC), saldo:round2(fv+sv), destaque:Math.abs(fv)};
+      var dv=g.items.length-ok;   // r217: SKUs com divergência (falta ou sobra)
+      return {nome:g.nome, total:g.items.length, ok:ok, divergentes:dv, inacuracidade:g.items.length?round2(dv/g.items.length*100):0, faltaVal:round2(fv), sobraVal:round2(sv), valorEstoque:round2(vE), valorEstoqueContado:round2(vC), acuracidade:acuraciaPorValor(vE,vC), saldo:round2(fv+sv), destaque:Math.abs(fv)};
     });
     /* KPI Perda de Estoque % = (valor estoque - valor estoque contado) / valor estoque * -1 */
     var valorEstoque = items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
     var valorEstoqueContado = items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
     var perdaEstoquePct = valorEstoque ? round2((valorEstoque - valorEstoqueContado) / valorEstoque * -1 * 100) : 0;
-    return {items:items, totalSKUs:totalSKUs, okCount:okCount, acuracidade:acuraciaPorValor(valorEstoque,valorEstoqueContado), faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    /* r217: KPI Inacurácia de Estoque = SKUs com divergência (contado ≠ sistema) ÷ SKUs auditados × 100.
+       Universo = o mesmo da Crítica (estoque ≠ 0, contagem > 0 ou venda > 0). Sem meta. */
+    var skusDivergentes = faltaItems.length + sobraItems.length;
+    var inacuracidade = totalSKUs ? round2(skusDivergentes / totalSKUs * 100) : 0;
+    return {items:items, totalSKUs:totalSKUs, okCount:okCount, skusDivergentes:skusDivergentes, inacuracidade:inacuracidade, acuracidade:acuraciaPorValor(valorEstoque,valorEstoqueContado), faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== ABC helper ========== */
@@ -508,6 +513,7 @@ var Engine = (function(){
         data: u.info.dataInventario || '',
         /* Crítica */
         acuracidade: r.critica ? r.critica.acuracidade : null,
+        inacuracidade: r.critica ? r.critica.inacuracidade : null,   // r217
         totalSKUs: r.critica ? r.critica.totalSKUs : null,
         faltaCount: r.critica ? r.critica.faltaCount : null,
         sobraCount: r.critica ? r.critica.sobraCount : null,
@@ -567,6 +573,7 @@ var Engine = (function(){
        (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
       {key:'acuracidade',    label:'Eficiência Operacional (%)',               melhor:'target100', fmt:'pct'},
+      {key:'inacuracidade',  label:'Inacurácia de Estoque (%)',                melhor:'min',       fmt:'pct'},   /* r217 */
       {key:'saldoLiquido',   label:'Valor Quebra (saldo entre perdas e sobras)', melhor:'min_abs', fmt:'brl'},
       {key:'totalSobras',    label:'Valor Sobras',                             melhor:'min_abs',   fmt:'brl'},
       {key:'totalFaltas',    label:'Valor Perdas',                             melhor:'min_abs',   fmt:'brl'},
@@ -692,9 +699,10 @@ var Engine = (function(){
     if (!data) return '';
     if (rt === 'critica') {
       var c = data;
-      var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nEficiência Operacional: ' + pct(c.acuracidade) + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
+      var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nEficiência Operacional: ' + pct(c.acuracidade)
+        + '\nInacurácia de estoque: ' + pct(c.inacuracidade) + ' (' + num(c.skusDivergentes) + ' de ' + num(c.totalSKUs) + ' SKUs com divergência entre sistema e contagem)' + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
         + '\nPerda de estoque: ' + pct(c.perdaEstoquePct) + '\nFaltas: ' + num(c.faltaCount) + ' SKUs (' + brl(c.totalFaltas) + ')\nSobras: ' + num(c.sobraCount) + ' SKUs (' + brl(c.totalSobras) + ')\nSaldo líquido: ' + brl(c.saldoLiquido);
-      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, Eficiência Operacional ' + pct(x.acuracidade) + ', valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
+      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, Eficiência Operacional ' + pct(x.acuracidade) + ', Inacurácia ' + pct(x.inacuracidade) + ' (' + num(x.divergentes) + ' SKUs com divergência), valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
       return m;
     }
     if (rt === 'ruptura') {
@@ -754,6 +762,14 @@ var Engine = (function(){
     if (c.totalSKUs) {
       paragrafos.push(
         'Do total de ' + num(c.totalSKUs) + ' SKUs analisados, ' + num(c.okCount) + ' (' + pct(c.okCount / c.totalSKUs * 100) + ') não apresentaram nenhuma divergência entre o sistema e a contagem física — uma base de comparação relevante para acompanhar a evolução dos processos de entrada, transformação e saída de mercadoria ao longo das próximas contagens.'
+      );
+    }
+
+    // r217: Inacurácia de estoque — em quantos produtos o sistema não bate com o físico
+    if (c.totalSKUs) {
+      paragrafos.push(
+        'A inacurácia de estoque — que mede em quantos produtos o sistema não bate com o físico, independentemente do valor — ficou em ' + pct(c.inacuracidade)
+        + ': ' + num(c.skusDivergentes) + ' dos ' + num(c.totalSKUs) + ' SKUs auditados apresentaram divergência entre o estoque registrado e a contagem física.'
       );
     }
 

@@ -801,6 +801,8 @@ function renderCritica(page){
   html+='<div class="analysis-box'+(analiseCarregando?' loading':'')+'" id="analiseCriticaBox">'+analiseTexto.split('\n\n').map(function(par){return '<p>'+par+'</p>';}).join('')+'</div>';
   html+='<div class="metrics">';
   html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div>'+(c.acuracidade>100?'<div class="metric-detail">'+Engine.contaEficiencia(c)+'</div>':'')+'</div>';
+  /* r217: Inacurácia de Estoque — sem meta (cor neutra) */
+  html+='<div class="metric" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">Inacurácia de estoque</div><div class="metric-value">'+PCT(c.inacuracidade)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div><div class="metric-detail">Antes da contagem (sistema)</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div><div class="metric-detail">Apurado na contagem física</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
@@ -810,7 +812,7 @@ function renderCritica(page){
   html+='</div>';
   if(c.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Resultado por categoria</div>';
-    html+=renderCatCards(c.categorias,[{label:'Eficiência Operacional',key:'acuracidade',fmt:PCT,color:function(v){return v<90?'text-red':'text-green';}},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
+    html+=renderCatCards(c.categorias,[{label:'Eficiência Operacional',key:'acuracidade',fmt:PCT,color:function(v){return v<90?'text-red':'text-green';}},{label:'SKUs divergentes',key:'divergentes',fmt:NUM},{label:'Inacurácia',key:'inacuracidade',fmt:PCT},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
     html+='<div class="chart-wrap" style="height:'+Math.max(200,c.categorias.length*58+60)+'px"><canvas id="chartCritica"></canvas></div>';
   }
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar SKU ou descrição..." value="'+srch+'" onkeyup="App.filterCritica(this.value)">';
@@ -1043,7 +1045,7 @@ window.App = {
     var metricas='';
     Comparativo.unidades.forEach(function(u){
       metricas+='UNIDADE: '+u.unidade+'\n';
-      if(u.acuracidade!==null) metricas+='  Eficiência Operacional: '+PCT(u.acuracidade)+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
+      if(u.acuracidade!==null) metricas+='  Eficiência Operacional: '+PCT(u.acuracidade)+(u.inacuracidade!==null&&u.inacuracidade!==undefined?' | Inacurácia de estoque: '+PCT(u.inacuracidade):'')+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
       if(u.taxaRuptura!==null) metricas+='  Taxa ruptura: '+PCT(u.taxaRuptura)+' | Rupturas: '+NUM(u.totalRupturas)+' | Curva A: '+NUM(u.rupturaA)+'\n';
       if(u.coberturaGeral!==null) metricas+='  Cobertura: '+u.coberturaGeral+' dias | Curva A: '+u.coberturaA+' dias | Sem giro: '+NUM(u.semGiro)+' | Excesso: '+BRLi(u.valorExcesso)+'\n';
       if(u.totalInvest!==null) metricas+='  Investimento: '+BRLi(u.totalInvest)+' | Fat. 90d: '+BRLi(u.totalFat)+'\n';
