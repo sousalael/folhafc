@@ -438,7 +438,7 @@
                 <button class="nav-link active fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-ponto" type="button">🕒 <span class="d-none d-sm-inline">Folha de </span>Ponto</button>
             </li>
             <li class="nav-item">
-                <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-despesas" type="button">💰 Despesas</button>
+                <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-despesas" type="button" id="btn-aba-despesas">💰 Despesas</button>
             </li>
             <li class="nav-item">
                 <button class="nav-link fw-bold text-nowrap px-1 aba-btn" data-bs-toggle="tab" data-bs-target="#tab-financeiro" type="button">🏦 Financeiro</button>
@@ -1895,6 +1895,7 @@
             }
 
             if(res && res.encontrado) {
+                setTimeout(() => carregarCentrosCusto(), 800);   // r219: depois do login
                 // r203: restrição por divisão — o supervisor só vê os projetos (de hoje em diante) da divisão dele
                 window.__projPermitidos = res.restritoDivisao ? new Set(res.projetosPermitidos || []) : null;
                 if (res.projetoNegado) {
@@ -2612,6 +2613,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         const btnCob = document.getElementById('btn-aba-cobranca');
         if (btnCob) btnCob.addEventListener('shown.bs.tab', () => { carregarCobrancaHome(); carregarNaoEnviadas(); divDespStatus(); });   // r199 · r206
+        const btnDespAba = document.getElementById('btn-aba-despesas');   // r219: centros de custo sempre disponíveis
+        if (btnDespAba) btnDespAba.addEventListener('shown.bs.tab', () => carregarCentrosCusto());
     });
     let cobLista = [];   // r165: lojas mostradas no card (para os botões por loja)
     // r165: por loja — Ignorar = pausa (fica na lista e pode reativar); Excluir = sai da lista e da cobrança de vez
@@ -3159,7 +3162,17 @@
             if (selD) selD.innerHTML = '<option value="">-- Falha ao carregar formas --</option>';
         }
 
-        if (!ehDiretor) return;
+        carregarCentrosCusto();   // r219
+    }
+    // r219: "Despesa sem projeto (centro de custo)" — Diretor e Supervisor. Antes só era montada uma vez, ao abrir a
+    // página: se o login ainda não estava reconhecido, a opção ficava escondida até recarregar. Agora é refeita
+    // depois do login e sempre que a aba Despesas é aberta (até conseguir carregar os centros).
+    let centrosCarregados = false, centrosCarregando = false;
+    async function carregarCentrosCusto() {
+        const pf = getPerfilLogado();
+        if (pf !== 'DIRETOR' && pf !== 'SUPERVISOR') return;
+        if (centrosCarregados || centrosCarregando) return;
+        centrosCarregando = true;
         try {
             const res = await chamarApi({ action: 'getConfigCentros', cpf: getCpfLogado() });
             if (!res.centros || !res.centros.length) return;
@@ -3169,7 +3182,9 @@
             document.getElementById('desp-bloco-centro').classList.remove('hidden');
             const selEditCentro = document.getElementById('edit-desp-centro');
             if (selEditCentro) selEditCentro.innerHTML = opcoesHtml;
-        } catch (err) { /* sem centros, segue normal */ }
+            centrosCarregados = true;
+        } catch (err) { /* tenta de novo na próxima abertura da aba */ }
+        finally { centrosCarregando = false; }
     }
 
     function avisarRecursoProprio() {
@@ -4899,7 +4914,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-11-05-r218';
+    const VERSAO_ESPERADA = '2026-11-06-r219';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

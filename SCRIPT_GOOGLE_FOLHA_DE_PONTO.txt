@@ -1011,7 +1011,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-05-r218';
+const VERSAO_SCRIPT = '2026-11-06-r219';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -1345,7 +1345,8 @@ function ehSupervisorPorCPF(cpfBruto) {
 
 // Config_Centros: Centro (para despesas sem projeto). Exclusivo da Diretoria.
 function getConfigCentros(cpf) {
-  if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { centros: [] };
+  var pf = getPerfilPorCPF(cpf);
+  if (pf !== 'DIRETOR' && pf !== 'SUPERVISOR') return { centros: [] };   // r219: supervisor também lança despesa sem projeto
   const dados = lerAbaConfigCacheada('Config_Centros');
   if (!dados) return { centros: [] };
   dados.shift();
@@ -1895,7 +1896,7 @@ function lancarDespesa(d) {
 
   const perfil = getPerfilPorCPF(d.cpf);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Apenas Supervisor ou Diretoria podem lancar despesas.' };
-  if (d.semProjeto && perfil !== 'DIRETOR') return { error: 'Apenas a Diretoria pode lancar despesas sem projeto.' };
+  // r219: supervisor também pode lançar despesa sem projeto (centro de custo)
   if (!d.semProjeto) { const erroDiv = exigirProjetoPermitido(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade }); if (erroDiv) return { error: erroDiv }; }   // r203
 
   if (!d.semProjeto && isSessaoEncerrada(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade })) {
@@ -8300,6 +8301,18 @@ function biFinAbaConfigs_() {
   return sh;
 }
 
+// r219: regras de rateio do B.I. — {regras:[{id, nome, ativo, contas[], negocios[], nivel: neg|cli|loja}]}
+function biFinValidarRateios_(cfg) {
+  if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.regras)) return null;
+  var txt = function(x) { return String(x == null ? '' : x).replace(/\s+/g, ' ').trim().slice(0, 80); };
+  var lista = function(a) { return Array.isArray(a) ? a.map(txt).filter(Boolean).slice(0, 60) : []; };
+  var regras = cfg.regras.slice(0, 30).map(function(r) {
+    r = r || {};
+    return { id: txt(r.id) || ('r' + Math.random().toString(36).slice(2, 8)), nome: txt(r.nome), ativo: !!r.ativo,
+             contas: lista(r.contas), negocios: lista(r.negocios), nivel: ['neg', 'cli', 'loja'].indexOf(r.nivel) >= 0 ? r.nivel : 'neg' };
+  });
+  return { regras: regras };
+}
 function biFinValidarConfig_(cfg) {
   // r216: aceita qualquer identificador de card válido (nome curto), para nenhum card novo ser descartado ao salvar;
   // os da lista BI_FIN_CARDS_VALIDOS que faltarem entram no fim da ordem (ocultos se a arrumação não os tinha).
@@ -8351,7 +8364,7 @@ function biFinConfigListar(cpf) {
   if (getPerfilPorCPF(cpf) !== 'DIRETOR') return { error: 'Acesso restrito à Diretoria.' };
   var alvo = normalizarCPF(cpf);
   var dados = biFinAbaConfigs_().getDataRange().getValues();
-  var atual = null, filtros = null, pessoas = null, lista = [];
+  var atual = null, filtros = null, pessoas = null, rateios = null, lista = [];
   for (var i = 1; i < dados.length; i++) {
     if (normalizarCPF(dados[i][0]) !== alvo) continue;
     var nome = String(dados[i][1] || '');
@@ -8359,13 +8372,14 @@ function biFinConfigListar(cpf) {
     try { bruto = JSON.parse(dados[i][2]); } catch (e) { bruto = null; }
     if (nome === '__FILTROS__') { filtros = biFinValidarFiltros_(bruto); continue; }
     if (nome === '__PESSOAS__') { pessoas = biFinValidarPessoas_(bruto); continue; }   // r193
+    if (nome === '__RATEIOS__') { rateios = biFinValidarRateios_(bruto); continue; }   // r219
     var cfg = biFinValidarConfig_(bruto);
     if (!cfg) continue;
     if (nome === '__ATUAL__') atual = cfg;
     else lista.push({ nome: nome, config: cfg });
   }
   lista.sort(function(a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-  return { success: true, atual: atual, filtros: filtros, pessoas: pessoas, lista: lista };
+  return { success: true, atual: atual, filtros: filtros, pessoas: pessoas, rateios: rateios, lista: lista };
 }
 
 function biFinConfigSalvar(cpf, nome, config) {
@@ -8373,7 +8387,7 @@ function biFinConfigSalvar(cpf, nome, config) {
   nome = String(nome || '').replace(/\s+/g, ' ').trim();
   if (!nome) return { error: 'Dê um nome para a configuração.' };
   if (nome.length > 60) return { error: 'Use um nome com até 60 caracteres.' };
-  var cfg = nome === '__FILTROS__' ? biFinValidarFiltros_(config) : nome === '__PESSOAS__' ? biFinValidarPessoas_(config) : biFinValidarConfig_(config);   // r193
+  var cfg = nome === '__FILTROS__' ? biFinValidarFiltros_(config) : nome === '__PESSOAS__' ? biFinValidarPessoas_(config) : nome === '__RATEIOS__' ? biFinValidarRateios_(config) : biFinValidarConfig_(config);   // r193 · r219
   if (!cfg) return { error: nome === '__FILTROS__' ? 'Filtros inválidos ou grandes demais para salvar.' : 'Configuração inválida.' };
   var alvo = normalizarCPF(cpf);
   var lock = LockService.getScriptLock();
