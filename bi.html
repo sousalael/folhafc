@@ -296,9 +296,10 @@
     <div class="painel-pdf-telas hidden" id="painel-rateios" role="dialog" aria-modal="true" aria-labelledby="rateios-titulo">
         <div class="pdf-telas-caixa rateio-caixa">
             <h3 id="rateios-titulo">⚖ Rateio de contas entre negócios</h3>
-            <p class="pdf-telas-dica">O valor total de cada conta escolhida (de todos os negócios) é redistribuído entre os negócios escolhidos,
-                proporcionalmente ao faturamento de cada um — mês a mês. Você escolhe o nível: negócio, cliente ou loja.
-                Meses em que os negócios escolhidos não faturaram ficam sem rateio.</p>
+            <p class="pdf-telas-dica">O valor das contas escolhidas <b>lançado nos negócios marcados</b> é somado e redividido entre esses mesmos negócios,
+                na proporção do faturamento de cada um <b>no período filtrado</b> (Ano/Mês). O que foi lançado em outros negócios não é tocado.
+                Ao mudar o período, o rateio é refeito.
+                Você escolhe o nível: negócio, cliente ou loja.</p>
             <div id="rateios-lista"></div>
             <button type="button" class="btn btn-sm btn-fc-contorno mt-2" onclick="novaRegraRateio()">➕ Nova regra</button>
             <div class="pdf-telas-msg" id="rateios-msg" role="status" aria-live="polite"></div>
@@ -1068,6 +1069,8 @@ function prepararNovas(db, res) {
     const L = res.linhas || [];
     db.dia = new Int32Array(db.n); db.pago = new Int32Array(db.n);
     for (let i = 0; i < db.n; i++) { db.dia[i] = L[i][11] || 0; db.pago[i] = L[i][12] || 0; }
+    db.rateio = new Uint8Array(db.n);   // r220: linhas criadas pelo rateio
+    for (let i = 0; i < db.n; i++) if (L[i][13] === 1) db.rateio[i] = 1;
     db.dic.pago = db.dic.pago || [];
     db.camada = db.chaves.conta.map(k => CAMADAS_DRE.findIndex(c => c[0] === k));   // -1 = fora das 8 contas
     db.contaFatIdx = db.chaves.conta.indexOf('FATURAMENTO');
@@ -1112,7 +1115,7 @@ function calcularDRE(db, linhas) {
         alvos.forEach(x => {
             x.imp += db.imp[i];
             if (c === db.contaFatIdx) { x.fat += db.fat[i]; x.outras -= db.custo[i]; }
-            else if (cam >= 0) { x.camadas[cam] += db.custo[i]; if (!db.cliFatura.has(db.cli[i])) x.estrutura += db.custo[i]; x.outras += db.fat[i]; }
+            else if (cam >= 0) { x.camadas[cam] += db.custo[i]; if (!db.rateio[i] && !db.cliFatura.has(db.cli[i])) x.estrutura += db.custo[i]; x.outras += db.fat[i]; }   // r220: rateado já está ligado à receita
             else x.outras += db.fat[i] - db.custo[i];
         });
     }
@@ -1169,6 +1172,7 @@ function custoSemFaturamento(db, linhas) {
     for (let j = 0; j < linhas.length; j++) {
         const i = linhas[j];
         if (db.conta[i] === db.contaFatIdx || !db.custo[i]) continue;
+        if (db.rateio[i]) continue;                                       // r220: valor rateado não é vazamento
         if (!db.cliFatura.has(db.cli[i])) continue;                       // estrutura fica na DRE
         if (db.uniMesComFat.has(db.uni[i] + '|' + db.mes[i])) continue;   // houve faturamento na loja no mes
         const k = db.uni[i] + '|' + db.mes[i];
@@ -1622,7 +1626,27 @@ function opcoesParaFiltro(db, dim, valores) {
 }
 
 // ---------------- Recalculo geral ----------------
+// r220: meses do período dos filtros globais (Ano / Mês) — a base do rateio
+function mesesDoPeriodo(db, casc) {
+    const ef = (casc && casc.efetivo) || {};
+    if (!ef.ano && !ef.mes) return null;
+    const s = new Set();
+    for (let m = 0; m < db.meses.length; m++) if ((!ef.ano || ef.ano.has(db.anoDoMes[m])) && (!ef.mes || ef.mes.has(m))) s.add(m);
+    return s;
+}
+function rateioAtivo() { return ((estado.rateios || {}).regras || []).some(r => r.ativo && (r.contas || []).length && (r.negocios || []).length); }
+function ajustarRateioAoPeriodo() {
+    if (!estado.resBruto || !estado.db) return;
+    if (!rateioAtivo()) { if (estado.rateioChave) { estado.rateioChave = ''; estado.db = prepararBase(comRateio(estado.resBruto, null)); } return; }
+    const casc = aplicarCascata(estado.db, DIMS_GLOBAIS, estado.intencao, todasLinhas(estado.db));
+    const M = mesesDoPeriodo(estado.db, casc);
+    const chave = (M ? Array.from(M).sort((a, b) => a - b).join(',') : 'tudo') + '|' + JSON.stringify(estado.rateios.regras);
+    if (chave === estado.rateioChave) return;
+    estado.rateioChave = chave;
+    estado.db = prepararBase(comRateio(estado.resBruto, M));
+}
 function recalcular() {
+    ajustarRateioAoPeriodo();   // r220: rateio pela participação no faturamento do período filtrado
     const db = estado.db;
     if (!db) return;
     const casc = aplicarCascata(db, DIMS_GLOBAIS, estado.intencao, todasLinhas(db));
@@ -4532,45 +4556,49 @@ new MutationObserver(muts => {
 }).observe(document.body, { childList: true, subtree: true });
 // ============================================================
 // r219: RATEIO DE CONTAS ENTRE NEGÓCIOS
-// O valor total de cada conta escolhida (de todos os negócios) sai de onde foi lançado e é
-// redistribuído entre os negócios escolhidos, pelo faturamento de cada alvo no MESMO mês
+// r221: o valor da conta lançado NOS NEGÓCIOS MARCADOS é somado e redividido entre eles
+// (o lançado em outros negócios não muda), pelo faturamento de cada alvo no MESMO mês
 // (assim qualquer filtro de período soma certo). Nível do alvo: negócio, cliente ou loja.
 // Abaixo do nível escolhido, o valor aparece como "(RATEIO)". Regras guardadas na planilha.
 // ============================================================
 function chaveRateio() { return 'fcBiRateios_' + cpfLogado; }   // função (pode ser usada antes desta linha)
 estado.rateios = estado.rateios || { regras: [] };
-function aplicarRateios(res, regras) {
+function aplicarRateios(res, regras, mesesPeriodo) {   // r220: mesesPeriodo = Set de meses do período filtrado (null = todos)
     const ativos = (regras || []).filter(r => r.ativo && (r.contas || []).length && (r.negocios || []).length);
     if (!ativos.length || !res || !res.linhas) return { res: res, info: null };
     const dic = JSON.parse(JSON.stringify(res.dic || {}));
     ['cli', 'loja', 'conta', 'neg'].forEach(d => { dic[d] = dic[d] || []; });
     const kConta = dic.conta.map(normBI), kNeg = dic.neg.map(normBI), fatIdx = kConta.indexOf(normBI(CONTA_FAT));
+    // r221: só o valor LANÇADO nos negócios marcados entra no rateio (eles juntam e redividem);
+    // o que foi lançado em outros negócios não é tocado. Conta+negócio só podem estar em uma regra ativa.
     const usadas = new Set(), plano = [];
     ativos.forEach(r => {
-        const cs = new Set(r.contas.map(normBI).map(k => kConta.indexOf(k)).filter(i => i >= 0 && i !== fatIdx && !usadas.has(i)));
-        cs.forEach(i => usadas.add(i));
+        const cs = new Set(r.contas.map(normBI).map(k => kConta.indexOf(k)).filter(i => i >= 0 && i !== fatIdx));
         const ns = new Set(r.negocios.map(normBI).map(k => kNeg.indexOf(k)).filter(i => i >= 0));
-        if (cs.size && ns.size) plano.push({ regra: r, cs: cs, ns: ns, nivel: r.nivel || 'neg' });
+        const pares = new Set();
+        cs.forEach(c => ns.forEach(n => { const k = c + '|' + n; if (!usadas.has(k)) { usadas.add(k); pares.add(k); } }));
+        if (cs.size && ns.size && pares.size) plano.push({ regra: r, cs: cs, ns: ns, pares: pares, nivel: r.nivel || 'neg' });
     });
     if (!plano.length) return { res: res, info: null };
     const novo = (d, nome) => { let i = dic[d].indexOf(nome); if (i < 0) { dic[d].push(nome); i = dic[d].length - 1; } return i; };
     const cliR = novo('cli', '(RATEIO)'), lojaR = novo('loja', '(RATEIO)');
     const pagoR = Array.isArray(dic.pago) ? novo('pago', '(RATEIO)') : 0;
-    const contaPlano = new Map(); plano.forEach((p, pi) => p.cs.forEach(c => contaPlano.set(c, pi)));
+    const contaPlano = new Map(); plano.forEach((p, pi) => p.pares.forEach(k => contaPlano.set(k, pi)));   // r221: chave conta|negócio
     const chaveAlvo = (p, row) => p.nivel === 'loja' ? row[1] + '|' + row[2] + '|' + row[3] : p.nivel === 'cli' ? row[1] + '|' + row[2] : String(row[1]);
-    const fatAlvo = plano.map(() => new Map());   // mês -> Map(alvo -> faturamento)
+    const fatAlvo = plano.map(() => new Map());   // r220: alvo -> faturamento no período
     const agg = plano.map(() => new Map());
     const L = res.linhas, out = [];
     for (let i = 0; i < L.length; i++) {
         const row = L[i];
-        if (row[5] === fatIdx && (row[9] || 0) > 0) {
+        // r220: a base é o faturamento dos alvos no PERÍODO filtrado inteiro (não mês a mês)
+        if (row[5] === fatIdx && (row[9] || 0) > 0 && (!mesesPeriodo || mesesPeriodo.has(row[0]))) {
             plano.forEach((p, pi) => {
                 if (!p.ns.has(row[1])) return;
-                let fm = fatAlvo[pi].get(row[0]); if (!fm) { fm = new Map(); fatAlvo[pi].set(row[0], fm); }
+                const fm = fatAlvo[pi];
                 const k = chaveAlvo(p, row); fm.set(k, (fm.get(k) || 0) + row[9]);
             });
         }
-        const pi = contaPlano.get(row[5]);
+        const pi = contaPlano.get(row[5] + '|' + row[1]);   // r221: só a conta lançada num negócio marcado
         if (pi === undefined) { out.push(row); continue; }
         const k = [row[0], row[4], row[5], row[6], row[7]].join('|');
         let a = agg[pi].get(k);
@@ -4579,22 +4607,24 @@ function aplicarRateios(res, regras) {
     }
     let semBase = 0, valor = 0;
     plano.forEach((p, pi) => {
+        const fm = fatAlvo[pi];
+        let tot = 0; fm.forEach(v => { tot += v; });
+        if (!(tot > 0) && agg[pi].size) semBase++;
         agg[pi].forEach(a => {
-            const fm = fatAlvo[pi].get(a.m);
-            let tot = 0; if (fm) fm.forEach(v => { tot += v; });
-            if (!(tot > 0)) { a.orig.forEach(rw => out.push(rw)); semBase++; return; }
+            if (!(tot > 0)) { a.orig.forEach(rw => out.push(rw)); return; }
             fm.forEach((v, key) => {
                 const sh = v / tot, pt = key.split('|').map(Number);
                 out.push([a.m, pt[0], pt.length > 1 ? pt[1] : cliR, pt.length > 2 ? pt[2] : lojaR, a.tipo, a.conta, a.setor, a.det,
-                          a.custo * sh, a.fat * sh, a.imp * sh, 0, pagoR]);
+                          a.custo * sh, a.fat * sh, a.imp * sh, 0, pagoR, 1]);   // r220: [13] = 1 marca linha de rateio
             });
             valor += a.custo;
         });
     });
-    return { res: Object.assign({}, res, { linhas: out, dic: dic }), info: { regras: plano.length, mesesSemBase: semBase, valor: valor } };
+    const partes = plano.map((p, pi) => { let t = 0; fatAlvo[pi].forEach(v => { t += v; }); const o = {}; fatAlvo[pi].forEach((v, k) => { o[k] = t ? v / t : 0; }); return o; });
+    return { res: Object.assign({}, res, { linhas: out, dic: dic }), info: { regras: plano.length, regrasSemBase: semBase, valor: valor, partes: partes } };
 }
-function comRateio(res) {
-    const r = aplicarRateios(res, (estado.rateios || {}).regras);
+function comRateio(res, mesesPeriodo) {
+    const r = aplicarRateios(res, (estado.rateios || {}).regras, mesesPeriodo || null);
     estado.rateioInfo = r.info;
     atualizarSeloRateio();
     return r.res;
@@ -4607,7 +4637,8 @@ function atualizarSeloRateio() {
 }
 function reconstruirComRateio() {
     if (!estado.resBruto) return;
-    estado.db = prepararBase(comRateio(estado.resBruto));
+    estado.rateioChave = '';   // r220: força refazer pelo período atual
+    estado.db = prepararBase(comRateio(estado.resBruto, null));
     estado.abertosRO.clear();
     Object.keys(estado.abertosCusto).forEach(k => estado.abertosCusto[k].clear());
     recalcular();
@@ -4655,10 +4686,11 @@ async function salvarRateios() {
     const msg = document.getElementById('rateios-msg');
     const regras = rateiosEdicao.filter(r => r.contas.length || r.negocios.length);
     for (const r of regras) if (r.ativo && (!r.contas.length || r.negocios.length < 1)) { msg.textContent = '⚠️ A regra "' + r.nome + '" precisa de ao menos uma conta e um negócio.'; return; }
-    const vistas = {};
-    for (const r of regras.filter(x => x.ativo)) for (const c of r.contas) {
-        if (vistas[c]) { msg.textContent = '⚠️ A conta "' + c + '" está em duas regras ativas ("' + vistas[c] + '" e "' + r.nome + '"). Deixe-a em uma só.'; return; }
-        vistas[c] = r.nome;
+    const vistas = {};   // r221: a mesma conta pode estar em regras diferentes, desde que com negócios diferentes
+    for (const r of regras.filter(x => x.ativo)) for (const c of r.contas) for (const n of r.negocios) {
+        const k = c + '|' + n;
+        if (vistas[k]) { msg.textContent = '⚠️ A conta "' + c + '" do negócio "' + n + '" está em duas regras ativas ("' + vistas[k] + '" e "' + r.nome + '"). Deixe em uma só.'; return; }
+        vistas[k] = r.nome;
     }
     estado.rateios = { regras: regras };
     try { localStorage.setItem(chaveRateio(), JSON.stringify(estado.rateios)); } catch (e) {}
@@ -4668,7 +4700,7 @@ async function salvarRateios() {
     catch (e) { msg.textContent = '⚠️ Aplicado neste navegador, mas não foi possível salvar na planilha: ' + e.message; return; }
     const inf = estado.rateioInfo;
     fecharRateios();
-    if (inf && inf.mesesSemBase) alert('Rateio aplicado. Atenção: em ' + inf.mesesSemBase + ' caso(s) (mês × conta) os negócios escolhidos não tiveram faturamento no mês — esses valores ficaram sem rateio.');
+    if (inf && inf.regrasSemBase) alert('Atenção: em ' + inf.regrasSemBase + ' regra(s) os negócios escolhidos não tiveram faturamento no período filtrado — esses valores ficaram sem rateio.');
 }
 </script>
 </body>
