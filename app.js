@@ -184,6 +184,7 @@ function applyMapping(rows,mapping){return rows.map(function(row){var o={};Objec
 var BRL=function(v){return(v<0?'−':'')+'R$ '+Math.abs(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
 var BRLi=function(v){return(v<0?'−':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR');};
 var PCT=function(v){return(v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';};
+var PCT2=function(v){return(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';};   /* r222 */
 var NUM=function(v){return(v||0).toLocaleString('pt-BR');};
 var NUMBR=function(v){if(v===null||v===undefined)return'—';return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
 function $(id){return document.getElementById(id);}
@@ -665,9 +666,9 @@ function renderResumo(){
     /* r218: Inacurácia de Estoque — KPI em destaque, sempre em % (sem meta) */
     html+='<div class="resumo-card kpi-destaque">';
     html+='<div class="resumo-card-label">★ INACURÁCIA DE ESTOQUE</div>';
-    html+='<div class="resumo-card-valor">'+PCT(c.inacuracidade)+'</div>';
-    html+='<div class="resumo-card-titulo">SKUs com divergência ÷ SKUs auditados</div>';
-    html+='<div class="resumo-card-detalhe">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência</div>';
+    html+='<div class="resumo-card-valor">'+(c.inacuracidade===null?'—':PCT2(c.inacuracidade))+'</div>';
+    html+='<div class="resumo-card-titulo">|estoque final − inicial| ÷ estoque inicial (unidades)</div>';
+    html+='<div class="resumo-card-detalhe">Inicial '+NUM(c.estoqueInicialQtd)+' un. · final '+NUM(c.estoqueFinalQtd)+' un. · diferença '+NUM(Math.abs(c.difLiquidaQtd))+' un.</div>';   // r222
     html+='</div>';
     /* r158: Eficiência Operacional — sem meta; alerta só abaixo de 90%; acima de 100% mostra a conta */
     var cls=c.acuracidade<90?'critico':'ok';
@@ -807,7 +808,9 @@ function renderCritica(page){
   html+='<div class="metrics">';
   html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div>'+(c.acuracidade>100?'<div class="metric-detail">'+Engine.contaEficiencia(c)+'</div>':'')+'</div>';
   /* r217: Inacurácia de Estoque — sem meta (cor neutra) */
-  html+='<div class="metric kpi-destaque" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">★ Inacurácia de estoque</div><div class="metric-value">'+PCT(c.inacuracidade)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs com divergência · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
+  /* r222: Inacurácia em unidades (diferença líquida ÷ estoque inicial) + % de SKUs com divergência (fórmula anterior) */
+  html+='<div class="metric kpi-destaque" title="|estoque final (contado) − estoque inicial (sistema)| ÷ estoque inicial × 100, em unidades"><div class="metric-label">★ Inacurácia de estoque</div><div class="metric-value">'+(c.inacuracidade===null?'—':PCT2(c.inacuracidade))+'</div><div class="metric-detail">Inicial '+NUM(c.estoqueInicialQtd)+' un. · final '+NUM(c.estoqueFinalQtd)+' un. · diferença '+NUM(Math.abs(c.difLiquidaQtd))+' un.</div></div>';
+  html+='<div class="metric" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">% de SKUs com divergência</div><div class="metric-value">'+PCT(c.pctSkusDiv)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div><div class="metric-detail">Antes da contagem (sistema)</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div><div class="metric-detail">Apurado na contagem física</div></div>';
   html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
@@ -817,7 +820,7 @@ function renderCritica(page){
   html+='</div>';
   if(c.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Resultado por categoria</div>';
-    html+=renderCatCards(c.categorias,[{label:'Eficiência Operacional',key:'acuracidade',fmt:PCT,color:function(v){return v<90?'text-red':'text-green';}},{label:'SKUs divergentes',key:'divergentes',fmt:NUM},{label:'Inacurácia',key:'inacuracidade',fmt:PCT},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
+    html+=renderCatCards(c.categorias,[{label:'Eficiência Operacional',key:'acuracidade',fmt:PCT,color:function(v){return v<90?'text-red':'text-green';}},{label:'Inacurácia',key:'inacuracidade',fmt:function(v){return v===null||v===undefined?'—':PCT2(v);}},{label:'% SKUs divergentes',key:'pctSkusDiv',fmt:PCT},{label:'Faltas',key:'faltaVal',fmt:BRLi,color:function(){return 'text-red';}},{label:'Sobras',key:'sobraVal',fmt:BRLi,color:function(v){return v>0?'text-amber':'text-muted';}},{label:'Saldo',key:'saldo',fmt:BRLi,color:function(v){return v<0?'text-red':'text-green';}}]);
     html+='<div class="chart-wrap" style="height:'+Math.max(200,c.categorias.length*58+60)+'px"><canvas id="chartCritica"></canvas></div>';
   }
   html+='<div class="toolbar"><input class="search-input" placeholder="Buscar SKU ou descrição..." value="'+srch+'" onkeyup="App.filterCritica(this.value)">';
@@ -1050,7 +1053,7 @@ window.App = {
     var metricas='';
     Comparativo.unidades.forEach(function(u){
       metricas+='UNIDADE: '+u.unidade+'\n';
-      if(u.acuracidade!==null) metricas+='  Eficiência Operacional: '+PCT(u.acuracidade)+(u.inacuracidade!==null&&u.inacuracidade!==undefined?' | Inacurácia de estoque: '+PCT(u.inacuracidade):'')+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
+      if(u.acuracidade!==null) metricas+='  Eficiência Operacional: '+PCT(u.acuracidade)+(u.inacuracidade!==null&&u.inacuracidade!==undefined?' | Inacurácia de estoque: '+PCT2(u.inacuracidade):'')+(u.pctSkusDiv!==null&&u.pctSkusDiv!==undefined?' | % de SKUs com divergência: '+PCT(u.pctSkusDiv):'')+' | Faltas: '+BRLi(u.totalFaltas)+' | Sobras: '+BRLi(u.totalSobras)+' | Saldo: '+BRLi(u.saldoLiquido)+'\n';
       if(u.taxaRuptura!==null) metricas+='  Taxa ruptura: '+PCT(u.taxaRuptura)+' | Rupturas: '+NUM(u.totalRupturas)+' | Curva A: '+NUM(u.rupturaA)+'\n';
       if(u.coberturaGeral!==null) metricas+='  Cobertura: '+u.coberturaGeral+' dias | Curva A: '+u.coberturaA+' dias | Sem giro: '+NUM(u.semGiro)+' | Excesso: '+BRLi(u.valorExcesso)+'\n';
       if(u.totalInvest!==null) metricas+='  Investimento: '+BRLi(u.totalInvest)+' | Fat. 90d: '+BRLi(u.totalFat)+'\n';

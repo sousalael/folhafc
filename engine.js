@@ -119,7 +119,9 @@ var Engine = (function(){
       var vE=g.items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
       var vC=g.items.reduce(function(s,i){return s+(i.qtdContada*i.custoUnit);},0);
       var dv=g.items.length-ok;   // r217: SKUs com divergência (falta ou sobra)
-      return {nome:g.nome, total:g.items.length, ok:ok, divergentes:dv, inacuracidade:g.items.length?round2(dv/g.items.length*100):0, faltaVal:round2(fv), sobraVal:round2(sv), valorEstoque:round2(vE), valorEstoqueContado:round2(vC), acuracidade:acuraciaPorValor(vE,vC), saldo:round2(fv+sv), destaque:Math.abs(fv)};
+      var qI=g.items.reduce(function(s,i){return s+(i.qtdSistema||0);},0), qF=g.items.reduce(function(s,i){return s+(i.qtdContada||0);},0);   // r222: unidades
+      return {nome:g.nome, total:g.items.length, ok:ok, divergentes:dv, pctSkusDiv:g.items.length?round2(dv/g.items.length*100):0,
+              estoqueInicialQtd:round2(qI), estoqueFinalQtd:round2(qF), inacuracidade:qI>0?round2(Math.abs(qF-qI)/qI*100):null, faltaVal:round2(fv), sobraVal:round2(sv), valorEstoque:round2(vE), valorEstoqueContado:round2(vC), acuracidade:acuraciaPorValor(vE,vC), saldo:round2(fv+sv), destaque:Math.abs(fv)};
     });
     /* KPI Perda de Estoque % = (valor estoque - valor estoque contado) / valor estoque * -1 */
     var valorEstoque = items.reduce(function(s,i){return s+(i.qtdSistema*i.custoUnit);},0);
@@ -128,8 +130,15 @@ var Engine = (function(){
     /* r217: KPI Inacurácia de Estoque = SKUs com divergência (contado ≠ sistema) ÷ SKUs auditados × 100.
        Universo = o mesmo da Crítica (estoque ≠ 0, contagem > 0 ou venda > 0). Sem meta. */
     var skusDivergentes = faltaItems.length + sobraItems.length;
-    var inacuracidade = totalSKUs ? round2(skusDivergentes / totalSKUs * 100) : 0;
-    return {items:items, totalSKUs:totalSKUs, okCount:okCount, skusDivergentes:skusDivergentes, inacuracidade:inacuracidade, acuracidade:acuraciaPorValor(valorEstoque,valorEstoqueContado), faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
+    var pctSkusDiv = totalSKUs ? round2(skusDivergentes / totalSKUs * 100) : 0;   // r222: "% de SKUs com divergência" (fórmula da r217)
+    /* r222: INACURÁCIA DE ESTOQUE = |estoque final (contado) − estoque inicial (sistema)| ÷ estoque inicial × 100, em UNIDADES.
+       Ex.: inicial 23, final 18 → 5 ÷ 23 = 21,74%. Universo = o da Crítica. */
+    var estoqueInicialQtd = round2(items.reduce(function(s,i){return s+(i.qtdSistema||0);},0));
+    var estoqueFinalQtd = round2(items.reduce(function(s,i){return s+(i.qtdContada||0);},0));
+    var difLiquidaQtd = round2(estoqueFinalQtd - estoqueInicialQtd);
+    var inacuracidade = estoqueInicialQtd > 0 ? round2(Math.abs(difLiquidaQtd) / estoqueInicialQtd * 100) : null;
+    return {items:items, totalSKUs:totalSKUs, okCount:okCount, skusDivergentes:skusDivergentes, pctSkusDiv:pctSkusDiv, inacuracidade:inacuracidade,
+      estoqueInicialQtd:estoqueInicialQtd, estoqueFinalQtd:estoqueFinalQtd, difLiquidaQtd:difLiquidaQtd, acuracidade:acuraciaPorValor(valorEstoque,valorEstoqueContado), faltaCount:faltaItems.length, sobraCount:sobraItems.length, totalFaltas:round2(totalFaltas), totalSobras:round2(totalSobras), saldoLiquido:round2(totalFaltas+totalSobras), valorEstoque:round2(valorEstoque), valorEstoqueContado:round2(valorEstoqueContado), perdaEstoquePct:perdaEstoquePct, categorias:catList, hasCategorias:hasRealCategorias(catList)};
   }
 
   /* ========== ABC helper ========== */
@@ -513,7 +522,8 @@ var Engine = (function(){
         data: u.info.dataInventario || '',
         /* Crítica */
         acuracidade: r.critica ? r.critica.acuracidade : null,
-        inacuracidade: r.critica ? r.critica.inacuracidade : null,   // r217
+        inacuracidade: r.critica ? r.critica.inacuracidade : null,   // r217 · r222: em unidades
+        pctSkusDiv: r.critica ? r.critica.pctSkusDiv : null,       // r222
         totalSKUs: r.critica ? r.critica.totalSKUs : null,
         faltaCount: r.critica ? r.critica.faltaCount : null,
         sobraCount: r.critica ? r.critica.sobraCount : null,
@@ -572,8 +582,9 @@ var Engine = (function(){
        fmt 'brl_pct' = valor em R$ + % (pctKey). rankBy 'pct' = melhor/pior pelo percentual
        (unidades de tamanhos diferentes ficam comparáveis). */
     var metricasDefs = [
-      {key:'inacuracidade',  label:'Inacurácia de Estoque (%)',                melhor:'min',       fmt:'pct', destaque:true},   /* r217 · r218: em destaque, sempre em 1º */
+      {key:'inacuracidade',  label:'Inacurácia de Estoque (%)',                melhor:'min',       fmt:'pct2', destaque:true},   /* r217 · r218: em destaque, sempre em 1º */
       {key:'acuracidade',    label:'Eficiência Operacional (%)',               melhor:'target100', fmt:'pct'},
+      {key:'pctSkusDiv',     label:'% de SKUs com divergência',                melhor:'min',       fmt:'pct'},   /* r222 */
       {key:'saldoLiquido',   label:'Valor Quebra (saldo entre perdas e sobras)', melhor:'min_abs', fmt:'brl'},
       {key:'totalSobras',    label:'Valor Sobras',                             melhor:'min_abs',   fmt:'brl'},
       {key:'totalFaltas',    label:'Valor Perdas',                             melhor:'min_abs',   fmt:'brl'},
@@ -694,15 +705,17 @@ var Engine = (function(){
   // ── r76: métricas para a IA, com rótulos limpos (sem embutir fórmula/metodologia) ──
   function buildMetricasIA(rt, data) {
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function pct2(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
     function num(v){ return (v||0).toLocaleString('pt-BR'); }
     if (!data) return '';
     if (rt === 'critica') {
       var c = data;
       var m = 'Total SKUs: ' + num(c.totalSKUs) + '\nEficiência Operacional: ' + pct(c.acuracidade)
-        + '\nInacurácia de estoque: ' + pct(c.inacuracidade) + ' (' + num(c.skusDivergentes) + ' de ' + num(c.totalSKUs) + ' SKUs com divergência entre sistema e contagem)' + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
+        + '\nInacurácia de estoque (unidades): ' + (c.inacuracidade === null ? '—' : pct2(c.inacuracidade)) + ' (estoque inicial ' + num(c.estoqueInicialQtd) + ' un., estoque final contado ' + num(c.estoqueFinalQtd) + ' un., diferença ' + num(Math.abs(c.difLiquidaQtd)) + ' un.)'
+        + '\n% de SKUs com divergência: ' + pct(c.pctSkusDiv) + ' (' + num(c.skusDivergentes) + ' de ' + num(c.totalSKUs) + ' SKUs)' + '\nValor estoque (sistema): ' + brl(c.valorEstoque) + '\nValor estoque contado: ' + brl(c.valorEstoqueContado)
         + '\nPerda de estoque: ' + pct(c.perdaEstoquePct) + '\nFaltas: ' + num(c.faltaCount) + ' SKUs (' + brl(c.totalFaltas) + ')\nSobras: ' + num(c.sobraCount) + ' SKUs (' + brl(c.totalSobras) + ')\nSaldo líquido: ' + brl(c.saldoLiquido);
-      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, Eficiência Operacional ' + pct(x.acuracidade) + ', Inacurácia ' + pct(x.inacuracidade) + ' (' + num(x.divergentes) + ' SKUs com divergência), valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
+      if (c.hasCategorias) m += '\nCategorias:\n' + c.categorias.map(function(x){ return x.nome + ': ' + num(x.total) + ' SKUs, Eficiência Operacional ' + pct(x.acuracidade) + ', Inacurácia ' + (x.inacuracidade === null ? '—' : pct2(x.inacuracidade)) + ' (inicial ' + num(x.estoqueInicialQtd) + ' un., final ' + num(x.estoqueFinalQtd) + ' un.), ' + pct(x.pctSkusDiv) + ' de SKUs com divergência (' + num(x.divergentes) + '), valor estoque ' + brl(x.valorEstoque) + ', valor contado ' + brl(x.valorEstoqueContado) + ', faltas ' + brl(x.faltaVal) + ', sobras ' + brl(x.sobraVal); }).join('\n');
       return m;
     }
     if (rt === 'ruptura') {
@@ -729,6 +742,7 @@ var Engine = (function(){
   function gerarAnaliseCritica(c, info) {
     info = info || {};
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function pct2(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
     function num(v){ return (v||0).toLocaleString('pt-BR'); }
     var paragrafos = [];
@@ -748,10 +762,13 @@ var Engine = (function(){
     );
 
     // r217 · r218 (logo após a Eficiência, em destaque): Inacurácia de estoque — em quantos produtos o sistema não bate com o físico
-    if (c.totalSKUs) {
+    if (c.totalSKUs) {   // r222: inacurácia em unidades + % de SKUs com divergência
       paragrafos.push(
-        'A inacurácia de estoque — que mede em quantos produtos o sistema não bate com o físico, independentemente do valor — ficou em ' + pct(c.inacuracidade)
-        + ': ' + num(c.skusDivergentes) + ' dos ' + num(c.totalSKUs) + ' SKUs auditados apresentaram divergência entre o estoque registrado e a contagem física.'
+        (c.inacuracidade !== null
+          ? 'A inacurácia de estoque ficou em ' + pct2(c.inacuracidade) + ': o estoque registrado em sistema era de ' + num(c.estoqueInicialQtd) + ' unidades e a contagem física encontrou '
+            + num(c.estoqueFinalQtd) + ', uma diferença de ' + num(Math.abs(c.difLiquidaQtd)) + ' unidades. '
+          : '')
+        + 'Em quantidade de itens, ' + num(c.skusDivergentes) + ' dos ' + num(c.totalSKUs) + ' SKUs auditados (' + pct(c.pctSkusDiv) + ') apresentaram alguma divergência entre o sistema e a contagem física.'
       );
     }
 
@@ -824,6 +841,7 @@ var Engine = (function(){
   function gerarAnaliseRuptura(r, info) {
     info = info || {};
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function pct2(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function num(v){ return (v||0).toLocaleString('pt-BR'); }
     var temVendas = r.items && r.items.some(function(i){ return i.vendaMediaDia > 0; });
     var paragrafos = [];
@@ -886,6 +904,7 @@ var Engine = (function(){
     info = info || {};
     var diasVenda = (info.diasVenda) || 90;
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function pct2(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
     var paragrafos = [];
 
@@ -909,6 +928,7 @@ var Engine = (function(){
     var diasVenda = (info.diasVenda) || 90;
     function num(v){ return (v||0).toLocaleString('pt-BR'); }
     function pct(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function pct2(v){ return (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function brl(v){ return (v<0?'-':'')+'R$ '+Math.abs(Math.round(v||0)).toLocaleString('pt-BR'); }
     var paragrafos = [];
 
