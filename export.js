@@ -372,8 +372,7 @@ function _buildWbBody(wb,data,sel,pd,info){
   XLSX.utils.book_append_sheet(wb,ws,'Dashboard');
 
   /* CRITICA RESUMO + TOP20 */
-  if(sel.criticaResumo&&data.critica){var wsC={},rw=0,c=data.critica;rw=addBH(wsC,rw,info,pd,6);rw=addST(wsC,rw,'RESUMO DA CRÍTICA');var sL=['EFICIÊNCIA OPERACIONAL','INACURÁCIA DE ESTOQUE (%)','QUEBRA DE INVENTÁRIO','% de SKUs com divergência','Valor estoque (sistema)','Valor estoque contado','Valor das faltas','Valor das sobras'],sV=[PCT(c.acuracidade),(c.inacuracidade===null?'—':PCT2(c.inacuracidade)),BRLi(c.saldoLiquido),PCT(c.pctSkusDiv),BRLi(c.valorEstoque),BRLi(c.valorEstoqueContado),BRLi(c.totalFaltas),BRLi(c.totalSobras)];   /* r224: sem subtextos e sem Perda de estoque */for(var i=0;i<sL.length;i++){sC(wsC,rw+i,0,sL[i],sB('left',true));sC(wsC,rw+i,1,sV[i],sB('right'));}rw+=sL.length+1;
-  if(c.hasCategorias){rw=addST(wsC,rw,'RESULTADO POR CATEGORIA');rw=addDT(wsC,rw,['Categoria','Eficiência Operacional','Inacurácia (%)','% SKUs divergentes','Faltas (R$)','Sobras (R$)','Saldo (R$)'],c.categorias.map(function(x){return[x.nome,PCT(x.acuracidade),x.inacuracidade===null?'—':PCT2(x.inacuracidade),PCT(x.pctSkusDiv),BRLi(x.faltaVal),BRLi(x.sobraVal),BRLi(x.saldo)];}),{0:'left',1:'right',2:'right',3:'right',4:'right',5:'right',6:'right'});}
+  if(sel.criticaResumo&&data.critica){var wsC={},rw=0,c=data.critica;rw=addBH(wsC,rw,info,pd,6);   /* r226: sem as seções Resumo da Crítica e Resultado por Categoria (ficam os Top 20 por categoria) */
   var ct=top20Cat(c.items);var tH=['SKU','Descrição','Qtd Sist','Qtd Contada','Dif. Qtd','Dif. R$'],tA={0:'left',1:'left',2:'right',3:'right',4:'right',5:'right'};
   ct.forEach(function(cat){if(cat.faltas.length){rw=addST(wsC,rw,'TOP '+cat.faltas.length+' FALTAS — '+cat.nome);rw=addDT(wsC,rw,tH,cat.faltas.map(function(i){return[i.sku,i.descricao,i.qtdSistema,i.qtdContada,i.difQtd,BRL(i.difValor)];}),tA);}if(cat.sobras.length){rw=addST(wsC,rw,'TOP '+cat.sobras.length+' SOBRAS — '+cat.nome);rw=addDT(wsC,rw,tH,cat.sobras.map(function(i){return[i.sku,i.descricao,i.qtdSistema,i.qtdContada,i.difQtd,BRL(i.difValor)];}),tA);}if(cat.zerados.length){rw=addST(wsC,rw,'TOP '+cat.zerados.length+' ZERADOS — '+cat.nome);rw=addDT(wsC,rw,['SKU','Descrição','Qtd Sistema','Valor Perdido'],cat.zerados.map(function(i){return[i.sku,i.descricao,i.qtdSistema,BRL(i.qtdSistema*i.custoUnit)];}),{0:'left',1:'left',2:'right',3:'right'});}});
   wsC['!cols']=[{wch:16},{wch:32},{wch:14},{wch:14},{wch:12},{wch:16}];wsC['!rows']=[{hpt:28},{hpt:20}];XLSX.utils.book_append_sheet(wb,wsC,'Crítica - Resumo');}
@@ -600,7 +599,7 @@ function generateComparativoExcel(comp, units, info){
   /* Rankings */
   R=addST(ws,R,'RANKING POR MÉTRICA');
   var hdr=['Métrica'];comp.unidades.forEach(function(u){hdr.push(u.unidade);});
-  var rows=comp.rankings.filter(function(r){return r.key!=='perdaEstoquePct';}).map(function(r){   /* r224: Excel sem Perda de estoque */
+  var rows=comp.rankings.map(function(r){   /* r225: Perda de Estoque (%) mantida no comparativo */
     var row=[r.destaque?r.label.toUpperCase():r.label];   /* r218 */
     r.valores.forEach(function(v){
       row.push(fmtRank(r,v));
