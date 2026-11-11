@@ -670,6 +670,13 @@ function renderResumo(){
     html+='<div class="resumo-card-titulo">|estoque final − inicial| ÷ estoque inicial (unidades)</div>';
     html+='<div class="resumo-card-detalhe">Inicial '+NUM(c.estoqueInicialQtd)+' un. · final '+NUM(c.estoqueFinalQtd)+' un. · diferença '+NUM(Math.abs(c.difLiquidaQtd))+' un.</div>';   // r222
     html+='</div>';
+    /* r223: Quebra de Inventário — essencial em todas as análises */
+    html+='<div class="resumo-card kpi-destaque">';
+    html+='<div class="resumo-card-label">★ QUEBRA DE INVENTÁRIO</div>';
+    html+='<div class="resumo-card-valor'+(c.saldoLiquido<0?' text-red':'')+'">'+BRLi(c.saldoLiquido)+'</div>';
+    html+='<div class="resumo-card-titulo">Faltas + sobras, em valor</div>';
+    html+='<div class="resumo-card-detalhe">Faltas '+BRLi(c.totalFaltas)+' · sobras '+BRLi(c.totalSobras)+'</div>';
+    html+='</div>';
     /* r158: Eficiência Operacional — sem meta; alerta só abaixo de 90%; acima de 100% mostra a conta */
     var cls=c.acuracidade<90?'critico':'ok';
     html+='<div class="resumo-card '+cls+'">';
@@ -806,17 +813,16 @@ function renderCritica(page){
   var html='<div class="section-title"><i class="ti ti-notes"></i> Análise</div>';
   html+='<div class="analysis-box'+(analiseCarregando?' loading':'')+'" id="analiseCriticaBox">'+analiseTexto.split('\n\n').map(function(par){return '<p>'+par+'</p>';}).join('')+'</div>';
   html+='<div class="metrics">';
-  html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div>'+(c.acuracidade>100?'<div class="metric-detail">'+Engine.contaEficiencia(c)+'</div>':'')+'</div>';
-  /* r217: Inacurácia de Estoque — sem meta (cor neutra) */
-  /* r222: Inacurácia em unidades (diferença líquida ÷ estoque inicial) + % de SKUs com divergência (fórmula anterior) */
-  html+='<div class="metric kpi-destaque" title="|estoque final (contado) − estoque inicial (sistema)| ÷ estoque inicial × 100, em unidades"><div class="metric-label">★ Inacurácia de estoque</div><div class="metric-value">'+(c.inacuracidade===null?'—':PCT2(c.inacuracidade))+'</div><div class="metric-detail">Inicial '+NUM(c.estoqueInicialQtd)+' un. · final '+NUM(c.estoqueFinalQtd)+' un. · diferença '+NUM(Math.abs(c.difLiquidaQtd))+' un.</div></div>';
-  html+='<div class="metric" title="SKUs com divergência ÷ SKUs auditados × 100"><div class="metric-label">% de SKUs com divergência</div><div class="metric-value">'+PCT(c.pctSkusDiv)+'</div><div class="metric-detail">'+NUM(c.skusDivergentes)+' de '+NUM(c.totalSKUs)+' SKUs · '+NUM(c.faltaCount)+' falta · '+NUM(c.sobraCount)+' sobra</div></div>';
-  html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div><div class="metric-detail">Antes da contagem (sistema)</div></div>';
-  html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div><div class="metric-detail">Apurado na contagem física</div></div>';
-  html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div><div class="metric-detail">'+NUM(c.faltaCount)+' SKUs</div></div>';
-  html+='<div class="metric"><div class="metric-label">Valor das sobras</div><div class="metric-value text-amber">'+BRLi(c.totalSobras)+'</div><div class="metric-detail">'+NUM(c.sobraCount)+' SKUs</div></div>';
-  html+='<div class="metric"><div class="metric-label">Saldo líquido</div><div class="metric-value text-red">'+BRLi(c.saldoLiquido)+'</div><div class="metric-detail">Faltas − sobras</div></div>';
-  html+='<div class="metric"><div class="metric-label">Perda de estoque</div><div class="metric-value '+(c.perdaEstoquePct<0?'text-red':'text-green')+'">'+PCT(c.perdaEstoquePct)+'</div><div class="metric-detail">Valor contado vs. valor de sistema</div></div>';
+  /* r223: cards sem subtexto (a explicação de cada um vai no PDF); "Saldo líquido" virou "Quebra de Inventário" */
+  html+='<div class="metric"><div class="metric-label">Eficiência Operacional</div><div class="metric-value '+(c.acuracidade<90?'text-red':'text-green')+'">'+PCT(c.acuracidade)+'</div></div>';
+  html+='<div class="metric kpi-destaque"><div class="metric-label">★ Inacurácia de estoque</div><div class="metric-value">'+(c.inacuracidade===null?'—':PCT2(c.inacuracidade))+'</div></div>';
+  html+='<div class="metric kpi-destaque"><div class="metric-label">★ Quebra de Inventário</div><div class="metric-value '+(c.saldoLiquido<0?'text-red':'text-green')+'">'+BRLi(c.saldoLiquido)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">% de SKUs com divergência</div><div class="metric-value">'+PCT(c.pctSkusDiv)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">Valor estoque</div><div class="metric-value">'+BRLi(c.valorEstoque)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">Valor estoque contado</div><div class="metric-value">'+BRLi(c.valorEstoqueContado)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">Valor das faltas</div><div class="metric-value text-red">'+BRLi(c.totalFaltas)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">Valor das sobras</div><div class="metric-value text-amber">'+BRLi(c.totalSobras)+'</div></div>';
+  html+='<div class="metric"><div class="metric-label">Perda de estoque</div><div class="metric-value '+(c.perdaEstoquePct<0?'text-red':'text-green')+'">'+PCT(c.perdaEstoquePct)+'</div></div>';
   html+='</div>';
   if(c.hasCategorias){
     html+='<div class="section-title"><i class="ti ti-category"></i> Resultado por categoria</div>';
