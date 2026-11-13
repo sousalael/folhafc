@@ -370,6 +370,14 @@
                 </div>
                 <ul class="fc-pend-lista" id="lista-pend-nao-encerrados"></ul>
             </div>
+            <!-- r227: projetos encerrados (automática ou manualmente) sem nenhuma presença -->
+            <div class="fc-pend-card fc-pend-vermelho" id="card-pend-sem-presenca" style="display:none;">
+                <div class="fc-pend-head">
+                    <div class="fc-pend-titulo"><span class="fc-pend-icone">🚫</span> Encerrados sem presenças · <span id="pend-data-sem-presenca"></span></div>
+                    <div class="fc-pend-contagem" id="pend-count-sem-presenca">0</div>
+                </div>
+                <ul class="fc-pend-lista" id="lista-pend-sem-presenca"></ul>
+            </div>
             <div class="fc-pend-card fc-pend-laranja" id="card-pend-sem-analise" style="display:none;">
                 <div class="fc-pend-head">
                     <div class="fc-pend-titulo"><span class="fc-pend-icone">📋</span> Sem Análise de Preparação · <span id="pend-data-sem-analise"></span></div>
@@ -2587,6 +2595,20 @@
                 cardNaoEnc.style.display = 'none';
             }
 
+            const cardSemPres = document.getElementById('card-pend-sem-presenca');   // r227
+            if (res.semPresenca && res.semPresenca.length) {
+                document.getElementById('pend-data-sem-presenca').innerText = res.dataReferencia;
+                document.getElementById('pend-count-sem-presenca').innerText = res.semPresenca.length;
+                document.getElementById('lista-pend-sem-presenca').innerHTML = res.semPresenca.map(p => `
+                    <li class="fc-pend-item">
+                        <div class="fc-pend-cliente">${escaparHtml(p.cliente)} — ${escaparHtml(p.unidade)}</div>
+                        <div class="fc-pend-detalhe">Nenhuma presença registrada · encerrado ${p.automatico ? 'automaticamente' : 'manualmente'}</div>
+                    </li>`).join('');
+                cardSemPres.style.display = 'block';
+            } else {
+                cardSemPres.style.display = 'none';
+            }
+
             if (res.semAnalise && res.semAnalise.length) {
                 document.getElementById('pend-data-sem-analise').innerText = res.dataReferencia;
                 document.getElementById('pend-count-sem-analise').innerText = res.semAnalise.length;
@@ -2599,7 +2621,7 @@
                 cardSemAnalise.style.display = 'none';
             }
 
-            wrap.style.display = (cardNaoEnc.style.display === 'block' || cardSemAnalise.style.display === 'block') ? 'block' : 'none';
+            wrap.style.display = (cardNaoEnc.style.display === 'block' || cardSemPres.style.display === 'block' || cardSemAnalise.style.display === 'block') ? 'block' : 'none';
         } catch (err) {
             // Falha ao carregar pendências não deve travar o login: só esconde os cards.
             wrap.style.display = 'none';
@@ -4914,7 +4936,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-11-11-r226';
+    const VERSAO_ESPERADA = '2026-11-13-r227';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

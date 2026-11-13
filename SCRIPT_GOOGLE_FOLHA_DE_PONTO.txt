@@ -38,6 +38,8 @@ function doPost(e) {
 
     try { migrarDivisaoDespesasSePreciso_(); } catch (eMig) { Logger.log('r206 migração divisão despesas: ' + eMig.message); }   // r206: uma vez só
 
+    try { autoEncerrarSePreciso_(); } catch (eAE) { Logger.log('r227 encerramento automático: ' + eAE.message); }   // r227: uma vez por dia de trabalho
+
     if (action === 'getProjetos') { result = getProjetos(); }
     else if (action === 'verificarSupervisor') { result = verificarSupervisor(data.cpf, data.projeto); }
     else if (action === 'getListaPresencas') { result = getListaPresencas(data.projeto); }
@@ -1011,7 +1013,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-11-r226';
+const VERSAO_SCRIPT = '2026-11-13-r227';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -4197,6 +4199,52 @@ function getDataPendenciaAnterior() {
 // Diretor vê TODOS os projetos do dia anterior; Supervisor só vê os projetos
 // em que bateu presença (qualquer cargo) naquela data — cada um vê só os
 // projetos em que atuou, por decisão do Lael.
+// ============================================================================ //
+// r227: ENCERRAMENTO AUTOMÁTICO DOS PROJETOS
+// Às 3h30 (mesmo corte em que o projeto sai da lista do supervisor) todo projeto de
+// data anterior ao dia de trabalho vigente que ainda estiver aberto é encerrado.
+// "Encerrado em" recebe a data/hora + " (automático)". Roda pelo gatilho de hora em
+// hora e também na primeira chamada ao sistema depois do corte (o que vier antes).
+// ============================================================================ //
+var AUTOENC_FUNCAO = 'autoEncerrarRodar';
+function autoEncerrarRodar() { autoEncerrarSePreciso_(); }
+function autoEncerrarSePreciso_() {
+  var props = PropertiesService.getScriptProperties();
+  var hoje = getDataTrabalhoVigente();
+  if (props.getProperty('AUTOENC_DIA') === hoje) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return;
+  try {
+    if (props.getProperty('AUTOENC_DIA') === hoje) return;
+    encerrarProjetosVencidos_(hoje);
+    props.setProperty('AUTOENC_DIA', hoje);
+    autoEncerrarGarantirGatilho_(props);
+  } finally { lock.releaseLock(); }
+}
+function encerrarProjetosVencidos_(hoje) {
+  var sh = getSheet('Projetos'), dados = sh.getDataRange().getDisplayValues();
+  if (dados.length < 2) return 0;
+  var colE = colEncerradoEm_(sh), limite = ddmmyyyyToInt(hoje), n = 0;
+  var quando = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm') + ' (automático)';
+  for (var i = 1; i < dados.length; i++) {
+    var r = dados[i], d = ddmmyyyyToInt(r[0]);
+    if (!d || d >= limite || String(r[3]).trim() === 'Encerrado' || (!r[1] && !r[2])) continue;
+    sh.getRange(i + 1, 4).setValue('Encerrado');
+    sh.getRange(i + 1, colE).setNumberFormat('@').setValue(quando);
+    n++;
+  }
+  if (n) Logger.log('r227: ' + n + ' projeto(s) encerrado(s) automaticamente');
+  return n;
+}
+function autoEncerrarGarantirGatilho_(props) {
+  if (props.getProperty('AUTOENC_GATILHO') === 'ok') return;
+  try {
+    var tem = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === AUTOENC_FUNCAO; });
+    if (!tem) ScriptApp.newTrigger(AUTOENC_FUNCAO).timeBased().everyHours(1).create();
+    props.setProperty('AUTOENC_GATILHO', 'ok');
+  } catch (e) { Logger.log('r227 gatilho do encerramento automático: ' + e.message); }   // sem o gatilho, segue pela primeira chamada do dia
+}
+
 function getPendenciasHome(cpf) {
   try {
     var perfil = getPerfilPorCPF(cpf);
@@ -4205,6 +4253,8 @@ function getPendenciasHome(cpf) {
     var dataAlvo = getDataPendenciaAnterior();
 
     var dadosProj = getSheet('Projetos').getDataRange().getDisplayValues();
+    var colEnc = -1;   // r227: "Encerrado em" (para marcar o automático)
+    (dadosProj[0] || []).forEach(function (c, ci) { if (colEnc < 0 && divSemAcento_(c).indexOf('ENCERRADO EM') === 0) colEnc = ci; });
     var projetosDoDia = [];
     for (var i = 1; i < dadosProj.length; i++) {
       var r = dadosProj[i];
@@ -4212,12 +4262,13 @@ function getPendenciasHome(cpf) {
         projetosDoDia.push({
           cliente: fcLimparNome(r[1]),
           unidade: fcLimparNome(r[2]),
-          status: String(r[3] || '').trim()
+          status: String(r[3] || '').trim(),
+          automatico: colEnc >= 0 && String(r[colEnc] || '').indexOf('automático') >= 0
         });
       }
     }
     if (!projetosDoDia.length) {
-      return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: [], semAnalise: [] };
+      return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: [], semAnalise: [], semPresenca: [] };
     }
 
     // Presenças do dia anterior: lerPresencasDoProjeto devolve do primeiro
@@ -4263,9 +4314,13 @@ function getPendenciasHome(cpf) {
       analisadosSet[fcChave(rowA[5]) + '|' + fcChave(rowA[6])] = true;
     }
 
-    var naoEncerrados = [], semAnalise = [];
+    var naoEncerrados = [], semAnalise = [], semPresenca = [];
     projetosDoDia.forEach(function (p) {
       var chave = fcChave(p.cliente) + '|' + fcChave(p.unidade);
+      // r227: projeto encerrado sem nenhuma presença registrada (só o Diretor vê — ninguém atuou nele)
+      if (perfil === 'DIRETOR' && p.status === 'Encerrado' && !(atuouPorProjeto[chave] && Object.keys(atuouPorProjeto[chave]).length)) {
+        semPresenca.push({ cliente: p.cliente, unidade: p.unidade, automatico: p.automatico });
+      }
       var atuou = (perfil === 'DIRETOR') || (atuouPorProjeto[chave] && atuouPorProjeto[chave][cpfLimpo]);
       if (!atuou) return; // Supervisor só vê os projetos em que atuou
 
@@ -4281,7 +4336,7 @@ function getPendenciasHome(cpf) {
       }
     });
 
-    return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: naoEncerrados, semAnalise: semAnalise };
+    return { ok: true, dataReferencia: dataAlvo.br, naoEncerrados: naoEncerrados, semAnalise: semAnalise, semPresenca: semPresenca };
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
