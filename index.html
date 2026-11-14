@@ -568,7 +568,7 @@
             <hr class="border-secondary">
             <div class="d-flex flex-column flex-md-row gap-2 mt-2">
                 <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalMultiRelatorio" onclick="popularModalMulti()">📑 Relatório Múltiplo Unificado</button>
-                <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab">🔍 Pesquisar Colaborador</button>
+                <button class="btn fc-btn-verde btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalBuscaColab" onclick="popularSeletorMes('busca-periodo', 'busca-data-ini', 'busca-data-fim', null)">🔍 Pesquisar Colaborador</button>
                 <button class="btn btn-outline-light btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalDiagnosticoDesempenho" onclick="abrirDiagnosticoDesempenho()">📊 Diagnóstico de Desempenho</button>
             </div>
         </div>
@@ -1120,6 +1120,8 @@
       <div class="modal-body">
         <div class="bg-light rounded p-3 mb-3">
           <div class="text-muted small fw-bold text-uppercase mb-2" style="letter-spacing:1px;font-size:11px">Filtros</div>
+          <label class="form-label mb-1" style="font-size:11px;color:#6B7B8D;font-weight:600">Período</label>
+          <select id="multi-periodo" class="form-select form-select-sm mb-2"></select>   <!-- r228 -->
           <div class="d-flex gap-2 mb-2">
             <div class="flex-fill">
               <label class="form-label mb-1" style="font-size:11px;color:#6B7B8D;font-weight:600">Período — De</label>
@@ -1161,6 +1163,10 @@
       </div>
       <div class="modal-body">
         <div class="row g-2 mb-3 border p-3 rounded bg-light mx-0 shadow-sm">
+          <div class="col-12">
+            <label class="form-label text-sm fw-bold text-primary">Período:</label>
+            <select id="busca-periodo" class="form-select form-select-sm"></select>   <!-- r228 -->
+          </div>
           <div class="col-6">
             <label class="form-label text-sm fw-bold text-primary">Data Inicial:</label>
             <input type="date" id="busca-data-ini" class="form-control form-control-sm">
@@ -2015,9 +2021,11 @@
         // Popular datalist de clientes únicos
         const clientesUnicos = [...new Set(projetosEncerradosGlobal.map(p => p.cliente))].sort();
         document.getElementById('datalist-clientes-multi').innerHTML = clientesUnicos.map(c => `<option value="${c}">`).join('');
-        // Limpar filtros
-        document.getElementById('multi-data-ini').value = '';
-        document.getElementById('multi-data-fim').value = '';
+        // Limpar filtros (r228: período abre em "Hoje", pelo seletor)
+        const selM = document.getElementById('multi-periodo');
+        if (selM.dataset.pronto === '1') selM.value = String(IDX_PERIODO_HOJE);
+        popularSeletorMes('multi-periodo', 'multi-data-ini', 'multi-data-fim', null);
+        selM.onchange = () => { aplicarSeletorMes('multi-periodo', 'multi-data-ini', 'multi-data-fim', null); filtrarProjetosMulti(); };
         document.getElementById('multi-cliente').value = '';
         filtrarProjetosMulti();
     }
@@ -3014,6 +3022,13 @@
     // Preenche um <select> com os ultimos 13 meses + "Personalizado".
     // Ao trocar, atualiza os inputs de data e dispara o recarregamento.
     // ============================================================
+    // r228: Amanhã / Hoje / Ontem no topo do seletor de período (datas do calendário)
+    function gerarOpcoesDias() {
+        const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const h = new Date(), dia = n => new Date(h.getFullYear(), h.getMonth(), h.getDate() + n);
+        return [['Amanhã', 1], ['Hoje', 0], ['Ontem', -1]].map(([l, n]) => ({ label: l, iniISO: iso(dia(n)), fimISO: iso(dia(n)) }));
+    }
+    const IDX_PERIODO_HOJE = 1;   // posição de "Hoje" na lista
     function gerarOpcoesMeses(qtd) {
         const hoje = new Date();
         const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -3034,11 +3049,11 @@
         const sel = document.getElementById(selectId);
         if (!sel) return;
         if (sel.dataset.pronto !== '1') {
-            const meses = gerarOpcoesMeses(13);
+            const meses = gerarOpcoesDias().concat(gerarOpcoesMeses(13));   // r228
             sel.innerHTML = meses.map((m, i) => '<option value="' + i + '">' + m.label + '</option>').join('') + '<option value="custom">Personalizado</option>';
             sel.dataset.meses = JSON.stringify(meses);
             sel.dataset.pronto = '1';
-            sel.value = '0';
+            sel.value = String(IDX_PERIODO_HOJE);   // r228: abre em "Hoje"
             sel.onchange = () => aplicarSeletorMes(selectId, iniId, fimId, onChange);
         }
         aplicarSeletorMes(selectId, iniId, fimId, onChange);
@@ -4936,7 +4951,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-11-13-r227';
+    const VERSAO_ESPERADA = '2026-11-14-r228';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

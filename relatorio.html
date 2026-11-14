@@ -89,6 +89,10 @@
     <div class="rel-wrap">
         <div class="filtros-barra no-print">
             <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-2">
+                    <label>Período</label>
+                    <select id="f-periodo" class="form-select form-select-sm"></select>   <!-- r228 -->
+                </div>
                 <div class="col-6 col-md-2">
                     <label>Data inicial</label>
                     <input type="date" id="f-ini" class="form-control form-control-sm">
@@ -160,13 +164,42 @@
     // Ao abrir: NAO lista despesas. Busca um periodo amplo (ultimos 12 meses)
     // apenas para descobrir as opcoes dos filtros (supervisores, clientes,
     // grupos). As despesas so aparecem quando o usuario clica em "Aplicar".
+
+    // r228: seletor de período (Amanhã / Hoje / Ontem / meses / Personalizado) — datas do calendário
+    function periodoOpcoes() {
+        const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const h = new Date(), dia = n => new Date(h.getFullYear(), h.getMonth(), h.getDate() + n);
+        const op = [['Amanhã', 1], ['Hoje', 0], ['Ontem', -1]].map(([l, n]) => ({ label: l, ini: iso(dia(n)), fim: iso(dia(n)) }));
+        const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        for (let i = 0; i < 13; i++) {
+            const d = new Date(h.getFullYear(), h.getMonth() - i, 1);
+            op.push({ label: nomes[d.getMonth()] + '/' + d.getFullYear() + (i === 0 ? ' (mês atual)' : ''), ini: iso(d), fim: iso(i === 0 ? h : new Date(d.getFullYear(), d.getMonth() + 1, 0)) });
+        }
+        return op;
+    }
+    function montarSeletorPeriodo(ini, fim) {
+        const sel = document.getElementById('f-periodo'), op = periodoOpcoes();
+        sel.innerHTML = op.map((o, i) => '<option value="' + i + '">' + o.label + '</option>').join('') + '<option value="custom">Personalizado</option>';
+        const iniEl = document.getElementById('f-ini'), fimEl = document.getElementById('f-fim');
+        const aplicar = () => {
+            const o = op[parseInt(sel.value, 10)];
+            if (o) { iniEl.value = o.ini; fimEl.value = o.fim; }
+            iniEl.disabled = fimEl.disabled = sel.value !== 'custom';
+        };
+        let idx = 1;   // "Hoje"
+        if (ini || fim) { idx = op.findIndex(o => o.ini === ini && o.fim === fim); }
+        if (idx < 0) { sel.value = 'custom'; iniEl.value = ini || ''; fimEl.value = fim || ''; }
+        else sel.value = String(idx);
+        sel.onchange = aplicar;
+        aplicar();
+    }
+
     async function carregarOpcoesFiltros() {
         const hoje = new Date();
         const dozeMeses = new Date(hoje.getFullYear() - 1, hoje.getMonth(), hoje.getDate());
         const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-        // Preenche as datas visiveis com o periodo vindo da URL (mes atual).
-        document.getElementById('f-ini').value = params.get('ini') || '';
-        document.getElementById('f-fim').value = params.get('fim') || '';
+        // r228: seletor de período — usa o período vindo da tela anterior; sem ele, "Hoje"
+        montarSeletorPeriodo(params.get('ini') || '', params.get('fim') || '');
         try {
             // r114: antes buscava 12 meses so para montar os filtros (lento).
             // Agora busca apenas o periodo da URL (mes atual); as opcoes dos
