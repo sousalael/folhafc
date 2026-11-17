@@ -502,6 +502,10 @@
             <div class="alert alert-warning mb-0" id="aviso-presenca-pendente">
                 <div class="fw-bold mb-2">✋ Registre a sua presença neste projeto</div>
                 <div class="small mb-3">O link para os colaboradores baterem o ponto só é liberado depois que você registrar a sua presença.</div>
+                <div class="form-check text-start mb-3 p-2 ps-5 border rounded bg-white">   <!-- r229: LGPD -->
+                    <input class="form-check-input" type="checkbox" id="lgpd-gestor">
+                    <label class="form-check-label small" for="lgpd-gestor">Ao registrar minha presença, autorizo a Formula Code a usar meu CPF, meu nome e minha chave PIX somente para controle de presença e pagamento deste projeto, conforme a Lei Geral de Proteção de Dados (Lei 13.709/2018).</label>
+                </div>
                 <button class="btn btn-primary w-100 py-2 fw-bold" id="btn-registrar-presenca-gestor" onclick="registrarPresencaGestor()">✅ Registrar minha presença e liberar o link</button>
             </div>
             <div class="alert alert-success mb-0 hidden" id="aviso-presenca-ok">
@@ -1063,6 +1067,10 @@
         <h4 class="mb-3 text-primary fw-bold">Registrar Presença</h4>
         <p id="info-projeto-colab" class="fw-bold text-secondary mb-3"></p>
         <input type="text" id="cpf-colab" class="form-control form-control-lg mb-3 text-center cpf-mask" placeholder="Seu CPF (000.000.000-00)" maxlength="14">
+        <div class="form-check text-start mb-3 p-2 ps-5 border rounded bg-light">   <!-- r229: LGPD -->
+                    <input class="form-check-input" type="checkbox" id="lgpd-colab">
+                    <label class="form-check-label small" for="lgpd-colab">Ao registrar minha presença, autorizo a Formula Code a usar meu CPF, meu nome e minha chave PIX somente para controle de presença e pagamento deste projeto, conforme a Lei Geral de Proteção de Dados (Lei 13.709/2018).</label>
+                </div>
         
         <div id="area-botoes-padrao">
             <button class="btn btn-success btn-lg w-100 mb-2 fw-bold shadow-sm" id="btn-ponto-padrao" onclick="processarPonto('padrao')">Confirmar Presença</button>
@@ -2258,8 +2266,9 @@
     async function processarPonto(tipo) {
         const cpf = document.getElementById('cpf-colab').value;
         if(!cpf || cpf.replace(/\D/g, "").length !== 11) return alert("Digite um CPF válido com 11 dígitos.");
+        if(!document.getElementById('lgpd-colab').checked) return alert('Para registrar a presença, marque a caixa de concordância com o uso dos seus dados (LGPD).');   // r229: LGPD
 
-        let extras = { nome: null, pix: null, tipoPix: null, updatePix: false };
+        let extras = { nome: null, pix: null, tipoPix: null, updatePix: false, lgpd: true };
         let btn;
 
         if(tipo === 'padrao') btn = document.getElementById('btn-ponto-padrao');
@@ -2293,6 +2302,7 @@
                 if(res.message) alert(res.message); 
                 document.getElementById('cpf-colab').value = ''; document.getElementById('nome-cadastro').value = '';
                 document.getElementById('pix-cadastro').value = ''; document.getElementById('pix-alterar').value = '';
+                document.getElementById('lgpd-colab').checked = false;   // r229: cada lançamento pede o aceite
                 alternarTelaColab('padrao'); carregarLista(true);
                 
                 const btnP = document.getElementById('btn-ponto-padrao');
@@ -3589,15 +3599,18 @@
 
     async function registrarPresencaGestor() {
         if (!projetoAtivo || !projetoAtivo.data) return alert('Selecione um projeto antes de registrar sua presença.');
+        const caixaLgpd = document.getElementById('lgpd-gestor');   // r229: LGPD
+        if (!caixaLgpd || !caixaLgpd.checked) return alert('Para registrar a presença, marque a caixa de concordância com o uso dos seus dados (LGPD).');
         const btn = document.getElementById('btn-registrar-presenca-gestor');
         btn.innerText = 'Registrando...'; btn.disabled = true;
         try {
-            const res = await chamarApi({ action: 'verificarSupervisor', cpf: getCpfLogado(), projeto: projetoAtivo });
+            const res = await chamarApi({ action: 'verificarSupervisor', cpf: getCpfLogado(), projeto: Object.assign({}, projetoAtivo, { lgpd: true }) });   // r229
             if (!res.encontrado) {
                 alert('⚠️ Não foi possível registrar sua presença.\n\nSeu CPF não foi reconhecido como Supervisor ou Diretor.');
                 return;
             }
             presencaGestorOk = true;
+            caixaLgpd.checked = false;   // r229: o próximo registro pede o aceite de novo
             atualizarCabecalhoProjeto();
             aplicarEstadoPresenca();
             carregarLista(false);
@@ -4951,7 +4964,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-11-14-r228';
+    const VERSAO_ESPERADA = '2026-11-17-r229';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

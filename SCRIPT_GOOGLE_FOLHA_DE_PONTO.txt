@@ -658,6 +658,24 @@ function getProjetos() {
 // dentro da PROPRIA chamada de login, quando o front manda o projeto ja
 // selecionado. verificarSupervisor continua existindo (chamada avulsa por
 // registrarPresencaGestor) e devolve exatamente o mesmo resultado de sempre.
+// r229: LGPD — aceite obrigatório ao lançar a presença (supervisor e colaborador).
+// A coluna "Consentimento LGPD" da aba Presencas é localizada pelo cabeçalho; se
+// ainda não existir, é criada no fim (nunca reordena as colunas existentes).
+function presColConsentimento_(sh) {
+  var ultCol = Math.max(sh.getLastColumn(), 1);
+  var cab = sh.getRange(1, 1, 1, ultCol).getDisplayValues()[0];
+  for (var i = 0; i < cab.length; i++) if (divSemAcento_(cab[i]).indexOf('CONSENTIMENTO LGPD') === 0) return i;
+  sh.getRange(1, ultCol + 1).setValue('Consentimento LGPD');
+  return ultCol;
+}
+function presLinhaComConsentimento_(sh, base) {
+  var col = presColConsentimento_(sh);
+  var linha = base.slice();
+  while (linha.length < col) linha.push('');
+  linha[col] = 'Aceito em ' + Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm:ss');
+  return linha;
+}
+
 function montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) {
   const cpfFormatado = formatarCPF(cpfLimpo);
 
@@ -677,8 +695,9 @@ function montarDadosEntradaGestor(cpfLimpo, perfil, nome, projeto) {
          jaRegistrado = true; break;
        }
      }
-     if (!jaRegistrado) {
-       sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, perfil === 'DIRETOR' ? 'DIRETORIA' : 'SUPERVISÃO', '', new Date().toLocaleString('pt-BR'), nome]);
+     // r229: só registra com o aceite LGPD marcado (projeto.lgpd === true).
+     if (!jaRegistrado && projeto.lgpd === true) {
+       sheetPresencas.appendRow(presLinhaComConsentimento_(sheetPresencas, [projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, perfil === 'DIRETOR' ? 'DIRETORIA' : 'SUPERVISÃO', '', new Date().toLocaleString('pt-BR'), nome]));
      }
   }
 
@@ -730,6 +749,8 @@ function verificarSupervisor(cpf, projeto) {
 
 function registrarPonto(projeto, cpf, extras) {
   if (isProjetoEncerrado(projeto)) return { error: 'Este projeto já foi encerrado e não aceita novas presenças.' };
+  // r229: LGPD — sem o aceite marcado, nada é gravado.
+  if (!extras || extras.lgpd !== true) return { error: 'Para registrar a presença, marque a caixa de concordância com o uso dos seus dados (LGPD).' };
   
   const cpfLimpo = normalizarCPF(cpf);
   if (cpfLimpo.length !== 11) return { error: "CPF Inválido. Certifique-se de digitar os 11 dígitos." };
@@ -784,7 +805,7 @@ function registrarPonto(projeto, cpf, extras) {
     sheetColab.appendRow(novaLinha); invalidarColabCache();
   }
 
-  sheetPresencas.appendRow([projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, 'OPERAÇÃO', '', new Date().toLocaleString('pt-BR'), nome]);
+  sheetPresencas.appendRow(presLinhaComConsentimento_(sheetPresencas, [projeto.data, projeto.cliente, projeto.unidade, cpfFormatado, 'OPERAÇÃO', '', new Date().toLocaleString('pt-BR'), nome]));   // r229
   return { success: true };
 }
 
@@ -1013,7 +1034,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-14-r228';
+const VERSAO_SCRIPT = '2026-11-17-r229';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
