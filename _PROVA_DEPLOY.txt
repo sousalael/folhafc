@@ -1,10 +1,10 @@
-=== PROVA DE PUBLICACAO — 2026-11-14 19:05:34 UTC ===
-Versao esperada: 2026-11-14-r228
-VER (numero interno do clasp): 280
+=== PROVA DE PUBLICACAO — 2026-11-17 20:12:27 UTC ===
+Versao esperada: 2026-11-17-r229
+VER (numero interno do clasp): 281
 SITE_DEP_ID (implantacao do pipeline): AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G
 URL: https://script.google.com/macros/s/AKfycbyVfvG9y6AIMJxbsIMyj0RZQgPdQNA-fXs--ZuzmFoJ8UDJZaS5CCAe8uHF-RaKF6_G/exec
 
 --- tentativa 1 ---
-"versao":"2026-11-14-r228"
+"versao":"2026-11-17-r229"
 
 >>> RESULTADO: SUCESSO na tentativa 1 <<<
