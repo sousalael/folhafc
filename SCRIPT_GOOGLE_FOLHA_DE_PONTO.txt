@@ -38,6 +38,9 @@ function doPost(e) {
 
     try { migrarDivisaoDespesasSePreciso_(); } catch (eMig) { Logger.log('r206 migração divisão despesas: ' + eMig.message); }   // r206: uma vez só
 
+    try { migrarRelMetaSePreciso_(); } catch (eRM) { Logger.log('r230 migração relatórios: ' + eRM.message); }   // r230: uma vez só (libera as Propriedades do Script)
+    try { limparPropriedadesDiario_(); } catch (eLP) { Logger.log('r231 limpeza propriedades: ' + eLP.message); }   // r231: 1x por dia
+
     try { autoEncerrarSePreciso_(); } catch (eAE) { Logger.log('r227 encerramento automático: ' + eAE.message); }   // r227: uma vez por dia de trabalho
 
     if (action === 'getProjetos') { result = getProjetos(); }
@@ -429,7 +432,7 @@ function atualizarDivisaoDespesas() {
     }
     sh.getRange(2, col, saida.length, 1).setValues(saida);
     var res = { ok: true, total: saida.length, alteradas: alteradas, semProjetoEncontrado: semAchar, quando: new Date().toLocaleString('pt-BR') };
-    PropertiesService.getScriptProperties().setProperty('DIV_DESP_ULTIMA', JSON.stringify(res));
+    propSetSeguro_('DIV_DESP_ULTIMA', JSON.stringify(res));
     return res;
   } catch (e) { return { ok: false, erro: e.message }; }
   finally { lock.releaseLock(); }
@@ -439,7 +442,7 @@ function migrarDivisaoDespesasSePreciso_() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('DIV_DESP_MIGRACAO') === DIV_DESP_MIGRACAO) return;
   var r = atualizarDivisaoDespesas();
-  if (r && r.ok) props.setProperty('DIV_DESP_MIGRACAO', DIV_DESP_MIGRACAO);
+  if (r && r.ok) propSetSeguro_('DIV_DESP_MIGRACAO', DIV_DESP_MIGRACAO);
 }
 // r207: colunas "Apurado" e "Divisão" da aba Despesas (achadas pelo nome do cabeçalho)
 function despColunasExtras_(cab) {
@@ -1034,7 +1037,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-17-r229';
+const VERSAO_SCRIPT = '2026-11-18-r231';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -3253,7 +3256,7 @@ function listarRascunhosAuditoria(cpf) {
       if (normalizarCPF(row[3]) === cpfLimpo && row[9] === 'RASCUNHO') {
         rascunhos.push({
           id: row[0], tipoAvaliacao: row[4], cliente: row[5],
-          unidade: row[6], dataAuditoria: row[7], secaoAtual: row[10], dataRegistro: row[1]
+          unidade: row[6], dataAuditoria: extrairDataISO(row[7]), secaoAtual: row[10], dataRegistro: row[1]   // r231: data sem fuso
         });
       }
     }
@@ -3618,7 +3621,7 @@ function listarHistoricoAuditorias(dados, cpf) {
       if (d.unidade && row[6] !== d.unidade) continue;
       resultado.push({
         id: row[0], dataRegistro: row[1], auditor: row[2], tipoAvaliacao: row[4], nps: (perfil === 'DIRETOR' ? (mapaNps[row[0]] || null) : null),
-        cliente: row[5], unidade: row[6], dataAuditoria: row[7], status: status, tipoEstabelecimento: tipoEstabelecimentoDaLinhaRapido(row),
+        cliente: row[5], unidade: row[6], dataAuditoria: extrairDataISO(row[7]), status: status, tipoEstabelecimento: tipoEstabelecimentoDaLinhaRapido(row),
         scoreGeral: (row[16] instanceof Date) ? '' : (parseFloat(row[16])||''), scoreEquipe: (row[17] instanceof Date) ? '' : (parseFloat(row[17])||''), emailCliente: String(row[14]||''), dataEnvio: row[15] ? String(row[15]) : '',
         emailGerente: String(row[20] || '')   // r157
       });
@@ -3918,7 +3921,7 @@ function gerarRelatorioAuditoria(dados, cpf) {
     // Executivo reflitam exatamente o que já foi publicado aqui, em vez
     // de uma segunda análise independente que pode divergir ou até
     // contradizer a primeira.
-    PropertiesService.getScriptProperties().setProperty('rel_' + auditoriaId, JSON.stringify({
+    relMetaSet_('rel_' + auditoriaId, JSON.stringify({
       htmlId:arquivo.getId(), pdfId:pdfFile.getId(), linkHTML:linkHTML, linkPDF:linkPDF,
       textoEmail:relatorio.texto_email||'', geradoEm:new Date().toISOString(),
       analise:{
@@ -3934,10 +3937,185 @@ function gerarRelatorioAuditoria(dados, cpf) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
+// =====================================================================
+// r230: RELATÓRIOS E APRESENTAÇÕES DAS ANÁLISES FORA DAS PROPRIEDADES
+// As Propriedades do Script têm limite fixo de 500 KB no Google e cada
+// relatório (rel_<id>) e apresentação (apres_<id>) ocupava espaço lá até
+// estourar ("Você ultrapassou a cota de armazenamento de propriedades").
+// Agora ficam na aba "RelatoriosMeta": Chave | GeradoEm | Conteúdo (JSON),
+// o conteúdo dividido em pedaços de até 45.000 caracteres (limite da célula).
+// Leitura: primeiro a aba; se não achar, as Propriedades (compatibilidade).
+// =====================================================================
+const REL_META_ABA = 'RelatoriosMeta';
+const REL_META_MIGRACAO = 'r230';
+const REL_META_PEDACO = 45000;
+const REL_META_DIAS_MANTER = 183;   // migração: mantém só os dos últimos 6 meses
+function relMetaAba_() {
+  var pl = getPlanilha(), sh = pl.getSheetByName(REL_META_ABA);
+  if (!sh) {
+    sh = pl.insertSheet(REL_META_ABA);
+    sh.getRange(1, 1, 1, 3).setValues([['Chave', 'GeradoEm', 'Conteudo (JSON)']]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function relMetaLinha_(sh, chave) {
+  var ult = sh.getLastRow();
+  if (ult < 2) return -1;
+  var achou = sh.getRange(2, 1, ult - 1, 1).createTextFinder(String(chave)).matchEntireCell(true).findNext();
+  return achou ? achou.getRow() : -1;
+}
+function relMetaPedacos_(valor) {
+  var txt = String(valor || ''), out = [];
+  for (var i = 0; i < txt.length; i += REL_META_PEDACO) out.push("'" + txt.substr(i, REL_META_PEDACO));   // ' = sempre texto
+  return out.length ? out : ["'"];
+}
+function relMetaGet_(chave) {
+  try {
+    var sh = relMetaAba_(), r = relMetaLinha_(sh, chave);
+    if (r > 0) {
+      var nCols = Math.max(sh.getLastColumn() - 2, 1);
+      var txt = sh.getRange(r, 3, 1, nCols).getValues()[0].map(function (v) { return v === null || v === undefined ? '' : String(v); }).join('');
+      if (txt) return txt;
+    }
+  } catch (e) { Logger.log('relMetaGet_ (' + chave + '): ' + e.message); }
+  return PropertiesService.getScriptProperties().getProperty(chave);
+}
+function relMetaSet_(chave, valor) {
+  var sh = relMetaAba_();
+  var linha = [String(chave), new Date().toISOString()].concat(relMetaPedacos_(valor));
+  var r = relMetaLinha_(sh, chave);
+  if (r > 0) {
+    var ultCol = sh.getLastColumn();
+    if (ultCol >= 3) sh.getRange(r, 3, 1, ultCol - 2).clearContent();
+    sh.getRange(r, 1, 1, linha.length).setValues([linha]);
+  } else {
+    sh.appendRow(linha);
+  }
+  try { PropertiesService.getScriptProperties().deleteProperty(chave); } catch (e) {}
+}
+// Uma vez só: copia para a aba os rel_/apres_ dos últimos 6 meses e apaga
+// todos eles das Propriedades, liberando o espaço.
+// r231: uma vez por dia, sem depender de nada gravado nas Propriedades (que podem estar cheias)
+function limparPropriedadesDiario_() {
+  var cache = CacheService.getScriptCache(), hoje = Utilities.formatDate(new Date(), 'America/Fortaleza', 'yyyy-MM-dd');
+  if (cache.get('LIMPEZA_PROPS') === hoje) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;
+  try {
+    if (cache.get('LIMPEZA_PROPS') === hoje) return;
+    liberarPropriedades_();
+    cache.put('LIMPEZA_PROPS', hoje, 21600);
+  } finally { lock.releaseLock(); }
+}
+function migrarRelMetaSePreciso_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('REL_META_MIGRACAO') === REL_META_MIGRACAO) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;
+  try {
+    if (props.getProperty('REL_META_MIGRACAO') === REL_META_MIGRACAO) return;
+    var todas = props.getProperties(), limite = Date.now() - REL_META_DIAS_MANTER * 24 * 3600 * 1000;
+    var sh = relMetaAba_(), existentes = {}, ult = sh.getLastRow();
+    if (ult >= 2) sh.getRange(2, 1, ult - 1, 1).getValues().forEach(function (x) { existentes[String(x[0])] = 1; });
+    var linhas = [], apagar = [], largura = 3;
+    Object.keys(todas).forEach(function (k) {
+      if (k.indexOf('rel_') !== 0 && k.indexOf('apres_') !== 0) return;
+      apagar.push(k);
+      if (existentes[k]) return;
+      var v = todas[k], ger = 0;
+      try { ger = Date.parse(JSON.parse(v).geradoEm) || 0; } catch (e) {}
+      if (ger && ger < limite) return;   // mais antigo que 6 meses: descartado
+      var linha = [k, ger ? new Date(ger).toISOString() : ''].concat(relMetaPedacos_(v));
+      largura = Math.max(largura, linha.length);
+      linhas.push(linha);
+    });
+    if (linhas.length) {
+      linhas = linhas.map(function (l) { while (l.length < largura) l.push(''); return l; });
+      sh.getRange(sh.getLastRow() + 1, 1, linhas.length, largura).setValues(linhas);
+    }
+    apagar.forEach(function (k) { props.deleteProperty(k); });
+    propSetSeguro_('REL_META_MIGRACAO', REL_META_MIGRACAO);
+    Logger.log('r230: ' + linhas.length + ' relatórios/apresentações migrados, ' + apagar.length + ' apagados das Propriedades.');
+  } finally { lock.releaseLock(); }
+}
+
+// =====================================================================
+// r231: PROPRIEDADES À PROVA DE COTA (solução definitiva)
+// O Google limita as Propriedades do Script a 500 KB no total e 9 KB por
+// valor. A r230 tirou de lá os relatórios/apresentações; a r231 garante que
+// nenhuma gravação volte a travar o sistema:
+//  1. liberarPropriedades_() move para a aba RelatoriosMeta qualquer rel_/apres_
+//     que ainda esteja nas Propriedades (de qualquer data) e apaga os tokens
+//     de B.I. vencidos e registros de execução que podem ser refeitos.
+//  2. propSetSeguro_() grava; se der erro de cota, libera e tenta de novo.
+//  3. Roda no editor: diagnosticoPropriedades() mostra o que ocupa espaço e
+//     liberarPropriedadesAgora() faz a limpeza na hora.
+// =====================================================================
+const PROP_DESCARTAVEIS = ['DIV_DESP_ULTIMA'];   // só um "último resultado" informativo
+function propEhCota_(e) { var m = String((e && e.message) || e || '').toLowerCase(); return m.indexOf('cota') !== -1 || m.indexOf('quota') !== -1 || m.indexOf('too large') !== -1 || m.indexOf('muito grande') !== -1; }
+function liberarPropriedades_() {
+  var props = PropertiesService.getScriptProperties(), todas = props.getProperties();
+  var movidos = 0, apagados = 0, agora = Date.now();
+  var sh = null;
+  Object.keys(todas).forEach(function (k) {
+    var v = todas[k];
+    if (k.indexOf('rel_') === 0 || k.indexOf('apres_') === 0) {
+      try {
+        var ger = 0;
+        try { ger = Date.parse(JSON.parse(v).geradoEm) || 0; } catch (e0) {}
+        var recente = !ger || ger >= agora - REL_META_DIAS_MANTER * 24 * 3600 * 1000;   // mais de 6 meses: só apaga
+        sh = sh || relMetaAba_();
+        if (recente && relMetaLinha_(sh, k) < 0) { sh.appendRow([k, ger ? new Date(ger).toISOString() : ''].concat(relMetaPedacos_(v))); movidos++; }
+        props.deleteProperty(k); apagados++;
+      } catch (e) { Logger.log('liberarPropriedades_ ' + k + ': ' + e.message); }
+      return;
+    }
+    if (typeof BI_LIB_PREFIXO !== 'undefined' && k.indexOf(BI_LIB_PREFIXO) === 0) {
+      var vencido = true;
+      try { vencido = JSON.parse(v).exp < agora; } catch (e) {}
+      if (vencido) { props.deleteProperty(k); apagados++; }
+      return;
+    }
+    if (PROP_DESCARTAVEIS.indexOf(k) !== -1) { props.deleteProperty(k); apagados++; }
+  });
+  return { movidos: movidos, apagados: apagados };
+}
+function propSetSeguro_(chave, valor) {
+  var props = PropertiesService.getScriptProperties();
+  try { props.setProperty(chave, valor); return true; }
+  catch (e) {
+    if (!propEhCota_(e)) throw e;
+    liberarPropriedades_();
+    props.setProperty(chave, valor);   // se ainda falhar, o erro sobe com a mensagem original
+    return true;
+  }
+}
+// Rodar pelo editor do Apps Script (selecionar a função e clicar em Executar).
+function diagnosticoPropriedades() {
+  var todas = PropertiesService.getScriptProperties().getProperties(), grupos = {}, total = 0;
+  Object.keys(todas).forEach(function (k) {
+    var tam = (k.length + String(todas[k]).length) * 2;   // aproximado (bytes)
+    var g = (k.match(/^[A-Za-z]+_/) || [k])[0];
+    grupos[g] = grupos[g] || { qtd: 0, kb: 0 }; grupos[g].qtd++; grupos[g].kb += tam / 1024; total += tam;
+  });
+  var linhas = Object.keys(grupos).sort(function (a, b) { return grupos[b].kb - grupos[a].kb; })
+    .map(function (g) { return g + ': ' + grupos[g].qtd + ' item(ns), ' + grupos[g].kb.toFixed(1) + ' KB'; });
+  var txt = 'Total aproximado: ' + (total / 1024).toFixed(1) + ' KB de 500 KB\n' + linhas.join('\n');
+  Logger.log(txt);
+  return txt;
+}
+function liberarPropriedadesAgora() {
+  var r = liberarPropriedades_();
+  Logger.log('Movidos para a aba RelatoriosMeta: ' + r.movidos + ' · apagados das Propriedades: ' + r.apagados);
+  Logger.log(diagnosticoPropriedades());
+  return r;
+}
+
 function obterRelatorio(dados, cpf) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
-    var meta = PropertiesService.getScriptProperties().getProperty('rel_' + d.auditoriaId);
+    var meta = relMetaGet_('rel_' + d.auditoriaId);
     if (!meta) return { ok: false, erro: 'Relatório ainda não foi gerado' };
     return { ok: true, relatorio: JSON.parse(meta) };
   } catch (e) { return { ok: false, erro: e.message }; }
@@ -4003,7 +4181,7 @@ function enviarRelatorioAuditoria(dados, cpf) {
     if (!listaEmails.length) return { ok: false, erro: 'Informe ao menos um e-mail válido.' };
     if (listaEmails.length > 40) return { ok: false, erro: 'Máximo de 40 destinatários por envio.' };
     d.email = listaEmails.join(', ');
-    var meta = PropertiesService.getScriptProperties().getProperty('rel_' + d.auditoriaId);
+    var meta = relMetaGet_('rel_' + d.auditoriaId);
     if (!meta) return { ok: false, erro: 'Gere o relatório antes de enviar' };
     var relMeta = JSON.parse(meta);
     var aba = getOuCriarAbaAuditoria();
@@ -4024,7 +4202,7 @@ function enviarRelatorioAuditoria(dados, cpf) {
     // funcionava, continua funcionando normalmente.
     var apresentacaoAnexada = false;
     try {
-      var metaApres = PropertiesService.getScriptProperties().getProperty('apres_' + d.auditoriaId);
+      var metaApres = relMetaGet_('apres_' + d.auditoriaId);
       if (metaApres) {
         var apres = JSON.parse(metaApres);
         if (apres && apres.detalhada && apres.detalhada.pdfId) {
@@ -4238,7 +4416,7 @@ function autoEncerrarSePreciso_() {
   try {
     if (props.getProperty('AUTOENC_DIA') === hoje) return;
     encerrarProjetosVencidos_(hoje);
-    props.setProperty('AUTOENC_DIA', hoje);
+    propSetSeguro_('AUTOENC_DIA', hoje);
     autoEncerrarGarantirGatilho_(props);
   } finally { lock.releaseLock(); }
 }
@@ -4262,7 +4440,7 @@ function autoEncerrarGarantirGatilho_(props) {
   try {
     var tem = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === AUTOENC_FUNCAO; });
     if (!tem) ScriptApp.newTrigger(AUTOENC_FUNCAO).timeBased().everyHours(1).create();
-    props.setProperty('AUTOENC_GATILHO', 'ok');
+    propSetSeguro_('AUTOENC_GATILHO', 'ok');
   } catch (e) { Logger.log('r227 gatilho do encerramento automático: ' + e.message); }   // sem o gatilho, segue pela primeira chamada do dia
 }
 
@@ -4525,12 +4703,12 @@ function cobrancaRodar() {
         } catch (eEnv) { resumo.falhas.push(sup.email + ': ' + (eEnv.message || String(eEnv))); }
       });
     });
-    props.setProperty(COB_PROP_ULTIMOS, JSON.stringify(novos));
+    propSetSeguro_(COB_PROP_ULTIMOS, JSON.stringify(novos));
     cobLimparEscolhas(calc);   // r165
   } catch (e) {
     resumo.falhas.push(e.message || String(e));
   } finally {
-    try { props.setProperty(COB_PROP_EXEC, JSON.stringify(resumo)); } catch (e2) {}
+    try { propSetSeguro_(COB_PROP_EXEC, JSON.stringify(resumo)); } catch (e2) {}
     lock.releaseLock();
   }
 }
@@ -4542,7 +4720,7 @@ function cobLimparEscolhas(calcTodas) {
   var vivas = {}, novo = {};
   calcTodas.pendentes.forEach(function (p) { vivas[p.chave] = 1; });
   chaves.forEach(function (k) { if (vivas[k]) novo[k] = esc[k]; });
-  if (Object.keys(novo).length !== chaves.length) PropertiesService.getScriptProperties().setProperty(COB_PROP_ESCOLHAS, JSON.stringify(novo));
+  if (Object.keys(novo).length !== chaves.length) propSetSeguro_(COB_PROP_ESCOLHAS, JSON.stringify(novo));
 }
 // todas as lojas pendentes do período, inclusive as excluídas (que o cálculo esconde)
 function cobChavesPendentes() {
@@ -4589,7 +4767,7 @@ function cobrancaAtivar(dados, cpf) {
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     var url = String(d.urlApp || '');
     if (!/^https:\/\/[A-Za-z0-9._~\-\/]+\/$/.test(url)) return { ok: false, erro: 'Endereço do sistema inválido' };
-    PropertiesService.getScriptProperties().setProperty(COB_PROP_URL, url);
+    propSetSeguro_(COB_PROP_URL, url);
     try {
       cobGatilhos().forEach(function (t) { ScriptApp.deleteTrigger(t); });
       ScriptApp.newTrigger(COB_FUNCAO).timeBased().everyHours(1).create();   // r164: confere de hora em hora; o intervalo real vem do painel
@@ -4607,7 +4785,7 @@ function cobrancaSalvarFrequencia(dados, cpf) {
     var d = typeof dados === 'string' ? JSON.parse(dados) : (dados || {});
     var h = Number(d.horas);
     if (!(h >= 1 && h <= 24) || Math.floor(h) !== h) return { ok: false, erro: 'Informe um número inteiro de horas entre 1 e 24.' };
-    PropertiesService.getScriptProperties().setProperty(COB_PROP_HORAS, String(h));
+    propSetSeguro_(COB_PROP_HORAS, String(h));
     try {
       var gs = cobGatilhos();
       if (gs.length) { gs.forEach(function (t) { ScriptApp.deleteTrigger(t); }); ScriptApp.newTrigger(COB_FUNCAO).timeBased().everyHours(1).create(); }
@@ -4628,7 +4806,7 @@ function cobrancaDefinirLoja(dados, cpf) {
       if (!cobChavesPendentes()[chave]) return { ok: false, erro: 'Esta loja não está mais pendente (a análise pode ter sido concluída). Atualize a tela.' };
       var esc = cobLerEscolhas();
       if (acao === 'ativar') delete esc[chave]; else esc[chave] = acao === 'pausar' ? 'pausada' : 'excluida';
-      PropertiesService.getScriptProperties().setProperty(COB_PROP_ESCOLHAS, JSON.stringify(esc));
+      propSetSeguro_(COB_PROP_ESCOLHAS, JSON.stringify(esc));
     } finally { lock.releaseLock(); }
     return { ok: true };
   } catch (e) { return { ok: false, erro: e.message }; }
@@ -4752,7 +4930,7 @@ function prepararApresentacaoAuditoria(dados, cpf) {
     // publicado no relatório completo.
     var analisePreparacao = null;
     try {
-      var metaRel = PropertiesService.getScriptProperties().getProperty('rel_' + auditoriaId);
+      var metaRel = relMetaGet_('rel_' + auditoriaId);
       if (metaRel) {
         var relSalvo = JSON.parse(metaRel);
         if (relSalvo.analise) analisePreparacao = relSalvo.analise;
@@ -5082,7 +5260,7 @@ function salvarApresentacaoAuditoria(dados, cpf) {
 
     var detalhadaFinal = resultado.detalhada || null;
 
-    PropertiesService.getScriptProperties().setProperty('apres_' + auditoriaId, JSON.stringify({
+    relMetaSet_('apres_' + auditoriaId, JSON.stringify({
       detalhada: detalhadaFinal, geradoEm: new Date().toISOString()
     }));
 
@@ -5116,7 +5294,7 @@ function converterPptxParaPdfReal(pptxBlob, nomeBase) {
 function obterApresentacaoAuditoria(dados, cpf) {
   try {
     var d = typeof dados === 'string' ? JSON.parse(dados) : dados;
-    var meta = PropertiesService.getScriptProperties().getProperty('apres_' + (d.auditoriaId||d.id));
+    var meta = relMetaGet_('apres_' + (d.auditoriaId||d.id));
     if (!meta) return { ok: false, erro: 'Apresentação ainda não foi gerada' };
     return { ok: true, apresentacao: JSON.parse(meta) };
   } catch (e) { return { ok: false, erro: e.message }; }
@@ -5487,7 +5665,7 @@ function gerarTextoTemplate(ident, respostas, observacoes, scores, alimentacao) 
     resumo_executivo:resumo,analise_retaguarda:ret.trim(),analise_area_vendas:av.trim(),analise_equipe:analiseEquipe,
     analise_alimentacao:analiseAlimentacao,
     pontosPositivos:pp,oportunidades:op,sugestoes:su,
-    texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
+    texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+formatarDataBR(ident.data_auditoria)+'. Score geral: '+scoreG+'/10. Agradecemos a parceria.'
   };
 }
 
@@ -5541,7 +5719,7 @@ function gerarTextoTemplateFarmacia(ident, respostas, observacoes, scores) {
   if(eqR.length)suP.push('ampliar o dimensionamento da equipe de apoio nas áreas identificadas');
   var su=suP.length?('Sugerimos considerar: '+suP.join('; ')+'. Realizar essas adequações com alguma antecedência favorece a fluidez da operação.'):'Sugerimos manter e replicar o padrão de preparação observado como referência de boas práticas.';
   return {resumo_executivo:resumo,analise_retaguarda:ret,analise_area_vendas:av,analise_equipe:analiseEquipe,pontosPositivos:pp,oportunidades:op,sugestoes:su,
-    texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+(ident.data_auditoria||'')+'. Score geral: '+sg.toFixed(1)+'/10. Agradecemos a parceria.'};
+    texto_email:'Prezado(a), compartilhamos a Análise de Preparação para Inventário da unidade '+(ident.unidade||'')+' realizada em '+formatarDataBR(ident.data_auditoria)+'. Score geral: '+sg.toFixed(1)+'/10. Agradecemos a parceria.'};
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -8181,7 +8359,7 @@ function biFinanceiroDados(cpf, forcar) {
     if (!gravou) {
       cacheId = DriveApp.createFile(BI_FIN_CACHE_NOME, json, MimeType.PLAIN_TEXT).getId();
     }
-    props.setProperty(BI_FIN_PROP, JSON.stringify({
+    propSetSeguro_(BI_FIN_PROP, JSON.stringify({
       fonte: fonte, mesAtual: mesAtual, formato: BI_FIN_FORMATO, cacheId: cacheId, processadoEm: Date.now()
     }));
     resultado.origemResposta = 'processado';
@@ -8605,7 +8783,7 @@ function biValidarCodigo(cpf, codigo) {
   try { biLimparLiberacoes_(); } catch (e) {}
   var tokenBI = Utilities.getUuid() + '-' + new Date().getTime();
   var exp = biFimDoDia_();
-  PropertiesService.getScriptProperties().setProperty(BI_LIB_PREFIXO + tokenBI, JSON.stringify({ cpf: cpfLimpo, exp: exp }));
+  propSetSeguro_(BI_LIB_PREFIXO + tokenBI, JSON.stringify({ cpf: cpfLimpo, exp: exp }));
   cache.put(chaveUsado, tokenBI, 60);
   return { success: true, tokenBI: tokenBI, expiraEm: exp };
 }

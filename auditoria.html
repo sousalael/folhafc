@@ -477,7 +477,7 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r229';
+const VERSAO = 'r231';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1046,7 +1046,7 @@ function htmlAbaPreenchimento() {
         ${rascunhos.map((r,i) => `
           <div class="rascunho-item" onclick="carregarRascunho(${i})">
             <div class="ri-titulo">${r.identificacao.cliente || 'Cliente não definido'}</div>
-            <div class="ri-sub">${r.identificacao.unidade || '—'} • ${r.identificacao.data_auditoria || '—'}</div>
+            <div class="ri-sub">${r.identificacao.unidade || '—'} • ${dataBR(r.identificacao.data_auditoria) || '—'}</div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
               <span class="ri-badge">RASCUNHO</span>
               <button type="button" class="btn-fc" style="width:auto;margin-left:auto;padding:6px 12px;font-size:11px;background:#FDEAEA;color:#E05252" onclick="event.stopPropagation();excluirRascunho(${i})">🗑️ Excluir</button>
@@ -2066,7 +2066,7 @@ async function finalizarAvaliacao() {
         <div style="font-size:56px;margin-bottom:16px">✅</div>
         <h2 style="font-size:20px;color:var(--navy);margin-bottom:8px">Avaliação Finalizada</h2>
         <p style="color:var(--text-light);margin-bottom:16px">
-          ${state.identificacao.cliente} — ${state.identificacao.unidade}<br>${state.identificacao.data_auditoria}
+          ${state.identificacao.cliente} — ${state.identificacao.unidade}<br>${dataBR(state.identificacao.data_auditoria)}
         </p>
         <p style="font-size:13px;color:var(--text);margin-bottom:24px">
           A avaliação foi salva com sucesso. O relatório pode ser gerado a qualquer momento pelo <strong>Histórico</strong>.
@@ -2364,7 +2364,7 @@ function histItemConcluido(a, isDiretor) {
     return `
     <div class="rascunho-item" style="cursor:default">
       <div class="ri-titulo">${a.cliente} — ${a.unidade}</div>
-      <div class="ri-sub">${a.dataAuditoria} • ${a.auditor} • ${a.tipoAvaliacao}</div>
+      <div class="ri-sub">${dataBR(a.dataAuditoria)} • ${a.auditor} • ${a.tipoAvaliacao}</div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700;color:var(--navy)">Score: ${a.scoreGeral || '—'}</span>
         <span style="font-size:12px;color:var(--orange)">Equipe: ${a.scoreEquipe || '—'}</span>
@@ -3529,9 +3529,23 @@ function npsMesRotulo(ym) {
   if (p.length < 2) return 'sem data';
   return meses[parseInt(p[1], 10) - 1] + '/' + p[0];
 }
+// r231: data no padrão brasileiro (dd/mm/aaaa) em todas as telas.
+// Aceita aaaa-mm-dd, ISO com hora (2026-11-11T03:00:00.000Z, convertido para o
+// fuso de Fortaleza), dd/mm/aaaa (devolve igual) e objetos Date.
+function dataBR(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) return isNaN(v) ? '' : v.toLocaleDateString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const t = String(v).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(t)) return t.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) {
+    const d = new Date(t);
+    if (!isNaN(d)) return d.toLocaleDateString('pt-BR', { timeZone: 'America/Fortaleza' });
+  }
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : t;
+}
 function npsDataBR(iso) {
-  const p = String(iso || '').substring(0, 10).split('-');
-  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '—';
+  return dataBR(iso) || '—';
 }
 
 function npsBarrasDist(dist, de, corFn) {
@@ -4885,7 +4899,7 @@ async function prepararEnvio(auditoriaId) {
   state.audEnvio = {
     auditoriaId,
     titulo: (r.cliente || a.cliente || '') + ' — ' + (r.unidade || a.unidade || ''),
-    data: a.dataAuditoria || '',
+    data: dataBR(a.dataAuditoria),
     emails: ((r.ok && r.emails) || []).map(e => ({ email: e.email, sub: e.origem || '', marcado: e.marcar !== false })),
     // r160: cópia oculta padrão de toda Análise de Preparação para Inventário — vem marcada,
     // dá pra desmarcar cada endereço individualmente só neste envio.
@@ -5352,7 +5366,7 @@ function montarPptxApresentacao(prep, variante) {
         const nome = (ident.cliente||'') + '\n' + (ident.unidade||'');
         const hNome = Math.min(1.1, pptMedirAltura(nome, PPT_PAINEL_W, 12, 1.1));
         s.addText(nome, { x:PPT_PAINEL_X, y:0.8, w:PPT_PAINEL_W, h:hNome, fontSize:12, fontFace:'Arial', bold:true, color:'FFFFFF', isTextBox:true, margin:0, valign:'top' });
-        const info = (ident.data_auditoria||'') + '\n' + (ident.tipo_avaliacao||'');
+        const info = dataBR(ident.data_auditoria) + '\n' + (ident.tipo_avaliacao||'');
         s.addText(info, { x:PPT_PAINEL_X, y:0.8 + hNome + 0.12, w:PPT_PAINEL_W, h:Math.min(1.2, pptMedirAltura(info, PPT_PAINEL_W, 10, 1.4)), fontSize:10, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, lineSpacingMultiple:1.4, valign:'top' });
       }
 
@@ -5430,7 +5444,7 @@ function montarPptxApresentacao(prep, variante) {
         { text:'Preparação para Inventário', options:{ color: GREEN, fontSize:30, fontFace:'Calibri', bold:true } }
       ], { x:0.8, y:0.7, w:8.4, h:1.1, isTextBox:true, margin:0 });
       s1.addText('Apresentação Executiva', { x:0.8, y:1.85, w:6, h:0.4, fontSize:16, fontFace:'Calibri', color: GREEN, isTextBox:true, margin:0 });
-      const sub = (ident.cliente||'') + ' — ' + (ident.unidade||'') + '  ·  ' + (ident.data_auditoria||'');
+      const sub = (ident.cliente||'') + ' — ' + (ident.unidade||'') + '  ·  ' + dataBR(ident.data_auditoria);
       s1.addText(sub, { x:0.8, y:2.45, w:8.4, h:Math.min(1.2, pptMedirAltura(sub, 8.4, 13, 1.1)), fontSize:13, fontFace:'Arial', color: LABEL, isTextBox:true, margin:0, valign:'top' });
       pptLogo(s1, 3.2, 4.15, 3.6, 0.94, 'centro');   // r153: sem achatar
 
@@ -6124,6 +6138,24 @@ async function abrirDiretoNoEnvio(id) {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// r231: avisa quando o script publicado no Google não é o desta página
+// (ex.: o robô de publicação não terminou). Assim um erro antigo não passa
+// por erro novo.
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const r = await apiCall('getVersaoScript');
+    const v = String((r && r.versao) || '');
+    if (!v || v.slice(-VERSAO.length - 1) === '-' + VERSAO) return;
+    const nServ = parseInt((v.match(/r(\d+)$/) || [])[1] || '0', 10), nApp = parseInt(VERSAO.replace(/\D/g, ''), 10);
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#D64545;color:#fff;font:600 13px Arial,sans-serif;padding:10px 14px;text-align:center';
+    div.textContent = nServ < nApp
+      ? '⚠️ O script do Google ainda está na versão ' + v + ' e esta página é a ' + VERSAO + '. Publique o script novo (nova implantação) para as correções valerem.'
+      : '⚠️ O servidor está numa versão mais nova (' + v + '). Recarregue a página (Ctrl+F5).';
+    document.body.appendChild(div);
+  } catch (e) {}
+});
 </script>
 </body>
 </html>
