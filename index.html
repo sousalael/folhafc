@@ -3242,8 +3242,45 @@
         aviso.classList.toggle('hidden', !(f && f.recursoProprio));
     }
 
-    function alternarSemProjeto() {
-        const marcado = document.getElementById('desp-sem-projeto').checked;
+    // r232: supervisor confirma por código (e-mail) que a despesa é mesmo sem projeto.
+    // Vale para uma única despesa; Diretor não passa por isso.
+    let despSemProjToken = null;
+    function ehSupervisorLogado() { return getPerfilLogado() === 'SUPERVISOR'; }
+    function desmarcarSemProjeto() {
+        const chk = document.getElementById('desp-sem-projeto');
+        if (chk) chk.checked = false;
+        document.getElementById('desp-campos-centro').classList.add('hidden');
+        despSemProjToken = null;
+    }
+    async function confirmarSemProjetoSupervisor() {
+        if (!confirm('Esta despesa realmente NÃO pertence a nenhum projeto?\n\nSe ela é de um inventário/loja, clique em Cancelar e lance no projeto.\n\nOK = sim, é sem projeto (vamos enviar um código para o seu e-mail)')) return false;
+        let res;
+        try { res = await chamarApi({ action: 'despSemProjSolicitar', cpf: getCpfLogado() }); }
+        catch (e) { alert('⚠️ Não foi possível enviar o código.\n\n' + e.message); return false; }
+        for (let i = 0; i < 5; i++) {
+            const cod = prompt('Enviamos um código de 6 dígitos para ' + (res.emailMascarado || 'o seu e-mail') + '.\n\nDigite o código para confirmar que esta despesa NÃO tem projeto:');
+            if (cod === null) return false;
+            try {
+                const v = await chamarApi({ action: 'despSemProjValidar', cpf: getCpfLogado(), codigo: String(cod).trim() });
+                despSemProjToken = v.token;
+                return true;
+            } catch (e) {
+                alert('⚠️ ' + e.message);
+                if (!/incorreto/i.test(e.message)) return false;
+            }
+        }
+        return false;
+    }
+    async function alternarSemProjeto() {
+        const chk = document.getElementById('desp-sem-projeto');
+        const marcado = chk.checked;
+        despSemProjToken = null;
+        if (marcado && ehSupervisorLogado()) {
+            chk.disabled = true;
+            let ok = false;
+            try { ok = await confirmarSemProjetoSupervisor(); } finally { chk.disabled = false; }
+            if (!ok) { desmarcarSemProjeto(); return; }
+        }
         document.getElementById('desp-campos-centro').classList.toggle('hidden', !marcado);
         if (marcado && !document.getElementById('desp-data-centro').value) {
             document.getElementById('desp-data-centro').value = hojeISO();
@@ -3287,6 +3324,10 @@
         if (!tipo) return alert('Selecione o Tipo de Despesa.');
         if (!valor || valor <= 0) return alert('Informe um valor maior que zero.');
         if (!forma) return alert('Selecione a Forma de Pagamento.');
+        if (destino.semProjeto && ehSupervisorLogado() && !despSemProjToken) {   // r232
+            desmarcarSemProjeto();
+            return alert('Despesa sem projeto precisa da confirmação por código.\n\nMarque de novo a opção "Despesa sem projeto" para receber o código no seu e-mail.');
+        }
 
         const btn = document.getElementById('btn-gravar-despesa');
         btn.innerText = comprovantes.desp ? 'Enviando comprovante...' : 'Gravando...';
@@ -3300,7 +3341,8 @@
                     data: destino.data, cliente: destino.cliente, unidade: destino.unidade, semProjeto: destino.semProjeto,
                     tipo: tipo, valor: valor, formaPagamento: forma, obs: obs,
                     supervisor: getSupervisorLogado(), comprovante: comprovantes.desp,
-                    confirmarDuplicata: !!confirmarDuplicata
+                    confirmarDuplicata: !!confirmarDuplicata,
+                    confirmacaoSemProjeto: destino.semProjeto ? despSemProjToken : null   // r232
                 }
             });
 
@@ -3322,6 +3364,7 @@
             }
 
             limparFormularioDespesa();
+            if (destino.semProjeto && ehSupervisorLogado()) desmarcarSemProjeto();   // r232: o código vale para uma despesa só
             await carregarDespesas();
 
             const outra = confirm('✅ Despesa gravada com sucesso!\n\nDeseja lançar outra despesa?\n\nOK = lançar outra\nCancelar = encerrar meus lançamentos');
@@ -3331,6 +3374,7 @@
                 await alterarSessaoDespesas('ENCERRADO', true);
             }
         } catch (err) {
+            if (/confirmação pelo código/.test(err.message)) desmarcarSemProjeto();   // r232: autorização vencida/usada
             alert('⚠️ A despesa NÃO foi gravada.\n\n' + err.message);
         } finally {
             btn.innerText = '💾 Gravar Despesa';
@@ -4964,7 +5008,7 @@
     // Indicador de versao do script: elimina a duvida sobre se o
     // Apps Script publicado e realmente a versao mais recente.
     // ============================================================
-    const VERSAO_ESPERADA = '2026-11-18-r231';
+    const VERSAO_ESPERADA = '2026-11-19-r232';
 
     // r172: logo após uma publicação, o site (GitHub Pages, ~1 min) fica pronto antes do
     // servidor (robô do Apps Script, ~3 min). Se o servidor ainda está numa versão ANTERIOR,

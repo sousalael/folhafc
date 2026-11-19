@@ -51,6 +51,8 @@ function doPost(e) {
     else if (action === 'encerrarProjeto') { result = encerrarProjeto(data.projeto || data.project, data.cpf); } // CORRIGIDO (autorizado) · r203: + divisão
     else if (action === 'getRelatorioMultiplo') { result = getRelatorioMultiplo(data.projetos); }
     else if (action === 'pesquisarColaboradores') { result = pesquisarColaboradores(data.filtros, data.cpf); }   // r212: + obs e adiantamentos
+    else if (action === 'despSemProjSolicitar') { result = despSemProjSolicitar(data.cpf); }                    // r232: despesa sem projeto (supervisor)
+    else if (action === 'despSemProjValidar') { result = despSemProjValidar(data.cpf, data.codigo); }
     else if (action === 'encEdicaoStatus') { result = encEdicaoStatus(data.cpf, data.projeto); }                    // r212: editar equipe de projeto encerrado
     else if (action === 'encEdicaoSolicitar') { result = encEdicaoSolicitar(data.cpf, data.login, data.senha, data.projeto); }
     else if (action === 'encEdicaoValidar') { result = encEdicaoValidar(data.cpf, data.codigo, data.projeto); }
@@ -1037,7 +1039,7 @@ function diagnosticoDesempenho(cpf) {
   return { success: true, msAbrirPlanilha: msAbrir, abas: abas };
 }
 
-const VERSAO_SCRIPT = '2026-11-18-r231';
+const VERSAO_SCRIPT = '2026-11-19-r232';
 function getVersaoScript() { return { versao: VERSAO_SCRIPT }; }
 
 // Permite verificar a versao publicada ABRINDO A URL DIRETO NO NAVEGADOR,
@@ -1071,7 +1073,8 @@ function doGet(e) {
     'diagPainel', 'diagGerarAnalise', 'diagObterQuestionario', 'diagResponder',
     'cobrancaStatus', 'cobrancaAtivar', 'cobrancaDesativar', 'cobrancaSalvarFrequencia', 'cobrancaDefinirLoja',
     'avalInternaListar', 'avalInternaCorrigir', 'divDespesasAtualizar', 'divDespesasStatus', 'despesasMarcarApurado',
-    'encEdicaoStatus', 'encEdicaoSolicitar', 'encEdicaoValidar', 'encEdicaoSalvar', 'presencasApurar'
+    'encEdicaoStatus', 'encEdicaoSolicitar', 'encEdicaoValidar', 'encEdicaoSalvar', 'presencasApurar',
+    'despSemProjSolicitar', 'despSemProjValidar'   // r232
   ];
   return ContentService.createTextOutput(JSON.stringify({
     versao: VERSAO_SCRIPT,
@@ -1912,6 +1915,55 @@ function reanalisarTudo() {
   return { success: true, reprocessados: total };
 }
 
+// =====================================================================
+// r232: DESPESA SEM PROJETO — CONFIRMAÇÃO POR CÓDIGO (SÓ PERFIL SUPERVISOR)
+// Ao marcar "Despesa sem projeto", o supervisor recebe um código no e-mail e
+// confirma que a despesa realmente não pertence a nenhum projeto. O código
+// gera uma autorização de uso único (30 min) que o lançamento consome.
+// Diretor não passa por isso.
+// =====================================================================
+const DESP_SP_TOKEN_SEG = 1800;
+function despSemProjSolicitar(cpf) {
+  var cpfL = normalizarCPF(cpf);
+  if (getPerfilPorCPF(cpfL) !== 'SUPERVISOR') return { error: 'A confirmação por código é exigida somente do perfil Supervisor.' };
+  var email = getEmailPorCPF(cpfL);
+  if (!email || email.indexOf('@') === -1) return { error: 'Não há e-mail válido cadastrado para o seu CPF. Procure a Diretoria para lançar despesa sem projeto.' };
+  var codigo = String(Math.floor(100000 + Math.random() * 900000));
+  CacheService.getScriptCache().put('dspotp_' + cpfL, JSON.stringify({ codigo: codigo, tentativas: 0 }), OTP_VALIDADE_SEG);
+  try {
+    MailApp.sendEmail({ to: email, subject: 'Confirmação de despesa sem projeto - Folha de Ponto', inlineImages: { fclogo: fcLogoEmailBlob() },
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:480px">' + fcCabecalhoEmailHtml() +
+        '<p style="margin-top:20px">Olá, <strong>' + getNomePorCPF(cpfL) + '</strong>.</p>' +
+        '<p>Você marcou <strong>"Despesa sem projeto (centro de custo)"</strong> na Folha de Ponto.</p>' +
+        '<p style="background:#FFF4E6;border-left:4px solid #E8872B;padding:10px 12px"><strong>Esta despesa realmente NÃO pertence a nenhum projeto?</strong><br>' +
+        'Se ela é de um inventário/loja, não use este código: desmarque a opção e lance a despesa no projeto.</p>' +
+        '<p>Se a despesa não tem projeto associado, digite este código para confirmar:</p>' +
+        '<p style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#001528">' + codigo + '</p>' +
+        '<p style="color:#666">Válido por 10 minutos e para uma única despesa. Se você não pediu, ignore e avise a Diretoria.</p></div>' });
+  } catch (e) { return { error: 'Não foi possível enviar o e-mail: ' + e.toString() }; }
+  return { success: true, emailMascarado: mascararEmail(email) };
+}
+function despSemProjValidar(cpf, codigo) {
+  var cpfL = normalizarCPF(cpf), cache = CacheService.getScriptCache(), chave = 'dspotp_' + cpfL;
+  if (getPerfilPorCPF(cpfL) !== 'SUPERVISOR') return { error: 'A confirmação por código é exigida somente do perfil Supervisor.' };
+  var bruto = cache.get(chave); if (!bruto) return { error: 'Código expirado ou inexistente. Desmarque e marque a opção de novo para receber outro.' };
+  var d = JSON.parse(bruto);
+  if (d.tentativas >= OTP_MAX_TENTATIVAS) { cache.remove(chave); return { error: 'Número máximo de tentativas excedido. Desmarque e marque a opção de novo para receber outro código.' }; }
+  if (String(codigo || '').trim() !== d.codigo) { d.tentativas++; cache.put(chave, JSON.stringify(d), OTP_VALIDADE_SEG); return { error: 'Código incorreto.' }; }
+  cache.remove(chave);
+  var tok = Utilities.getUuid();
+  cache.put('dsptok_' + tok, JSON.stringify({ cpf: cpfL, quando: Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm:ss') }), DESP_SP_TOKEN_SEG);
+  return { success: true, token: tok };
+}
+// Coluna "Confirmado sem projeto" da aba Despesas: achada pelo cabeçalho; criada no fim se não existir.
+function despColConfirmSemProj_(sh) {
+  var ult = Math.max(sh.getLastColumn(), 1);
+  var cab = sh.getRange(1, 1, 1, ult).getDisplayValues()[0];
+  for (var i = 0; i < cab.length; i++) if (divSemAcento_(cab[i]).indexOf('CONFIRMADO SEM PROJETO') === 0) return i + 1;
+  sh.getRange(1, ult + 1).setValue('Confirmado sem projeto');
+  return ult + 1;
+}
+
 function lancarDespesa(d) {
   if (!d || !d.data || !d.cliente || !d.unidade) return { error: 'Projeto ou centro de custo nao identificado.' };
   if (!d.tipo) return { error: 'Selecione o Tipo de Despesa.' };
@@ -1922,6 +1974,16 @@ function lancarDespesa(d) {
 
   const perfil = getPerfilPorCPF(d.cpf);
   if (perfil !== 'SUPERVISOR' && perfil !== 'DIRETOR') return { error: 'Apenas Supervisor ou Diretoria podem lancar despesas.' };
+  // r232: supervisor só lança despesa sem projeto com a confirmação por código (uso único)
+  var spTok = null, spInfo = null;
+  if (d.semProjeto && perfil === 'SUPERVISOR') {
+    spTok = String(d.confirmacaoSemProjeto || '');
+    var spBruto = spTok ? CacheService.getScriptCache().get('dsptok_' + spTok) : null;
+    if (spBruto) { try { spInfo = JSON.parse(spBruto); } catch (eSp) { spInfo = null; } }
+    if (!spInfo || spInfo.cpf !== normalizarCPF(d.cpf)) {
+      return { error: 'Despesa sem projeto precisa da confirmação pelo código enviado ao seu e-mail. Desmarque e marque de novo a opção "Despesa sem projeto" para receber um novo código.', exigeCodigoSemProjeto: true };
+    }
+  }
   // r219: supervisor também pode lançar despesa sem projeto (centro de custo)
   if (!d.semProjeto) { const erroDiv = exigirProjetoPermitido(d.cpf, { data: d.data, cliente: d.cliente, unidade: d.unidade }); if (erroDiv) return { error: erroDiv }; }   // r203
 
@@ -1975,7 +2037,13 @@ function lancarDespesa(d) {
     while (linhaNova.length < colDiv) linhaNova.push('');
     linhaNova[colDiv - 1] = div === null ? '' : div;
   } catch (eDiv) { Logger.log('r206 divisão no lançamento: ' + eDiv.message); }
+  if (spInfo) {   // r232: comprovante da confirmação do supervisor
+    const colConf = despColConfirmSemProj_(shDesp);
+    while (linhaNova.length < colConf) linhaNova.push('');
+    linhaNova[colConf - 1] = 'Confirmado por código em ' + spInfo.quando;
+  }
   shDesp.appendRow(linhaNova);
+  if (spTok) { try { CacheService.getScriptCache().remove('dsptok_' + spTok); } catch (eRm) {} }   // r232: uso único
 
   // BLOCO 1 — se o supervisor confirmou que e DIFERENTE de uma identica,
   // registra para a Diretoria revisar (marca de duplicidade).
