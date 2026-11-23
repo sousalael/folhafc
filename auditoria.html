@@ -470,14 +470,15 @@ button.pf-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,21,
 
 <!-- INPUT CAMERA OCULTO -->
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
-<input type="file" id="galeriaInput" accept="image/*" style="display:none" multiple>
+<!-- r233: extensões explícitas fazem o Android abrir a galeria/arquivos (e não só a câmera) e mostram fotos HEIC do iPhone/Samsung -->
+<input type="file" id="galeriaInput" accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none" multiple>
 
 <script>
 /* ═══════════════════════════════════════════════════════
    CONSTANTES
    ═══════════════════════════════════════════════════════ */
 const API_URL = (function(){ /* r158: endereço do servidor publicado automaticamente pelo robô do GitHub (backend.json); se não carregar, usa o endereço fixo de sempre */ var RESERVA='https://script.google.com/macros/s/AKfycbyHQEQanZCbRh7BHA0QIvUKdmNmtrYlDuWSYf7kZc8PCZbzfXk3qrCN7YQ0je6TpENw/exec'; try{ var x=new XMLHttpRequest(); x.open('GET','backend.json?t='+Date.now(),false); x.send(null); if(x.status===200){ var j=JSON.parse(x.responseText); if(j&&typeof j.url==='string'&&/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(j.url)) return j.url; } }catch(e){} return RESERVA; })();
-const VERSAO = 'r232';
+const VERSAO = 'r233';
 
 // Reaproveita o mesmo logo já embutido no header (data:image/png;base64,...)
 // para usar como marca d'água/capa na apresentação PPTX (r69).
@@ -1676,37 +1677,101 @@ function capturarFoto(secaoId, modo) {
   document.getElementById(modo === 'galeria' ? 'galeriaInput' : 'cameraInput').click();
 }
 
-function processarFotoFile(file) {
-  if (!file || !fotoTargetSecao) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      const maxDim = 1200;
-      let w = img.width, h = img.height;
-      if (w > maxDim || h > maxDim) {
-        if (w > h) { h = h * maxDim / w; w = maxDim; }
-        else { w = w * maxDim / h; h = maxDim; }
-      }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const compressed = canvas.toDataURL('image/jpeg', 0.7);
-      if (!state.fotos[fotoTargetSecao]) state.fotos[fotoTargetSecao] = [];
-      state.fotos[fotoTargetSecao].push({ base64: compressed, legenda: '' });
-      renderFormulario();
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+// r233: fotos da galeria.
+// - Uma de cada vez (várias fotos grandes ao mesmo tempo estouravam a memória do celular).
+// - HEIC/HEIF (padrão do iPhone e de muitos Samsung): o navegador não lê; a foto é
+//   convertida para JPEG com a biblioteca heic2any, carregada só quando precisa.
+// - Se uma foto não puder ser lida, aparece um aviso (antes ela sumia em silêncio).
+const FOTO_MAX_DIM = 1200;
+let heic2anyCarregando = null;
+function carregarHeic2any() {
+  if (window.heic2any) return Promise.resolve(window.heic2any);
+  if (!heic2anyCarregando) {
+    heic2anyCarregando = new Promise((ok, falha) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      s.onload = () => window.heic2any ? ok(window.heic2any) : falha(new Error('conversor indisponível'));
+      s.onerror = () => { heic2anyCarregando = null; falha(new Error('sem internet para o conversor de HEIC')); };
+      document.head.appendChild(s);
+    });
+  }
+  return heic2anyCarregando;
 }
+function fotoEhHeic(file) {
+  return /hei[cf]/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+}
+function carregarImagem(blob) {
+  return new Promise((ok, falha) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); falha(new Error('formato não suportado pelo navegador')); };
+    img.src = url;
+  });
+}
+async function fotoParaJpeg(file) {
+  let img;
+  try { img = await carregarImagem(file); }
+  catch (e) {
+    if (!fotoEhHeic(file)) throw e;
+    const conv = await carregarHeic2any();
+    let jpg = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    if (Array.isArray(jpg)) jpg = jpg[0];
+    img = await carregarImagem(jpg);
+  }
+  let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (w > FOTO_MAX_DIM || h > FOTO_MAX_DIM) {
+    if (w > h) { h = Math.round(h * FOTO_MAX_DIM / w); w = FOTO_MAX_DIM; }
+    else { w = Math.round(w * FOTO_MAX_DIM / h); h = FOTO_MAX_DIM; }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  const dados = canvas.toDataURL('image/jpeg', 0.7);
+  canvas.width = canvas.height = 0;   // libera memória
+  return dados;
+}
+let fotosEmProcesso = 0;
+function avisoFotosProcessando(n) {
+  let el = document.getElementById('aviso-fotos-proc');
+  if (!n) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aviso-fotos-proc';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:#001528;color:#fff;padding:10px 16px;border-radius:20px;font:600 13px Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.textContent = '📷 Preparando ' + n + ' foto(s)...';
+}
+async function processarFotos(files) {
+  const secaoAlvo = fotoTargetSecao;
+  if (!secaoAlvo || !files.length) return;
+  const falhas = [];
+  fotosEmProcesso += files.length; avisoFotosProcessando(fotosEmProcesso);
+  for (const file of files) {
+    try {
+      const dados = await fotoParaJpeg(file);
+      if (!state.fotos[secaoAlvo]) state.fotos[secaoAlvo] = [];
+      state.fotos[secaoAlvo].push({ base64: dados, legenda: '' });
+      renderFormulario();
+    } catch (e) {
+      falhas.push((file.name || 'foto') + ' — ' + e.message);
+    } finally {
+      fotosEmProcesso--; avisoFotosProcessando(fotosEmProcesso);
+    }
+  }
+  if (falhas.length) alert('⚠️ Não foi possível anexar ' + falhas.length + ' foto(s):\n\n' + falhas.join('\n') + '\n\nTente escolher a foto de novo ou tirar a foto pelo botão Câmera.');
+}
+function processarFotoFile(file) { if (file) processarFotos([file]); }   // compatibilidade
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cameraInput').addEventListener('change', function(e) {
-    processarFotoFile(e.target.files[0]); e.target.value = '';
+    const arqs = Array.from(e.target.files || []); e.target.value = '';
+    processarFotos(arqs);
   });
   document.getElementById('galeriaInput').addEventListener('change', function(e) {
-    Array.from(e.target.files).forEach(f => processarFotoFile(f)); e.target.value = '';
+    const arqs = Array.from(e.target.files || []); e.target.value = '';
+    processarFotos(arqs);
   });
 });
 
